@@ -353,8 +353,15 @@ def regression(
 
     # 效应量: f² = (R² - R²_0) / (1 - R²)
     if result["r_squared"] is not None:
-        result["effect_size"] = float(result["r_squared"] / (1 - result["r_squared"]))
-        result["effect_type"] = "f_squared"
+        denom = 1 - result["r_squared"]
+        if denom > 1e-10:
+            result["effect_size"] = float(result["r_squared"] / denom)
+            result["effect_type"] = "f_squared"
+        else:
+            # R² ≈ 1.0 (完美拟合)，f² 无意义但说明模型极强
+            result["effect_size"] = float("inf")
+            result["effect_type"] = "f_squared"
+            result["warning"] = "R² ≈ 1.0，可能存在过拟合或完全拟合"
 
     # 诊断（OLS 时）
     if method == "ols" and result["r_squared"] is not None:

@@ -11,6 +11,7 @@ import pandas as pd
 
 from ..config import LLMConfig
 from ..observability.event_bus import EventBus
+from ..observability.events import EventType
 from ..tools.data_io import get_data_info, load_data
 from ..tools.profiling import generate_profile, suggest_column_roles
 from .base import DataAgentBase
@@ -57,6 +58,7 @@ class ColumnSemantic:
 class DataContext:
     """Scout 产出的数据上下文"""
 
+    # 基础信息
     data_path: str
     n_rows: int
     n_cols: int
@@ -65,6 +67,20 @@ class DataContext:
     missing_summary: dict[str, Any] = field(default_factory=dict)
     correlation_highlights: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+    # 分析上下文（Scout 的真正价值，来自 PROJECT.md 设计）
+    target: str | None = None
+    features: list[str] = field(default_factory=list)
+    confounders: list[str] = field(default_factory=list)
+    time_column: str | None = None
+    group_columns: list[str] = field(default_factory=list)
+    column_descriptions: dict[str, str] = field(default_factory=dict)
+    units: dict[str, str] = field(default_factory=dict)
+    missing_patterns: dict[str, str] = field(default_factory=dict)
+    outlier_candidates: list[str] = field(default_factory=list)
+    variable_roles: dict[str, str] = field(default_factory=dict)
+    suggested_analyses: list[str] = field(default_factory=list)
+    user_constraints: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,7 +92,47 @@ class DataContext:
             "missing_summary": self.missing_summary,
             "correlation_highlights": self.correlation_highlights,
             "warnings": self.warnings,
+            "target": self.target,
+            "features": self.features,
+            "confounders": self.confounders,
+            "time_column": self.time_column,
+            "group_columns": self.group_columns,
+            "column_descriptions": self.column_descriptions,
+            "units": self.units,
+            "missing_patterns": self.missing_patterns,
+            "outlier_candidates": self.outlier_candidates,
+            "variable_roles": self.variable_roles,
+            "suggested_analyses": self.suggested_analyses,
+            "user_constraints": self.user_constraints,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DataContext:
+        """从 to_dict() 的输出重建 DataContext，正确处理 column_semantics 反序列化"""
+        data = data.copy()
+        # 反序列化 column_semantics：dict → ColumnSemantic
+        raw_sems = data.pop("column_semantics", [])
+        column_semantics = []
+        for s in raw_sems:
+            if isinstance(s, ColumnSemantic):
+                column_semantics.append(s)
+            elif isinstance(s, dict):
+                inferred_type = s.get("inferred_type", "unknown")
+                if isinstance(inferred_type, str):
+                    try:
+                        inferred_type = SemanticType(inferred_type)
+                    except ValueError:
+                        inferred_type = SemanticType.UNKNOWN
+                column_semantics.append(ColumnSemantic(
+                    column_name=s.get("column_name", ""),
+                    inferred_type=inferred_type,
+                    confidence=s.get("confidence", 0.0),
+                    evidence=s.get("evidence", ""),
+                    needs_user_input=s.get("needs_user_input", False),
+                    suggested_role=s.get("suggested_role", "feature"),
+                    user_override=s.get("user_override"),
+                ))
+        return cls(column_semantics=column_semantics, **data)
 
     def get_uncertain_columns(self) -> list[ColumnSemantic]:
         """获取需要用户确认的列"""
@@ -85,6 +141,53 @@ class DataContext:
     def get_target_candidates(self) -> list[ColumnSemantic]:
         """获取可能的目标变量"""
         return [s for s in self.column_semantics if s.suggested_role == "target"]
+
+    def derive_from_column_semantics(self) -> None:
+        """从 column_semantics 推导 target/features/confounders/variable_roles 等"""
+        features = []
+        confounders = []
+        variable_roles = {}
+
+        for sem in self.column_semantics:
+            role = sem.suggested_role
+            col = sem.column_name
+            variable_roles[col] = role
+
+            # 跳过忽略列和标识列
+            if role in ("ignore", "identifier"):
+                continue
+
+            # 目标变量
+            if role == "target" and not self.target:
+                self.target = col
+                continue
+
+            # 混淆变量
+            if role == "control":
+                confounders.append(col)
+                continue
+
+            # 时间列
+            if role in ("time_index", "time") and not self.time_column:
+                self.time_column = col
+                continue
+
+            # 分组列
+            if role == "group":
+                if col not in self.group_columns:
+                    self.group_columns.append(col)
+                continue
+
+            # 其他作为特征
+            features.append(col)
+
+        # 只在没设置过时才覆盖
+        if not self.features:
+            self.features = features
+        if not self.confounders:
+            self.confounders = confounders
+        if not self.variable_roles:
+            self.variable_roles = variable_roles
 
 
 class ScoutAgent(DataAgentBase):
@@ -105,13 +208,21 @@ class ScoutAgent(DataAgentBase):
             event_bus=event_bus,
         )
 
-    def run(self, data_path: str, query: str = "") -> DataContext:
+    def run(
+        self,
+        data_path: str,
+        query: str = "",
+        project_id: str | None = None,
+        memory: Any | None = None,
+    ) -> DataContext:
         """
         执行数据侦察
 
         Args:
             data_path: 数据文件路径
             query: 用户的分析问题（帮助推断目标变量）
+            project_id: 项目 ID
+            memory: MemoryManager 实例（用于应用记忆）
 
         Returns:
             DataContext 数据上下文
@@ -129,9 +240,12 @@ class ScoutAgent(DataAgentBase):
             self.emit_thinking("生成数据画像...")
             self.emit_tool_call("generate_profile")
             profile = generate_profile(df)
+            n_cols_with_nulls = profile['missing_summary'].get('columns_with_nulls', 0)
+            if not isinstance(n_cols_with_nulls, int):
+                n_cols_with_nulls = len(n_cols_with_nulls)
             self.emit_tool_result(
                 f"质量={profile['quality_score']}, "
-                f"缺失列={len(profile['missing_summary'].get('columns_with_nulls', []))}"
+                f"缺失列={n_cols_with_nulls}"
             )
 
             # 3. 字段语义推断
@@ -149,13 +263,24 @@ class ScoutAgent(DataAgentBase):
                 correlation_highlights=profile.get("correlations", {}).get("high_correlations", []),
             )
 
-            # 5. 警告
+            # 5. 应用记忆：自动修正已知字段语义
+            if memory and project_id:
+                n_before = len(context.get_uncertain_columns())
+                memory.apply_to_context(project_id, context)
+                n_after = len(context.get_uncertain_columns())
+                if n_before > n_after:
+                    self.emit_thinking(f"从记忆中应用了 {n_before - n_after} 个字段修正")
+
+            # 6. 推导派生字段
+            context.derive_from_column_semantics()
+
+            # 7. 警告
             if profile["duplicate_rate"] > 0.05:
                 context.warnings.append(f"重复行率 {profile['duplicate_rate']:.1%} 较高")
             if profile["missing_summary"].get("null_rate", 0) > 0.1:
                 context.warnings.append(f"缺失率 {profile['missing_summary']['null_rate']:.1%} 较高")
 
-            # 6. 如果有用户输入请求
+            # 8. 如果有用户输入请求
             uncertain = context.get_uncertain_columns()
             if uncertain:
                 for col_sem in uncertain:
@@ -259,16 +384,23 @@ class ScoutAgent(DataAgentBase):
                     suggested_role="target",
                 )
 
-            # 高唯一值比可能是 ID
+            # 高唯一值比可能是 ID — 但只有整数列且接近连续序列才判为 ID
+            # 浮点列高唯一率是正常的（连续值），不应误判
             if n_unique > n_total * 0.8:
-                return ColumnSemantic(
-                    column_name=name,
-                    inferred_type=SemanticType.ID,
-                    confidence=0.60,
-                    evidence=f"高唯一值比 {n_unique}/{n_total}",
-                    needs_user_input=True,
-                    suggested_role="identifier",
-                )
+                if not pd.api.types.is_float_dtype(series):
+                    # 整数列：检查是否接近连续序列（如 0,1,2,...,N）
+                    vals = series.dropna().sort_values()
+                    val_range = vals.max() - vals.min() + 1
+                    if val_range <= n_unique * 1.1:
+                        return ColumnSemantic(
+                            column_name=name,
+                            inferred_type=SemanticType.ID,
+                            confidence=0.60,
+                            evidence=f"高唯一值整数列 {n_unique}/{n_total}，接近连续序列",
+                            needs_user_input=True,
+                            suggested_role="identifier",
+                        )
+                # 浮点列或非连续整数列，高唯一率保持 NUMERIC
 
             return ColumnSemantic(
                 column_name=name,
@@ -402,3 +534,4 @@ class ScoutAgent(DataAgentBase):
                 break
 
         return context
+

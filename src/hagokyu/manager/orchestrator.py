@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ..config import HaGoKuConfig
@@ -12,6 +13,7 @@ from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
+from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
 from ..agents.analyst import AnalystAgent, AnalysisResult
 from ..agents.cleaner import CleanerAgent
@@ -80,6 +82,7 @@ class Orchestrator:
         self.db = HaGoKuDB.get_instance(self.config.work_dir / "hagokyu.db")
         self.display = TerminalDisplay(verbosity="normal")
         self.output_mgr: OutputManager | None = None  # 按项目初始化
+        self.memory: MemoryManager | None = None  # 按项目初始化
 
         # 订阅显示
         self.event_bus.subscribe(self.display)
@@ -100,6 +103,8 @@ class Orchestrator:
         user_mode: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
+        resume: bool = False,
+        schema_path: str | None = None,
     ) -> dict[str, Any]:
         """
         主入口：执行完整分析流程
@@ -112,6 +117,8 @@ class Orchestrator:
             user_mode: 用户模式 (quick / standard / expert)
             output_dir: 自定义输出目录
             formats: 报告输出格式
+            resume: 是否从上次断点继续
+            schema_path: 外部 schema.yaml 路径
 
         Returns:
             运行结果摘要
@@ -121,8 +128,6 @@ class Orchestrator:
 
         # 1. 创建项目
         if project_name is None:
-            from pathlib import Path
-
             project_name = Path(data_path).stem.replace(" ", "_")
 
         self.event_bus.emit(EventType.RUN_STARTED, "Manager", {
@@ -132,6 +137,17 @@ class Orchestrator:
         })
 
         self.output_mgr = OutputManager(self.config.output, project_name)
+        schema_file = self.output_mgr.project_dir / "schema.yaml"
+        self.memory = MemoryManager(self.db, schema_path=schema_file)
+
+        # 处理 --schema 参数
+        if schema_path:
+            n = self.memory.import_schema_yaml(project_name, Path(schema_path))
+            if n > 0:
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": f"📄 导入了 {n} 条 schema 定义",
+                })
+
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
 
@@ -140,43 +156,74 @@ class Orchestrator:
         plan = self._create_plan(query, mode)
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode=mode)
 
-        # 2. 初始化 Agent
+        # 初始化 Agent
         scout = ScoutAgent(self.config.llm, self.event_bus)
         cleaner = CleanerAgent(self.config.llm, self.event_bus)
         analyst = AnalystAgent(self.config.llm, self.event_bus)
         reporter = ReporterAgent(self.config.llm, self.event_bus)
 
-        try:
-            # 3. Scout: 数据侦察
-            context = scout.run(data_path, query)
+        # Resume 支持
+        context: DataContext | None = None
+        df_clean = None
+        cleaning_report = None
+        cleaned_path_str = ""
 
-            # 3.5 用户交互：确认不确定的字段
-            uncertain = context.get_uncertain_columns()
-            if uncertain and user_mode != "quick":
-                # 在标准/专家模式下，等待用户确认
-                # （实际交互在 CLI 层处理，这里只是标记）
-                self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "Manager", {
-                    "question": f"有 {len(uncertain)} 个字段需要确认，是否继续？",
-                    "uncertain_columns": [s.column_name for s in uncertain],
+        if resume:
+            state = self.memory.get_resume_state(project_name)
+            if state and state["stage"] in ("cleaned", "analyzed", "reported"):
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": f"⏩ 从 {state['stage']} 阶段恢复，跳过 Scout 和 Cleaner",
+                })
+                # 恢复上下文
+                if state.get("context") and isinstance(state["context"], dict):
+                    context = DataContext.from_dict(state["context"])
+                # 加载清洗后数据
+                if state.get("cleaned_path"):
+                    import pandas as pd
+                    cleaned_path_str = state["cleaned_path"]
+                    if Path(cleaned_path_str).exists():
+                        df_clean = pd.read_parquet(cleaned_path_str)
+
+        try:
+            # Scout + Cleaner（如果不是 resume）
+            if context is None:
+                # 3. Scout: 数据侦察（传入 MemoryManager）
+                context = scout.run(data_path, query, project_id=project_name, memory=self.memory)
+
+                # 3.5 用户交互：确认不确定的字段
+                uncertain = context.get_uncertain_columns()
+                if uncertain and user_mode != "quick":
+                    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "Manager", {
+                        "question": f"有 {len(uncertain)} 个字段需要确认，是否继续？",
+                        "uncertain_columns": [s.column_name for s in uncertain],
+                    })
+
+                # 4. Cleaner: 数据清洗
+                df_clean, cleaning_report = cleaner.run(
+                    data_path, context,
+                    impact_warning=self.config.manager.cleaning_impact_warning,
+                )
+
+                # 保存清洗后数据
+                cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
+                save_data(df_clean, cleaned_path)
+                cleaned_path_str = str(cleaned_path)
+
+                # 保存 resume 状态
+                self.memory.save_resume_state(
+                    project_name, "cleaned",
+                    cleaned_path=cleaned_path_str,
+                    context=context, run_id=run_id,
+                )
+
+                # 5. 质量检查
+                self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                    "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
+                    "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
                 })
 
-            # 4. Cleaner: 数据清洗
-            df_clean, cleaning_report = cleaner.run(
-                data_path, context,
-                impact_warning=self.config.manager.cleaning_impact_warning,
-            )
-
-            # 保存清洗后数据
-            cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-            save_data(df_clean, cleaned_path)
-
-            # 5. 质量检查
-            self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
-                "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
-                "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
-            })
-
             # 6. Analyst: 统计分析
+            assert df_clean is not None and context is not None
             results = analyst.run(df_clean, context, plan)
 
             # 7. Reporter: 生成报告
@@ -184,11 +231,12 @@ class Orchestrator:
             report = reporter.run(
                 results=results,
                 context=context,
-                cleaning_summary=cleaning_report.to_dict(),
+                cleaning_summary=cleaning_report.to_dict() if cleaning_report else {},
                 project_name=project_name,
                 query=query,
                 output_path=output_path,
                 formats=formats or self.config.output.formats,
+                user_mode=user_mode,
             )
 
             # 8. 保存运行元数据
@@ -198,7 +246,7 @@ class Orchestrator:
                 "query": query,
                 "plan": plan,
                 "n_results": len(results),
-                "cleaning_impact": cleaning_report.impact_rate,
+                "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
                 "output_path": output_path,
             }
             self.output_mgr.save_run_meta(run_dir, run_meta)
@@ -223,14 +271,28 @@ class Orchestrator:
                     "significance": result.significance,
                 })
 
-            # 10. 创建 latest 链接
+            # 10. 学习 + 导出 schema.yaml
+            learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
+            if learned > 0:
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
+                })
+
+            # 保存 resume 状态
+            self.memory.save_resume_state(
+                project_name, "reported",
+                cleaned_path=cleaned_path_str,
+                context=context, run_id=run_id,
+            )
+
+            # 11. 创建 latest 链接
             self.output_mgr.create_latest_symlink(run_dir)
 
-            # 11. 事件日志
+            # 12. 事件日志
             events_path = run_dir / "events.jsonl"
             self.event_bus.save_to_file(events_path)
 
-            # 12. 发射完成事件
+            # 13. 发射完成事件
             self.event_bus.emit(EventType.RUN_COMPLETED, "Manager", {
                 "duration": f"{duration_ms / 1000:.1f}s",
                 "token_count": sum(
@@ -291,3 +353,50 @@ class Orchestrator:
             "query": query,
             "rule_match": False,
         }
+
+    def _learn_from_run(
+        self,
+        project_name: str,
+        context: DataContext,
+        results: list[AnalysisResult],
+        cleaning_report: Any,
+    ) -> None:
+        """从本次运行中学习，将确认的信息存入记忆"""
+        learned = 0
+
+        # 1. 学习目标变量：如果 Scout 推断了目标变量且分析成功了，记住
+        target_candidates = context.get_target_candidates()
+        for sem in target_candidates:
+            if sem.confidence >= 0.8:
+                self.db.learn_target_variable(project_name, sem.column_name)
+                learned += 1
+
+        # 2. 学习清洗偏好：记录此次用的清洗策略
+        if hasattr(cleaning_report, "operations"):
+            for op in cleaning_report.operations:
+                self.db.learn_cleaning_preference(
+                    project_name,
+                    op.column,
+                    op.strategy.value,
+                    reason=op.reason,
+                )
+                learned += 1
+
+        # 3. 学习分析模式：记录查询→计划匹配结果
+        plan = self.rule_engine.match_plan(context.data_path)  # 不会真正用 data_path
+        # 改为记录实际使用的分析类型
+        for result in results:
+            self.db.save_memory(
+                project_name,
+                "analysis_pattern",
+                result.analysis_type,
+                value={"question": result.question, "significance": result.significance},
+                source="auto",
+                confidence=0.6,
+            )
+            learned += 1
+
+        if learned > 0:
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
+            })

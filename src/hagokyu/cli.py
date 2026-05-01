@@ -31,6 +31,9 @@ def cli() -> None:
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),
               help="输出格式（可多次指定）")
+@click.option("--resume", is_flag=True, help="从上次断点继续分析")
+@click.option("--schema", "schema_path", default=None, type=click.Path(exists=True),
+              help="外部 schema.yaml 路径")
 @click.option("--verbosity", "-v", default="normal",
               type=click.Choice(["quiet", "normal", "verbose"]),
               help="终端输出详细度")
@@ -42,6 +45,8 @@ def run(
     manager_mode: str | None,
     output_dir: str | None,
     formats: tuple[str, ...],
+    resume: bool,
+    schema_path: str | None,
     verbosity: str,
 ) -> None:
     """运行完整分析流程"""
@@ -71,6 +76,8 @@ def run(
         user_mode=mode,
         output_dir=output_dir,
         formats=format_list,
+        resume=resume,
+        schema_path=schema_path,
     )
 
     if result["status"] == "completed":
@@ -237,12 +244,20 @@ def replay(run_id: str, agent: str | None, verbose: bool) -> None:
     for project_dir in projects_dir.iterdir():
         if not project_dir.is_dir():
             continue
-        for run_dir in project_dir.iterdir():
-            if run_dir.name == run_id and run_dir.is_dir():
-                candidate = run_dir / "events.jsonl"
-                if candidate.exists():
-                    events_path = candidate
-                    break
+        # 运行目录可能在 project_dir/ 下，也可能在 project_dir/runs/ 下
+        runs_dir = project_dir / "runs"
+        search_dirs = [project_dir]
+        if runs_dir.is_dir():
+            search_dirs.append(runs_dir)
+        for search_dir in search_dirs:
+            for run_dir in search_dir.iterdir():
+                if run_dir.name == run_id and run_dir.is_dir():
+                    candidate = run_dir / "events.jsonl"
+                    if candidate.exists():
+                        events_path = candidate
+                        break
+            if events_path:
+                break
         if events_path:
             break
 
@@ -317,6 +332,121 @@ def replay(run_id: str, agent: str | None, verbose: bool) -> None:
                 click.echo(f"  {color}{timestamp} [{evt_agent}]{reset} [{evt_type}] {json.dumps(data, ensure_ascii=False)[:120]}")
             else:
                 click.echo(f"  {color}{timestamp} [{evt_agent}]{reset} [{evt_type}]")
+
+
+@cli.command()
+@click.argument("project_name", required=False)
+@click.option("--category", "-c", default=None, help="按类别过滤 (column_semantic/cleaning_pref/analysis_pattern/target_variable/user_note)")
+@click.option("--set", "set_item", nargs=3, type=(str, str, str), default=None,
+              help="设置记忆: --set <category> <key> <value>")
+@click.option("--delete", "delete_item", nargs=2, type=(str, str), default=None,
+              help="删除记忆: --delete <category> <key>")
+@click.option("--global", "is_global", is_flag=True, help="操作全局记忆（非项目级）")
+@click.option("--export", "export_path", default=None, type=click.Path(),
+              help="导出 schema.yaml 到指定路径")
+@click.option("--import", "import_path", default=None, type=click.Path(exists=True),
+              help="从 schema.yaml 导入记忆")
+def memory(project_name: str | None, category: str | None, set_item: tuple | None,
+           delete_item: tuple | None, is_global: bool,
+           export_path: str | None, import_path: str | None) -> None:
+    """查看/管理项目记忆"""
+    from .storage.database import HaGoKuDB
+    from .storage.memory import MemoryManager
+
+    config = HaGoKuConfig.load()
+    db = HaGoKuDB.get_instance(config.work_dir / "hagokyu.db")
+
+    pid = None if is_global else project_name
+
+    # 创建 MemoryManager（不绑定 schema_path，CLI 级别操作不自动读写 YAML）
+    mm = MemoryManager(db)
+
+    # 导入 schema.yaml
+    if import_path:
+        target_pid = pid or project_name or "_imported"
+        n = mm.import_schema_yaml(target_pid, Path(import_path))
+        click.echo(f"📄 从 {import_path} 导入了 {n} 条记忆到项目 '{target_pid}'")
+        return
+
+    # 导出 schema.yaml
+    if export_path:
+        target_pid = pid or project_name
+        if not target_pid:
+            click.echo("❌ 导出需要指定项目名或 --global")
+            return
+        out_path = mm.export_schema_yaml(target_pid, Path(export_path))
+        click.echo(f"📄 已导出 schema.yaml 到 {out_path}")
+        return
+
+    # 设置记忆
+    if set_item:
+        cat, key, value = set_item
+        mm.save(pid, cat, key, value, source="user")
+        scope = "全局" if pid is None else f"项目 '{pid}'"
+        click.echo(f"✅ 已保存{scope}记忆: {cat}/{key} = {value}")
+        return
+
+    # 删除记忆
+    if delete_item:
+        cat, key = delete_item
+        if mm.delete(pid, cat, key):
+            click.echo(f"🗑️ 已删除记忆: {cat}/{key}")
+        else:
+            click.echo(f"未找到记忆: {cat}/{key}")
+        return
+
+    # 查看记忆
+    if pid is None and not is_global:
+        # 显示所有项目的记忆概览
+        click.echo("🧠 记忆概览:")
+        projs = db.list_projects()
+        if not projs:
+            click.echo("   暂无项目记忆。运行 `hagokyu run` 后自动积累。")
+            return
+        for p in projs:
+            mems = mm.load(p["id"])
+            click.echo(f"   📁 {p['id']}: {len(mems)} 条记忆")
+        # 全局记忆
+        global_mems = mm.load(None)
+        if global_mems:
+            click.echo(f"   🌐 全局: {len(global_mems)} 条记忆")
+        return
+
+    # 显示指定项目的记忆
+    mems = mm.load(pid, category=category)
+    scope = "全局" if pid is None else f"项目 '{pid}'"
+    if not mems:
+        click.echo(f"{scope}暂无记忆。")
+        return
+
+    click.echo(f"🧠 {scope}记忆 ({len(mems)} 条):")
+    click.echo()
+
+    # 按类别分组
+    by_category: dict[str, list] = {}
+    for m in mems:
+        cat = m["category"]
+        by_category.setdefault(cat, []).append(m)
+
+    category_icons = {
+        "column_semantic": "🏷️",
+        "cleaning_pref": "🧹",
+        "analysis_pattern": "📊",
+        "target_variable": "🎯",
+        "user_note": "📝",
+    }
+
+    for cat, items in by_category.items():
+        icon = category_icons.get(cat, "📌")
+        click.echo(f"  {icon} {cat}:")
+        for item in items:
+            source_tag = {"user": "👤", "auto": "🤖", "learned": "📖"}.get(item.get("source", ""), "•")
+            val = item.get("value", "")
+            val_str = str(val)[:80] if isinstance(val, (dict, list)) else str(val)[:80]
+            click.echo(f"    {source_tag} {item['key']}: {val_str}")
+            if item.get("updated_at"):
+                click.echo(f"       更新: {item['updated_at'][:19]}")
+        click.echo()
 
 
 def main() -> None:

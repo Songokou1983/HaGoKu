@@ -13,6 +13,31 @@ from .base import DataAgentBase
 from .scout import DataContext
 
 
+# ── 效应量大小判断 ──────────────────────────────────────────
+
+def _effect_size_magnitude(effect_size: float | None, effect_type: str = "") -> str:
+    """判断效应量大小等级"""
+    if effect_size is None:
+        return "unknown"
+    es = abs(effect_size)
+    if "cohen" in effect_type.lower() or "d" in effect_type.lower():
+        if es >= 0.8: return "large"
+        if es >= 0.5: return "medium"
+        return "small"
+    if "eta" in effect_type.lower() or "f_sq" in effect_type.lower():
+        if es >= 0.14: return "large"
+        if es >= 0.06: return "medium"
+        return "small"
+    if "cramer" in effect_type.lower() or "v" in effect_type.lower():
+        if es >= 0.16: return "large"
+        if es >= 0.07: return "medium"
+        return "small"
+    # 通用
+    if es >= 0.5: return "large"
+    if es >= 0.2: return "medium"
+    return "small"
+
+
 class ReporterAgent(DataAgentBase):
     """报告员：用吸引力层抓住用户，用核心价值层留住用户"""
 
@@ -42,6 +67,7 @@ class ReporterAgent(DataAgentBase):
         output_path: str | None = None,
         formats: list[str] | None = None,
         template_dir: str | None = None,
+        user_mode: str = "standard",
     ) -> ReportData:
         """
         生成分析报告
@@ -55,6 +81,7 @@ class ReporterAgent(DataAgentBase):
             output_path: 输出路径
             formats: 输出格式列表 (html / md / json)
             template_dir: 自定义模板目录
+            user_mode: 用户模式 (quick / standard / expert)
 
         Returns:
             ReportData 报告数据
@@ -64,8 +91,8 @@ class ReporterAgent(DataAgentBase):
         try:
             formats = formats or ["html"]
 
-            # 1. 构建报告结构
-            self.emit_thinking("构建报告结构...")
+            # 1. 构建报告结构 — 双轨
+            self.emit_thinking("构建双轨报告：吸引力层 + 核心价值层...")
 
             sections = []
 
@@ -77,11 +104,15 @@ class ReporterAgent(DataAgentBase):
                     content=self._summarize_key_findings(key_findings),
                     findings=key_findings,
                     level=2,
+                    # 吸引力层
+                    headline=self._generate_headline(results, context),
+                    # 核心价值层
+                    plain_explanation=self._generate_overall_plain(results),
                 ))
 
-            # 详细分析结果
+            # 详细分析结果 — 双轨
             for result in results:
-                section = self._build_result_section(result)
+                section = self._build_result_section(result, user_mode)
                 sections.append(section)
 
             # 护栏检查报告
@@ -101,7 +132,11 @@ class ReporterAgent(DataAgentBase):
                     "null_rate": context.missing_summary.get("null_rate", "N/A"),
                 },
                 cleaning_summary=cleaning_summary,
-                findings_summary=[f.to_dict() for f in key_findings],
+                findings_summary=key_findings,
+                # 双轨新增
+                headline=self._generate_headline(results, context),
+                metric_cards=self._generate_metric_cards(results, context),
+                user_mode=user_mode,
             )
 
             # 3. 生成报告文件
@@ -138,8 +173,84 @@ class ReporterAgent(DataAgentBase):
             self.fail(str(e))
             raise
 
+    # ── 吸引力层：一眼抓住 ──────────────────────────────────
+
+    def _generate_headline(self, results: list[AnalysisResult], context: DataContext) -> str:
+        """生成报告顶部一句话结论（吸引力层核心）"""
+        significant = [r for r in results if r.significance == "significant"]
+        if not significant:
+            if results:
+                return f"分析完成，{len(results)} 项检验未发现统计显著结果——这本身也是重要信息"
+            return "分析完成，暂无发现"
+
+        # 取效应量最大的显著结果
+        best = max(significant, key=lambda r: abs(r.effect_size) if r.effect_size else 0)
+        if best.conclusion_plain:
+            # 截取第一句作为 headline
+            first_sentence = best.conclusion_plain.split("。")[0]
+            if len(first_sentence) > 80:
+                first_sentence = first_sentence[:77] + "..."
+            return first_sentence
+
+        return f"发现 {len(significant)} 项统计显著结果"
+
+    def _generate_metric_cards(
+        self, results: list[AnalysisResult], context: DataContext
+    ) -> list[dict[str, Any]]:
+        """生成关键指标卡片"""
+        cards = []
+
+        # 样本量卡片
+        if context.n_rows:
+            cards.append({"value": f"{context.n_rows:,}", "label": "样本量"})
+
+        # 显著发现数
+        n_sig = sum(1 for r in results if r.significance == "significant")
+        n_total = len(results)
+        if n_total > 0:
+            cards.append({
+                "value": f"{n_sig}/{n_total}",
+                "label": "显著发现",
+                "trend": "up" if n_sig > n_total / 2 else None,
+            })
+
+        # 最大效应量
+        significant = [r for r in results if r.significance == "significant" and r.effect_size is not None]
+        if significant:
+            best = max(significant, key=lambda r: abs(r.effect_size) if r.effect_size else 0)
+            magnitude = _effect_size_magnitude(best.effect_size, best.effect_type)
+            cards.append({
+                "value": f"{abs(best.effect_size):.2f}",
+                "label": f"最大效应量 ({best.effect_type})" if best.effect_type else "最大效应量",
+                "trend": "up" if magnitude in ("medium", "large") else None,
+            })
+
+        # 数据质量
+        if context.quality_score:
+            cards.append({"value": f"{context.quality_score:.2f}", "label": "数据质量"})
+
+        return cards
+
+    # ── 核心价值层：深入看到的真东西 ────────────────────────
+
+    def _generate_overall_plain(self, results: list[AnalysisResult]) -> str:
+        """生成整体人话解读"""
+        significant = [r for r in results if r.significance == "significant"]
+        not_sig = [r for r in results if r.significance != "significant"]
+
+        parts = []
+        if significant:
+            parts.append(f"在 {len(results)} 项分析中，{len(significant)} 项达到统计显著水平（p < 0.05）。")
+            for r in significant[:3]:  # 最多列3个
+                if r.conclusion_plain:
+                    parts.append(f"• {r.conclusion_plain}")
+        if not_sig:
+            parts.append(f"{len(not_sig)} 项分析未达显著水平，这本身也是有价值的信息——说明这些方向上数据不足以支持强烈结论。")
+
+        return "\n".join(parts) if parts else "分析完成。"
+
     def _extract_key_findings(self, results: list[AnalysisResult]) -> list[dict[str, Any]]:
-        """提取关键发现（显著性 + 大效应量）"""
+        """提取关键发现（双轨：headline + 人话 + 统计证据 + 局限性 + 追溯）"""
         findings = []
 
         for result in results:
@@ -148,6 +259,37 @@ class ReporterAgent(DataAgentBase):
                 gr.get("severity") == "mandatory" and not gr.get("passed", True)
                 for gr in result.guardrail_results
             )
+
+            # 吸引力层：一句话 headline
+            headline = result.conclusion_plain.split("。")[0] if result.conclusion_plain else ""
+            if len(headline) > 60:
+                headline = headline[:57] + "..."
+
+            # 核心价值层：人话解读
+            plain_explanation = result.conclusion_plain if result.conclusion_plain else ""
+
+            # 核心价值层：局限性
+            limitations = []
+            if result.diagnostics:
+                for key, val in result.diagnostics.items():
+                    if isinstance(val, dict) and not val.get("met", True):
+                        limitations.append(f"{key}: {val.get('verdict', '未通过')}")
+            if has_mandatory_violation:
+                limitations.append("存在强制级护栏违规，结论需谨慎解读")
+            if result.significance != "significant":
+                limitations.append("结果未达统计显著，可能是样本量不足或效应确实不存在")
+            if result.p_value is not None and result.p_value is not None and 0.05 < result.p_value < 0.10:
+                limitations.append("p 值在 0.05-0.10 之间，为边缘显著，需更大样本验证")
+
+            # 核心价值层：证据追溯
+            evidence_trace = ""
+            if result.conclusion_statistical:
+                evidence_trace = result.conclusion_statistical
+            elif result.p_value is not None:
+                parts = [f"p={result.p_value:.4f}"]
+                if result.effect_size is not None:
+                    parts.append(f"{result.effect_type}={result.effect_size:.3f}")
+                evidence_trace = ", ".join(parts)
 
             finding = {
                 "analysis_type": result.analysis_type,
@@ -159,6 +301,11 @@ class ReporterAgent(DataAgentBase):
                 "confidence_interval": result.confidence_interval,
                 "significance": result.significance,
                 "has_guardrail_issue": has_mandatory_violation,
+                # 双轨新增
+                "headline": headline,
+                "plain_explanation": plain_explanation,
+                "limitations": limitations,
+                "evidence_trace": evidence_trace,
             }
             findings.append(finding)
 
@@ -177,8 +324,8 @@ class ReporterAgent(DataAgentBase):
         else:
             return f"在 {n_total} 项分析中，未发现统计显著的结果。这本身也是重要信息。"
 
-    def _build_result_section(self, result: AnalysisResult) -> ReportSection:
-        """构建单个分析结果的章节"""
+    def _build_result_section(self, result: AnalysisResult, user_mode: str = "standard") -> ReportSection:
+        """构建单个分析结果的章节（双轨）"""
         # 章节标题
         title_map = {
             "regression": "📈 回归分析",
@@ -189,8 +336,43 @@ class ReporterAgent(DataAgentBase):
         }
         title = title_map.get(result.analysis_type, f"📊 {result.analysis_type}")
 
-        # 内容
-        content = result.conclusion_plain
+        # 吸引力层：headline
+        headline = result.conclusion_plain.split("。")[0] if result.conclusion_plain else None
+        if headline and len(headline) > 80:
+            headline = headline[:77] + "..."
+
+        # 吸引力层：指标卡片
+        metric_cards = []
+        if result.p_value is not None:
+            sig_label = "显著 ✅" if result.significance == "significant" else "不显著"
+            metric_cards.append({"value": f"p={result.p_value:.4f}", "label": sig_label})
+        if result.effect_size is not None:
+            magnitude = _effect_size_magnitude(result.effect_size, result.effect_type)
+            magnitude_label = {"large": "大", "medium": "中", "small": "小"}.get(magnitude, "")
+            metric_cards.append({
+                "value": f"{abs(result.effect_size):.3f}",
+                "label": f"{result.effect_type} ({magnitude_label}效应)",
+            })
+        if result.confidence_interval:
+            metric_cards.append({"value": result.confidence_interval, "label": "95% CI"})
+
+        # 核心价值层
+        plain_explanation = result.conclusion_plain if result.conclusion_plain else None
+        statistical_detail = result.conclusion_statistical if result.conclusion_statistical else None
+
+        # 局限性
+        limitations = []
+        if result.diagnostics:
+            for key, val in result.diagnostics.items():
+                if isinstance(val, dict) and not val.get("met", True):
+                    limitations.append(f"{key}: {val.get('verdict', '未通过')}")
+        if result.significance != "significant":
+            limitations.append("结果未达统计显著水平")
+
+        # 证据追溯
+        evidence_trace = ""
+        if result.conclusion_statistical:
+            evidence_trace = f"→ {result.conclusion_statistical}"
 
         # 发现
         finding = {
@@ -202,11 +384,16 @@ class ReporterAgent(DataAgentBase):
             "effect_type": result.effect_type,
             "confidence_interval": result.confidence_interval,
             "significance": result.significance,
+            # 双轨
+            "headline": headline,
+            "plain_explanation": plain_explanation,
+            "limitations": limitations,
+            "evidence_trace": evidence_trace,
         }
 
         # 子章节：诊断
         subsections = []
-        if result.diagnostics:
+        if result.diagnostics and user_mode != "quick":
             diag_items = []
             for key, val in result.diagnostics.items():
                 if isinstance(val, dict) and "verdict" in val:
@@ -223,10 +410,18 @@ class ReporterAgent(DataAgentBase):
 
         return ReportSection(
             title=title,
-            content=content,
+            content=result.conclusion_plain,
             findings=[finding],
             subsections=subsections,
             level=2,
+            # 吸引力层
+            headline=headline,
+            metric_cards=metric_cards,
+            # 核心价值层
+            plain_explanation=plain_explanation,
+            statistical_detail=statistical_detail,
+            limitations=limitations,
+            evidence_trace=evidence_trace,
         )
 
     def _build_guardrail_section(self, results: list[AnalysisResult]) -> ReportSection | None:
@@ -253,12 +448,15 @@ class ReporterAgent(DataAgentBase):
         suggestion = [i for i in all_issues if i["severity"] == "suggestion"]
 
         content_parts = []
+        limitations = []
         if mandatory:
             content_parts.append(f"🚫 强制级违规 {len(mandatory)} 项：")
             for m in mandatory:
                 content_parts.append(f"  - {m['rule']}: {m['message']}")
+            limitations.append(f"存在 {len(mandatory)} 项强制级统计护栏违规，结论需极度谨慎")
         if warning:
             content_parts.append(f"⚠️ 警告 {len(warning)} 项")
+            limitations.append(f"存在 {len(warning)} 项警告级统计问题")
         if suggestion:
             content_parts.append(f"💡 建议 {len(suggestion)} 项")
 
@@ -266,4 +464,5 @@ class ReporterAgent(DataAgentBase):
             title="🛡️ 统计护栏检查",
             content="\n".join(content_parts),
             level=2,
+            limitations=limitations,
         )

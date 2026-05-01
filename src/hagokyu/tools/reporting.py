@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 # ── 报告数据结构 ─────────────────────────────────────────────
 
 class ReportSection:
-    """报告章节"""
+    """报告章节 — 双轨产出：吸引力层 + 核心价值层"""
 
     def __init__(
         self,
@@ -23,6 +23,14 @@ class ReportSection:
         charts: list[dict[str, Any]] | None = None,
         subsections: list["ReportSection"] | None = None,
         level: int = 2,
+        # 吸引力层
+        headline: str | None = None,
+        metric_cards: list[dict[str, Any]] | None = None,
+        # 核心价值层
+        plain_explanation: str | None = None,
+        statistical_detail: str | None = None,
+        limitations: list[str] | None = None,
+        evidence_trace: str | None = None,
     ) -> None:
         self.title = title
         self.content = content
@@ -30,6 +38,14 @@ class ReportSection:
         self.charts = charts or []
         self.subsections = subsections or []
         self.level = level
+        # 吸引力层
+        self.headline = headline
+        self.metric_cards = metric_cards or []
+        # 核心价值层
+        self.plain_explanation = plain_explanation
+        self.statistical_detail = statistical_detail
+        self.limitations = limitations or []
+        self.evidence_trace = evidence_trace
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +55,14 @@ class ReportSection:
             "charts": self.charts,
             "subsections": [s.to_dict() for s in self.subsections],
             "level": self.level,
+            # 吸引力层
+            "headline": self.headline,
+            "metric_cards": self.metric_cards,
+            # 核心价值层
+            "plain_explanation": self.plain_explanation,
+            "statistical_detail": self.statistical_detail,
+            "limitations": self.limitations,
+            "evidence_trace": self.evidence_trace,
         }
 
 
@@ -54,6 +78,10 @@ class ReportData:
         findings_summary: list[dict[str, Any]] | None = None,
         data_summary: dict[str, Any] | None = None,
         cleaning_summary: dict[str, Any] | None = None,
+        # 双轨新增
+        headline: str | None = None,
+        metric_cards: list[dict[str, Any]] | None = None,
+        user_mode: str = "standard",
     ) -> None:
         self.project_name = project_name
         self.query = query
@@ -62,6 +90,10 @@ class ReportData:
         self.findings_summary = findings_summary or []
         self.data_summary = data_summary or {}
         self.cleaning_summary = cleaning_summary or {}
+        # 双轨新增
+        self.headline = headline
+        self.metric_cards = metric_cards or []
+        self.user_mode = user_mode  # quick / standard / expert
         self.generated_at = datetime.now()
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +105,9 @@ class ReportData:
             "findings_summary": self.findings_summary,
             "data_summary": self.data_summary,
             "cleaning_summary": self.cleaning_summary,
+            "headline": self.headline,
+            "metric_cards": self.metric_cards,
+            "user_mode": self.user_mode,
             "generated_at": self.generated_at.isoformat(),
         }
 
@@ -108,18 +143,59 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         .meta { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem; }
         .query { font-size: 1.1rem; margin: 1rem 0; padding: 0.75rem 1rem;
                  background: var(--surface); border-left: 4px solid var(--primary); border-radius: 4px; }
+
+        /* 吸引力层 — 一眼抓住 */
+        .headline-box {
+            background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+            color: #fff; border-radius: 12px; padding: 1.5rem 2rem;
+            margin: 1.5rem 0; font-size: 1.2rem; font-weight: 600;
+        }
+        .metric-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem; margin: 1.5rem 0;
+        }
+        .metric-card {
+            background: var(--surface); border-radius: 10px; padding: 1.25rem;
+            text-align: center; border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .metric-card .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+        .metric-card .label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        .metric-card .trend-up { color: var(--success); }
+        .metric-card .trend-down { color: var(--error); }
+
         .section { margin: 2rem 0; }
         .section h2 { font-size: 1.4rem; color: var(--primary); border-bottom: 1px solid var(--border);
                       padding-bottom: 0.5rem; margin-bottom: 1rem; }
         .section h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
+
+        /* 双轨发现卡片 */
         .finding { background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem;
                    margin: 0.75rem 0; border-left: 4px solid var(--success); }
         .finding.warning { border-left-color: var(--warning); }
         .finding.error { border-left-color: var(--error); }
-        .finding .conclusion { font-weight: 600; margin-bottom: 0.25rem; }
+        .finding .headline { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.35rem; color: var(--text); }
+        .finding .conclusion { font-weight: 500; margin-bottom: 0.25rem; }
         .finding .detail { font-size: 0.9rem; color: var(--text-secondary); }
-        .finding .stats { font-family: 'Courier New', monospace; font-size: 0.85rem;
-                         background: #fff; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; }
+
+        /* 核心价值层 — 展开查看 */
+        .finding .core-value { margin-top: 0.75rem; }
+        .finding .plain-explanation { font-size: 0.95rem; line-height: 1.7; margin-bottom: 0.5rem; }
+        .finding .stats {
+            font-family: 'Courier New', monospace; font-size: 0.85rem;
+            background: #fff; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;
+        }
+        .finding .limitations {
+            font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;
+            padding-left: 1rem; border-left: 2px solid var(--border);
+        }
+        .finding .limitations li { margin: 0.2rem 0; }
+        .finding .evidence-trace {
+            font-size: 0.8rem; color: #80868b; margin-top: 0.5rem;
+            font-family: 'Courier New', monospace;
+        }
+
         .chart { margin: 1rem 0; text-align: center; }
         .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
         .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
@@ -145,11 +221,27 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
             生成时间: {{ report.generated_at[:19] }} | HaGoKu v0.1.0
+            {% if report.user_mode == 'quick' %}| ⚡ 快速模式{% elif report.user_mode == 'expert' %}| 🔬 资深模式{% endif %}
         </div>
         <div class="query">
             <strong>研究问题：</strong>{{ report.query }}
         </div>
     </header>
+
+    {% if report.headline %}
+    <div class="headline-box">{{ report.headline }}</div>
+    {% endif %}
+
+    {% if report.metric_cards %}
+    <div class="metric-cards">
+    {% for card in report.metric_cards %}
+        <div class="metric-card">
+            <div class="value">{{ card.value }}{% if card.trend %} <span class="trend-{{ card.trend }}">{{ '↑' if card.trend == 'up' else '↓' }}</span>{% endif %}</div>
+            <div class="label">{{ card.label }}</div>
+        </div>
+    {% endfor %}
+    </div>
+    {% endif %}
 
     {% if report.data_summary %}
     <div class="section">
@@ -193,24 +285,80 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ section.title }}</h2>
+
+        {% if section.headline %}
+        <div class="headline" style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">{{ section.headline }}</div>
+        {% endif %}
+
+        {% if section.metric_cards %}
+        <div class="metric-cards">
+        {% for card in section.metric_cards %}
+            <div class="metric-card">
+                <div class="value">{{ card.value }}{% if card.trend %} <span class="trend-{{ card.trend }}">{{ '↑' if card.trend == 'up' else '↓' }}</span>{% endif %}</div>
+                <div class="label">{{ card.label }}</div>
+            </div>
+        {% endfor %}
+        </div>
+        {% endif %}
+
         {% if section.content %}
         <p>{{ section.content }}</p>
         {% endif %}
+
+        {% if section.plain_explanation %}
+        <div class="plain-explanation" style="margin:0.75rem 0; font-size:0.95rem; line-height:1.7;">{{ section.plain_explanation }}</div>
+        {% endif %}
+
         {% for finding in section.findings %}
         <div class="finding {% if finding.get('significance') == 'not_significant' %}warning{% elif finding.get('significance') == 'marginal' %}warning{% endif %}">
+            {% if finding.get('headline') %}
+            <div class="headline">{{ finding.headline }}</div>
+            {% endif %}
             <div class="conclusion">{{ finding.get('question', finding.get('conclusion_plain', '')) }}</div>
             {% if finding.get('conclusion_plain') %}
             <div class="detail">{{ finding.conclusion_plain }}</div>
             {% endif %}
-            {% if finding.get('p_value') is not none %}
+            <div class="core-value">
+            {% if finding.get('plain_explanation') %}
+            <div class="plain-explanation">{{ finding.plain_explanation }}</div>
+            {% endif %}
+            {% if finding.get('p_value') is not none and report.user_mode != 'quick' %}
             <div class="stats">
                 p = {{ '%.4f' | format(finding.p_value) }}
                 {% if finding.get('effect_size') is not none %}| {{ finding.get('effect_type', '效应量') }} = {{ '%.3f' | format(finding.effect_size) }}{% endif %}
                 {% if finding.get('confidence_interval') %}| 95% CI: {{ finding.confidence_interval }}{% endif %}
             </div>
             {% endif %}
+            {% if finding.get('limitations') and report.user_mode != 'quick' %}
+            <ul class="limitations">
+            {% for lim in finding.limitations %}
+                <li>{{ lim }}</li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+            {% if finding.get('evidence_trace') and report.user_mode == 'expert' %}
+            <div class="evidence-trace">→ {{ finding.evidence_trace }}</div>
+            {% endif %}
+            </div>
         </div>
         {% endfor %}
+
+        {% if section.statistical_detail and report.user_mode != 'quick' %}
+        <div class="stats" style="background:var(--surface); padding:0.75rem; border-radius:6px; margin-top:0.75rem;">{{ section.statistical_detail }}</div>
+        {% endif %}
+
+        {% if section.limitations and report.user_mode != 'quick' %}
+        <ul class="limitations" style="margin-top:0.5rem; padding-left:1rem; border-left:2px solid var(--border); font-size:0.9rem; color:var(--text-secondary);">
+        {% for lim in section.limitations %}
+            <li>{{ lim }}</li>
+        {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if section.evidence_trace and report.user_mode == 'expert' %}
+        <div class="evidence-trace" style="margin-top:0.5rem;">→ {{ section.evidence_trace }}</div>
+        {% endif %}
+
         {% for chart in section.charts %}
         <div class="chart">
             {% if chart.get('type') == 'html' and chart.get('path') %}

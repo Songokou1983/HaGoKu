@@ -79,6 +79,41 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
 CREATE INDEX IF NOT EXISTS idx_data_sources_project ON data_sources(project_id);
 CREATE INDEX IF NOT EXISTS idx_findings_significance ON findings(significance);
 CREATE INDEX IF NOT EXISTS idx_findings_analysis_type ON findings(analysis_type);
+
+-- 记忆系统：跨运行学习和偏好持久化
+CREATE TABLE IF NOT EXISTS memory (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT,                    -- NULL = 全局记忆
+    category    TEXT NOT NULL,           -- column_semantic / cleaning_pref / analysis_pattern / target_variable / user_note
+    key         TEXT NOT NULL,           -- 列名/模式名等
+    value       TEXT NOT NULL,           -- JSON 值
+    source      TEXT DEFAULT 'user',     -- user / auto / learned
+    confidence  REAL DEFAULT 1.0,
+    created_at  DATETIME,
+    updated_at  DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_project ON memory(project_id);
+CREATE INDEX IF NOT EXISTS idx_memory_category ON memory(category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_uniq ON memory(project_id, category, key);
+
+-- 项目工作台状态（目的/数据/进度/结果/下一步）
+CREATE TABLE IF NOT EXISTS project_state (
+    project_id  TEXT PRIMARY KEY,
+    goal        TEXT DEFAULT '',            -- 分析目的（用户的问题）
+    data_path   TEXT DEFAULT '',            -- 数据在哪
+    data_hash   TEXT DEFAULT '',            -- 数据指纹（检测数据是否变化）
+    stage       TEXT DEFAULT 'created',     -- 当前阶段: created / profiled / cleaned / analyzed / reported
+    context_json TEXT DEFAULT '',            -- Scout 产出的数据上下文（JSON）
+    cleaned_path TEXT DEFAULT '',            -- 清洗后数据路径
+    cleaning_json TEXT DEFAULT '',           -- 清洗报告（JSON）
+    results_json TEXT DEFAULT '',            -- 分析结果摘要（JSON）
+    report_path TEXT DEFAULT '',             -- 报告路径
+    next_action TEXT DEFAULT '',             -- 下一步建议
+    updated_at  DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_state_stage ON project_state(stage);
 """
 
 
@@ -482,3 +517,87 @@ class HaGoKuDB:
             "only_in_run_2": [{"analysis_type": k[0], "question": k[1]} for k in only_in_2],
             "changed": changed,
         }
+
+    # ── Project State (工作台状态) ────────────────────────────
+
+    def get_project_state(self, project_id: str) -> dict[str, Any] | None:
+        """获取项目工作台状态"""
+        row = self.conn.execute(
+            "SELECT * FROM project_state WHERE project_id = ?", (project_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        for key in ("context_json", "cleaning_json", "results_json"):
+            if d.get(key):
+                try:
+                    d[key] = json.loads(d[key])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+
+    def init_project_state(
+        self, project_id: str, goal: str = "", data_path: str = "", data_hash: str = "",
+    ) -> dict[str, Any]:
+        """初始化项目状态"""
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "INSERT OR IGNORE INTO project_state "
+            "(project_id, goal, data_path, data_hash, stage, next_action, updated_at) "
+            "VALUES (?, ?, ?, ?, 'created', 'run hagokyu profile to start', ?)",
+            (project_id, goal, data_path, data_hash, now),
+        )
+        self.conn.commit()
+        return self.get_project_state(project_id) or {}
+
+    def update_project_state(self, project_id: str, **kwargs: Any) -> None:
+        """
+        更新项目工作台状态
+
+        任意字段: goal, data_path, data_hash, stage, context_json,
+                  cleaned_path, cleaning_json, results_json, report_path, next_action
+        """
+        if not kwargs:
+            return
+        # JSON 字段自动序列化
+        for key in ("context_json", "cleaning_json", "results_json"):
+            if key in kwargs and not isinstance(kwargs[key], str):
+                kwargs[key] = json.dumps(kwargs[key], ensure_ascii=False)
+        kwargs["updated_at"] = datetime.now().isoformat()
+
+        # 确保 project_state 行存在
+        existing = self.get_project_state(project_id)
+        if existing is None:
+            self.init_project_state(project_id)
+
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        vals = list(kwargs.values()) + [project_id]
+        self.conn.execute(f"UPDATE project_state SET {sets} WHERE project_id = ?", vals)
+        self.conn.commit()
+
+    # ── Memory 已迁移到 storage/memory.py (MemoryManager) ───────────
+    # memory 表的 SQL 建表语句保留在此（SqliteMemoryBackend 直接操作）
+    # 高层方法 save_memory / get_project_memory / learn_target_variable / learn_cleaning_preference 已删除
+
+    def list_projects_by_stage(self, stage: str | None = None) -> list[dict[str, Any]]:
+        """按阶段列出项目（看哪些做到哪了）"""
+        if stage:
+            rows = self.conn.execute(
+                "SELECT * FROM project_state WHERE stage = ? ORDER BY updated_at DESC",
+                (stage,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM project_state ORDER BY updated_at DESC"
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            for key in ("context_json", "cleaning_json", "results_json"):
+                if d.get(key):
+                    try:
+                        d[key] = json.loads(d[key])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            result.append(d)
+        return result

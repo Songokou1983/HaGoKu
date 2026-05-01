@@ -11,6 +11,7 @@ import pandas as pd
 from ..config import LLMConfig
 from ..guardrails.statistical import StatisticalGuardrails
 from ..observability.event_bus import EventBus
+from ..observability.events import EventType
 from ..tools.analysis import (
     anova,
     chi_square,

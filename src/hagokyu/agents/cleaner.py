@@ -13,6 +13,8 @@ from ..tools.cleaning import (
     clean_data,
     detect_missing_mechanism,
     detect_outliers_iqr,
+    detect_outliers_isolation_forest,
+    littles_mcar_test,
     suggest_cleaning_strategy,
 )
 from ..tools.data_io import get_data_info, load_data, save_data
@@ -21,17 +23,19 @@ from .scout import DataContext
 
 
 class CleanerAgent(DataAgentBase):
-    """数据清洗员：保守清洗，影响可追溯"""
+    """数据清洗员：统计感知，保守清洗，影响可追溯"""
 
     def __init__(self, llm_config: LLMConfig, event_bus: EventBus) -> None:
         super().__init__(
             role="Cleaner",
-            goal="清洗数据，保守操作，影响可追溯",
+            goal="统计感知清洗，保守操作，影响可追溯，偏差风险评估",
             backstory=(
                 "你是数据清洗员。你的原则是：宁可保留脏数据，也不要过度清洗导致偏差。"
                 "每次操作都必须记录影响：影响了多少行、多少列、占总体比例。"
                 "当清洗影响超过 10% 时，你会发出警告。"
-                "你了解 MCAR/MAR/MNAR，会根据缺失机制选择合适的策略。"
+                "你了解 MCAR/MAR/MNAR，会用 Little's 检验验证缺失机制。"
+                "你能用 IQR、Z-score、Isolation Forest 多种方法检测异常值。"
+                "清洗后你会对比前后分布变化，评估偏差风险。"
             ),
             llm_config=llm_config,
             event_bus=event_bus,
@@ -66,33 +70,53 @@ class CleanerAgent(DataAgentBase):
             df = load_data(data_path)
             self.emit_tool_result(f"{len(df)} 行, {len(df.columns)} 列")
 
-            # 2. 异常值检测
-            self.emit_thinking("检测异常值...")
+            # 2. 异常值检测（IQR + Isolation Forest）
+            self.emit_thinking("检测异常值（IQR）...")
             self.emit_tool_call("detect_outliers_iqr")
-            outliers = detect_outliers_iqr(df)
-            outlier_summary = {k: v["count"] for k, v in outliers.items() if v["count"] > 0}
+            outliers_iqr = detect_outliers_iqr(df)
+            outlier_summary = {k: v["count"] for k, v in outliers_iqr.items() if v["count"] > 0}
             self.emit_tool_result(
                 f"异常列: {outlier_summary}" if outlier_summary else "未检测到显著异常值"
             )
 
-            # 3. 缺失机制检测
-            self.emit_thinking("检测缺失机制...")
+            # Isolation Forest（如果数据足够）
+            if len(df) >= 20:
+                self.emit_thinking("检测异常值（Isolation Forest）...")
+                self.emit_tool_call("detect_outliers_isolation_forest")
+                outliers_iso = detect_outliers_isolation_forest(df)
+                if "__global" in outliers_iso:
+                    self.emit_tool_result(
+                        f"Isolation Forest: {outliers_iso['__global']['count']} 个全局异常行 "
+                        f"({outliers_iso['__global']['rate']:.1%})"
+                    )
+
+            # 3. 缺失机制检测（Little's MCAR 检验 + 逐列 t 检验）
             null_cols = [col for col in df.columns if df[col].isnull().any()]
             mechanisms = {}
-            for col in null_cols:
-                mechanism = detect_missing_mechanism(df, col)
-                mechanisms[col] = mechanism
-                self.emit_tool_result(f"  {col}: {mechanism}")
+
+            if null_cols:
+                # Little's MCAR 整体检验
+                self.emit_thinking("执行 Little's MCAR 检验...")
+                self.emit_tool_call("littles_mcar_test")
+                mcar_result = littles_mcar_test(df)
+                self.emit_tool_result(mcar_result["conclusion"])
+
+                # 逐列检测
+                self.emit_thinking("检测各列缺失机制...")
+                for col in null_cols:
+                    mechanism = detect_missing_mechanism(df, col)
+                    mechanisms[col] = mechanism
+                    self.emit_tool_result(f"  {col}: {mechanism}")
 
             # 4. 生成清洗操作
             if user_operations:
                 operations = user_operations
                 self.emit_thinking("使用用户指定的清洗操作")
             else:
-                operations = self._plan_operations(df, context, mechanisms, outliers)
+                operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
                 self.emit_thinking(f"计划 {len(operations)} 个清洗操作")
 
-            # 5. 执行清洗
+            # 5. 执行清洗（内含前后对比 + 偏差评估）
             self.emit_thinking("执行数据清洗...")
             self.emit_tool_call("clean_data", f"{len(operations)} 个操作")
             df_clean, report = clean_data(
@@ -106,11 +130,22 @@ class CleanerAgent(DataAgentBase):
                 f"影响率 {report.impact_rate:.1%}"
             )
 
-            # 6. 警告
+            # 6. 报告分布变化
+            if report.distribution_shift:
+                large_shifts = {k: v for k, v in report.distribution_shift.items() if v > 0.1}
+                if large_shifts:
+                    self.emit_thinking(
+                        f"分布变化 > 0.1σ 的列: {list(large_shifts.keys())}"
+                    )
+
+            # 7. 偏差风险评估
+            self.emit_thinking(f"偏差风险: {report.bias_risk} — {report.bias_risk_reason}")
+
+            # 8. 警告
             for warning in report.warnings:
                 self.emit_thinking(f"⚠️ {warning}")
 
-            # 7. 补充缺失机制信息
+            # 9. 补充缺失机制信息
             report.missing_mechanism.update(mechanisms)
 
             self.complete({
@@ -118,6 +153,7 @@ class CleanerAgent(DataAgentBase):
                 "rows_after": report.total_rows_after,
                 "impact_rate": report.impact_rate,
                 "operations": len(report.operations),
+                "bias_risk": report.bias_risk,
             })
 
             return df_clean, report
@@ -146,6 +182,16 @@ class CleanerAgent(DataAgentBase):
                     "column": col,
                     "strategy": strategy.value,
                     "reason": reason,
+                })
+
+        # 异常值处理：对 IQR 检测到异常的列，使用 Winsorize 而非删除
+        for col, info in outliers.items():
+            if info.get("count", 0) > 0 and info.get("rate", 0) < 0.1:
+                # 只对异常率 < 10% 的列做 Winsorize
+                operations.append({
+                    "column": col,
+                    "strategy": "winsorize",
+                    "reason": f"IQR 检测到 {info['count']} 个异常值({info['rate']:.1%})，Winsorize 截断优于删除",
                 })
 
         return operations

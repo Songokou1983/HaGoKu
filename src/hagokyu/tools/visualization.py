@@ -1,4 +1,4 @@
-"""HaGoKu 可视化 — 吸引力层的实现"""
+"""HaGoKu 可视化 — 吸引力层的实现 + 洞察图/趋势图/对比图"""
 
 from __future__ import annotations
 
@@ -273,3 +273,491 @@ def _matplotlib_plot(
         plt.close(fig)
 
     return fig
+
+
+# ── 洞察图/趋势图/对比图 — 分析驱动的图表生成 ───────────────
+
+
+def generate_insight_charts(
+    df: pd.DataFrame,
+    results: list[dict[str, Any]],
+    context: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    *,
+    interactive: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    从分析结果自动生成洞察图
+
+    根据分析类型选择最合适的可视化：
+    - regression: 回归拟合图 + 残差诊断图
+    - hypothesis_test: 分组对比图 (box/violin)
+    - correlation: 相关散点图
+    - trend_analysis: 时间趋势图
+    - interaction: 交互效应图
+
+    Args:
+        df: 清洗后数据
+        results: 分析结果列表（dict 格式，来自 AnalysisResult.raw_result）
+        context: 数据上下文（可选，含 column_semantics 等）
+        output_dir: 图表输出目录
+        interactive: 是否交互式图表
+
+    Returns:
+        图表元数据列表，可附加到 ReportSection.charts
+    """
+    if output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    charts: list[dict[str, Any]] = []
+
+    for i, result in enumerate(results):
+        analysis_type = result.get("analysis_type", "")
+        raw = result.get("raw_result", result)
+
+        try:
+            if analysis_type == "regression":
+                chart = _chart_regression(df, raw, i, output_dir, interactive)
+                if chart:
+                    charts.extend(chart)
+
+            elif analysis_type in ("hypothesis_test", "hypothesis_test_mann_whitney", "hypothesis_test_kruskal_wallis"):
+                chart = _chart_hypothesis_test(df, raw, i, output_dir, interactive)
+                if chart:
+                    charts.extend(chart)
+
+            elif analysis_type == "correlation":
+                chart = _chart_correlation(df, raw, i, output_dir, interactive)
+                if chart:
+                    charts.extend(chart)
+
+            elif analysis_type == "trend_analysis":
+                chart = _chart_trend(df, raw, i, output_dir, interactive)
+                if chart:
+                    charts.extend(chart)
+
+            elif analysis_type == "interaction_analysis":
+                chart = _chart_interaction(df, raw, i, output_dir, interactive)
+                if chart:
+                    charts.extend(chart)
+
+        except Exception:
+            # 图表生成失败不应阻止报告生成
+            continue
+
+    return charts
+
+
+def _chart_regression(
+    df: pd.DataFrame,
+    raw: dict[str, Any],
+    idx: int,
+    output_dir: Path | None,
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    """回归分析图表：拟合图 + 残差图"""
+    charts = []
+    coeffs = raw.get("coefficients", {})
+    # 找最显著的预测变量
+    p_values = raw.get("p_values", {})
+    features = [k for k in coeffs.keys() if k != "const" and k in df.columns]
+
+    if not features:
+        return charts
+
+    # 选最显著的特征做图
+    best_feature = min(features, key=lambda f: p_values.get(f, 1.0)) if features else None
+    if best_feature is None:
+        return charts
+
+    # 1. 拟合散点图
+    target = raw.get("target", "")
+    if not target:
+        # 从 question 推断
+        return charts
+
+    fname = f"regression_scatter_{idx}.html" if interactive else f"regression_scatter_{idx}.png"
+    fpath = str(output_dir / fname) if output_dir else None
+
+    create_plot(
+        "scatter",
+        df,
+        x=best_feature,
+        y=target,
+        title=f"回归拟合: {target} vs {best_feature}",
+        xlabel=best_feature,
+        ylabel=target,
+        output_path=fpath,
+        interactive=interactive,
+    )
+    charts.append({
+        "type": "html" if interactive else "image",
+        "path": fpath,
+        "title": f"回归拟合: {target} vs {best_feature}",
+    })
+
+    # 2. 残差诊断图提示
+    diagnostics = raw.get("diagnostics", {})
+    if diagnostics and "residual_pattern" in diagnostics:
+        charts.append({
+            "type": "placeholder",
+            "title": "残差诊断图",
+            "note": "残差诊断详见诊断章节",
+        })
+
+    return charts
+
+
+def _chart_hypothesis_test(
+    df: pd.DataFrame,
+    raw: dict[str, Any],
+    idx: int,
+    output_dir: Path | None,
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    """假设检验图表：分组对比 violin/box"""
+    charts = []
+
+    # 从 question 推断 target 和 group
+    # 或者从 raw_result 获取
+    test_type = raw.get("test", "")
+    target = None
+    group_col = None
+
+    if test_type in ("ttest", "mann_whitney_u"):
+        # 从 question 格式推断: "不同 X 组的 Y 有差异吗？"
+        q = raw.get("question", "") or ""
+        if "的" in q and "组" in q:
+            parts = q.split("组")
+            group_hint = parts[0].replace("不同", "").strip()
+            target_hint = parts[1].replace("有差异吗？", "").replace("有差异吗", "").strip()
+            for col in df.columns:
+                if col in group_hint or group_hint in col:
+                    group_col = col
+                    break
+            for col in df.select_dtypes(include=[np.number]).columns:
+                if col in target_hint or target_hint in col:
+                    target = col
+                    break
+
+    elif test_type in ("one_way_anova", "kruskal_wallis"):
+        target = raw.get("_dv")  # non-standard
+        group_col = raw.get("_between")
+
+    if not target or not group_col:
+        return charts
+
+    if target not in df.columns or group_col not in df.columns:
+        return charts
+
+    fname = f"hypothesis_comparison_{idx}.html" if interactive else f"hypothesis_comparison_{idx}.png"
+    fpath = str(output_dir / fname) if output_dir else None
+
+    create_plot(
+        "violin" if interactive else "box",
+        df,
+        x=group_col,
+        y=target,
+        color=group_col,
+        title=f"分组对比: {target} by {group_col}",
+        xlabel=group_col,
+        ylabel=target,
+        output_path=fpath,
+        interactive=interactive,
+    )
+    charts.append({
+        "type": "html" if interactive else "image",
+        "path": fpath,
+        "title": f"分组对比: {target} by {group_col}",
+    })
+
+    return charts
+
+
+def _chart_correlation(
+    df: pd.DataFrame,
+    raw: dict[str, Any],
+    idx: int,
+    output_dir: Path | None,
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    """相关性图表：散点图"""
+    charts = []
+    col1 = None
+    col2 = None
+
+    # 从 question 推断: "X 与 Y 之间的关系？"
+    q = raw.get("question", "") or ""
+    if "与" in q and "之间" in q:
+        parts = q.split("与")
+        if len(parts) == 2:
+            hint1 = parts[0].strip()
+            hint2 = parts[1].split("之间")[0].strip()
+            for col in df.columns:
+                if col == hint1 or hint1 in col:
+                    col1 = col
+                if col == hint2 or hint2 in col:
+                    col2 = col
+
+    if not col1 or not col2:
+        return charts
+
+    fname = f"correlation_scatter_{idx}.html" if interactive else f"correlation_scatter_{idx}.png"
+    fpath = str(output_dir / fname) if output_dir else None
+
+    create_plot(
+        "scatter",
+        df,
+        x=col1,
+        y=col2,
+        title=f"相关分析: {col1} vs {col2} (r={raw.get('statistic', 0):.3f})",
+        xlabel=col1,
+        ylabel=col2,
+        output_path=fpath,
+        interactive=interactive,
+    )
+    charts.append({
+        "type": "html" if interactive else "image",
+        "path": fpath,
+        "title": f"相关分析: {col1} vs {col2}",
+    })
+
+    return charts
+
+
+def _chart_trend(
+    df: pd.DataFrame,
+    raw: dict[str, Any],
+    idx: int,
+    output_dir: Path | None,
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    """趋势分析图表：时间线图"""
+    charts = []
+
+    q = raw.get("question", "") or ""
+    # 推断时间列和目标列
+    time_col = None
+    target = None
+
+    # 找 datetime 列
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            time_col = col
+            break
+
+    # 从 question 推断 target
+    if "的" in q:
+        hint = q.split("的")[0].strip()
+        for col in df.select_dtypes(include=[np.number]).columns:
+            if col == hint or hint in col:
+                target = col
+                break
+
+    if not time_col or not target:
+        return charts
+
+    # 排序后绘图
+    df_sorted = df.sort_values(time_col)
+
+    fname = f"trend_line_{idx}.html" if interactive else f"trend_line_{idx}.png"
+    fpath = str(output_dir / fname) if output_dir else None
+
+    create_plot(
+        "line",
+        df_sorted,
+        x=time_col,
+        y=target,
+        title=f"趋势分析: {target} over {time_col}",
+        xlabel=time_col,
+        ylabel=target,
+        output_path=fpath,
+        interactive=interactive,
+    )
+    charts.append({
+        "type": "html" if interactive else "image",
+        "path": fpath,
+        "title": f"趋势分析: {target} over {time_col}",
+    })
+
+    return charts
+
+
+def _chart_interaction(
+    df: pd.DataFrame,
+    raw: dict[str, Any],
+    idx: int,
+    output_dir: Path | None,
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    """交互效应图表：双变量交互可视化"""
+    charts = []
+    feat1 = raw.get("feature1")
+    feat2 = raw.get("feature2")
+
+    if not feat1 or not feat2:
+        return charts
+
+    if feat1 not in df.columns or feat2 not in df.columns:
+        return charts
+
+    # 找目标变量
+    target = None
+    q = raw.get("question", "") or ""
+    # 从 "X 和 Y 对 Z 是否存在交互效应？" 格式推断
+    if "对" in q:
+        hint = q.split("对")[1].split("是否存在")[0].strip()
+        for col in df.columns:
+            if col == hint or hint in col:
+                target = col
+                break
+
+    if not target or target not in df.columns:
+        return charts
+
+    fname = f"interaction_{idx}.html" if interactive else f"interaction_{idx}.png"
+    fpath = str(output_dir / fname) if output_dir else None
+
+    if interactive:
+        import plotly.express as px
+        import plotly.graph_objects as go
+
+        # 分组交互图：将 feat2 分成 high/low 两组
+        median_val = df[feat2].median()
+        df_copy = df.copy()
+        df_copy[f"{feat2}_group"] = np.where(df_copy[feat2] >= median_val, "High", "Low")
+
+        fig = px.scatter(
+            df_copy, x=feat1, y=target, color=f"{feat2}_group",
+            title=f"交互效应: {feat1}×{feat2} on {target}",
+            trendline="ols",
+            labels={feat1: feat1, target: target},
+        )
+
+        if fpath:
+            fig.write_html(fpath)
+
+        charts.append({
+            "type": "html",
+            "path": fpath,
+            "title": f"交互效应: {feat1}×{feat2}",
+        })
+    else:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        median_val = df[feat2].median()
+        df_high = df[df[feat2] >= median_val]
+        df_low = df[df[feat2] < median_val]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.scatter(df_high[feat1], df_high[target], alpha=0.5, label=f"{feat2} ≥ median")
+        ax.scatter(df_low[feat1], df_low[target], alpha=0.5, label=f"{feat2} < median")
+
+        # 拟合线
+        if len(df_high) > 1:
+            z = np.polyfit(df_high[feat1].dropna(), df_high[target].dropna(), 1)
+            p = np.poly1d(z)
+            x_range = np.linspace(df_high[feat1].min(), df_high[feat1].max(), 100)
+            ax.plot(x_range, p(x_range), "r--", alpha=0.8)
+        if len(df_low) > 1:
+            z = np.polyfit(df_low[feat1].dropna(), df_low[target].dropna(), 1)
+            p = np.poly1d(z)
+            x_range = np.linspace(df_low[feat1].min(), df_low[feat1].max(), 100)
+            ax.plot(x_range, p(x_range), "b--", alpha=0.8)
+
+        ax.set_xlabel(feat1)
+        ax.set_ylabel(target)
+        ax.set_title(f"交互效应: {feat1}×{feat2}")
+        ax.legend()
+
+        if fpath:
+            fig.savefig(fpath, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+        charts.append({
+            "type": "image",
+            "path": fpath,
+            "title": f"交互效应: {feat1}×{feat2}",
+        })
+
+    return charts
+
+
+def generate_data_overview_charts(
+    df: pd.DataFrame,
+    output_dir: str | Path | None = None,
+    *,
+    interactive: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    生成数据概览图表（独立于分析结果）
+
+    包含：
+    - 数值变量分布直方图矩阵
+    - 相关性热力图
+    - 缺失值模式图
+
+    Args:
+        df: 数据
+        output_dir: 输出目录
+        interactive: 是否交互式
+
+    Returns:
+        图表元数据列表
+    """
+    if output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    charts: list[dict[str, Any]] = []
+
+    # 1. 相关性热力图
+    numeric_df = df.select_dtypes(include=[np.number])
+    if len(numeric_df.columns) >= 2:
+        fname = "correlation_heatmap.html" if interactive else "correlation_heatmap.png"
+        fpath = str(output_dir / fname) if output_dir else None
+
+        create_plot(
+            "heatmap",
+            numeric_df,
+            title="变量相关性热力图",
+            output_path=fpath,
+            interactive=interactive,
+        )
+        charts.append({
+            "type": "html" if interactive else "image",
+            "path": fpath,
+            "title": "变量相关性热力图",
+        })
+
+    # 2. 缺失值模式图
+    null_counts = df.isnull().sum()
+    null_cols = null_counts[null_counts > 0]
+    if len(null_cols) > 0:
+        if interactive:
+            import plotly.graph_objects as go
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=null_cols.index.tolist(),
+                y=null_cols.values.tolist(),
+                marker_color="#ea4335",
+            ))
+            fig.update_layout(
+                title="缺失值分布",
+                xaxis_title="变量",
+                yaxis_title="缺失数量",
+            )
+            fname = "missing_pattern.html"
+            fpath = str(output_dir / fname) if output_dir else None
+            if fpath:
+                fig.write_html(fpath)
+            charts.append({
+                "type": "html",
+                "path": fpath,
+                "title": "缺失值分布",
+            })
+
+    return charts

@@ -93,6 +93,9 @@ class Orchestrator:
         # 护栏
         self.guardrails = StatisticalGuardrails()
 
+        # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
+        self._llm_client: Any | None = None
+
     def run(
         self,
         data_path: str,
@@ -237,6 +240,7 @@ class Orchestrator:
                 output_path=output_path,
                 formats=formats or self.config.output.formats,
                 user_mode=user_mode,
+                df=df_clean,
             )
 
             # 8. 保存运行元数据
@@ -320,32 +324,57 @@ class Orchestrator:
 
     def _create_plan(self, query: str, mode: str) -> dict[str, Any]:
         """
-        创建分析计划
+        创建分析计划 — 规则+AI 双驱动
 
-        规则权重 + AI 权重 双驱动：
-        - local_weak: 90% 规则 + 10% AI
-        - local_strong: 50% 规则 + 50% AI
-        - cloud: 10% 规则 + 90% AI
-        - pure_rule: 100% 规则
+        三层决策逻辑：
+        - Tier 1: 规则匹配 + rule_weight ≥ 0.9 → 直接返回规则计划（不调 LLM）
+        - Tier 2: 规则匹配 + 混合模式 → LLM 调整规则计划
+        - Tier 3: 无规则匹配 + llm_weight > 0 → LLM 从零生成计划
+        - 降级: LLM 失败 → 规则计划或通用计划
         """
         rule_weight = self.config.manager.rule_weight
         llm_weight = self.config.manager.llm_weight
 
-        # 1. 规则匹配
+        # 1. 始终先运行规则引擎（免费、快速）
         rule_plan = self.rule_engine.match_plan(query)
 
-        if rule_plan and rule_weight >= 0.9:
-            # 规则权重高，直接用规则结果
+        # Tier 1: 纯规则模式 或 规则匹配且权重高
+        if rule_weight >= 1.0 or not self.config.manager.llm_plan_enabled:
+            if rule_plan:
+                return rule_plan
+            return self._generic_plan(query)
+
+        if rule_plan and rule_weight >= 0.9 and llm_weight <= 0.1:
+            # local_weak: 规则匹配足够强，跳过 LLM
             return rule_plan
 
-        if rule_plan and rule_weight > 0:
-            # 混合模式：规则为基础，AI 可调整
-            plan = rule_plan.copy()
-            plan["rule_match"] = True
-            plan["rule_confidence"] = rule_weight
-            return plan
+        # Tier 2 & 3: LLM 辅助路径
+        if llm_weight > 0:
+            if rule_plan and 0.1 < rule_weight < 0.9:
+                # 混合模式 (e.g., local_strong 0.5/0.5):
+                # LLM 调整规则计划
+                return self._create_plan_hybrid(query, rule_plan)
+            else:
+                # 无规则匹配 或 cloud 模式 (llm_weight 高):
+                # LLM 从零生成计划
+                llm_plan = self._create_plan_llm(query, rule_plan)
+                if llm_plan is not None:
+                    return llm_plan
+                # LLM 失败：降级到规则计划或通用计划
+                if rule_plan:
+                    self.event_bus.emit(EventType.PLAN_ADJUSTED, "Manager", {
+                        "reason": "LLM 失败，降级到规则计划",
+                    })
+                    return rule_plan
+                return self._generic_plan(query)
 
-        # 2. 无规则匹配或 AI 权重高 → 默认通用分析
+        # llm_weight == 0，无规则匹配
+        if rule_plan:
+            return rule_plan
+        return self._generic_plan(query)
+
+    def _generic_plan(self, query: str) -> dict[str, Any]:
+        """返回通用分析计划（探索性分析）"""
         return {
             "plan_name": "通用分析",
             "agents": ["scout", "cleaner", "analyst", "reporter"],
@@ -353,6 +382,128 @@ class Orchestrator:
             "query": query,
             "rule_match": False,
         }
+
+    def _create_plan_hybrid(self, query: str, rule_plan: dict[str, Any]) -> dict[str, Any]:
+        """混合模式：规则计划为基础，LLM 调整优化"""
+        llm_plan = self._call_llm_for_plan(
+            query=query,
+            rule_plan=rule_plan,
+            mode="adjust",
+        )
+        if llm_plan is not None:
+            llm_plan["rule_match"] = True
+            llm_plan["llm_adjusted"] = True
+            self.event_bus.emit(EventType.PLAN_ADJUSTED, "Manager", {
+                "original": rule_plan.get("plan_name"),
+                "adjusted": llm_plan.get("plan_name"),
+                "reasoning": llm_plan.get("reasoning", ""),
+            })
+            return llm_plan
+        # LLM 失败，返回规则计划不变
+        rule_plan["rule_match"] = True
+        return rule_plan
+
+    def _create_plan_llm(
+        self,
+        query: str,
+        rule_plan: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """LLM 从零生成分析计划（rule_plan 可作为参考 hint）"""
+        llm_plan = self._call_llm_for_plan(
+            query=query,
+            rule_plan=rule_plan,
+            mode="generate",
+        )
+        if llm_plan is not None:
+            llm_plan["rule_match"] = rule_plan is not None
+            llm_plan["llm_generated"] = True
+            self.event_bus.emit(EventType.PLAN_CREATED, "Manager", {
+                "source": "llm",
+                "plan_name": llm_plan.get("plan_name"),
+                "reasoning": llm_plan.get("reasoning", ""),
+            })
+            return llm_plan
+        return None
+
+    def _call_llm_for_plan(
+        self,
+        query: str,
+        rule_plan: dict[str, Any] | None = None,
+        mode: str = "generate",
+    ) -> dict[str, Any] | None:
+        """
+        调用 LLM 生成或调整分析计划
+
+        Args:
+            query: 用户分析问题
+            rule_plan: 规则引擎输出（混合模式下作为上下文）
+            mode: "generate"（从零生成）或 "adjust"（调整规则计划）
+
+        Returns:
+            计划 dict，LLM 失败时返回 None
+        """
+        from ..llm.client import create_structured_llm_client
+        from ..llm.plan_schema import VALID_ANALYST_FOCUS, DEFAULT_EXPLORATORY_FOCUS, LLMPlanResponse
+        from ..llm.prompts import PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER, PLAN_ADJUSTMENT_USER
+
+        try:
+            # 懒初始化 LLM 客户端
+            if self._llm_client is None:
+                self._llm_client = create_structured_llm_client(self.config.llm)
+
+            # 构建消息
+            messages = [{"role": "system", "content": PLAN_GENERATION_SYSTEM}]
+
+            if mode == "adjust" and rule_plan:
+                user_content = PLAN_ADJUSTMENT_USER.format(
+                    query=query,
+                    plan_name=rule_plan.get("plan_name", ""),
+                    agents=", ".join(rule_plan.get("agents", [])),
+                    analyst_focus=", ".join(rule_plan.get("analyst_focus", [])),
+                    target=rule_plan.get("target") or "null",
+                )
+            else:
+                user_content = PLAN_GENERATION_USER.format(query=query)
+
+            messages.append({"role": "user", "content": user_content})
+
+            # 通过 instructor 获取结构化输出
+            response: LLMPlanResponse = self._llm_client.chat.completions.create(
+                model=self.config.llm.model,
+                messages=messages,
+                response_model=LLMPlanResponse,
+                temperature=self.config.llm.temperature,
+                max_tokens=self.config.manager.llm_plan_max_tokens,
+                timeout=self.config.manager.llm_plan_timeout,
+            )
+
+            # 服务端二次校验 analyst_focus
+            validated_focus = [f for f in response.analyst_focus if f in VALID_ANALYST_FOCUS]
+            if not validated_focus:
+                validated_focus = DEFAULT_EXPLORATORY_FOCUS.copy()
+
+            # 确保 agents 包含 scout 和 reporter
+            agents = list(response.agents)
+            if "scout" not in agents:
+                agents.insert(0, "scout")
+            if "reporter" not in agents:
+                agents.append("reporter")
+
+            plan = {
+                "plan_name": response.plan_name,
+                "agents": agents,
+                "analyst_focus": validated_focus,
+                "target": response.target,
+                "query": response.query,
+                "reasoning": response.reasoning,
+            }
+            return plan
+
+        except Exception as e:
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": f"LLM 计划生成失败: {e}",
+            })
+            return None
 
     def _learn_from_run(
         self,

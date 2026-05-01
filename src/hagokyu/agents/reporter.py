@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 from ..config import LLMConfig
 from ..guardrails.statistical import GuardrailResult, Severity, StatisticalGuardrails
 from ..observability.event_bus import EventBus
 from ..tools.reporting import ReportData, ReportGenerator, ReportSection
+from ..tools.visualization import generate_data_overview_charts, generate_insight_charts
 from .analyst import AnalysisResult
 from .base import DataAgentBase
 from .scout import DataContext
@@ -68,6 +72,7 @@ class ReporterAgent(DataAgentBase):
         formats: list[str] | None = None,
         template_dir: str | None = None,
         user_mode: str = "standard",
+        df: pd.DataFrame | None = None,
     ) -> ReportData:
         """
         生成分析报告
@@ -82,6 +87,7 @@ class ReporterAgent(DataAgentBase):
             formats: 输出格式列表 (html / md / json)
             template_dir: 自定义模板目录
             user_mode: 用户模式 (quick / standard / expert)
+            df: 清洗后数据（用于生成图表）
 
         Returns:
             ReportData 报告数据
@@ -93,6 +99,11 @@ class ReporterAgent(DataAgentBase):
 
             # 1. 构建报告结构 — 双轨
             self.emit_thinking("构建双轨报告：吸引力层 + 核心价值层...")
+
+            # 图表输出目录
+            charts_dir = None
+            if output_path:
+                charts_dir = Path(output_path).parent / "charts"
 
             sections = []
 
@@ -110,17 +121,74 @@ class ReporterAgent(DataAgentBase):
                     plain_explanation=self._generate_overall_plain(results),
                 ))
 
-            # 详细分析结果 — 双轨
+            # 2. 数据概览图表
+            overview_charts: list[dict[str, Any]] = []
+            if df is not None and charts_dir:
+                self.emit_thinking("生成数据概览图表...")
+                self.emit_tool_call("generate_charts", "data_overview")
+                try:
+                    overview_charts = generate_data_overview_charts(
+                        df, output_dir=charts_dir, interactive=True,
+                    )
+                    self.emit_tool_result(f"生成 {len(overview_charts)} 个概览图表")
+                except Exception as e:
+                    self.emit_tool_result(f"概览图表生成跳过: {e}")
+
+            # 3. 洞察图表（从分析结果驱动）
+            insight_charts: list[dict[str, Any]] = []
+            if df is not None and charts_dir:
+                self.emit_thinking("生成洞察图表...")
+                self.emit_tool_call("generate_charts", "insight")
+                try:
+                    # 将 AnalysisResult 转为 dict 格式供 generate_insight_charts
+                    result_dicts = []
+                    for r in results:
+                        rd = r.to_dict()
+                        rd["raw_result"] = r.raw_result
+                        result_dicts.append(rd)
+
+                    insight_charts = generate_insight_charts(
+                        df, result_dicts,
+                        context=context.to_dict() if hasattr(context, "to_dict") else None,
+                        output_dir=charts_dir,
+                        interactive=True,
+                    )
+                    self.emit_tool_result(f"生成 {len(insight_charts)} 个洞察图表")
+                except Exception as e:
+                    self.emit_tool_result(f"洞察图表生成跳过: {e}")
+
+            # 详细分析结果 — 双轨（附加图表）
             for result in results:
                 section = self._build_result_section(result, user_mode)
+
+                # 将对应的洞察图表附加到 section
+                for chart in insight_charts:
+                    # 匹配同类型的图表
+                    chart_title = chart.get("title", "")
+                    if result.analysis_type in chart_title or any(
+                        kw in chart_title for kw in result.question.split()[:3]
+                    ):
+                        section.charts.append(chart)
+
                 sections.append(section)
+
+            # 数据概况章节（附加概览图表）
+            data_section = ReportSection(
+                title="📊 数据概况",
+                content="",
+                charts=overview_charts,
+                level=2,
+            )
+            # 插入到 sections 前面（核心发现之后）
+            if overview_charts:
+                sections.insert(1 if len(sections) > 0 else 0, data_section)
 
             # 护栏检查报告
             guardrail_section = self._build_guardrail_section(results)
             if guardrail_section:
                 sections.append(guardrail_section)
 
-            # 2. 构建报告数据
+            # 4. 构建报告数据
             report = ReportData(
                 project_name=project_name,
                 query=query,

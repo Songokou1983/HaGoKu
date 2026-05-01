@@ -582,11 +582,495 @@ BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 # ── 内置模板注册 ──────────────────────────────────────────────
+# 注意：新模板在下方定义，BUILTIN_TEMPLATES 字典移到文件末尾
+
+
+# ── 商业分析模板 ──────────────────────────────────────────────
+
+BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — 商业分析报告</title>
+    <style>
+        :root {
+            --primary: #0d47a1;
+            --accent: #ff6f00;
+            --bg: #ffffff;
+            --surface: #f5f7fa;
+            --text: #212121;
+            --text-secondary: #616161;
+            --border: #e0e0e0;
+            --success: #2e7d32;
+            --warning: #f57f17;
+            --error: #c62828;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text); background: var(--bg); line-height: 1.6;
+            max-width: 960px; margin: 0 auto; padding: 2rem;
+        }
+        header {
+            background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%);
+            color: #fff; padding: 2rem; border-radius: 12px; margin-bottom: 2rem;
+        }
+        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+        .meta { opacity: 0.85; font-size: 0.9rem; }
+        .query { font-size: 1.1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.3); }
+
+        .headline-box {
+            background: var(--accent); color: #fff; border-radius: 8px;
+            padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+            font-size: 1.15rem; font-weight: 600;
+        }
+        .metric-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem; margin: 1.5rem 0;
+        }
+        .metric-card {
+            background: var(--surface); border-radius: 8px; padding: 1.25rem;
+            text-align: center; border-bottom: 3px solid var(--primary);
+        }
+        .metric-card .value { font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .metric-card .label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+        .section { margin: 2rem 0; }
+        .section h2 { font-size: 1.3rem; color: var(--primary); padding-bottom: 0.5rem;
+                      border-bottom: 2px solid var(--primary); margin-bottom: 1rem; }
+
+        .finding {
+            background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem;
+            margin: 0.75rem 0; border-left: 4px solid var(--success);
+        }
+        .finding.warning { border-left-color: var(--warning); }
+        .finding.error { border-left-color: var(--error); }
+        .finding .headline { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.35rem; }
+        .finding .conclusion { font-weight: 500; }
+        .finding .detail { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        .finding .stats { font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+
+        .action-box {
+            background: #e3f2fd; border-radius: 8px; padding: 1rem 1.25rem;
+            margin: 1rem 0; border-left: 4px solid var(--primary);
+        }
+        .action-box h3 { color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem; }
+        .action-box ul { padding-left: 1.5rem; }
+        .action-box li { margin: 0.3rem 0; }
+
+        .chart { margin: 1rem 0; text-align: center; }
+        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+
+        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+                color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📊 {{ report.project_name }}</h1>
+        <div class="meta">商业分析报告 | {{ report.generated_at[:10] }} | HaGoKu</div>
+        {% if report.query %}<div class="query"><strong>核心问题：</strong>{{ report.query }}</div>{% endif %}
+    </header>
+
+    {% if report.headline %}
+    <div class="headline-box">💡 {{ report.headline }}</div>
+    {% endif %}
+
+    {% if report.metric_cards %}
+    <div class="metric-cards">
+    {% for card in report.metric_cards %}
+        <div class="metric-card">
+            <div class="value">{{ card.value }}</div>
+            <div class="label">{{ card.label }}</div>
+        </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+
+    {% for section in report.sections %}
+    <div class="section">
+        <h2>{{ section.title }}</h2>
+        {% if section.content %}<p>{{ section.content }}</p>{% endif %}
+
+        {% for finding in section.findings %}
+        <div class="finding {% if finding.get('significance') == 'not_significant' %}warning{% endif %}">
+            {% if finding.get('headline') %}<div class="headline">{{ finding.headline }}</div>{% endif %}
+            <div class="conclusion">{{ finding.get('conclusion_plain', finding.get('question', '')) }}</div>
+            {% if finding.get('plain_explanation') %}
+            <div class="detail">{{ finding.plain_explanation }}</div>
+            {% endif %}
+            {% if finding.get('p_value') is not none %}
+            <div class="stats">p = {{ '%.4f' | format(finding.p_value) }}{% if finding.get('effect_size') is not none %} | 效应量 = {{ '%.3f' | format(finding.effect_size) }}{% endif %}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {% for chart in section.charts %}
+        <div class="chart">
+            {% if chart.get('type') == 'html' and chart.get('path') %}
+            <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
+            {% elif chart.get('type') == 'image' and chart.get('path') %}
+            <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="action-box">
+        <h3>📋 建议行动</h3>
+        <ul>
+        {% for section in report.sections %}
+            {% for finding in section.findings %}
+                {% if finding.get('significance') == 'significant' and finding.get('question') %}
+            <li>{{ finding.question }} — 基于数据支持，建议优先关注</li>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+        </ul>
+    </div>
+
+    <footer>HaGoKu 商业分析报告 — 用数学的力量，驱动商业决策</footer>
+</body>
+</html>
+"""
+
+
+# ── A/B 测试报告模板 ─────────────────────────────────────────
+
+AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — A/B 测试报告</title>
+    <style>
+        :root { --primary: #1b5e20; --bg: #fff; --surface: #f1f8e9; --text: #212121; --border: #c8e6c9; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; }
+        header { background: var(--primary); color: #fff; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
+        h1 { font-size: 1.5rem; }
+        .meta { opacity: 0.85; font-size: 0.85rem; margin-top: 0.5rem; }
+
+        .verdict-box {
+            border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
+            text-align: center; font-size: 1.2rem; font-weight: 600;
+        }
+        .verdict-significant { background: #e8f5e9; color: var(--success); border: 2px solid var(--success); }
+        .verdict-not-significant { background: #fff3e0; color: var(--warning); border: 2px solid var(--warning); }
+
+        .metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        .metric-card { background: var(--surface); border-radius: 8px; padding: 1rem; text-align: center; }
+        .metric-card .value { font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+        .metric-card .label { font-size: 0.8rem; color: #757575; }
+
+        .section { margin: 2rem 0; }
+        .section h2 { font-size: 1.2rem; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+        .result-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .result-table th, .result-table td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .result-table th { background: var(--surface); font-weight: 600; }
+
+        .finding { background: var(--surface); border-radius: 8px; padding: 1rem; margin: 0.5rem 0; }
+        .finding .stats { font-family: monospace; font-size: 0.85rem; color: #616161; }
+
+        .chart { margin: 1rem 0; text-align: center; }
+        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; }
+        footer { margin-top: 3rem; font-size: 0.8rem; color: #9e9e9e; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🧪 {{ report.project_name }}</h1>
+        <div class="meta">A/B 测试分析 | {{ report.generated_at[:10] }}</div>
+        {% if report.query %}<div style="margin-top:0.5rem;">{{ report.query }}</div>{% endif %}
+    </header>
+
+    {% if report.headline %}
+    <div class="verdict-box {% if '显著' in report.headline or 'significant' in report.headline.lower() %}verdict-significant{% else %}verdict-not-significant{% endif %}">
+        {{ report.headline }}
+    </div>
+    {% endif %}
+
+    {% if report.metric_cards %}
+    <div class="metric-cards">
+    {% for card in report.metric_cards %}
+        <div class="metric-card">
+            <div class="value">{{ card.value }}</div>
+            <div class="label">{{ card.label }}</div>
+        </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+
+    {% for section in report.sections %}
+    <div class="section">
+        <h2>{{ section.title }}</h2>
+        {% for finding in section.findings %}
+        <div class="finding">
+            {% if finding.get('headline') %}<strong>{{ finding.headline }}</strong><br>{% endif %}
+            {{ finding.get('conclusion_plain', finding.get('question', '')) }}
+            {% if finding.get('p_value') is not none %}
+            <div class="stats">
+                p = {{ '%.4f' | format(finding.p_value) }}
+                {% if finding.get('effect_size') is not none %}| 效应量 = {{ '%.3f' | format(finding.effect_size) }}{% endif %}
+                {% if finding.get('confidence_interval') %}| 95% CI: {{ finding.confidence_interval }}{% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% for chart in section.charts %}
+        <div class="chart">
+            {% if chart.get('type') == 'html' and chart.get('path') %}
+            <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
+            {% elif chart.get('type') == 'image' and chart.get('path') %}
+            <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <footer>HaGoKu A/B 测试报告</footer>
+</body>
+</html>
+"""
+
+
+# ── 高管简报模板 ──────────────────────────────────────────────
+
+EXECUTIVE_BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — 高管简报</title>
+    <style>
+        :root { --primary: #1565c0; --bg: #fff; --surface: #f5f5f5; --text: #212121; --border: #e0e0e0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.5; max-width: 680px; margin: 0 auto; padding: 2rem; }
+
+        header { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 3px solid var(--primary); }
+        h1 { font-size: 1.4rem; color: var(--primary); }
+        .meta { font-size: 0.8rem; color: #9e9e9e; margin-top: 0.25rem; }
+
+        .key-message {
+            background: var(--primary); color: #fff; border-radius: 8px;
+            padding: 1.25rem; margin: 1rem 0; font-size: 1.1rem; font-weight: 500;
+        }
+
+        .numbers { display: flex; gap: 2rem; margin: 1.5rem 0; flex-wrap: wrap; }
+        .numbers .item { text-align: center; min-width: 100px; }
+        .numbers .value { font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .numbers .label { font-size: 0.75rem; color: #757575; text-transform: uppercase; }
+
+        .insight { margin: 1rem 0; padding: 0.75rem 1rem; border-left: 3px solid var(--primary); background: var(--surface); border-radius: 0 6px 6px 0; }
+        .insight .q { font-weight: 600; font-size: 0.95rem; }
+        .insight .a { font-size: 0.9rem; margin-top: 0.25rem; color: #424242; }
+
+        .recommendation { background: #e3f2fd; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+        .recommendation h3 { font-size: 0.95rem; color: var(--primary); margin-bottom: 0.5rem; }
+        .recommendation ol { padding-left: 1.5rem; }
+        .recommendation li { font-size: 0.9rem; margin: 0.3rem 0; }
+
+        .caveat { font-size: 0.8rem; color: #9e9e9e; margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+        footer { margin-top: 2rem; font-size: 0.7rem; color: #bdbdbd; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>{{ report.project_name }}</h1>
+        <div class="meta">高管简报 | {{ report.generated_at[:10] }}</div>
+    </header>
+
+    {% if report.headline %}
+    <div class="key-message">{{ report.headline }}</div>
+    {% endif %}
+
+    {% if report.metric_cards %}
+    <div class="numbers">
+    {% for card in report.metric_cards %}
+        <div class="item">
+            <div class="value">{{ card.value }}</div>
+            <div class="label">{{ card.label }}</div>
+        </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+
+    {% for section in report.sections %}
+        {% for finding in section.findings %}
+        <div class="insight">
+            <div class="q">{{ finding.get('question', '') }}</div>
+            <div class="a">{{ finding.get('conclusion_plain', finding.get('plain_explanation', '')) }}</div>
+        </div>
+        {% endfor %}
+    {% endfor %}
+
+    <div class="recommendation">
+        <h3>📋 建议行动</h3>
+        <ol>
+        {% for section in report.sections %}
+            {% for finding in section.findings %}
+                {% if finding.get('significance') == 'significant' %}
+            <li>{{ finding.get('question', '') }}</li>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+        </ol>
+    </div>
+
+    <div class="caveat">
+        ⚠️ 以上结论基于统计检验（p < 0.05），但统计显著不代表商业显著。
+        决策前请考虑效应量大小、业务成本和实施可行性。
+    </div>
+
+    <footer>HaGoKu 高管简报</footer>
+</body>
+</html>
+"""
+
+
+# ── 数据审计模板 ──────────────────────────────────────────────
+
+DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — 数据审计报告</title>
+    <style>
+        :root { --primary: #37474f; --bg: #fff; --surface: #eceff1; --text: #212121; --text-secondary: #607d8b; --border: #cfd8dc; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem; }
+        header { border-bottom: 3px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem; }
+        h1 { font-size: 1.5rem; color: var(--primary); }
+        .meta { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; }
+
+        .audit-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        .audit-card { background: var(--surface); border-radius: 8px; padding: 1rem; border-left: 4px solid var(--primary); }
+        .audit-card .label { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; }
+        .audit-card .value { font-size: 1.4rem; font-weight: 700; color: var(--primary); margin-top: 0.25rem; }
+        .audit-card.warn { border-left-color: var(--warning); }
+        .audit-card.error { border-left-color: var(--error); }
+
+        .section { margin: 2rem 0; }
+        .section h2 { font-size: 1.2rem; color: var(--primary); margin-bottom: 1rem; }
+
+        .audit-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+        .audit-table th, .audit-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .audit-table th { background: var(--surface); font-weight: 600; color: var(--primary); }
+        .audit-table tr:hover { background: #fafafa; }
+
+        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+        .badge-pass { background: #e8f5e9; color: var(--success); }
+        .badge-warn { background: #fff3e0; color: var(--warning); }
+        .badge-fail { background: #ffebee; color: var(--error); }
+
+        .finding { background: var(--surface); border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+        .chart { margin: 1rem 0; text-align: center; }
+        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; }
+
+        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔍 {{ report.project_name }} — 数据审计</h1>
+        <div class="meta">审计时间: {{ report.generated_at[:19] }} | HaGoKu v0.1.0</div>
+    </header>
+
+    <div class="audit-summary">
+        {% if report.data_summary %}
+        <div class="audit-card">
+            <div class="label">样本量</div>
+            <div class="value">{{ report.data_summary.get('n_rows', 'N/A') }}</div>
+        </div>
+        <div class="audit-card">
+            <div class="label">变量数</div>
+            <div class="value">{{ report.data_summary.get('n_cols', 'N/A') }}</div>
+        </div>
+        <div class="audit-card {% if report.data_summary.get('null_rate') and report.data_summary.get('null_rate') != 'N/A' and report.data_summary.get('null_rate')|float > 0.1 %}warn{% endif %}">
+            <div class="label">缺失率</div>
+            <div class="value">{{ report.data_summary.get('null_rate', 'N/A') }}</div>
+        </div>
+        <div class="audit-card">
+            <div class="label">质量评分</div>
+            <div class="value">{{ report.data_summary.get('quality_score', 'N/A') }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if report.cleaning_summary %}
+    <div class="section">
+        <h2>🧹 清洗审计</h2>
+        <table class="audit-table">
+            <tr><th>操作</th><th>列</th><th>策略</th><th>原因</th></tr>
+            {% for op in report.cleaning_summary.get('operations', []) %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ op.column }}</td>
+                <td>{{ op.strategy }}</td>
+                <td>{{ op.reason }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <div class="finding">
+            原始 {{ report.cleaning_summary.get('total_rows_original', 'N/A') }} 行
+            → 清洗后 {{ report.cleaning_summary.get('total_rows_after', 'N/A') }} 行
+            (影响率: {{ report.cleaning_summary.get('impact_rate', 'N/A') }})
+        </div>
+    </div>
+    {% endif %}
+
+    {% for section in report.sections %}
+    <div class="section">
+        <h2>{{ section.title }}</h2>
+        {% for finding in section.findings %}
+        <div class="finding">
+            {% if finding.get('headline') %}<strong>{{ finding.headline }}</strong><br>{% endif %}
+            {{ finding.get('conclusion_plain', finding.get('question', '')) }}
+            {% if finding.get('p_value') is not none %}
+            <br><span class="badge {% if finding.p_value < 0.05 %}badge-pass{% else %}badge-warn{% endif %}">
+                p = {{ '%.4f' | format(finding.p_value) }}
+            </span>
+            {% endif %}
+            {% if finding.get('limitations') %}
+            <ul style="font-size:0.85rem; color:#607d8b; margin-top:0.5rem; padding-left:1.5rem;">
+            {% for lim in finding.limitations %}<li>{{ lim }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% for chart in section.charts %}
+        <div class="chart">
+            {% if chart.get('type') == 'html' and chart.get('path') %}
+            <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
+            {% elif chart.get('type') == 'image' and chart.get('path') %}
+            <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <footer>HaGoKu 数据审计报告</footer>
+</body>
+</html>
+"""
+
+
+# ── 内置模板注册 ──────────────────────────────────────────────
 
 BUILTIN_TEMPLATES: dict[str, str] = {
     "default": DEFAULT_HTML_TEMPLATE,
     "academic": ACADEMIC_HTML_TEMPLATE,
     "brief": BRIEF_HTML_TEMPLATE,
+    "business_analysis": BUSINESS_ANALYSIS_HTML_TEMPLATE,
+    "ab_test": AB_TEST_HTML_TEMPLATE,
+    "executive_brief": EXECUTIVE_BRIEF_HTML_TEMPLATE,
+    "data_audit": DATA_AUDIT_HTML_TEMPLATE,
 }
 
 

@@ -196,6 +196,14 @@ def clean_data(
     Returns:
         (清洗后的 DataFrame, 清洗报告)
     """
+    # 空 DataFrame
+    if len(df) == 0:
+        return df.copy(), CleaningReport(
+            total_rows_original=0,
+            total_rows_after=0,
+            warnings=["输入数据为空"],
+        )
+
     original_rows = len(df)
     df_clean = df.copy()
     ops: list[CleaningOp] = []
@@ -342,6 +350,18 @@ def detect_outliers_iqr(
         if col not in df.columns or not pd.api.types.is_numeric_dtype(df[col]):
             continue
 
+        # 零方差列无异常值
+        if df[col].std() == 0:
+            results[col] = {
+                "count": 0, "rate": 0,
+                "lower_bound": round(float(df[col].iloc[0]), 4) if len(df) > 0 else 0,
+                "upper_bound": round(float(df[col].iloc[0]), 4) if len(df) > 0 else 0,
+                "q1": round(float(df[col].quantile(0.25)), 4),
+                "q3": round(float(df[col].quantile(0.75)), 4),
+                "note": "零方差列，无异常值",
+            }
+            continue
+
         q1 = df[col].quantile(0.25)
         q3 = df[col].quantile(0.75)
         iqr = q3 - q1
@@ -387,7 +407,18 @@ def detect_outliers_zscore(
         if col not in df.columns or not pd.api.types.is_numeric_dtype(df[col]):
             continue
 
-        z_scores = np.abs((df[col] - df[col].mean()) / df[col].std())
+        std = df[col].std()
+        # 零方差列无异常值
+        if std == 0:
+            results[col] = {
+                "count": 0, "rate": 0,
+                "threshold": threshold,
+                "max_zscore": 0,
+                "note": "零方差列，无异常值",
+            }
+            continue
+
+        z_scores = np.abs((df[col] - df[col].mean()) / std)
         outlier_mask = z_scores > threshold
         n_outliers = int(outlier_mask.sum())
 

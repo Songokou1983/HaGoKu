@@ -205,6 +205,9 @@ class AnalystAgent(DataAgentBase):
 
         try:
             reg_result = regression(df, target_col, available_features, method="ols")
+            if "error" in reg_result:
+                self.emit_tool_error(f"回归分析失败: {reg_result['message']}")
+                return None
             self.emit_tool_result(f"R²={reg_result.get('r_squared', 'N/A'):.3f}")
 
             # 诊断
@@ -301,7 +304,15 @@ class AnalystAgent(DataAgentBase):
                 g1 = groups.get_group(group_names[0]).dropna()
                 g2 = groups.get_group(group_names[1]).dropna()
 
+                # 数据不足检查
+                if len(g1) < 3 or len(g2) < 3:
+                    self.emit_thinking(f"某组数据不足 (n1={len(g1)}, n2={len(g2)})，跳过假设检验")
+                    return None
+
                 test_result = ttest(g1, g2)
+                if "error" in test_result:
+                    self.emit_tool_error(f"t 检验失败: {test_result['message']}")
+                    return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, d={test_result['effect_size']:.3f}")
 
                 sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
@@ -315,6 +326,9 @@ class AnalystAgent(DataAgentBase):
 
             else:
                 test_result = anova(df, dv=target_col, between=group_col)
+                if "error" in test_result:
+                    self.emit_tool_error(f"ANOVA 失败: {test_result['message']}")
+                    return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²={test_result['effect_size']:.3f}")
 
                 sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"

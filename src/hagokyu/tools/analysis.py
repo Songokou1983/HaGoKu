@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 
 
+def _insufficient_data(msg: str) -> dict[str, Any]:
+    """返回数据不足的标准错误结果"""
+    return {"error": "insufficient_data", "message": msg}
+
+
 def ttest(
     group1: pd.Series | np.ndarray,
     group2: pd.Series | np.ndarray,
@@ -27,33 +32,59 @@ def ttest(
     Returns:
         检验结果字典
     """
+    g1 = np.asarray(group1, dtype=float)
+    g2 = np.asarray(group2, dtype=float)
+    g1 = g1[~np.isnan(g1)]
+    g2 = g2[~np.isnan(g2)]
+
+    min_n = 3 if not paired else 2
+    if len(g1) < min_n or len(g2) < min_n:
+        return _insufficient_data(
+            f"t 检验需要每组至少 {min_n} 个有效观测值 "
+            f"(实际: n1={len(g1)}, n2={len(g2)})"
+        )
+    if paired and len(g1) != len(g2):
+        return _insufficient_data(
+            f"配对 t 检验需要两组等长 (n1={len(g1)}, n2={len(g2)})"
+        )
+
+    # 常数列（零方差）无法做 t 检验
+    if np.std(g1) == 0 or np.std(g2) == 0:
+        return _insufficient_data(
+            "t 检验要求每组方差 > 0（检测到常数列）"
+        )
+
     try:
         import pingouin as pg
 
-        result = pg.ttest(group1, group2, paired=paired, alternative=alternative)
+        result = pg.ttest(g1, g2, paired=paired, alternative=alternative)
+        # pingouin 列名版本兼容: p-val / p_val, cohen-d / cohen_d, CI95% / CI95
+        p_val_col = "p-val" if "p-val" in result.columns else "p_val"
+        d_col = "cohen-d" if "cohen-d" in result.columns else "cohen_d"
+        ci_col = "CI95%" if "CI95%" in result.columns else "CI95"
         return {
             "test": "ttest",
             "paired": paired,
             "statistic": float(result["T"].iloc[0]),
-            "p_value": float(result["p-val"].iloc[0]),
-            "effect_size": float(result["cohen-d"].iloc[0]),
+            "p_value": float(result[p_val_col].iloc[0]),
+            "effect_size": float(result[d_col].iloc[0]),
             "effect_type": "cohen_d",
-            "confidence_interval": str(result["CI95%"].iloc[0]),
+            "confidence_interval": str(result[ci_col].iloc[0]),
             "df": float(result["dof"].iloc[0]),
-            "assumptions": _check_ttest_assumptions(group1, group2),
+            "assumptions": _check_ttest_assumptions(g1, g2),
         }
     except ImportError:
         # 退回 scipy
         from scipy import stats
 
         if paired:
-            stat, p = stats.ttest_rel(group1, group2, alternative=alternative)
+            stat, p = stats.ttest_rel(g1, g2, alternative=alternative)
         else:
-            stat, p = stats.ttest_ind(group1, group2, alternative=alternative)
+            stat, p = stats.ttest_ind(g1, g2, alternative=alternative)
 
         # 手动计算 Cohen's d
-        d = _cohens_d(group1, group2, paired=paired)
-        ci = _mean_diff_ci(group1, group2, paired=paired)
+        d = _cohens_d(g1, g2, paired=paired)
+        ci = _mean_diff_ci(g1, g2, paired=paired)
 
         return {
             "test": "ttest",
@@ -63,8 +94,8 @@ def ttest(
             "effect_size": float(d),
             "effect_type": "cohen_d",
             "confidence_interval": ci,
-            "df": len(group1) + len(group2) - 2 if not paired else len(group1) - 1,
-            "assumptions": _check_ttest_assumptions(group1, group2),
+            "df": len(g1) + len(g2) - 2 if not paired else len(g1) - 1,
+            "assumptions": _check_ttest_assumptions(g1, g2),
         }
 
 
@@ -84,16 +115,38 @@ def anova(
     Returns:
         ANOVA 结果字典
     """
+    if len(df) < 4:
+        return _insufficient_data(f"ANOVA 需要至少 4 行数据 (实际: {len(df)})")
+
+    if dv not in df.columns:
+        return _insufficient_data(f"因变量 '{dv}' 不在数据中")
+
+    if isinstance(between, str):
+        if between not in df.columns:
+            return _insufficient_data(f"分组变量 '{between}' 不在数据中")
+        n_groups = df[between].nunique()
+        if n_groups < 2:
+            return _insufficient_data(f"ANOVA 需要至少 2 个分组 (实际: {n_groups})")
+        # 检查每组至少 2 个观测值
+        group_sizes = df.groupby(between)[dv].count()
+        if (group_sizes < 2).any():
+            return _insufficient_data(
+                f"ANOVA 每组需要至少 2 个观测值 "
+                f"(最小组: {group_sizes.min()})"
+            )
+
     try:
         import pingouin as pg
 
         if isinstance(between, str):
             result = pg.anova(df, dv=dv, between=between)
+            p_unc_col = "p-unc" if "p-unc" in result.columns else "p_unc"
+            np2_col = "np2" if "np2" in result.columns else "n2p"
             return {
                 "test": "one_way_anova",
                 "f_statistic": float(result["F"].iloc[0]),
-                "p_value": float(result["p-unc"].iloc[0]),
-                "effect_size": float(result["np2"].iloc[0]),
+                "p_value": float(result[p_unc_col].iloc[0]),
+                "effect_size": float(result[np2_col].iloc[0]),
                 "effect_type": "eta_squared",
                 "df_between": float(result["ddof1"].iloc[0]),
                 "df_within": float(result["ddof2"].iloc[0]),
@@ -142,7 +195,15 @@ def chi_square(
     Returns:
         卡方检验结果
     """
+    if len(df) < 5:
+        return _insufficient_data(f"卡方检验需要至少 5 行数据 (实际: {len(df)})")
+    if col1 not in df.columns or col2 not in df.columns:
+        return _insufficient_data(f"列 '{col1}' 或 '{col2}' 不在数据中")
+
     contingency = pd.crosstab(df[col1], df[col2])
+    if contingency.size == 0:
+        return _insufficient_data("列联表为空")
+
     from scipy import stats
 
     chi2, p, dof, expected = stats.chi2_contingency(contingency)
@@ -180,11 +241,21 @@ def correlation(
     Returns:
         相关分析结果
     """
+    if col1 not in df.columns or col2 not in df.columns:
+        return _insufficient_data(f"列 '{col1}' 或 '{col2}' 不在数据中")
+
+    valid = df[[col1, col2]].dropna()
+    if len(valid) < 3:
+        return _insufficient_data(f"相关分析需要至少 3 对有效观测 (实际: {len(valid)})")
+
+    # 常数列无法计算相关
+    if valid[col1].std() == 0 or valid[col2].std() == 0:
+        return _insufficient_data("常数列（零方差）无法计算相关系数")
+
     from scipy import stats
 
     x, y = df[col1].dropna(), df[col2].dropna()
-    # 对齐有效索引
-    valid = df[[col1, col2]].dropna()
+    # 对齐有效索引（已上方 dropna，此处用 valid）
     x, y = valid[col1], valid[col2]
 
     if method == "pearson":
@@ -228,6 +299,24 @@ def regression(
     Returns:
         回归分析结果（含诊断）
     """
+    min_n = len(features) + 3
+    if len(df) < min_n:
+        return _insufficient_data(
+            f"回归分析需要至少 {min_n} 行数据 ({len(features)} 个自变量 + 3, 实际: {len(df)})"
+        )
+    if target not in df.columns:
+        return _insufficient_data(f"因变量 '{target}' 不在数据中")
+    missing_features = [f for f in features if f not in df.columns]
+    if missing_features:
+        return _insufficient_data(f"自变量 {missing_features} 不在数据中")
+    # 常数因变量
+    if df[target].std() == 0:
+        return _insufficient_data("因变量为常数列（零方差），无法做回归")
+    # 常数自变量
+    const_features = [f for f in features if df[f].std() == 0]
+    if const_features:
+        return _insufficient_data(f"自变量 {const_features} 为常数列（零方差），无法做回归")
+
     import statsmodels.api as sm
 
     y = df[target]
@@ -288,12 +377,22 @@ def mann_whitney_u(
     Returns:
         检验结果
     """
+    g1 = np.asarray(group1, dtype=float)
+    g2 = np.asarray(group2, dtype=float)
+    g1 = g1[~np.isnan(g1)]
+    g2 = g2[~np.isnan(g2)]
+
+    if len(g1) < 2 or len(g2) < 2:
+        return _insufficient_data(
+            f"Mann-Whitney U 需要每组至少 2 个有效观测值 (n1={len(g1)}, n2={len(g2)})"
+        )
+
     from scipy import stats
 
-    stat, p = stats.mannwhitneyu(group1, group2, alternative="two-sided")
+    stat, p = stats.mannwhitneyu(g1, g2, alternative="two-sided")
 
     # 效应量: rank-biserial correlation r = 1 - 2U / (n1*n2)
-    n1, n2 = len(group1), len(group2)
+    n1, n2 = len(g1), len(g2)
     r = 1 - (2 * stat) / (n1 * n2)
 
     return {
@@ -323,6 +422,14 @@ def kruskal_wallis(
     Returns:
         检验结果
     """
+    if len(df) < 4:
+        return _insufficient_data(f"Kruskal-Wallis 需要至少 4 行数据 (实际: {len(df)})")
+    if between not in df.columns:
+        return _insufficient_data(f"分组变量 '{between}' 不在数据中")
+    n_groups = df[between].nunique()
+    if n_groups < 2:
+        return _insufficient_data(f"Kruskal-Wallis 需要至少 2 个分组 (实际: {n_groups})")
+
     from scipy import stats
 
     groups = [g[dv].values for _, g in df.groupby(between)]

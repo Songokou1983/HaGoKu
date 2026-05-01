@@ -235,6 +235,213 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+# ── 学术报告模板 ──────────────────────────────────────────────
+
+ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — Statistical Analysis Report</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --bg: #ffffff;
+            --surface: #f5f5f5;
+            --text: #333333;
+            --text-secondary: #666666;
+            --border: #cccccc;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Times New Roman', 'Songti SC', 'SimSun', serif;
+            color: var(--text); background: var(--bg); line-height: 1.8;
+            max-width: 800px; margin: 0 auto; padding: 2.5rem;
+            font-size: 12pt;
+        }
+        header { border-bottom: 1px solid var(--text); padding-bottom: 1rem; margin-bottom: 2rem; }
+        h1 { font-size: 16pt; text-align: center; margin-bottom: 0.5rem; }
+        .meta { font-size: 10pt; color: var(--text-secondary); text-align: center; }
+        .query { font-style: italic; text-align: center; margin: 1rem 0; font-size: 11pt; }
+        .section { margin: 2rem 0; }
+        h2 { font-size: 13pt; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; margin-bottom: 0.8rem; }
+        h3 { font-size: 12pt; margin: 1rem 0 0.5rem; }
+        p { text-indent: 2em; margin: 0.5rem 0; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 10pt; }
+        th, td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+        th { background: var(--surface); font-weight: bold; }
+        .finding { margin: 1rem 0; padding: 0.5rem 0; }
+        .finding p { text-indent: 0; }
+        .stats-table { margin: 0.5rem 0 0.5rem 2em; }
+        .stats-table td { font-family: 'Courier New', monospace; font-size: 9pt; }
+        .guardrail { font-size: 10pt; color: #c0392b; margin: 0.3rem 0; }
+        footer { margin-top: 3rem; border-top: 1px solid var(--text); padding-top: 0.5rem;
+                font-size: 9pt; color: var(--text-secondary); text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>{{ report.project_name }}</h1>
+        <div class="meta">
+            Generated: {{ report.generated_at[:19] }} | HaGoKu v0.1.0
+        </div>
+        <div class="query">Research Question: {{ report.query }}</div>
+    </header>
+
+    {% if report.data_summary %}
+    <div class="section">
+        <h2>1. Data Summary</h2>
+        <table>
+            <tr><th>Metric</th><th>Value</th></tr>
+            <tr><td>Sample Size (N)</td><td>{{ report.data_summary.get('n_rows', 'N/A') }}</td></tr>
+            <tr><td>Variables</td><td>{{ report.data_summary.get('n_cols', 'N/A') }}</td></tr>
+            <tr><td>Data Quality Score</td><td>{{ report.data_summary.get('quality_score', 'N/A') }}</td></tr>
+            <tr><td>Missing Rate</td><td>{{ report.data_summary.get('null_rate', 'N/A') }}</td></tr>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if report.cleaning_summary %}
+    <div class="section">
+        <h2>2. Data Cleaning</h2>
+        <p>
+            Original N = {{ report.cleaning_summary.get('total_rows_original', 'N/A') }},
+            After cleaning N = {{ report.cleaning_summary.get('total_rows_after', 'N/A') }},
+            Impact rate = {{ report.cleaning_summary.get('impact_rate', 'N/A') }}.
+        </p>
+    </div>
+    {% endif %}
+
+    {% for section in report.sections %}
+    <div class="section">
+        <h2>{{ loop.index + 2 }}. {{ section.title | replace('🎯 ', '') | replace('📈 ', '') | replace('🔬 ', '') | replace('🔗 ', '') | replace('📊 ', '') | replace('🛡️ ', '') }}</h2>
+        {% if section.content %}<p>{{ section.content }}</p>{% endif %}
+
+        {% for finding in section.findings %}
+        <div class="finding">
+            <p><strong>{{ finding.get('question', finding.get('conclusion_plain', '')) }}</strong></p>
+            {% if finding.get('p_value') is not none %}
+            <table class="stats-table">
+                <tr><th>Statistic</th><th>Value</th></tr>
+                <tr><td>p-value</td><td>{{ '%.4f' | format(finding.p_value) }}</td></tr>
+                {% if finding.get('effect_size') is not none %}
+                <tr><td>{{ finding.get('effect_type', 'Effect Size') }}</td><td>{{ '%.3f' | format(finding.effect_size) }}</td></tr>
+                {% endif %}
+                {% if finding.get('confidence_interval') %}
+                <tr><td>95% CI</td><td>{{ finding.confidence_interval }}</td></tr>
+                {% endif %}
+                <tr><td>Significance</td><td>{{ finding.get('significance', 'N/A') }}</td></tr>
+            </table>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <footer>
+        HaGoKu Statistical Analysis Report
+    </footer>
+</body>
+</html>
+"""
+
+
+# ── 简要摘要模板 ──────────────────────────────────────────────
+
+BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — Summary</title>
+    <style>
+        :root { --primary: #1a73e8; --bg: #fff; --surface: #f8f9fa; --text: #202124; --border: #dadce0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text); background: var(--bg); line-height: 1.5;
+            max-width: 640px; margin: 0 auto; padding: 2rem;
+        }
+        header { border-left: 4px solid var(--primary); padding-left: 1rem; margin-bottom: 2rem; }
+        h1 { font-size: 1.3rem; color: var(--primary); }
+        .meta { font-size: 0.8rem; color: #80868b; margin-top: 0.3rem; }
+        .query { font-size: 0.95rem; margin: 0.5rem 0; color: var(--text); }
+        .key-number { display: flex; gap: 1.5rem; margin: 1.5rem 0; flex-wrap: wrap; }
+        .key-number .item { text-align: center; }
+        .key-number .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+        .key-number .label { font-size: 0.75rem; color: #80868b; }
+        .findings { margin: 1.5rem 0; }
+        .finding-item {
+            background: var(--surface); border-radius: 6px; padding: 0.75rem 1rem;
+            margin: 0.5rem 0; border-left: 3px solid var(--primary);
+        }
+        .finding-item .question { font-weight: 600; font-size: 0.9rem; }
+        .finding-item .conclusion { font-size: 0.85rem; margin-top: 0.25rem; }
+        .finding-item .stats { font-size: 0.8rem; color: #5f6368; margin-top: 0.25rem;
+                              font-family: 'Courier New', monospace; }
+        .finding-item.warning { border-left-color: #fbbc04; }
+        .finding-item.negative { border-left-color: #ea4335; }
+        footer { margin-top: 2rem; font-size: 0.75rem; color: #80868b; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>{{ report.project_name }}</h1>
+        <div class="meta">{{ report.generated_at[:10] }}</div>
+        {% if report.query %}<div class="query">{{ report.query }}</div>{% endif %}
+    </header>
+
+    {% if report.data_summary %}
+    <div class="key-number">
+        <div class="item">
+            <div class="value">{{ report.data_summary.get('n_rows', 'N/A') }}</div>
+            <div class="label">Samples</div>
+        </div>
+        <div class="item">
+            <div class="value">{{ report.data_summary.get('n_cols', 'N/A') }}</div>
+            <div class="label">Variables</div>
+        </div>
+        <div class="item">
+            <div class="value">{{ report.data_summary.get('quality_score', 'N/A') }}</div>
+            <div class="label">Quality</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="findings">
+    {% for section in report.sections %}
+        {% for finding in section.findings %}
+        <div class="finding-item {% if finding.get('significance') == 'not_significant' %}warning{% endif %}">
+            <div class="question">{{ finding.get('question', '') }}</div>
+            {% if finding.get('conclusion_plain') %}
+            <div class="conclusion">{{ finding.conclusion_plain }}</div>
+            {% endif %}
+            {% if finding.get('p_value') is not none %}
+            <div class="stats">
+                p = {{ '%.4f' | format(finding.p_value) }}
+                {% if finding.get('effect_size') is not none %}| d = {{ '%.3f' | format(finding.effect_size) }}{% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endfor %}
+    </div>
+
+    <footer>HaGoKu Summary</footer>
+</body>
+</html>
+"""
+
+
+# ── 内置模板注册 ──────────────────────────────────────────────
+
+BUILTIN_TEMPLATES: dict[str, str] = {
+    "default": DEFAULT_HTML_TEMPLATE,
+    "academic": ACADEMIC_HTML_TEMPLATE,
+    "brief": BRIEF_HTML_TEMPLATE,
+}
+
+
 # ── 报告生成器 ────────────────────────────────────────────────
 
 
@@ -280,7 +487,7 @@ class ReportGenerator:
         Args:
             report: 报告数据
             output_path: 输出路径
-            template_name: 模板名（在 template_dir 中查找）
+            template_name: 模板名 — "default"/"academic"/"brief" 或 template_dir 中的文件名
 
         Returns:
             HTML 字符串
@@ -288,7 +495,9 @@ class ReportGenerator:
         env = self._get_env()
 
         # 选择模板
-        if template_name:
+        if template_name and template_name in BUILTIN_TEMPLATES:
+            template = env.from_string(BUILTIN_TEMPLATES[template_name])
+        elif template_name:
             template = env.get_template(template_name)
         elif self.custom_template:
             template = env.get_template(self.custom_template)

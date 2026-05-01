@@ -22,6 +22,20 @@ def generate_profile(df: pd.DataFrame, *, minimal: bool = True) -> dict[str, Any
     Returns:
         结构化画像字典
     """
+    # 空 DataFrame 安全处理
+    if len(df) == 0:
+        return {
+            "n_rows": 0,
+            "n_cols": len(df.columns),
+            "columns": {},
+            "missing_summary": {"total_nulls": 0, "null_rate": 0, "columns_with_nulls": 0, "column_details": {}},
+            "duplicate_rate": 0,
+            "duplicate_rows": 0,
+            "memory_mb": 0,
+            "correlations": {},
+            "quality_score": 0,
+        }
+
     profile: dict[str, Any] = {
         "n_rows": len(df),
         "n_cols": len(df.columns),
@@ -161,14 +175,29 @@ def _column_profile(series: pd.Series, *, minimal: bool = True) -> dict[str, Any
 
 def _infer_type(series: pd.Series) -> str:
     """推断列的语义类型"""
+    # 全 NaN 列
+    if series.isna().all():
+        return "unknown"
     if pd.api.types.is_datetime64_any_dtype(series):
         return "datetime"
     if pd.api.types.is_bool_dtype(series):
         return "boolean"
     if pd.api.types.is_numeric_dtype(series):
         n_unique = series.nunique()
-        # 低唯一值数的数值列可能是分类
-        if n_unique <= 10 and n_unique < len(series) * 0.05:
+        # 高唯一率的数值列可能是 ID，但需额外验证：
+        # 浮点列高唯一率是正常的（连续值），只有整数列且接近连续序列才判为 ID
+        if n_unique > len(series) * 0.8:
+            if not pd.api.types.is_float_dtype(series):
+                # 整数列：检查是否接近连续序列（如 0,1,2,...,N）
+                vals = series.dropna().sort_values()
+                val_range = vals.max() - vals.min() + 1
+                # 如果值域接近唯一值数，说明是连续序列 → ID
+                if val_range <= n_unique * 1.1:
+                    return "id"
+            # 浮点列或非连续整数列，高唯一率也保持 numeric
+        # 低唯一值数的整数列可能是分类（如 flag/枚举），浮点列保持 numeric
+        if (not pd.api.types.is_float_dtype(series)
+                and n_unique <= 10 and n_unique < len(series) * 0.05):
             return "categorical"
         return "numeric"
     # 字符串列

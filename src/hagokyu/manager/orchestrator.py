@@ -233,7 +233,11 @@ class Orchestrator:
             # 12. 发射完成事件
             self.event_bus.emit(EventType.RUN_COMPLETED, "Manager", {
                 "duration": f"{duration_ms / 1000:.1f}s",
-                "token_count": 0,  # TODO: 从 LLM 调用中统计
+                "token_count": sum(
+                    e.data.get("token_count", 0)
+                    for e in self.event_bus.events
+                    if e.event_type == EventType.TOOL_RESULT and "token_count" in e.data
+                ),
                 "output_path": output_path,
             })
 

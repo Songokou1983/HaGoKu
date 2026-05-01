@@ -458,6 +458,598 @@ def kruskal_wallis(
     }
 
 
+# ── 增强功能：交叉验证 / 多比较校正 / 假设检验前置检查 / 交互分析 ──
+
+
+def cross_validate(
+    df: pd.DataFrame,
+    target: str,
+    features: list[str],
+    *,
+    method: str = "ols",
+    k_folds: int = 5,
+    scoring: str = "r_squared",
+) -> dict[str, Any]:
+    """
+    k-fold 交叉验证，评估模型泛化能力
+
+    Args:
+        df: 数据
+        target: 因变量列名
+        features: 自变量列名列表
+        method: "ols" / "robust" / "logistic"
+        k_folds: 折数（默认 5）
+        scoring: "r_squared" / "rmse" / "mae"
+
+    Returns:
+        交叉验证结果
+    """
+    import statsmodels.api as sm
+    from sklearn.model_selection import KFold
+
+    n = len(df)
+    min_n = len(features) + 3
+    if n < min_n:
+        return _insufficient_data(
+            f"交叉验证需要至少 {min_n} 行数据 (实际: {n})"
+        )
+    if target not in df.columns:
+        return _insufficient_data(f"因变量 '{target}' 不在数据中")
+    missing_features = [f for f in features if f not in df.columns]
+    if missing_features:
+        return _insufficient_data(f"自变量 {missing_features} 不在数据中")
+
+    # 调整折数：小样本时减少折数
+    actual_k = min(k_folds, n // min_n)
+    if actual_k < 2:
+        return _insufficient_data(
+            f"交叉验证至少需要 2 折 (样本 {n} / 最小折样本 {min_n})"
+        )
+
+    y = df[target].values
+    X = df[features].values
+    X = sm.add_constant(X)
+
+    kf = KFold(n_splits=actual_k, shuffle=True, random_state=42)
+
+    train_scores: list[float] = []
+    test_scores: list[float] = []
+
+    for train_idx, test_idx in kf.split(X):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        try:
+            if method == "ols":
+                model = sm.OLS(y_train, X_train).fit()
+            elif method == "robust":
+                model = sm.RLM(y_train, X_train).fit()
+            elif method == "logistic":
+                model = sm.Logit(y_train, X_train).fit(disp=0)
+            else:
+                raise ValueError(f"不支持的回归方法: {method}")
+
+            # 训练集评分
+            if scoring == "r_squared" and method != "logistic":
+                train_r2 = _calc_r_squared(y_train, model.predict(X_train))
+                test_r2 = _calc_r_squared(y_test, model.predict(X_test))
+                train_scores.append(train_r2)
+                test_scores.append(test_r2)
+            elif scoring == "rmse":
+                train_rmse = float(np.sqrt(np.mean((y_train - model.predict(X_train)) ** 2)))
+                test_rmse = float(np.sqrt(np.mean((y_test - model.predict(X_test)) ** 2)))
+                train_scores.append(train_rmse)
+                test_scores.append(test_rmse)
+            elif scoring == "mae":
+                train_mae = float(np.mean(np.abs(y_train - model.predict(X_train))))
+                test_mae = float(np.mean(np.abs(y_test - model.predict(X_test))))
+                train_scores.append(train_mae)
+                test_scores.append(test_mae)
+            else:
+                # 默认 R²
+                if method != "logistic":
+                    train_scores.append(_calc_r_squared(y_train, model.predict(X_train)))
+                    test_scores.append(_calc_r_squared(y_test, model.predict(X_test)))
+        except Exception:
+            continue
+
+    if not train_scores:
+        return {"error": "cv_failed", "message": "所有折的模型拟合均失败"}
+
+    train_mean = float(np.mean(train_scores))
+    test_mean = float(np.mean(test_scores))
+    train_std = float(np.std(train_scores))
+    test_std = float(np.std(test_scores))
+
+    # 过拟合检测
+    if scoring == "r_squared":
+        gap = train_mean - test_mean
+        overfitting = gap > 0.15
+    elif scoring in ("rmse", "mae"):
+        gap = test_mean - train_mean
+        overfitting = gap / max(train_mean, 1e-10) > 0.15
+    else:
+        gap = abs(train_mean - test_mean)
+        overfitting = False
+
+    return {
+        "test": "cross_validation",
+        "method": method,
+        "k_folds": actual_k,
+        "scoring": scoring,
+        "train_scores": [round(s, 4) for s in train_scores],
+        "test_scores": [round(s, 4) for s in test_scores],
+        "train_mean": round(train_mean, 4),
+        "train_std": round(train_std, 4),
+        "test_mean": round(test_mean, 4),
+        "test_std": round(test_std, 4),
+        "generalization_gap": round(float(gap), 4),
+        "overfitting_detected": overfitting,
+        "n_observations": n,
+    }
+
+
+def _calc_r_squared(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """计算 R²"""
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return float(1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+
+
+def multiple_comparison_correction(
+    p_values: list[float],
+    *,
+    method: str = "bh",
+    alpha: float = 0.05,
+) -> dict[str, Any]:
+    """
+    多重比较校正（控制族错误率或发现错误率）
+
+    Args:
+        p_values: 原始 p 值列表
+        method: "bonferroni" / "bh"（Benjamini-Hochberg）/ "holm"
+        alpha: 显著性水平（默认 0.05）
+
+    Returns:
+        校正结果
+    """
+    from scipy import stats
+
+    n = len(p_values)
+    if n == 0:
+        return {"error": "no_p_values", "message": "p 值列表为空"}
+
+    if n == 1:
+        # 单个检验无需校正
+        return {
+            "test": "multiple_comparison_correction",
+            "method": "none_needed",
+            "n_tests": 1,
+            "original_p": p_values,
+            "adjusted_p": p_values,
+            "significant": [p < alpha for p in p_values],
+            "note": "单次检验无需多重比较校正",
+        }
+
+    original = np.array(p_values)
+
+    if method == "bonferroni":
+        adjusted = np.minimum(original * n, 1.0)
+        method_name = "Bonferroni"
+
+    elif method == "bh":
+        # Benjamini-Hochberg procedure
+        order = np.argsort(original)
+        ranks = np.empty_like(order, dtype=float)
+        ranks[order] = np.arange(1, n + 1)
+        adjusted = original * n / ranks
+        # 确保单调性：从最大 p 值回推
+        for i in range(n - 2, -1, -1):
+            idx = order[i]
+            idx_next = order[i + 1]
+            adjusted[idx] = min(adjusted[idx], adjusted[idx_next])
+        adjusted = np.minimum(adjusted, 1.0)
+        method_name = "Benjamini-Hochberg"
+
+    elif method == "holm":
+        # Holm-Bonferroni (step-down)
+        order = np.argsort(original)
+        adjusted = np.empty(n, dtype=float)
+        for i, rank_idx in enumerate(order):
+            # Holm: p_i * (n - i)
+            multiplier = n - i
+            adjusted[rank_idx] = min(original[rank_idx] * multiplier, 1.0)
+        # 确保单调性
+        for i in range(n - 2, -1, -1):
+            idx = order[i]
+            idx_next = order[i + 1]
+            adjusted[idx] = max(adjusted[idx], adjusted[idx_next])
+        adjusted = np.minimum(adjusted, 1.0)
+        method_name = "Holm-Bonferroni"
+
+    else:
+        raise ValueError(f"不支持的校正方法: {method}，可选: bonferroni, bh, holm")
+
+    significant = adjusted < alpha
+    n_significant = int(np.sum(significant))
+
+    return {
+        "test": "multiple_comparison_correction",
+        "method": method,
+        "method_name": method_name,
+        "n_tests": n,
+        "alpha": alpha,
+        "original_p": [round(float(p), 6) for p in original],
+        "adjusted_p": [round(float(p), 6) for p in adjusted],
+        "significant": [bool(s) for s in significant],
+        "n_significant": n_significant,
+        "n_original_significant": int(np.sum(original < alpha)),
+        "correction_note": (
+            f"{method_name} 校正: {int(np.sum(original < alpha))} → {n_significant} 个显著"
+        ),
+    }
+
+
+def check_test_assumptions(
+    df: pd.DataFrame,
+    test_type: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """
+    检验前假设检查：根据检验类型自动验证前提条件
+
+    Args:
+        df: 数据
+        test_type: "ttest" / "anova" / "regression" / "correlation" / "chi_square"
+        **kwargs: 检验相关参数（target, group_col, features 等）
+
+    Returns:
+        假设检查结果
+    """
+    from scipy import stats
+
+    result: dict[str, Any] = {
+        "test_type": test_type,
+        "assumptions": {},
+        "warnings": [],
+        "recommendation": None,
+    }
+
+    if test_type == "ttest":
+        group_col = kwargs.get("group_col")
+        target = kwargs.get("target")
+        if group_col and target and group_col in df.columns and target in df.columns:
+            groups = df.groupby(group_col)[target]
+            group_data = [g.dropna().values for _, g in groups]
+            if len(group_data) >= 2:
+                g1, g2 = group_data[0], group_data[1]
+
+                # 正态性
+                if len(g1) >= 3:
+                    _, p1 = stats.shapiro(g1[:5000])
+                    result["assumptions"]["normality_group1"] = {
+                        "p_value": round(float(p1), 4),
+                        "met": p1 > 0.05,
+                    }
+                if len(g2) >= 3:
+                    _, p2 = stats.shapiro(g2[:5000])
+                    result["assumptions"]["normality_group2"] = {
+                        "p_value": round(float(p2), 4),
+                        "met": p2 > 0.05,
+                    }
+
+                # 方差齐性
+                if len(g1) >= 2 and len(g2) >= 2:
+                    _, p_levene = stats.levene(g1, g2)
+                    result["assumptions"]["equal_variance"] = {
+                        "p_value": round(float(p_levene), 4),
+                        "met": p_levene > 0.05,
+                    }
+
+                # 样本量
+                min_n = min(len(g1), len(g2))
+                result["assumptions"]["sample_size"] = {
+                    "n1": len(g1), "n2": len(g2),
+                    "met": min_n >= 30,
+                }
+
+                # 推荐替代
+                norm_violated = any(
+                    not v.get("met", True)
+                    for k, v in result["assumptions"].items()
+                    if k.startswith("normality") and not v.get("met", True)
+                )
+                var_violated = not result["assumptions"].get("equal_variance", {}).get("met", True)
+
+                if norm_violated:
+                    result["recommendation"] = "正态性不满足，建议使用 Mann-Whitney U 检验（非参数替代）"
+                    result["warnings"].append("正态性假设不满足")
+                elif var_violated:
+                    result["recommendation"] = "方差齐性不满足，建议使用 Welch's t 检验"
+                    result["warnings"].append("方差齐性假设不满足")
+
+    elif test_type == "anova":
+        group_col = kwargs.get("group_col")
+        target = kwargs.get("target")
+        if group_col and target and group_col in df.columns and target in df.columns:
+            groups = [g.dropna().values for _, g in df.groupby(group_col)[target]]
+
+            # 正态性（每组）
+            normality_ok = True
+            for i, g in enumerate(groups):
+                if len(g) >= 3:
+                    _, p = stats.shapiro(g[:5000])
+                    result["assumptions"][f"normality_group{i}"] = {
+                        "p_value": round(float(p), 4),
+                        "met": p > 0.05,
+                    }
+                    if p <= 0.05:
+                        normality_ok = False
+
+            # 方差齐性
+            if len(groups) >= 2 and all(len(g) >= 2 for g in groups):
+                _, p_levene = stats.levene(*groups)
+                result["assumptions"]["equal_variance"] = {
+                    "p_value": round(float(p_levene), 4),
+                    "met": p_levene > 0.05,
+                }
+
+            # 样本量
+            result["assumptions"]["sample_size"] = {
+                "per_group": [len(g) for g in groups],
+                "met": all(len(g) >= 5 for g in groups),
+            }
+
+            if not normality_ok:
+                result["recommendation"] = "正态性不满足，建议使用 Kruskal-Wallis H 检验（非参数替代）"
+                result["warnings"].append("正态性假设不满足")
+
+    elif test_type == "regression":
+        target = kwargs.get("target")
+        features = kwargs.get("features", [])
+        if target and target in df.columns:
+            y = df[target].dropna()
+
+            # 正态性（因变量）
+            if len(y) >= 3:
+                _, p = stats.shapiro(y[:5000])
+                result["assumptions"]["normality_target"] = {
+                    "p_value": round(float(p), 4),
+                    "met": p > 0.05,
+                }
+
+            # 线性暗示（如果有 features）
+            if features:
+                for feat in features[:5]:  # 最多检查 5 个
+                    if feat in df.columns:
+                        valid = df[[target, feat]].dropna()
+                        if len(valid) >= 10:
+                            corr, _ = stats.pearsonr(valid[target], valid[feat])
+                            result["assumptions"][f"linearity_{feat}"] = {
+                                "pearson_r": round(float(corr), 4),
+                                "linear_hint": abs(corr) > 0.1,
+                            }
+
+            # 多重共线性（VIF）
+            if len(features) > 1:
+                try:
+                    from statsmodels.stats.outliers_influence import variance_inflation_factor
+                    X = df[features].dropna()
+                    if len(X) > len(features):
+                        vif_values = {}
+                        for i, col in enumerate(features):
+                            vif_values[col] = round(float(variance_inflation_factor(X.values, i)), 4)
+                        max_vif = max(vif_values.values())
+                        result["assumptions"]["multicollinearity"] = {
+                            "vif": vif_values,
+                            "max_vif": max_vif,
+                            "met": max_vif < 10,
+                        }
+                        if max_vif >= 10:
+                            result["warnings"].append(f"VIF={max_vif:.1f} >= 10，存在严重共线性")
+                except Exception:
+                    pass
+
+            # 样本量（每变量至少 10-15 个观测）
+            n_per_var = len(df) / max(len(features), 1)
+            result["assumptions"]["sample_size_per_predictor"] = {
+                "ratio": round(float(n_per_var), 1),
+                "met": n_per_var >= 10,
+            }
+
+    elif test_type == "correlation":
+        col1 = kwargs.get("col1")
+        col2 = kwargs.get("col2")
+        method = kwargs.get("method", "pearson")
+        if col1 and col2 and col1 in df.columns and col2 in df.columns:
+            valid = df[[col1, col2]].dropna()
+
+            if method == "pearson":
+                # 正态性（两个变量）
+                if len(valid) >= 3:
+                    _, p1 = stats.shapiro(valid[col1].values[:5000])
+                    _, p2 = stats.shapiro(valid[col2].values[:5000])
+                    result["assumptions"]["normality"] = {
+                        "p_value_col1": round(float(p1), 4),
+                        "p_value_col2": round(float(p2), 4),
+                        "met": p1 > 0.05 and p2 > 0.05,
+                    }
+                    if p1 <= 0.05 or p2 <= 0.05:
+                        result["recommendation"] = "变量非正态，建议使用 Spearman 等级相关"
+                        result["warnings"].append("Pearson 相关的正态性假设不满足")
+
+            # 线性（散点图暗示）
+            if len(valid) >= 10:
+                corr_p, _ = stats.pearsonr(valid[col1], valid[col2])
+                corr_s, _ = stats.spearmanr(valid[col1], valid[col2])
+                # Pearson 和 Spearman 差异大 → 非线性
+                diff = abs(corr_p - corr_s)
+                result["assumptions"]["linearity"] = {
+                    "pearson_r": round(float(corr_p), 4),
+                    "spearman_r": round(float(corr_s), 4),
+                    "difference": round(float(diff), 4),
+                    "met": diff < 0.2,
+                }
+                if diff >= 0.2:
+                    result["warnings"].append("Pearson-Spearman 差异较大，可能存在非线性关系")
+
+    elif test_type == "chi_square":
+        col1 = kwargs.get("col1")
+        col2 = kwargs.get("col2")
+        if col1 and col2 and col1 in df.columns and col2 in df.columns:
+            contingency = pd.crosstab(df[col1], df[col2])
+
+            # 期望频数（每格 ≥ 5）
+            from scipy import stats as sp_stats
+            _, _, _, expected = sp_stats.chi2_contingency(contingency)
+            low_expected = np.sum(expected < 5)
+            total_cells = expected.size
+            result["assumptions"]["expected_frequencies"] = {
+                "cells_below_5": int(low_expected),
+                "total_cells": int(total_cells),
+                "rate": round(float(low_expected / total_cells), 4),
+                "met": low_expected / total_cells < 0.2,
+            }
+
+            if low_expected / total_cells >= 0.2:
+                result["recommendation"] = "期望频数过低（>20% 格子 < 5），建议使用 Fisher 精确检验"
+                result["warnings"].append("卡方检验期望频数假设不满足")
+
+    # 汇总
+    all_met = all(
+        v.get("met", True)
+        for v in result["assumptions"].values()
+        if isinstance(v, dict) and "met" in v
+    )
+    result["all_assumptions_met"] = all_met
+
+    return result
+
+
+def interaction_analysis(
+    df: pd.DataFrame,
+    target: str,
+    feature1: str,
+    feature2: str,
+    *,
+    add_main_effects: bool = True,
+) -> dict[str, Any]:
+    """
+    交互效应分析：检验两个变量是否存在交互作用
+
+    Args:
+        df: 数据
+        target: 因变量
+        feature1: 第一个自变量
+        feature2: 第二个自变量
+        add_main_effects: 是否包含主效应
+
+    Returns:
+        交互分析结果
+    """
+    import statsmodels.api as sm
+
+    if target not in df.columns:
+        return _insufficient_data(f"因变量 '{target}' 不在数据中")
+    for feat in (feature1, feature2):
+        if feat not in df.columns:
+            return _insufficient_data(f"自变量 '{feat}' 不在数据中")
+
+    valid = df[[target, feature1, feature2]].dropna()
+    if len(valid) < 10:
+        return _insufficient_data(
+            f"交互分析需要至少 10 行有效数据 (实际: {len(valid)})"
+        )
+
+    # 标准化连续变量（使交互项系数更可解释）
+    y = valid[target].values
+
+    # 构建特征矩阵
+    features_list = []
+    feature_names = []
+
+    if add_main_effects:
+        features_list.append(valid[feature1].values)
+        feature_names.append(feature1)
+        features_list.append(valid[feature2].values)
+        feature_names.append(feature2)
+
+    # 交互项
+    interaction_term = valid[feature1].values * valid[feature2].values
+    features_list.append(interaction_term)
+    feature_names.append(f"{feature1}×{feature2}")
+
+    X = np.column_stack(features_list)
+    X = sm.add_constant(X)
+
+    try:
+        model = sm.OLS(y, X).fit()
+    except Exception as e:
+        return _insufficient_data(f"交互模型拟合失败: {e}")
+
+    # 提取交互项的系数和 p 值（最后一项）
+    interaction_idx = len(feature_names)  # +1 因为 const
+    interaction_coef = float(model.params[interaction_idx])
+    interaction_p = float(model.pvalues[interaction_idx])
+    interaction_ci = model.conf_int()[interaction_idx].tolist()
+
+    # 比较有交互项和无交互项的模型
+    if add_main_effects:
+        X_main = np.column_stack([
+            valid[feature1].values,
+            valid[feature2].values,
+        ])
+        X_main = sm.add_constant(X_main)
+        model_main = sm.OLS(y, X_main).fit()
+
+        r2_diff = float(model.rsquared - model_main.rsquared)
+        # F 检验比较两个模型
+        try:
+            f_test = model.compare_f_test(model_main)
+            f_stat = float(f_test[0])
+            f_p = float(f_test[1])
+        except Exception:
+            f_stat = None
+            f_p = None
+    else:
+        r2_diff = None
+        f_stat = None
+        f_p = None
+
+    sig = "significant" if interaction_p < 0.05 else "not_significant"
+
+    # 效应量：交互项的偏 η²
+    if model.f_pvalue is not None:
+        # 近似：用交互项的 t 值计算
+        t_val = float(model.tvalues[interaction_idx])
+        partial_eta_sq = t_val ** 2 / (t_val ** 2 + model.df_resid)
+    else:
+        partial_eta_sq = None
+
+    return {
+        "test": "interaction_analysis",
+        "feature1": feature1,
+        "feature2": feature2,
+        "interaction_term": f"{feature1}×{feature2}",
+        "coefficient": round(interaction_coef, 6),
+        "p_value": round(interaction_p, 6),
+        "significance": sig,
+        "confidence_interval": [round(float(v), 6) for v in interaction_ci],
+        "effect_size": round(float(partial_eta_sq), 4) if partial_eta_sq is not None else None,
+        "effect_type": "partial_eta_squared",
+        "r_squared_with_interaction": round(float(model.rsquared), 4),
+        "r_squared_improvement": round(r2_diff, 4) if r2_diff is not None else None,
+        "f_test_statistic": round(f_stat, 4) if f_stat is not None else None,
+        "f_test_p_value": round(f_p, 6) if f_p is not None else None,
+        "n_observations": len(valid),
+        "interpretation": (
+            f"{'存在' if sig == 'significant' else '不存在'}显著交互效应: "
+            f"{feature1} 对 {target} 的影响{'受' if sig == 'significant' else '不受'} "
+            f"{feature2} 的调节"
+        ),
+    }
+
+
 # ── 辅助函数 ─────────────────────────────────────────────────
 
 

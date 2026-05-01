@@ -14,10 +14,14 @@ from ..observability.event_bus import EventBus
 from ..observability.events import EventType
 from ..tools.analysis import (
     anova,
+    check_test_assumptions,
     chi_square,
     correlation,
+    cross_validate,
+    interaction_analysis,
     kruskal_wallis,
     mann_whitney_u,
+    multiple_comparison_correction,
     regression,
     ttest,
 )
@@ -138,6 +142,21 @@ class AnalystAgent(DataAgentBase):
             if not results:
                 results = self._auto_analyze(df, context, target_col, query)
 
+            # 增强诊断：对回归结果做交叉验证
+            for result in results:
+                if result.analysis_type == "regression" and result.raw_result:
+                    self._enhance_with_cv(df, context, result, target_col)
+
+            # 增强诊断：对多结果做多重比较校正
+            if len(results) > 1:
+                self._apply_multiple_comparison(results)
+
+            # 增强诊断：尝试交互效应分析
+            if "regression" in focus or "causal" in focus:
+                interaction_result = self._do_interaction_analysis(df, context, target_col)
+                if interaction_result:
+                    results.append(interaction_result)
+
             # 对每个结果运行统计护栏
             for result in results:
                 guardrail_results = self.guardrails.check(result.to_dict())
@@ -202,6 +221,20 @@ class AnalystAgent(DataAgentBase):
             return None
 
         self.emit_thinking(f"回归分析: {target_col} ~ {'+'.join(available_features[:5])}")
+
+        # 假设检验前置检查
+        self.emit_tool_call("check_test_assumptions", "regression")
+        assumption_check = check_test_assumptions(
+            df, "regression", target=target_col, features=available_features
+        )
+        if not assumption_check.get("all_assumptions_met", True):
+            warnings = assumption_check.get("warnings", [])
+            if warnings:
+                self.emit_thinking(f"⚠️ 假设检查: {'; '.join(warnings)}")
+            rec = assumption_check.get("recommendation")
+            if rec:
+                self.emit_thinking(f"💡 建议: {rec}")
+
         self.emit_tool_call("regression", f"target={target_col}")
 
         try:
@@ -296,6 +329,29 @@ class AnalystAgent(DataAgentBase):
         n_groups = df[group_col].nunique()
 
         self.emit_thinking(f"假设检验: {target_col} by {group_col} ({n_groups} 组)")
+
+        # 假设检验前置检查
+        test_type = "ttest" if n_groups == 2 else "anova"
+        self.emit_tool_call("check_test_assumptions", test_type)
+        assumption_check = check_test_assumptions(
+            df, test_type, target=target_col, group_col=group_col
+        )
+        if not assumption_check.get("all_assumptions_met", True):
+            warnings = assumption_check.get("warnings", [])
+            if warnings:
+                self.emit_thinking(f"⚠️ 假设检查: {'; '.join(warnings)}")
+            rec = assumption_check.get("recommendation")
+            if rec:
+                self.emit_thinking(f"💡 建议: {rec}")
+                # 如果正态性不满足，自动切换到非参数方法
+                if "正态性" in "; ".join(warnings):
+                    if n_groups == 2:
+                        self.emit_thinking("自动切换到 Mann-Whitney U 检验")
+                        test_type = "mann_whitney"
+                    else:
+                        self.emit_thinking("自动切换到 Kruskal-Wallis H 检验")
+                        test_type = "kruskal_wallis"
+
         self.emit_tool_call("ttest" if n_groups == 2 else "anova", f"{target_col} by {group_col}")
 
         try:
@@ -309,6 +365,35 @@ class AnalystAgent(DataAgentBase):
                 if len(g1) < 3 or len(g2) < 3:
                     self.emit_thinking(f"某组数据不足 (n1={len(g1)}, n2={len(g2)})，跳过假设检验")
                     return None
+
+                # 如果假设检查建议非参数方法，使用 Mann-Whitney U
+                if test_type == "mann_whitney":
+                    test_result = mann_whitney_u(g1, g2)
+                    if "error" in test_result:
+                        self.emit_tool_error(f"Mann-Whitney U 检验失败: {test_result['message']}")
+                        return None
+                    self.emit_tool_result(f"p={test_result['p_value']:.4f}, r={test_result['effect_size']:.3f}")
+                    sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
+                    medians = [float(g1.median()), float(g2.median())]
+                    conclusion = (
+                        f"{group_names[0]} (Mdn={medians[0]:.2f}) vs "
+                        f"{group_names[1]} (Mdn={medians[1]:.2f})，"
+                        f"{'差异显著' if sig == 'significant' else '差异不显著'}"
+                        f"(U={test_result['statistic']:.1f}, p={test_result['p_value']:.4f}, r={test_result['effect_size']:.3f})"
+                    )
+                    return AnalysisResult(
+                        result_id=uuid4().hex[:8],
+                        analysis_type="hypothesis_test_mann_whitney",
+                        question=f"不同 {group_col} 组的 {target_col} 有差异吗？",
+                        conclusion_plain=conclusion,
+                        p_value=test_result["p_value"],
+                        effect_size=test_result["effect_size"],
+                        effect_type=test_result.get("effect_type", ""),
+                        significance=sig,
+                        sample_size=len(df),
+                        test_statistic=test_result.get("statistic"),
+                        raw_result=test_result,
+                    )
 
                 test_result = ttest(g1, g2)
                 if "error" in test_result:
@@ -326,6 +411,33 @@ class AnalystAgent(DataAgentBase):
                 )
 
             else:
+                # 如果假设检查建议非参数方法，使用 Kruskal-Wallis
+                if test_type == "kruskal_wallis":
+                    test_result = kruskal_wallis(df, dv=target_col, between=group_col)
+                    if "error" in test_result:
+                        self.emit_tool_error(f"Kruskal-Wallis 检验失败: {test_result['message']}")
+                        return None
+                    self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²_H={test_result['effect_size']:.3f}")
+                    sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
+                    conclusion = (
+                        f"{n_groups} 组 {target_col} 中位数"
+                        f"{'差异显著' if sig == 'significant' else '差异不显著'}"
+                        f"(H={test_result['statistic']:.2f}, p={test_result['p_value']:.4f}, η²_H={test_result['effect_size']:.3f})"
+                    )
+                    return AnalysisResult(
+                        result_id=uuid4().hex[:8],
+                        analysis_type="hypothesis_test_kruskal_wallis",
+                        question=f"不同 {group_col} 组的 {target_col} 有差异吗？",
+                        conclusion_plain=conclusion,
+                        p_value=test_result["p_value"],
+                        effect_size=test_result["effect_size"],
+                        effect_type=test_result.get("effect_type", ""),
+                        significance=sig,
+                        sample_size=len(df),
+                        test_statistic=test_result.get("statistic"),
+                        raw_result=test_result,
+                    )
+
                 test_result = anova(df, dv=target_col, between=group_col)
                 if "error" in test_result:
                     self.emit_tool_error(f"ANOVA 失败: {test_result['message']}")
@@ -479,6 +591,142 @@ class AnalystAgent(DataAgentBase):
             sample_size=best_corr["n_observations"],
             raw_result=best_corr,
         )
+
+    def _enhance_with_cv(
+        self,
+        df: pd.DataFrame,
+        context: DataContext,
+        result: AnalysisResult,
+        target_col: str | None,
+    ) -> None:
+        """增强回归结果：添加交叉验证"""
+        raw = result.raw_result
+        features = [
+            k for k in raw.get("coefficients", {}).keys()
+            if k != "const" and k in df.columns
+        ]
+        target = target_col or result.question.split("的")[0] if "的" in result.question else None
+
+        if not target or target not in df.columns or len(features) < 1:
+            return
+
+        self.emit_thinking("执行 5-fold 交叉验证...")
+        self.emit_tool_call("cross_validate", f"target={target}, k=5")
+        try:
+            cv_result = cross_validate(df, target, features, k_folds=5)
+            if "error" not in cv_result:
+                # 附加到 diagnostics
+                if result.diagnostics is None:
+                    result.diagnostics = {}
+                result.diagnostics["cross_validation"] = cv_result
+
+                gap = cv_result.get("generalization_gap", 0)
+                test_mean = cv_result.get("test_mean", 0)
+                overfit = cv_result.get("overfitting_detected", False)
+                self.emit_tool_result(
+                    f"CV R²: train={cv_result['train_mean']:.3f}, test={test_mean:.3f}, "
+                    f"gap={gap:.3f}{' ⚠️ 过拟合' if overfit else ''}"
+                )
+            else:
+                self.emit_tool_result(f"交叉验证跳过: {cv_result.get('message', '')}")
+        except Exception as e:
+            self.emit_tool_result(f"交叉验证跳过: {e}")
+
+    def _apply_multiple_comparison(self, results: list[AnalysisResult]) -> None:
+        """对多个分析结果应用多重比较校正"""
+        p_values = []
+        for r in results:
+            if r.p_value is not None and not isinstance(r.p_value, str):
+                p_values.append(float(r.p_value))
+
+        if len(p_values) < 2:
+            return
+
+        self.emit_thinking(f"多重比较校正: {len(p_values)} 个 p 值")
+        self.emit_tool_call("multiple_comparison_correction", "method=bh")
+        try:
+            correction = multiple_comparison_correction(p_values, method="bh")
+            self.emit_tool_result(correction.get("correction_note", "完成"))
+
+            # 将校正结果附加到每个结果
+            for i, result in enumerate(results):
+                if i < len(correction.get("adjusted_p", [])):
+                    if result.raw_result is None:
+                        result.raw_result = {}
+                    result.raw_result["multiple_comparison"] = {
+                        "original_p": correction["original_p"][i],
+                        "adjusted_p": correction["adjusted_p"][i],
+                        "still_significant": correction["significant"][i],
+                        "method": "Benjamini-Hochberg",
+                    }
+                    # 如果校正后不再显著，更新 significance
+                    if not correction["significant"][i] and result.significance == "significant":
+                        result.significance = "not_significant_after_correction"
+                        self.emit_thinking(
+                            f"⚠️ {result.analysis_type}: p={correction['original_p'][i]:.4f} "
+                            f"→ 调整后 p={correction['adjusted_p'][i]:.4f}，不再显著"
+                        )
+        except Exception as e:
+            self.emit_tool_result(f"多重比较校正跳过: {e}")
+
+    def _do_interaction_analysis(
+        self,
+        df: pd.DataFrame,
+        context: DataContext,
+        target_col: str | None,
+    ) -> AnalysisResult | None:
+        """交互效应分析"""
+        if not target_col or target_col not in df.columns:
+            return None
+
+        # 找两个数值型自变量
+        numeric_features = [
+            sem.column_name
+            for sem in context.column_semantics
+            if sem.inferred_type == SemanticType.NUMERIC
+            and sem.suggested_role != "identifier"
+            and sem.column_name in df.columns
+            and sem.column_name != target_col
+        ]
+
+        if len(numeric_features) < 2:
+            self.emit_thinking("交互分析需要至少 2 个数值型自变量，跳过")
+            return None
+
+        # 选前两个做交互分析
+        feat1, feat2 = numeric_features[0], numeric_features[1]
+
+        self.emit_thinking(f"交互分析: {target_col} ~ {feat1}×{feat2}")
+        self.emit_tool_call("interaction_analysis", f"{feat1}×{feat2}")
+
+        try:
+            result = interaction_analysis(df, target_col, feat1, feat2)
+            if "error" in result:
+                self.emit_tool_result(f"交互分析跳过: {result['message']}")
+                return None
+
+            sig = result.get("significance", "not_significant")
+            self.emit_tool_result(
+                f"交互项 p={result['p_value']:.4f}, "
+                f"{'显著' if sig == 'significant' else '不显著'}, "
+                f"R² 改善={result.get('r_squared_improvement', 'N/A')}"
+            )
+
+            return AnalysisResult(
+                result_id=uuid4().hex[:8],
+                analysis_type="interaction_analysis",
+                question=f"{feat1} 和 {feat2} 对 {target_col} 是否存在交互效应？",
+                conclusion_plain=result.get("interpretation", ""),
+                p_value=result.get("p_value"),
+                effect_size=result.get("effect_size"),
+                effect_type=result.get("effect_type", ""),
+                significance=sig,
+                sample_size=result.get("n_observations"),
+                raw_result=result,
+            )
+        except Exception as e:
+            self.emit_tool_error(f"交互分析失败: {e}")
+            return None
 
     def _auto_analyze(
         self,

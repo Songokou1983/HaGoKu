@@ -115,8 +115,16 @@ class MustReportCI:
         return Severity.MANDATORY
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
-        has_point_estimate = analysis_result.get("point_estimate") is not None or analysis_result.get("coefficient") is not None
-        has_ci = analysis_result.get("confidence_interval") is not None
+        has_point_estimate = (
+            analysis_result.get("point_estimate") is not None
+            or analysis_result.get("coefficient") is not None
+            or analysis_result.get("coefficients") is not None
+        )
+        # 兼容 regression 的 confidence_intervals (复数) 和 ttest 的 confidence_interval (单数)
+        has_ci = (
+            analysis_result.get("confidence_interval") is not None
+            or analysis_result.get("confidence_intervals") is not None
+        )
         passed = not has_point_estimate or has_ci
         return GuardrailResult(
             rule=self.rule_name,

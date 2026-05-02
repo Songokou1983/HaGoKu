@@ -24,21 +24,15 @@ class TestLLMConfig:
 class TestManagerModeConfig:
     def test_defaults(self):
         config = ManagerModeConfig()
-        assert config.mode == "local_weak"
-        assert config.rule_weight == 0.9
-        assert config.llm_weight == 0.1
-
-    def test_r_squared_warning(self):
-        config = ManagerModeConfig()
-        assert config.r_squared_warning == 0.3
-        assert config.cleaning_impact_warning == 0.10
+        assert config.mode == "balanced"
+        assert config.llm_plan_enabled is True
 
 
 class TestHaGoKuConfig:
     def test_defaults(self):
         config = HaGoKuConfig()
         assert config.llm.model == "Qwen3.6-35B-A3B"
-        assert config.manager.mode == "local_weak"
+        assert config.manager.mode == "balanced"
         assert config.user_mode.default_mode == "standard"
 
     def test_from_yaml(self, tmp_path):
@@ -48,12 +42,12 @@ llm:
   model: test-model
   temperature: 0.5
 manager:
-  mode: cloud
+  mode: ai
 """)
         config = HaGoKuConfig.from_yaml(yaml_path)
         assert config.llm.model == "test-model"
         assert config.llm.temperature == 0.5
-        assert config.manager.mode == "cloud"
+        assert config.manager.mode == "ai"
 
     def test_from_yaml_nonexistent(self):
         config = HaGoKuConfig.from_yaml(Path("/nonexistent/config.yaml"))
@@ -62,16 +56,14 @@ manager:
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("HAGOKYU_LLM_BASE_URL", "http://env:7000/v1")
         monkeypatch.setenv("HAGOKYU_LLM_MODEL", "env-model")
-        monkeypatch.setenv("HAGOKYU_MANAGER_MODE", "cloud")
+        monkeypatch.setenv("HAGOKYU_MANAGER_MODE", "rule")
 
         config = HaGoKuConfig()
         config = HaGoKuConfig._merge_env(config)
 
         assert config.llm.base_url == "http://env:7000/v1"
         assert config.llm.model == "env-model"
-        assert config.manager.mode == "cloud"
-        assert config.manager.rule_weight == 0.1  # cloud preset
-        assert config.manager.llm_weight == 0.9
+        assert config.manager.mode == "rule"
 
     def test_ensure_work_dir(self, tmp_path, monkeypatch):
         work_dir = tmp_path / "test_hagokyu"

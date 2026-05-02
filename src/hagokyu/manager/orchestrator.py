@@ -338,53 +338,46 @@ class Orchestrator:
 
     def _create_plan(self, query: str, mode: str) -> dict[str, Any]:
         """
-        创建分析计划 — 规则+AI 双驱动
+        创建分析计划
 
-        三层决策逻辑：
-        - Tier 1: 规则匹配 + rule_weight ≥ 0.9 → 直接返回规则计划（不调 LLM）
-        - Tier 2: 规则匹配 + 混合模式 → LLM 调整规则计划
-        - Tier 3: 无规则匹配 + llm_weight > 0 → LLM 从零生成计划
-        - 降级: LLM 失败 → 规则计划或通用计划
+        简单模式：
+        - rule: 纯规则，快速
+        - balanced: 规则 + AI 调整
+        - ai: AI 生成
         """
-        rule_weight = self.config.manager.rule_weight
-        llm_weight = self.config.manager.llm_weight
-
-        # 1. 始终先运行规则引擎（免费、快速）
         rule_plan = self.rule_engine.match_plan(query)
 
-        # Tier 1: 纯规则模式 或 规则匹配且权重高
-        if rule_weight >= 1.0 or not self.config.manager.llm_plan_enabled:
+        # 纯规则模式
+        if mode == "rule" or not self.config.manager.llm_plan_enabled:
             if rule_plan:
+                rule_plan["rule_match"] = True
                 return rule_plan
             return self._generic_plan(query)
 
-        if rule_plan and rule_weight >= 0.9 and llm_weight <= 0.1:
-            # local_weak: 规则匹配足够强，跳过 LLM
-            return rule_plan
+        # AI 优先模式
+        if mode == "ai":
+            llm_plan = self._create_plan_llm(query, rule_plan)
+            if llm_plan is not None:
+                return llm_plan
+            # LLM 失败降级
+            if rule_plan:
+                rule_plan["rule_match"] = True
+                return rule_plan
+            return self._generic_plan(query)
 
-        # Tier 2 & 3: LLM 辅助路径
-        if llm_weight > 0:
-            if rule_plan and 0.1 < rule_weight < 0.9:
-                # 混合模式 (e.g., local_strong 0.5/0.5):
-                # LLM 调整规则计划
-                return self._create_plan_hybrid(query, rule_plan)
-            else:
-                # 无规则匹配 或 cloud 模式 (llm_weight 高):
-                # LLM 从零生成计划
-                llm_plan = self._create_plan_llm(query, rule_plan)
-                if llm_plan is not None:
-                    return llm_plan
-                # LLM 失败：降级到规则计划或通用计划
-                if rule_plan:
-                    self.event_bus.emit(EventType.PLAN_ADJUSTED, "Manager", {
-                        "reason": "LLM 失败，降级到规则计划",
-                    })
-                    return rule_plan
-                return self._generic_plan(query)
-
-        # llm_weight == 0，无规则匹配
+        # balanced 模式（默认）：规则优先，AI 调整
         if rule_plan:
+            # 先用规则，AI 做微调
+            llm_plan = self._create_plan_hybrid(query, rule_plan)
+            if llm_plan is not None:
+                return llm_plan
+            rule_plan["rule_match"] = True
             return rule_plan
+
+        # 无匹配规则，降级到 AI 生成
+        llm_plan = self._create_plan_llm(query, rule_plan)
+        if llm_plan is not None:
+            return llm_plan
         return self._generic_plan(query)
 
     def _generic_plan(self, query: str) -> dict[str, Any]:

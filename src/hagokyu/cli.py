@@ -25,8 +25,8 @@ def cli() -> None:
               type=click.Choice(["quick", "standard", "expert"]),
               help="用户模式 (quick/standard/expert)")
 @click.option("--manager-mode", default=None,
-              type=click.Choice(["local_weak", "local_strong", "cloud", "pure_rule"]),
-              help="Manager 模式")
+              type=click.Choice(["balanced", "rule", "ai"]),
+              help="Manager 模式: balanced=规则+AI / rule=纯规则 / ai=AI优先")
 @click.option("--output-dir", "-o", default=None, help="输出目录")
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),

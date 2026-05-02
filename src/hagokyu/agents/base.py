@@ -143,14 +143,13 @@ class DataAgentBase:
         """
         client = self.create_llm_client()
 
-        # instructor 客户端和原始 OpenAI 客户端的调用方式不同
-        if hasattr(client, "chat") and hasattr(client.chat, "completions"):
-            # 原始 OpenAI 客户端
-            messages = []
-            if system:
-                messages.append({"role": "system", "content": system})
-            messages.append({"role": "user", "content": prompt})
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
 
+        # instructor 包装的客户端和原始 OpenAI 客户端调用方式一致
+        try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=messages,
@@ -158,13 +157,8 @@ class DataAgentBase:
                 max_tokens=self.llm_config.max_tokens,
             )
             return response.choices[0].message.content or ""
-        else:
-            # instructor 客户端
-            messages = []
-            if system:
-                messages.append({"role": "system", "content": system})
-            messages.append({"role": "user", "content": prompt})
-
+        except TypeError:
+            # instructor 客户端可能需要 response_model=None
             response = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=messages,

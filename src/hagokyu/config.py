@@ -106,25 +106,6 @@ class HaGoKuConfig(BaseModel):
         return cls(**data)
 
     @classmethod
-    def from_env(cls) -> "HaGoKuConfig":
-        """从环境变量覆盖配置"""
-        config = cls()
-        # LLM
-        if v := os.getenv("HAGOKYU_LLM_BASE_URL"):
-            config.llm.base_url = v
-        if v := os.getenv("HAGOKYU_LLM_API_KEY"):
-            config.llm.api_key = v
-        if v := os.getenv("HAGOKYU_LLM_MODEL"):
-            config.llm.model = v
-        # Work dir
-        if v := os.getenv("HAGOKYU_WORK_DIR"):
-            config.work_dir = Path(v).expanduser()
-        # Manager mode
-        if v := os.getenv("HAGOKYU_MANAGER_MODE"):
-            config.manager.mode = v
-        return config
-
-    @classmethod
     def load(cls, config_path: Optional[Path] = None) -> "HaGoKuConfig":
         """加载配置：YAML + 环境变量覆盖"""
         # 1. 默认值

@@ -15,7 +15,6 @@ from ..observability.events import EventType
 from ..tools.analysis import (
     anova,
     check_test_assumptions,
-    chi_square,
     correlation,
     cross_validate,
     interaction_analysis,
@@ -25,7 +24,6 @@ from ..tools.analysis import (
     regression,
     ttest,
 )
-from ..tools.diagnostics import diagnose_regression, generate_diagnostic_plots
 from .base import DataAgentBase
 from .scout import DataContext, SemanticType
 
@@ -560,6 +558,7 @@ class AnalystAgent(DataAgentBase):
 
         # 找最强的相关
         best_corr = None
+        best_pair = (numeric_cols[0], numeric_cols[1])  # 默认值，防止未赋值
         best_abs_r = 0
 
         for i, col1 in enumerate(numeric_cols):

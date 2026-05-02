@@ -1,14 +1,13 @@
 """测试数据持久化"""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 import pandas as pd
 
 from hagokyu.storage.database import HaGoKuDB
-from hagokyu.storage.artifact import ArtifactManager, DataArtifact
+from hagokyu.storage.artifact import ArtifactManager
 from hagokyu.storage.output import OutputManager
 from hagokyu.config import OutputConfig
 

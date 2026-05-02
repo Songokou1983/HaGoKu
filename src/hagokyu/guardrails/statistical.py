@@ -199,7 +199,11 @@ class AssumptionsViolated:
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         assumptions = analysis_result.get("assumptions", {})
-        violated = [name for name, status in assumptions.items() if status in ("violated", "not_met")]
+        # analysis tools store assumptions as nested dicts: {"normality_group1": {"p_value": 0.03, "met": False}}
+        violated = [
+            name for name, value in assumptions.items()
+            if isinstance(value, dict) and not value.get("met", True)
+        ]
         passed = len(violated) == 0
         return GuardrailResult(
             rule=self.rule_name,
@@ -260,12 +264,20 @@ class HighVIF:
     VIF_THRESHOLD = 10.0
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
+        # VIF 数据可能在 diagnostics["vif"] 或 assumptions["multicollinearity"]["vif"]
         vif_data = analysis_result.get("vif", {})
+        if not vif_data:
+            diagnostics = analysis_result.get("diagnostics", {})
+            vif_data = diagnostics.get("vif", {})
+        if not vif_data:
+            assumptions = analysis_result.get("assumptions", {})
+            mc = assumptions.get("multicollinearity", {})
+            vif_data = mc.get("vif", {})
         if not vif_data:
             # 没有做 VIF 检查，不做判断
             return GuardrailResult(rule=self.rule_name, severity=self.severity, passed=True)
 
-        high_vif_vars = {var: vif for var, vif in vif_data.items() if vif > self.VIF_THRESHOLD}
+        high_vif_vars = {var: vif for var, vif in vif_data.items() if isinstance(vif, (int, float)) and vif > self.VIF_THRESHOLD}
         passed = len(high_vif_vars) == 0
         return GuardrailResult(
             rule=self.rule_name,
@@ -290,8 +302,24 @@ class PotentialOverfitting:
     RATIO_THRESHOLD = 0.15  # 训练/测试 R² 差异超过 15% 警告
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
-        train_score = analysis_result.get("train_r_squared") or analysis_result.get("train_score")
-        test_score = analysis_result.get("test_r_squared") or analysis_result.get("test_score")
+        # cross_validate() returns train_mean/test_mean/generalization_gap/overfitting_detected
+        train_score = (
+            analysis_result.get("train_mean")
+            or analysis_result.get("train_r_squared")
+            or analysis_result.get("train_score")
+        )
+        test_score = (
+            analysis_result.get("test_mean")
+            or analysis_result.get("test_r_squared")
+            or analysis_result.get("test_score")
+        )
+        # 也检查 diagnostics 中嵌套的 CV 结果
+        if train_score is None or test_score is None:
+            cv = analysis_result.get("cross_validation", {})
+            if train_score is None:
+                train_score = cv.get("train_mean") or cv.get("train_r_squared") or cv.get("train_score")
+            if test_score is None:
+                test_score = cv.get("test_mean") or cv.get("test_r_squared") or cv.get("test_score")
         if train_score is None or test_score is None:
             return GuardrailResult(rule=self.rule_name, severity=self.severity, passed=True)
 
@@ -301,7 +329,7 @@ class PotentialOverfitting:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"可能过拟合: 训练 R²={train_score:.3f}, 测试 R²={test_score:.3f}, 差异={gap:.3f}" if not passed else "",
+            message=f"可能过拟合: 训练={train_score:.3f}, 测试={test_score:.3f}, 差异={gap:.3f}" if not passed else "",
             suggestion="尝试简化模型、增加正则化、或收集更多数据" if not passed else None,
         )
 
@@ -320,7 +348,12 @@ class CleaningHighImpact:
     IMPACT_THRESHOLD = 0.10
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
+        # cleaning_impact 可能在 analysis_result 顶层或 cleaning_report 中
         impact = analysis_result.get("cleaning_impact")
+        if impact is None:
+            cleaning_report = analysis_result.get("cleaning_report", {})
+            impact = cleaning_report.get("impact_rate")
+
         if impact is None:
             return GuardrailResult(rule=self.rule_name, severity=self.severity, passed=True)
 
@@ -360,8 +393,14 @@ class SuggestNonlinear:
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         diagnostics = analysis_result.get("diagnostics", {})
-        residual_pattern = diagnostics.get("residual_pattern", "")
-        has_nonlinear_pattern = residual_pattern in ("u_shape", "inverted_u", "funnel", "curved")
+        residual_pattern = diagnostics.get("residual_pattern", {})
+        # _detect_residual_pattern() returns {"pattern": str, "met": bool, "verdict": str}
+        if isinstance(residual_pattern, dict):
+            pattern_name = residual_pattern.get("pattern", "")
+        else:
+            # 兼容直接传字符串的情况
+            pattern_name = str(residual_pattern)
+        has_nonlinear_pattern = pattern_name in ("u_shape", "inverted_u", "funnel", "curved")
 
         return GuardrailResult(
             rule=self.rule_name,
@@ -409,6 +448,14 @@ class MissingNotRandom:
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         missing_mechanism = analysis_result.get("missing_mechanism", "")
+        # cleaning tools 返回小写 ("mar", "mnar")，兼容大小写
+        if isinstance(missing_mechanism, str):
+            missing_mechanism = missing_mechanism.upper()
+        elif isinstance(missing_mechanism, dict):
+            # 如果是 {column: mechanism} 字典，检查是否有任何列非 MCAR
+            missing_mechanism = "MNAR" if any(
+                v.upper() in ("MAR", "MNAR") for v in missing_mechanism.values() if isinstance(v, str)
+            ) else ""
         is_not_random = missing_mechanism in ("MAR", "MNAR")
 
         return GuardrailResult(

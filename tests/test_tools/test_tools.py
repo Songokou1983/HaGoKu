@@ -1,7 +1,6 @@
 """测试工具层"""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -12,7 +11,6 @@ from hagokyu.tools.data_io import load_data, save_data, get_data_info, compute_d
 from hagokyu.tools.profiling import generate_profile, suggest_column_roles
 from hagokyu.tools.cleaning import (
     clean_data,
-    detect_missing_mechanism,
     detect_outliers_iqr,
     detect_outliers_zscore,
     suggest_cleaning_strategy,

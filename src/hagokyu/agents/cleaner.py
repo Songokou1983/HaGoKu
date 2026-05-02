@@ -17,7 +17,7 @@ from ..tools.cleaning import (
     littles_mcar_test,
     suggest_cleaning_strategy,
 )
-from ..tools.data_io import get_data_info, load_data, save_data
+from ..tools.data_io import load_data
 from .base import DataAgentBase
 from .scout import DataContext
 

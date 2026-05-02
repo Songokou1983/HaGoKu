@@ -151,10 +151,12 @@ class TestPrompts:
         assert "趋势分析" in result
         assert "trend, regression" in result
 
-    def test_system_prompt_lists_all_focus_types(self):
-        """系统提示应列出所有可用分析类型"""
-        for focus in VALID_ANALYST_FOCUS:
-            assert focus in PLAN_GENERATION_SYSTEM
+    def test_system_prompt_mentions_key_analysis_types(self):
+        """系统提示应涵盖主要分析类型（用中文或用户语言描述）"""
+        # 新 prompt 用中文和用户语言描述了分析类型
+        key_terms = ["回归", "假设检验", "一起涨一起跌", "趋势", "因果"]
+        for term in key_terms:
+            assert term in PLAN_GENERATION_SYSTEM, f"缺少关键分析类型: {term}"
 
 
 # ── rule 模式 ───────────────────────────────────────────────

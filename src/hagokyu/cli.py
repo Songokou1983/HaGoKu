@@ -40,6 +40,8 @@ def cli() -> None:
 @click.option("--verbosity", "-v", default="normal",
               type=click.Choice(["quiet", "normal", "verbose"]),
               help="终端输出详细度")
+@click.option("--interactive", "-i", is_flag=True,
+              help="交互模式：分析完成后继续等待你的调整指令")
 def run(
     data_path: str,
     query: str,
@@ -52,6 +54,7 @@ def run(
     resume: bool,
     schema_path: str | None,
     verbosity: str,
+    interactive: bool = False,
 ) -> None:
     """运行完整分析流程"""
     from .manager.orchestrator import Orchestrator
@@ -107,6 +110,16 @@ def run(
     if result["status"] == "completed":
         if verbosity != "quiet":
             click.echo(f"\n✅ 分析完成！报告: {result['output_path']}")
+
+        # 交互模式：进入 refinement REPL
+        if interactive:
+            _run_refinement_loop(
+                data_path=data_path,
+                project_name=result.get("project"),
+                result=result,
+                orch=orch,
+                verbosity=verbosity,
+            )
     else:
         click.echo("\n❌ 分析未能完成", err=True)
         click.echo("   请检查数据质量，或使用 -v verbose 查看详细信息", err=True)
@@ -501,6 +514,138 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
             if item.get("updated_at"):
                 click.echo(f"       更新: {item['updated_at'][:19]}")
         click.echo()
+
+
+def _run_refinement_loop(
+    data_path: str,
+    project_name: str | None,
+    result: dict,
+    orch: Any,
+    verbosity: str,
+) -> None:
+    """交互式 refinement REPL loop"""
+    from .manager.refinement import parse_refinement
+
+    click.echo()
+    click.echo("─" * 50)
+    click.echo("💬 交互模式：调整分析方向或报告格式")
+    click.echo("   输入你的想法，我来调整（输入「退出」结束）")
+    click.echo()
+
+    refinement_context: dict[str, Any] = {
+        "recent_results": [],
+        "current_template": None,
+        "verbosity": "standard",
+    }
+
+    while True:
+        try:
+            feedback = input("\n📝 你的想法: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            click.echo("\n\n再见！报告已保存。")
+            break
+
+        if not feedback:
+            continue
+
+        # 解析用户反馈
+        intent = parse_refinement(feedback, refinement_context)
+
+        # 退出处理
+        if intent.refine_type == "exit":
+            click.echo("\n✅ 调整结束！报告已保存。")
+            break
+
+        # 无法理解的反馈
+        if intent.clarification_needed and intent.confidence == "low":
+            click.echo(f"\n💭 {intent.clarification_needed}")
+            continue
+
+        # 需要用户确认
+        if intent.clarification_needed:
+            click.echo(f"\n💭 {intent.clarification_needed}")
+            # 等待用户输入
+            try:
+                confirm = input("   请输入: ").strip()
+                if confirm:
+                    # 更新意图
+                    if intent.refine_type == "filter" and intent.filter_column:
+                        intent.filter_value = confirm
+                        intent.clarification_needed = None
+                    elif intent.refine_type == "switch_target":
+                        intent.new_target = confirm
+                        intent.clarification_needed = None
+                    elif intent.refine_type == "add":
+                        intent.add_dimension = confirm
+                        intent.clarification_needed = None
+            except (EOFError, KeyboardInterrupt):
+                break
+
+        # 描述将要做的调整
+        desc = _describe_refinement(intent)
+        if desc:
+            click.echo(f"\n🔄 {desc}")
+
+        # 执行调整后的重新分析
+        try:
+            # 根据 refinement 类型构建新的分析参数
+            new_query = _build_refinement_query(feedback, result, intent)
+
+            if intent.refine_type == "simplify":
+                refinement_context["verbosity"] = "brief"
+            elif intent.refine_type == "more_detail":
+                refinement_context["verbosity"] = "detailed"
+
+            # 重新运行分析（用新 query 或调整参数）
+            new_result = orch.run(
+                data_path=data_path,
+                query=new_query or result.get("query", ""),
+                project_name=project_name,
+                user_mode="standard",
+                resume=True,
+            )
+
+            if new_result["status"] == "completed":
+                click.echo(f"\n✅ 调整完成！报告: {new_result['output_path']}")
+                # 更新结果用于下次 refinement
+                result.update(new_result)
+            else:
+                click.echo("\n⚠️ 调整失败，报告保持不变")
+
+        except Exception as e:
+            click.echo(f"\n⚠️ 调整出错: {e}")
+
+
+def _describe_refinement(intent: Any) -> str:
+    """将 refinement 意图翻译成用户能理解的话"""
+    descriptions = {
+        "filter": f"只看「{intent.filter_value or intent.filter_column}」的数据",
+        "exclude": f"排除「{intent.filter_value or intent.filter_column}」的数据",
+        "switch_target": f"换成「{intent.new_target}」作为分析指标",
+        "simplify": "简化报告，只保留关键发现",
+        "more_detail": "生成更详细的报告",
+        "explain": "解释分析结论背后的原因",
+        "add": f"增加「{intent.add_dimension}」维度的分析",
+        "regenerate": "重新生成完整报告",
+        "refine_query": "按你的新想法重新分析",
+    }
+    return descriptions.get(intent.refine_type, "")
+
+
+def _build_refinement_query(feedback: str, original_result: dict, intent: Any) -> str:
+    """根据 refinement 意图构建新的分析 query"""
+    if intent.refine_type == "filter" and intent.filter_column:
+        val = intent.filter_value or f"[指定{intent.filter_column}]"
+        return f"{original_result.get('query', '')} {intent.filter_column}为{val}"
+    elif intent.refine_type == "switch_target" and intent.new_target:
+        return f"{original_result.get('query', '')} 指标改为{intent.new_target}"
+    elif intent.refine_type == "add" and intent.add_dimension:
+        return f"{original_result.get('query', '')} 加上{intent.add_dimension}"
+    elif intent.refine_type == "regenerate":
+        return original_result.get("query", "")
+    else:
+        # 其他情况，把用户原话作为新 query
+        return feedback
 
 
 def main() -> None:

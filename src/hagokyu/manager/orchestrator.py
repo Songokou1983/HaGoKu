@@ -20,6 +20,7 @@ from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
 from ..agents.scout import DataContext, ScoutAgent
 from ..tools.data_io import save_data
+from .query_parser import QueryParser, parse_query
 
 
 # ── 规则引擎 ──────────────────────────────────────────────────
@@ -164,7 +165,15 @@ class Orchestrator:
 
         # 创建数据库记录
         self.db.create_project(project_name, data_path=data_path)
-        plan = self._create_plan(query, mode)
+
+        # 1.5 解析用户查询 — 理解用户真正想问什么
+        parsed_intent = self._parse_user_query(query)
+        self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            "thought": f"🔍 理解你的问题：{self._describe_intent(parsed_intent)}",
+        })
+
+        # 2. 创建分析计划
+        plan = self._create_plan(query, mode, parsed_intent=parsed_intent)
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode=mode)
 
         # 初始化 Agent
@@ -356,7 +365,12 @@ class Orchestrator:
             self.event_bus.emit(EventType.RUN_FAILED, "Manager", {"error": str(e)})
             raise
 
-    def _create_plan(self, query: str, mode: str) -> dict[str, Any]:
+    def _create_plan(
+        self,
+        query: str,
+        mode: str,
+        parsed_intent: Any | None = None,
+    ) -> dict[str, Any]:
         """
         创建分析计划
 
@@ -367,16 +381,22 @@ class Orchestrator:
         """
         rule_plan = self.rule_engine.match_plan(query)
 
-        # 纯规则模式
+        # 纯规则模式：基于解析意图调整 plan_name
         if mode == "rule" or not self.config.manager.llm_plan_enabled:
             if rule_plan:
                 rule_plan["rule_match"] = True
+                # 用解析意图增强计划
+                if parsed_intent and parsed_intent.target:
+                    rule_plan["target"] = parsed_intent.target
                 return rule_plan
-            return self._generic_plan(query)
+            plan = self._generic_plan(query)
+            if parsed_intent and parsed_intent.target:
+                plan["target"] = parsed_intent.target
+            return plan
 
         # AI 优先模式
         if mode == "ai":
-            llm_plan = self._create_plan_llm(query, rule_plan)
+            llm_plan = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
             if llm_plan is not None:
                 return llm_plan
             # LLM 失败降级
@@ -388,17 +408,20 @@ class Orchestrator:
         # balanced 模式（默认）：规则优先，AI 调整
         if rule_plan:
             # 先用规则，AI 做微调
-            llm_plan = self._create_plan_hybrid(query, rule_plan)
+            llm_plan = self._create_plan_hybrid(query, rule_plan, parsed_intent=parsed_intent)
             if llm_plan is not None:
                 return llm_plan
             rule_plan["rule_match"] = True
             return rule_plan
 
         # 无匹配规则，降级到 AI 生成
-        llm_plan = self._create_plan_llm(query, rule_plan)
+        llm_plan = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
         if llm_plan is not None:
             return llm_plan
-        return self._generic_plan(query)
+        plan = self._generic_plan(query)
+        if parsed_intent and parsed_intent.target:
+            plan["target"] = parsed_intent.target
+        return plan
 
     def _generic_plan(self, query: str) -> dict[str, Any]:
         """返回通用分析计划（探索性分析）"""
@@ -410,12 +433,18 @@ class Orchestrator:
             "rule_match": False,
         }
 
-    def _create_plan_hybrid(self, query: str, rule_plan: dict[str, Any]) -> dict[str, Any]:
+    def _create_plan_hybrid(
+        self,
+        query: str,
+        rule_plan: dict[str, Any],
+        parsed_intent: Any | None = None,
+    ) -> dict[str, Any]:
         """混合模式：规则计划为基础，LLM 调整优化"""
         llm_plan = self._call_llm_for_plan(
             query=query,
             rule_plan=rule_plan,
             mode="adjust",
+            parsed_intent=parsed_intent,
         )
         if llm_plan is not None:
             llm_plan["rule_match"] = True
@@ -434,12 +463,14 @@ class Orchestrator:
         self,
         query: str,
         rule_plan: dict[str, Any] | None = None,
+        parsed_intent: Any | None = None,
     ) -> dict[str, Any] | None:
         """LLM 从零生成分析计划（rule_plan 可作为参考 hint）"""
         llm_plan = self._call_llm_for_plan(
             query=query,
             rule_plan=rule_plan,
             mode="generate",
+            parsed_intent=parsed_intent,
         )
         if llm_plan is not None:
             llm_plan["rule_match"] = rule_plan is not None
@@ -457,6 +488,7 @@ class Orchestrator:
         query: str,
         rule_plan: dict[str, Any] | None = None,
         mode: str = "generate",
+        parsed_intent: Any | None = None,
     ) -> dict[str, Any] | None:
         """
         调用 LLM 生成或调整分析计划
@@ -481,16 +513,19 @@ class Orchestrator:
             # 构建消息
             messages = [{"role": "system", "content": PLAN_GENERATION_SYSTEM}]
 
+            # 基于解析意图构建更丰富的用户查询上下文
+            intent_context = self._build_intent_context(query, parsed_intent)
+
             if mode == "adjust" and rule_plan:
                 user_content = PLAN_ADJUSTMENT_USER.format(
-                    query=query,
+                    query=intent_context,
                     plan_name=rule_plan.get("plan_name", ""),
                     agents=", ".join(rule_plan.get("agents", [])),
                     analyst_focus=", ".join(rule_plan.get("analyst_focus", [])),
                     target=rule_plan.get("target") or "null",
                 )
             else:
-                user_content = PLAN_GENERATION_USER.format(query=query)
+                user_content = PLAN_GENERATION_USER.format(query=intent_context)
 
             messages.append({"role": "user", "content": user_content})
 
@@ -531,3 +566,72 @@ class Orchestrator:
                 "thought": f"LLM 计划生成失败: {e}",
             })
             return None
+
+    def _parse_user_query(self, query: str) -> Any:
+        """解析用户查询为结构化意图"""
+        try:
+            from .query_parser import parse_query
+            return parse_query(query)
+        except Exception:
+            return None
+
+    def _describe_intent(self, parsed_intent: Any) -> str:
+        """将解析后的意图翻译成用户能理解的话"""
+        if parsed_intent is None:
+            return "探索这份数据有什么规律"
+
+        intent_names = {
+            "comparison": "对比不同组之间的差异",
+            "causation": "找某个结果的原因",
+            "correlation": "找变量之间的关系",
+            "trend": "看某个指标随时间的变化趋势",
+            "diagnostic": "诊断数据中的问题",
+            "exploration": "探索数据有什么规律",
+        }
+
+        parts = []
+        intent_name = intent_names.get(parsed_intent.intent_type, "探索数据")
+        parts.append(intent_name)
+
+        if parsed_intent.target:
+            parts.append(f"，关注「{parsed_intent.target}」")
+
+        if parsed_intent.time_range:
+            parts.append(f"，时间范围「{parsed_intent.time_range}」")
+
+        if parsed_intent.group_by:
+            parts.append(f"，按「{'/'.join(parsed_intent.group_by)}」分组")
+
+        return "".join(parts)
+
+    def _build_intent_context(self, query: str, parsed_intent: Any) -> str:
+        """将解析后的意图构建成 LLM 可用的上下文"""
+        if parsed_intent is None:
+            return query
+
+        parts = [query]
+
+        if parsed_intent.intent_type != "exploration":
+            intent_labels = {
+                "comparison": "用户想对比不同组的差异",
+                "causation": "用户想找原因",
+                "correlation": "用户想知道变量之间的关系",
+                "trend": "用户想看变化趋势",
+                "diagnostic": "用户想诊断问题",
+            }
+            if parsed_intent.intent_type in intent_labels:
+                parts.append(f"\n【意图】：{intent_labels[parsed_intent.intent_type]}")
+
+        if parsed_intent.target:
+            parts.append(f"\n【目标变量】：{parsed_intent.target}")
+
+        if parsed_intent.time_range:
+            parts.append(f"\n【时间范围】：{parsed_intent.time_range}")
+
+        if parsed_intent.group_by:
+            parts.append(f"\n【分组维度】：{'、'.join(parsed_intent.group_by)}")
+
+        if parsed_intent.filters:
+            parts.append(f"\n【筛选条件】：{parsed_intent.filters}")
+
+        return "".join(parts)

@@ -266,7 +266,7 @@ class AnalystAgent(DataAgentBase):
             if r_sq is not None:
                 conclusion = (
                     f"回归模型 R²={r_sq:.3f}，"
-                    f"{'模型整体显著' if f_p and f_p < 0.05 else '模型整体不显著'}。"
+                    f"{'模型整体显著' if f_p is not None and 0 <= f_p < 0.05 else '模型整体不显著'}。"
                 )
                 if significant_predictors:
                     conclusion += f"显著预测变量: {', '.join(significant_predictors[:3])}。"
@@ -284,7 +284,7 @@ class AnalystAgent(DataAgentBase):
                 p_value=f_p,
                 effect_size=reg_result.get("effect_size"),
                 effect_type=reg_result.get("effect_type", ""),
-                significance="significant" if f_p and f_p < 0.05 else "not_significant",
+                significance="significant" if f_p is not None and 0 <= f_p < 0.05 else "not_significant",
                 sample_size=reg_result.get("n_obs"),
                 diagnostics=reg_result.get("diagnostics"),
                 raw_result=reg_result,

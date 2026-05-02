@@ -74,6 +74,11 @@ hagokyu quick examples/ad_campaign.csv -q "分析转化率趋势"
 # 输出格式（可组合）
 hagokyu run data.csv -q "分析" -f html -f md -f json
 
+# 报告模板
+hagokyu run data.csv -q "分析" --template academic         # 学术报告
+hagokyu run data.csv -q "分析" --template business_analysis # 商业分析
+hagokyu run data.csv -q "分析" --template executive_brief   # 高管简报
+
 # Manager 模式
 hagokyu run data.csv -q "分析" --manager-mode pure_rule   # 纯规则，零AI
 hagokyu run data.csv -q "分析" --manager-mode cloud        # 云端强模型
@@ -81,9 +86,6 @@ hagokyu run data.csv -q "分析" --manager-mode cloud        # 云端强模型
 # 输出详细度
 hagokyu run data.csv -q "分析" -v verbose
 hagokyu run data.csv -q "分析" -v quiet
-
-# 报告模板
-hagokyu run data.csv -q "分析" --template academic         # 学术报告
 ```
 
 ## 四个专业 Agent
@@ -110,6 +112,10 @@ HaGoKu 内置三级统计护栏，防止常见统计错误：
 | `default` | 彩色现代风 | 日常分析（默认） |
 | `academic` | APA 风格、表格化 | 学术论文 / 正式报告 |
 | `brief` | 单页精简 | 快速汇报 / 邮件摘要 |
+| `business_analysis` | 商业分析 | 含建议行动区 |
+| `ab_test` | A/B 测试 | 含 verdict 判定 |
+| `executive_brief` | 高管简报 | 极简关键信息 |
+| `data_audit` | 数据审计 | 详细清洗操作表 |
 
 ## 配置
 

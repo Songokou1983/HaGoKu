@@ -24,6 +24,9 @@ def _effect_size_magnitude(effect_size: float | None, effect_type: str = "") -> 
     if effect_size is None:
         return "unknown"
     es = abs(effect_size)
+    # inf 表示完美拟合，单独处理
+    if es == float("inf"):
+        return "perfect"
     if "cohen" in effect_type.lower() or "d" in effect_type.lower():
         if es >= 0.8: return "large"
         if es >= 0.5: return "medium"
@@ -40,6 +43,21 @@ def _effect_size_magnitude(effect_size: float | None, effect_type: str = "") -> 
     if es >= 0.5: return "large"
     if es >= 0.2: return "medium"
     return "small"
+
+
+def _format_effect_size(effect_size: float | None, effect_type: str = "") -> str:
+    """格式化效应量显示"""
+    if effect_size is None:
+        return "N/A"
+    es = abs(effect_size)
+    if es == float("inf"):
+        return "完美拟合 (R²≈1)"
+    # 保留合理小数位
+    if es >= 100:
+        return f"{es:.0f}"
+    if es >= 10:
+        return f"{es:.1f}"
+    return f"{es:.2f}"
 
 
 class ReporterAgent(DataAgentBase):
@@ -70,6 +88,7 @@ class ReporterAgent(DataAgentBase):
         query: str = "",
         output_path: str | None = None,
         formats: list[str] | None = None,
+        template: str | None = None,
         template_dir: str | None = None,
         user_mode: str = "standard",
         df: pd.DataFrame | None = None,
@@ -85,6 +104,7 @@ class ReporterAgent(DataAgentBase):
             query: 研究问题
             output_path: 输出路径
             formats: 输出格式列表 (html / md / json)
+            template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             template_dir: 自定义模板目录
             user_mode: 用户模式 (quick / standard / expert)
             df: 清洗后数据（用于生成图表）
@@ -212,12 +232,12 @@ class ReporterAgent(DataAgentBase):
                 template_dir=template_dir,
             )
 
-            self.emit_tool_call("generate_report", f"formats={formats}")
+            self.emit_tool_call("generate_report", f"formats={formats}, template={template or 'default'}")
 
             if output_path:
                 if "html" in formats:
                     html_path = output_path if output_path.endswith(".html") else f"{output_path}.html"
-                    generator.generate_html(report, output_path=html_path)
+                    generator.generate_html(report, output_path=html_path, template_name=template)
                     self.emit_tool_result(f"HTML: {html_path}")
 
                 if "md" in formats:
@@ -231,7 +251,7 @@ class ReporterAgent(DataAgentBase):
                     self.emit_tool_result(f"JSON: {json_path}")
             else:
                 # 只生成 HTML
-                html = generator.generate_html(report)
+                html = generator.generate_html(report, template_name=template)
                 self.emit_tool_result(f"HTML 报告已生成 ({len(html)} 字符)")
 
             self.complete({"n_sections": len(sections), "n_findings": len(key_findings)})
@@ -288,9 +308,9 @@ class ReporterAgent(DataAgentBase):
             best = max(significant, key=lambda r: abs(r.effect_size) if r.effect_size else 0)
             magnitude = _effect_size_magnitude(best.effect_size, best.effect_type)
             cards.append({
-                "value": f"{abs(best.effect_size):.2f}",
+                "value": _format_effect_size(best.effect_size, best.effect_type),
                 "label": f"最大效应量 ({best.effect_type})" if best.effect_type else "最大效应量",
-                "trend": "up" if magnitude in ("medium", "large") else None,
+                "trend": "up" if magnitude in ("medium", "large", "perfect") else None,
             })
 
         # 数据质量
@@ -356,7 +376,8 @@ class ReporterAgent(DataAgentBase):
             elif result.p_value is not None:
                 parts = [f"p={result.p_value:.4f}"]
                 if result.effect_size is not None:
-                    parts.append(f"{result.effect_type}={result.effect_size:.3f}")
+                    es_str = _format_effect_size(result.effect_size, result.effect_type)
+                    parts.append(f"{result.effect_type}={es_str}")
                 evidence_trace = ", ".join(parts)
 
             finding = {
@@ -416,10 +437,10 @@ class ReporterAgent(DataAgentBase):
             metric_cards.append({"value": f"p={result.p_value:.4f}", "label": sig_label})
         if result.effect_size is not None:
             magnitude = _effect_size_magnitude(result.effect_size, result.effect_type)
-            magnitude_label = {"large": "大", "medium": "中", "small": "小"}.get(magnitude, "")
+            magnitude_label = {"large": "大", "medium": "中", "small": "小", "perfect": "完美"}.get(magnitude, "")
             metric_cards.append({
-                "value": f"{abs(result.effect_size):.3f}",
-                "label": f"{result.effect_type} ({magnitude_label}效应)",
+                "value": _format_effect_size(result.effect_size, result.effect_type),
+                "label": f"{result.effect_type} ({magnitude_label}效应)" if magnitude_label else result.effect_type,
             })
         if result.confidence_interval:
             metric_cards.append({"value": result.confidence_interval, "label": "95% CI"})
@@ -428,12 +449,33 @@ class ReporterAgent(DataAgentBase):
         plain_explanation = result.conclusion_plain if result.conclusion_plain else None
         statistical_detail = result.conclusion_statistical if result.conclusion_statistical else None
 
+        # 诊断信息中文解释
+        DIAGNOSTIC_CHINESE = {
+            "residual_normality": "残差正态性",
+            "heteroscedasticity": "异方差性",
+            "autocorrelation": "自相关",
+            "multicollinearity": "多重共线性",
+            "vif": "方差膨胀因子(VIF)",
+            "durbin_watson": "Durbin-Watson检验",
+            "normality_group1": "第一组正态性",
+            "normality_group2": "第二组正态性",
+            "equal_variance": "方差齐性",
+        }
+        DIAGNOSTIC_HINTS = {
+            "residual_normality": "残差应接近正态分布，否则模型估计可能不准确",
+            "heteroscedasticity": "残差方差应恒定，否则标准误差估计有偏",
+            "autocorrelation": "相邻残差应独立，否则标准误差估计有偏",
+            "multicollinearity": "VIF>10表示严重共线性，系数估计不稳定",
+            "durbin_watson": "DW值接近2表示无自相关，1.5-2.5之间可接受",
+        }
+
         # 局限性
         limitations = []
         if result.diagnostics:
             for key, val in result.diagnostics.items():
                 if isinstance(val, dict) and not val.get("met", True):
-                    limitations.append(f"{key}: {val.get('verdict', '未通过')}")
+                    chinese_name = DIAGNOSTIC_CHINESE.get(key, key)
+                    limitations.append(f"⚠️ {chinese_name}未达标")
         if result.significance != "significant":
             limitations.append("结果未达统计显著水平")
 
@@ -459,7 +501,7 @@ class ReporterAgent(DataAgentBase):
             "evidence_trace": evidence_trace,
         }
 
-        # 子章节：诊断
+        # 子章节：诊断（带中文解释）
         subsections = []
         if result.diagnostics and user_mode != "quick":
             diag_items = []
@@ -467,7 +509,12 @@ class ReporterAgent(DataAgentBase):
                 if isinstance(val, dict) and "verdict" in val:
                     met = val.get("met", True)
                     icon = "✅" if met else "⚠️"
-                    diag_items.append(f"{icon} {key}: {val['verdict']}")
+                    chinese_name = DIAGNOSTIC_CHINESE.get(key, key)
+                    hint = DIAGNOSTIC_HINTS.get(key, "")
+                    if hint:
+                        diag_items.append(f"{icon} {chinese_name}: {hint}")
+                    else:
+                        diag_items.append(f"{icon} {chinese_name}")
 
             if diag_items:
                 subsections.append(ReportSection(

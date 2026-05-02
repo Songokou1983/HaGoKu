@@ -112,6 +112,7 @@ class Orchestrator:
         user_mode: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
+        template: str | None = None,
         resume: bool = False,
         schema_path: str | None = None,
     ) -> dict[str, Any]:
@@ -126,6 +127,7 @@ class Orchestrator:
             user_mode: 用户模式 (quick / standard / expert)
             output_dir: 自定义输出目录
             formats: 报告输出格式
+            template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             resume: 是否从上次断点继续
             schema_path: 外部 schema.yaml 路径
 
@@ -250,6 +252,7 @@ class Orchestrator:
                 query=query,
                 output_path=output_path,
                 formats=formats or self.config.output.formats,
+                template=template,
                 user_mode=user_mode,
                 df=df_clean,
             )

@@ -31,6 +31,9 @@ def cli() -> None:
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),
               help="输出格式（可多次指定）")
+@click.option("--template", "-t", default=None,
+              type=click.Choice(["default", "academic", "brief", "business_analysis", "ab_test", "executive_brief", "data_audit"]),
+              help="报告模板")
 @click.option("--resume", is_flag=True, help="从上次断点继续分析")
 @click.option("--schema", "schema_path", default=None, type=click.Path(exists=True),
               help="外部 schema.yaml 路径")
@@ -45,6 +48,7 @@ def run(
     manager_mode: str | None,
     output_dir: str | None,
     formats: tuple[str, ...],
+    template: str | None,
     resume: bool,
     schema_path: str | None,
     verbosity: str,
@@ -77,6 +81,7 @@ def run(
             user_mode=mode,
             output_dir=output_dir,
             formats=format_list,
+            template=template,
             resume=resume,
             schema_path=schema_path,
         )
@@ -103,9 +108,19 @@ def run(
 
 @cli.command(name="quick")
 @click.argument("data_path", type=click.Path(exists=True))
-@click.option("--query", "-q", default="", help="分析问题")
+@click.option("--query", "-q", default="", help="分析问题（可选）")
 def quick_run(data_path: str, query: str) -> None:
-    """快速模式：零交互，自动分析"""
+    """快速模式：零交互，自动分析
+
+    示例：
+        hagokyu quick data.csv                          # 自动探索
+        hagokyu quick data.csv -q "哪个渠道效果最好"     # 指定问题
+    """
+    # 如果没指定问题，设置为自动探索
+    if not query:
+        click.echo("🚀 快速模式：自动探索数据...")
+        query = "探索数据特征，寻找有意义的规律和异常"
+
     from .manager.orchestrator import Orchestrator
 
     config = HaGoKuConfig.load()

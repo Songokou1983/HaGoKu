@@ -74,8 +74,8 @@ class NoConclusionWithoutTest:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="结论缺少统计检验支撑" if not passed else "",
-            suggestion="必须先做统计检验（t 检验、卡方检验、回归等），再下结论" if not passed else None,
+            message="下结论但缺少统计检验支撑" if not passed else "",
+            suggestion="请先做统计检验（如 t 检验、方差分析或回归分析），再基于结果下结论" if not passed else None,
         )
 
 
@@ -98,8 +98,8 @@ class MustReportEffectSize:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="报告了 p 值但缺少效应量" if not passed else "",
-            suggestion="必须报告效应量（Cohen's d, η², Cramér's V 等），p 值只说明是否存在差异，效应量说明差异有多大" if not passed else None,
+            message="报告了统计显著但未说明差异大小" if not passed else "",
+            suggestion="请同时报告效应量（如 Cohen's d）。p 值告诉你'有没有差异'，效应量告诉你'差异有多大'" if not passed else None,
         )
 
 
@@ -130,8 +130,8 @@ class MustReportCI:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="有点估计但缺少置信区间" if not passed else "",
-            suggestion="必须报告 95% 置信区间，单一点估计无法反映不确定性" if not passed else None,
+            message="报告了点估计但缺少置信区间" if not passed else "",
+            suggestion="请添加 95% 置信区间，它说明估计值的不确定范围（如 置信区间 [1.2, 3.5]）" if not passed else None,
         )
 
 
@@ -159,8 +159,8 @@ class NoCausalClaimWithoutMethod:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="观测数据做了因果声称但未使用因果推断方法" if not passed else "",
-            suggestion="如要声称因果，须使用因果推断方法（DoWhy/IV/DID/回归不连续等），或改为关联性表述" if not passed else None,
+            message="声称了因果关系但缺少因果推断方法支撑" if not passed else "",
+            suggestion="观测数据不能直接说因果，请改为'相关'或'关联'表述，或使用因果推断方法" if not passed else None,
         )
 
 
@@ -186,8 +186,8 @@ class MustDiagnoseModel:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="回归模型未做残差诊断" if not passed else "",
-            suggestion="必须检查: 残差正态性(Q-Q图)、异方差(Breusch-Pagan)、多重共线性(VIF)、自相关(Durbin-Watson)" if not passed else None,
+            message="回归模型未验证其假设" if not passed else "",
+            suggestion="请检查：残差分布是否正态、是否存在异常值、变量是否高度相关" if not passed else None,
         )
 
 
@@ -217,8 +217,8 @@ class AssumptionsViolated:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"统计假设不满足: {', '.join(violated)}" if not passed else "",
-            suggestion="考虑使用非参数方法或稳健方法替代" if not passed else None,
+            message="统计检验的前提假设未满足（如数据不符合正态分布、方差不齐）" if not passed else "",
+            suggestion="建议使用非参数方法（不要求正态分布的检验）或对数据进行变换" if not passed else None,
         )
 
 
@@ -253,8 +253,8 @@ class SmallSampleSize:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"样本量 n={n} 不足（建议 ≥{threshold}）" if not passed else "",
-            suggestion="样本量不足可能导致检验效力低，结论可靠性受限" if not passed else None,
+            message=f"样本量偏小（当前 n={n}，建议 ≥{threshold}），可能影响结论可靠性" if not passed else "",
+            suggestion="样本太小可能无法检测到真实存在的差异，考虑增加样本量" if not passed else None,
         )
 
 
@@ -291,8 +291,8 @@ class HighVIF:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"多重共线性超标: {high_vif_vars}" if not passed else "",
-            suggestion="考虑移除高 VIF 变量、使用岭回归/Lasso，或合并相关变量" if not passed else None,
+            message="部分变量之间存在高度相关，影响模型稳定性" if not passed else "",
+            suggestion="建议移除或合并高度相关的变量，或使用正则化回归方法" if not passed else None,
         )
 
 
@@ -337,8 +337,8 @@ class PotentialOverfitting:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"可能过拟合: 训练={train_score:.3f}, 测试={test_score:.3f}, 差异={gap:.3f}" if not passed else "",
-            suggestion="尝试简化模型、增加正则化、或收集更多数据" if not passed else None,
+            message="模型在训练数据上表现远好于测试数据（过拟合），泛化能力受限" if not passed else "",
+            suggestion="建议简化模型结构、增加数据量，或使用交叉验证评估模型" if not passed else None,
         )
 
 
@@ -380,8 +380,8 @@ class CleaningHighImpact:
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message=f"清洗影响率 {ratio:.1%} 超过 {self.IMPACT_THRESHOLD:.0%}" if not passed else "",
-            suggestion="高影响清洗可能导致偏差，检查缺失机制(MCAR/MAR/MNAR)，考虑多重插补" if not passed else None,
+            message=f"大量数据被清洗或删除（{ratio:.1%}），可能引入分析偏差" if not passed else "",
+            suggestion="请检查数据缺失原因，考虑保留部分缺失数据或使用更保守的清洗策略" if not passed else None,
         )
 
 
@@ -414,8 +414,8 @@ class SuggestNonlinear:
             rule=self.rule_name,
             severity=self.severity,
             passed=not has_nonlinear_pattern,
-            message="残差呈非线性模式，线性模型可能不适用" if has_nonlinear_pattern else "",
-            suggestion="考虑多项式回归、样条回归或非线性模型" if has_nonlinear_pattern else None,
+            message="数据显示可能存在曲线关系，线性模型可能不够准确" if has_nonlinear_pattern else "",
+            suggestion="建议尝试非线性模型或添加多项式特征来捕捉曲线关系" if has_nonlinear_pattern else None,
         )
 
 
@@ -438,8 +438,8 @@ class SuggestInteraction:
             rule=self.rule_name,
             severity=self.severity,
             passed=not has_hints,
-            message=f"检测到可能的交互效应: {interaction_hints}" if has_hints else "",
-            suggestion="考虑在模型中加入交互项并检验显著性" if has_hints else None,
+            message="某些变量可能相互影响，而非独立作用" if has_hints else "",
+            suggestion="建议在模型中检验变量间的交互效应" if has_hints else None,
         )
 
 
@@ -470,8 +470,8 @@ class MissingNotRandom:
             rule=self.rule_name,
             severity=self.severity,
             passed=not is_not_random,
-            message=f"缺失机制为 {missing_mechanism}，非随机缺失" if is_not_random else "",
-            suggestion="非随机缺失可能导致估计偏差，建议使用多重插补(MICE)而非简单删除" if is_not_random else None,
+            message="数据缺失可能不是随机的，可能导致分析偏差" if is_not_random else "",
+            suggestion="建议保留缺失数据标记或使用专门的缺失值处理方法，而非简单删除" if is_not_random else None,
         )
 
 
@@ -497,8 +497,8 @@ class ConsiderPowerAnalysis:
             rule=self.rule_name,
             severity=self.severity,
             passed=not need_suggest,
-            message="做了统计检验但未做功效分析" if need_suggest else "",
-            suggestion="建议做功效分析(power analysis)确认样本量足以检测实际效应" if need_suggest else None,
+            message="统计检验结果未知，但未验证样本量是否足够" if need_suggest else "",
+            suggestion="建议确认样本量足以检测真实存在的效应（样本太小可能漏掉真实差异）" if need_suggest else None,
         )
 
 
@@ -571,12 +571,12 @@ class StatisticalGuardrails:
             try:
                 result = rule.check(analysis_result)
                 results.append(result)
-            except Exception as e:
+            except Exception:
                 results.append(GuardrailResult(
                     rule=rule.rule_name,
                     severity=rule.severity,
                     passed=False,
-                    message=f"检查出错: {e}",
+                    message="护栏检查执行出错",
                 ))
         return results
 

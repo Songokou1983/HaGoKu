@@ -175,16 +175,16 @@ class AnalystAgent(DataAgentBase):
                 mandatory_violations = [gr for gr in guardrail_results if not gr.passed and gr.severity.value == "mandatory"]
                 if mandatory_violations:
                     for mv in mandatory_violations:
-                        self.emit_thinking(f"🚫 强制级违规: {mv.rule} - {mv.message}")
+                        self.emit_thinking(f"🚫 统计质量问题（严重）: {mv.message}")
 
             self.complete({"n_results": len(results)})
             return results
 
         except Exception as e:
             # 不崩溃：发射警告，返回已有的部分结果（如果有的话）
-            self.fail(str(e))
+            self.fail("分析过程遇到问题")
             self.emit_event(EventType.AGENT_THINKING, {
-                "thought": f"⚠️ Analyst 部分分析失败（{e}），继续生成报告",
+                "thought": "⚠️ 分析过程中出现问题，将尝试继续生成报告",
             })
             # 返回空列表，让报告阶段仍能运行
             return results if results else []
@@ -296,7 +296,7 @@ class AnalystAgent(DataAgentBase):
             )
 
         except Exception as e:
-            self.emit_tool_error(f"回归分析失败: {e}")
+            self.emit_tool_error(f"回归分析遇到问题，可能需要检查数据质量或样本量")
             return None
 
     def _do_hypothesis_test(
@@ -375,7 +375,7 @@ class AnalystAgent(DataAgentBase):
                 if test_type == "mann_whitney":
                     test_result = mann_whitney_u(g1, g2)
                     if "error" in test_result:
-                        self.emit_tool_error(f"Mann-Whitney U 检验失败: {test_result['message']}")
+                        self.emit_tool_error(f"非参数检验失败（适用于非正态数据），可能需要检查数据分布")
                         return None
                     self.emit_tool_result(f"p={test_result['p_value']:.4f}, r={test_result['effect_size']:.3f}")
                     sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
@@ -404,7 +404,7 @@ class AnalystAgent(DataAgentBase):
 
                 test_result = ttest(g1, g2)
                 if "error" in test_result:
-                    self.emit_tool_error(f"t 检验失败: {test_result['message']}")
+                    self.emit_tool_error(f"两组均值比较检验失败，可能需要检查数据正态性或样本量")
                     return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, d={test_result['effect_size']:.3f}")
 
@@ -422,7 +422,7 @@ class AnalystAgent(DataAgentBase):
                 if test_type == "kruskal_wallis":
                     test_result = kruskal_wallis(df, dv=target_col, between=group_col)
                     if "error" in test_result:
-                        self.emit_tool_error(f"Kruskal-Wallis 检验失败: {test_result['message']}")
+                        self.emit_tool_error(f"多组均值比较检验失败，可能需要检查数据分布或样本量")
                         return None
                     self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²_H={test_result['effect_size']:.3f}")
                     sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
@@ -449,7 +449,7 @@ class AnalystAgent(DataAgentBase):
 
                 test_result = anova(df, dv=target_col, between=group_col)
                 if "error" in test_result:
-                    self.emit_tool_error(f"ANOVA 失败: {test_result['message']}")
+                    self.emit_tool_error(f"多组均值比较（方差分析）失败，可能需要检查数据正态性和方差齐性")
                     return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²={test_result['effect_size']:.3f}")
 
@@ -476,8 +476,8 @@ class AnalystAgent(DataAgentBase):
                 raw_result=test_result,
             )
 
-        except Exception as e:
-            self.emit_tool_error(f"假设检验失败: {e}")
+        except Exception:
+            self.emit_tool_error("统计检验遇到问题，可能与数据质量或检验条件有关")
             return None
 
     def _do_trend_analysis(
@@ -540,8 +540,8 @@ class AnalystAgent(DataAgentBase):
                 raw_result=result,
             )
 
-        except Exception as e:
-            self.emit_tool_error(f"趋势分析失败: {e}")
+        except Exception:
+            self.emit_tool_error("趋势分析遇到问题，可能需要检查时间序列数据格式")
             return None
 
     def _do_correlation_analysis(
@@ -742,8 +742,8 @@ class AnalystAgent(DataAgentBase):
                 sample_size=result.get("n_observations"),
                 raw_result=result,
             )
-        except Exception as e:
-            self.emit_tool_error(f"交互分析失败: {e}")
+        except Exception:
+            self.emit_tool_error("交互效应分析失败，可能需要更多变量数据")
             return None
 
     def _auto_analyze(

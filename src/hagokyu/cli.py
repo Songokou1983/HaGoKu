@@ -85,14 +85,20 @@ def run(
             resume=resume,
             schema_path=schema_path,
         )
-    except FileNotFoundError as e:
-        click.echo(f"\n❌ 文件未找到: {e}", err=True)
+    except FileNotFoundError:
+        click.echo("\n❌ 数据文件未找到", err=True)
+        click.echo("   请检查文件路径是否正确，或确认文件扩展名是 CSV/Excel/JSON/Parquet 之一", err=True)
         raise SystemExit(1)
     except RuntimeError as e:
-        click.echo(f"\n❌ 运行时错误: {e}", err=True)
+        click.echo(f"\n❌ 分析过程遇到问题: {e}", err=True)
+        if verbosity == "verbose":
+            import traceback
+            traceback.print_exc()
         raise SystemExit(1)
-    except Exception as e:
-        click.echo(f"\n❌ 分析失败: {e}", err=True)
+    except Exception:
+        click.echo("\n❌ 分析过程中出现意外错误", err=True)
+        click.echo("   可能原因：数据格式异常、LLM 服务不可用、配置错误", err=True)
+        click.echo("   提示：使用 -v verbose 查看详细错误信息", err=True)
         if verbosity == "verbose":
             import traceback
             traceback.print_exc()
@@ -102,7 +108,8 @@ def run(
         if verbosity != "quiet":
             click.echo(f"\n✅ 分析完成！报告: {result['output_path']}")
     else:
-        click.echo(f"\n❌ 分析未能完成: {result.get('error', '未知错误')}", err=True)
+        click.echo("\n❌ 分析未能完成", err=True)
+        click.echo("   请检查数据质量，或使用 -v verbose 查看详细信息", err=True)
         raise SystemExit(1)
 
 
@@ -138,17 +145,19 @@ def quick_run(data_path: str, query: str) -> None:
             query=query,
             user_mode="quick",
         )
-    except FileNotFoundError as e:
-        click.echo(f"❌ 文件未找到: {e}", err=True)
+    except FileNotFoundError:
+        click.echo("❌ 数据文件未找到", err=True)
+        click.echo("   请确认文件路径正确，支持 CSV/Excel/JSON/Parquet 格式", err=True)
         raise SystemExit(1)
-    except Exception as e:
-        click.echo(f"❌ 分析失败: {e}", err=True)
+    except Exception:
+        click.echo("❌ 分析过程中出现意外错误", err=True)
+        click.echo("   请检查数据文件或确认 LLM 服务是否可用", err=True)
         raise SystemExit(1)
 
     if result["status"] == "completed":
         click.echo(f"\n📄 报告: {result['output_path']}")
     else:
-        click.echo(f"❌ 分析未能完成", err=True)
+        click.echo("❌ 分析未能完成，请检查数据文件", err=True)
         raise SystemExit(1)
 
 

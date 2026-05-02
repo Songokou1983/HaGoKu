@@ -70,9 +70,9 @@ class CleanerAgent(DataAgentBase):
             df = load_data(data_path)
             self.emit_tool_result(f"{len(df)} 行, {len(df.columns)} 列")
         except Exception as e:
-            self.fail(f"加载数据失败: {e}，跳过清洗")
+            self.fail("数据加载失败")
             self.emit_event(EventType.AGENT_THINKING, {
-                "thought": f"⚠️ Cleaner 跳过，使用原始数据继续（{e}）",
+                "thought": "⚠️ Cleaner 跳过，使用原始数据继续",
             })
             # 返回原始数据的最小报告
             report = CleaningReport(
@@ -160,9 +160,9 @@ class CleanerAgent(DataAgentBase):
 
         except Exception as e:
             # 清洗失败 → 返回原始数据 + 警告
-            self.fail(str(e))
+            self.fail("数据清洗遇到问题")
             self.emit_event(EventType.AGENT_THINKING, {
-                "thought": f"⚠️ Cleaner 部分失败（{e}），继续使用原始数据",
+                "thought": "⚠️ Cleaner 数据清洗遇到问题，继续使用原始数据",
             })
             df_clean = df
             report = CleaningReport(

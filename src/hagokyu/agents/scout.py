@@ -254,7 +254,7 @@ class ScoutAgent(DataAgentBase):
                 self.emit_tool_result(f"加载成功: {len(df)} 行, {len(df.columns)} 列")
                 data_path = found
             else:
-                self.fail(f"文件不存在: {data_path}")
+                self.fail("数据文件未找到")
                 # 返回空 context，不阻断 pipeline
                 return DataContext(
                     data_path=data_path,
@@ -264,9 +264,9 @@ class ScoutAgent(DataAgentBase):
                     quality_score=0.0,
                 )
 
-        except ValueError as e:
+        except ValueError:
             # 格式不支持 → 返回空 context
-            self.fail(f"不支持的文件格式: {e}")
+            self.fail("不支持的数据文件格式")
             return DataContext(
                 data_path=data_path,
                 n_rows=0,
@@ -353,9 +353,9 @@ class ScoutAgent(DataAgentBase):
 
         except Exception as e:
             # 推断/构建失败 → 返回最基本 context
-            self.fail(str(e))
+            self.fail("数据侦察遇到问题")
             self.emit_event(EventType.AGENT_THINKING, {
-                "thought": f"⚠️ Scout 部分失败（{e}），继续使用最小上下文",
+                "thought": "⚠️ Scout 数据侦察遇到问题，继续使用最小上下文",
             })
             return DataContext(
                 data_path=data_path,

@@ -9,6 +9,12 @@ from .analysis import (
     regression,
     ttest,
 )
+from .analysis_registry import (
+    AnalysisMethod,
+    AnalysisRegistry,
+    analysis_registry,
+    load_plugins,
+)
 from .business import (
     attribution_analysis,
     calc_break_even,
@@ -113,6 +119,11 @@ __all__ = [
     # diagnostics
     "diagnose_regression",
     "generate_diagnostic_plots",
+    # plugin system
+    "AnalysisMethod",
+    "AnalysisRegistry",
+    "analysis_registry",
+    "load_plugins",
     # power
     "assess_power_for_data",
     "interpret_effect_size",

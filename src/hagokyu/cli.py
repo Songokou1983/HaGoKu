@@ -267,6 +267,73 @@ def config_cmd(reset: bool) -> None:
     click.echo(f"   输出格式: {', '.join(config.output.formats)}")
 
 
+@cli.command(name="methods")
+@click.option("--tag", "-t", default=None, help="按标签过滤 (statistical/business)")
+def list_methods(tag: str | None) -> None:
+    """查看所有可用的分析方法
+
+    HaGoKu 支持的分析方法分为两类：
+
+    统计方法 — 数学上严格，每个结论都经过检验
+      t 检验、ANOVA、Mann-Whitney、卡方、相关、回归
+
+    商业方法 — 回答业务问题
+      ROI/ROAS、LTV/CAC、回本周期、NPV/IRR、归因、漏斗
+
+    新增方法：放入 ~/.hagokyu/plugins/*_plugin.py，HaGoKu 自动加载
+    """
+    from .tools import analysis_registry, load_plugins
+
+    reg = load_plugins()
+
+    click.echo("📊 HaGoKu 分析方法")
+    click.echo(f"   共 {reg.summary()['total_methods']} 个内置方法")
+    click.echo("   插件目录: ~/.hagokyu/plugins/*_plugin.py")
+    click.echo()
+
+    if tag:
+        methods = [m for m in reg.list_all() if tag in m.tags]
+        click.echo(f"  [{tag}] 标签 ({len(methods)} 个):")
+    else:
+        # 按标签分组展示
+        tag_groups = {
+            "statistical": "📈 统计方法",
+            "business": "💰 商业方法",
+            "financial": "💵 财务分析",
+            "comparison": "🔬 对比分析",
+            "regression": "📉 回归分析",
+            "correlation": "🔗 相关分析",
+            "causal": "⚡ 因果推断",
+            "user": "👤 用户分析",
+            "growth": "📈 增长分析",
+            "attribution": "🎯 归因分析",
+            "funnel": "🔽 漏斗分析",
+            "advertising": "📢 广告分析",
+        }
+        shown_tags = set()
+        for method in reg.list_all():
+            for t in method.tags:
+                if t not in shown_tags:
+                    label = tag_groups.get(t, f"  [{t}]")
+                    click.echo(f"  {label}:")
+                    shown_tags.add(t)
+                    break
+
+        click.echo()
+        click.echo("  方法列表:")
+        methods = reg.list_all()
+
+    for m in methods:
+        tags_str = ", ".join(m.tags) if m.tags else "无标签"
+        click.echo(f"   • {m.name:<20} {tags_str}")
+        if m.description:
+            desc = m.description.split("\n")[0][:60]
+            click.echo(f"     {desc}")
+
+    click.echo()
+    click.echo("  💡 新增方法：在 ~/.hagokyu/plugins/ 放入 *_plugin.py 文件")
+
+
 @cli.command()
 def guardrails() -> None:
     """查看统计护栏规则"""

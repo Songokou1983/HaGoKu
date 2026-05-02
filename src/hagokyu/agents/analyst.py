@@ -24,6 +24,7 @@ from ..tools.analysis import (
     regression,
     ttest,
 )
+from ..tools.analysis_registry import analysis_registry, load_plugins
 from ..tools.power_analysis import (
     assess_power_for_data,
     interpret_nonsignificant_result,
@@ -31,21 +32,6 @@ from ..tools.power_analysis import (
     power_anova,
     power_correlation,
     power_regression,
-)
-from ..tools.business import (
-    calc_roi,
-    calc_roas,
-    calc_ltv,
-    calc_cac,
-    calc_ltv_cac_ratio,
-    calc_payback_period,
-    calc_npv,
-    calc_irr,
-    calc_break_even,
-    calc_cagr,
-    calc_growth_rate,
-    attribution_analysis,
-    funnel_analysis,
 )
 from .base import DataAgentBase
 from .scout import DataContext, SemanticType
@@ -822,23 +808,65 @@ class AnalystAgent(DataAgentBase):
         target_col: str | None,
         query: str,
     ) -> list[AnalysisResult]:
-        """自动分析：根据数据特征选择分析方法"""
+        """
+        自动分析：注册表驱动的方法发现 + 专项方法执行
+
+        架构说明：
+        - 注册表按意图关键词查找适用的分析方法
+        - 专项方法（_do_regression 等）封装了复杂的执行逻辑（假设检验前置、多步诊断等）
+        - 商业方法通过注册表发现，由 _detect_business_metrics 统一执行
+        """
         results = []
+        intent = query.lower()
 
-        # 1. 如果有目标变量和数值预测变量 → 回归
-        result = self._do_regression(df, context, target_col, query)
-        if result:
-            results.append(result)
+        # 1. 注册表驱动：按意图发现适用的分析方法
+        statistical_methods = analysis_registry.find(
+            intent=intent,
+            context=context,
+            df=df,
+            tags=["statistical", "comparison", "correlation", "regression"],
+        )
 
-        # 2. 如果有分类变量和数值变量 → 假设检验
-        result = self._do_hypothesis_test(df, context, target_col)
-        if result:
-            results.append(result)
+        # 2. 专项方法执行（封装了复杂逻辑）
+        # 这些方法包含假设前置检查、自动切换非参数等内部逻辑
+        targeted_executed = set()
 
-        # 3. 如果有多个数值变量 → 相关性
-        result = self._do_correlation_analysis(df, context)
-        if result:
-            results.append(result)
+        for method in statistical_methods[:5]:
+            if method.name in targeted_executed:
+                continue
+
+            if method.name == "regression":
+                result = self._do_regression(df, context, target_col, query)
+                if result:
+                    results.append(result)
+                    targeted_executed.add("regression")
+
+            elif method.name in ("ttest", "mann_whitney", "anova", "kruskal_wallis", "chi_square"):
+                result = self._do_hypothesis_test(df, context, target_col)
+                if result:
+                    results.append(result)
+                    targeted_executed.add("hypothesis_test")
+
+            elif method.name == "correlation":
+                result = self._do_correlation_analysis(df, context)
+                if result:
+                    results.append(result)
+                    targeted_executed.add("correlation")
+
+        # 3. 如果注册表没匹配到，执行兜底专项分析
+        if not targeted_executed:
+            # 回归兜底
+            result = self._do_regression(df, context, target_col, query)
+            if result:
+                results.append(result)
+            # 假设检验兜底
+            result = self._do_hypothesis_test(df, context, target_col)
+            if result:
+                results.append(result)
+            # 相关性兜底
+            result = self._do_correlation_analysis(df, context)
+            if result:
+                results.append(result)
 
         return results
 
@@ -978,84 +1006,108 @@ class AnalystAgent(DataAgentBase):
         """
         自动检测商业指标
 
-        根据数据列和用户 query 自动识别并计算商业指标
+        架构：注册表做意图发现，专项函数执行（含智能列匹配）
+        新增商业指标 = 在 business.py 添加函数 + 在注册表注册即可
         """
         metrics: list[dict[str, Any]] = []
-        col_names_lower = [c.lower() for c in df.columns]
+        intent = query.lower()
 
-        # ROI / ROAS
-        if "roi" in query.lower() or "投资回报" in query.lower():
-            revenue_col, cost_col = self._find_cols(df, ["revenue", "销售额", "收入", "gmv", "sales"], ["cost", "成本", "广告费", "花费", "spend"])
-            if revenue_col and cost_col:
-                result = calc_roi(df[revenue_col].sum(), df[cost_col].sum())
-                if "error" not in result:
-                    result["type"] = "roi"
-                    result["revenue_col"] = revenue_col
-                    result["cost_col"] = cost_col
-                    metrics.append(result)
+        # 注册表发现适用的商业方法
+        biz_methods = analysis_registry.find(
+            intent=intent,
+            context=context,
+            df=df,
+            tags=["business"],
+        )
 
-        if "roas" in query.lower() or "广告效果" in query.lower():
-            rev_col, ad_col = self._find_cols(df, ["revenue", "销售额", "收入"], ["ad", "广告", "spend", "花费"])
-            if rev_col and ad_col:
-                result = calc_roas(df[rev_col].sum(), df[ad_col].sum())
-                if "error" not in result:
-                    result["type"] = "roas"
-                    result["revenue_col"] = rev_col
-                    result["ad_spend_col"] = ad_col
-                    metrics.append(result)
+        # 按方法名执行（带智能列匹配）
+        for method in biz_methods[:6]:
+            mname = method.name
+            mtype = mname.replace("calc_", "").replace("attribution_analysis", "attribution")
 
-        # LTV
-        if "ltv" in query.lower() or "用户价值" in query.lower() or "clv" in query.lower():
-            cust_col, rev_col = self._find_cols(df, ["user", "customer", "客户", "用户", "id"], ["revenue", "ltv", "value", "销售额", "消费"])
-            if cust_col and rev_col:
-                result = calc_ltv(df, cust_col, rev_col)
-                if "error" not in result:
-                    result["type"] = "ltv"
-                    result["customer_col"] = cust_col
-                    result["revenue_col"] = rev_col
-                    metrics.append(result)
-
-        # CAC
-        if "cac" in query.lower() or "获客成本" in query.lower():
-            cust_col, cost_col = self._find_cols(df, ["user", "customer", "客户", "新用户"], ["cost", "成本", "广告", "花费"])
-            if cust_col and cost_col:
-                result = calc_cac(df, cust_col, cost_col)
-                if "error" not in result:
-                    result["type"] = "cac"
-                    metrics.append(result)
-
-        # 增长 / CAGR
-        if any(kw in query.lower() for kw in ["增长", "cagr", "growth", "趋势"]):
-            growth_cols = self._find_numeric_pairs(df)
-            for col1, col2 in growth_cols:
-                result = calc_growth_rate(df[col1].sum(), df[col2].sum())
-                if "error" not in result and result.get("growth") is not None:
-                    result["type"] = "growth"
-                    result["from_col"] = col1
-                    result["to_col"] = col2
-                    metrics.append(result)
-
-        # 漏斗分析
-        if any(kw in query.lower() for kw in ["转化", "漏斗", "funnel", "conversion"]):
-            stage_col = self._find_single_col(df, ["stage", "阶段", "步骤", "step", "status", "状态"])
-            if stage_col:
-                result = funnel_analysis(df, stage_col)
-                if "error" not in result:
-                    result["type"] = "funnel"
-                    result["stage_col"] = stage_col
-                    metrics.append(result)
-
-        # 归因
-        if any(kw in query.lower() for kw in ["归因", "attribution", "渠道", "channel"]):
-            channel_col = self._find_single_col(df, ["channel", "渠道", "source", "来源", "medium"])
-            if channel_col:
-                conv_col = self._find_single_col(df, ["conversion", "转化", "purchase", "buy", "成交", "order"])
-                if conv_col:
-                    result = attribution_analysis(df, conv_col, channel_col, method="last_touch")
+            if mtype == "roi":
+                revenue_col, cost_col = self._find_cols(
+                    df, ["revenue", "销售额", "收入", "gmv", "sales"],
+                    ["cost", "成本", "广告费", "花费", "spend"]
+                )
+                if revenue_col and cost_col:
+                    from ..tools.business import calc_roi
+                    result = calc_roi(df[revenue_col].sum(), df[cost_col].sum())
                     if "error" not in result:
-                        result["type"] = "attribution"
-                        result["channel_col"] = channel_col
-                        result["conversion_col"] = conv_col
+                        result["type"] = "roi"
+                        metrics.append(result)
+
+            elif mtype == "roas":
+                rev_col, ad_col = self._find_cols(
+                    df, ["revenue", "销售额", "收入"],
+                    ["ad", "广告", "spend", "花费"]
+                )
+                if rev_col and ad_col:
+                    from ..tools.business import calc_roas
+                    result = calc_roas(df[rev_col].sum(), df[ad_col].sum())
+                    if "error" not in result:
+                        result["type"] = "roas"
+                        metrics.append(result)
+
+            elif mtype == "ltv":
+                cust_col, rev_col = self._find_cols(
+                    df, ["user", "customer", "客户", "用户", "id"],
+                    ["revenue", "ltv", "value", "销售额", "消费"]
+                )
+                if cust_col and rev_col:
+                    from ..tools.business import calc_ltv
+                    result = calc_ltv(df, cust_col, rev_col)
+                    if "error" not in result:
+                        result["type"] = "ltv"
+                        metrics.append(result)
+
+            elif mtype == "cac":
+                cust_col, cost_col = self._find_cols(
+                    df, ["user", "customer", "客户", "新用户"],
+                    ["cost", "成本", "广告", "花费"]
+                )
+                if cust_col and cost_col:
+                    from ..tools.business import calc_cac
+                    result = calc_cac(df, cust_col, cost_col)
+                    if "error" not in result:
+                        result["type"] = "cac"
+                        metrics.append(result)
+
+            elif mtype == "funnel":
+                stage_col = self._find_single_col(
+                    df, ["stage", "阶段", "步骤", "step", "status", "状态"]
+                )
+                if stage_col:
+                    from ..tools.business import funnel_analysis
+                    result = funnel_analysis(df, stage_col)
+                    if "error" not in result:
+                        result["type"] = "funnel"
+                        metrics.append(result)
+
+            elif mtype == "attribution":
+                channel_col = self._find_single_col(
+                    df, ["channel", "渠道", "source", "来源", "medium"]
+                )
+                if channel_col:
+                    conv_col = self._find_single_col(
+                        df, ["conversion", "转化", "purchase", "buy", "成交", "order"]
+                    )
+                    if conv_col:
+                        from ..tools.business import attribution_analysis
+                        result = attribution_analysis(df, conv_col, channel_col, method="last_touch")
+                        if "error" not in result:
+                            result["type"] = "attribution"
+                            metrics.append(result)
+
+            elif mtype == "cagr":
+                from ..tools.business import calc_cagr
+                growth_cols = self._find_numeric_pairs(df)
+                for col1, col2 in growth_cols[:3]:
+                    result = calc_cagr([df[col1].sum(), df[col2].sum()])
+                    if "error" not in result and result.get("cagr") is not None:
+                        result["type"] = "growth"
+                        result["from_col"] = col1
+                        result["to_col"] = col2
                         metrics.append(result)
 
         return metrics

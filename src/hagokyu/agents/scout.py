@@ -243,7 +243,7 @@ class ScoutAgent(DataAgentBase):
             self.emit_thinking(f"正在加载数据: {data_path}")
             self.emit_tool_call("load_data", data_path)
             df = load_data(data_path)
-            self.emit_tool_result(f"加载成功: {len(df)} 行, {len(df.columns)} 列")
+            self.emit_tool_result(f"加载成功: {len(df)} 行, {len(df.columns)} 列，收到数据！")
 
         except FileNotFoundError:
             # 文件不存在 → 尝试常见扩展名
@@ -296,6 +296,10 @@ class ScoutAgent(DataAgentBase):
                 f"质量={profile['quality_score']}, "
                 f"缺失列={n_cols_with_nulls}"
             )
+            if profile["quality_score"] >= 0.8:
+                self.emit_thinking("数据质量不错，可以进行深入分析")
+            elif profile["quality_score"] >= 0.5:
+                self.emit_thinking("数据质量一般，我会谨慎处理，结论也会标注数据限制")
 
         except Exception as e:
             # 画像失败 → 用最小化指标

@@ -165,6 +165,14 @@ class AnalystAgent(DataAgentBase):
                 if interaction_result:
                     results.append(interaction_result)
 
+            # 🎯 情绪价值：分析完成的鼓励
+            if results:
+                n_sig = sum(1 for r in results if r.significance == "significant")
+                if n_sig > 0:
+                    self.emit_thinking(f"🎉 找到 {n_sig} 项显著发现！数据在说话")
+                else:
+                    self.emit_thinking("本次分析未发现显著结果——这也是有价值的结论，至少排除了这些可能性")
+
             # 对每个结果运行统计护栏
             for result in results:
                 guardrail_results = self.guardrails.check(result.to_dict())

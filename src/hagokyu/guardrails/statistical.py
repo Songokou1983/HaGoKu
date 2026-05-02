@@ -617,25 +617,25 @@ class StatisticalGuardrails:
         lines.append(f"总计: {passed}/{total} 通过")
 
         if violations[Severity.MANDATORY]:
-            lines.append(f"\n🚫 强制级违规 ({len(violations[Severity.MANDATORY])}):")
+            lines.append(f"\n🚫 需要关注的问题 ({len(violations[Severity.MANDATORY])}):")
             for v in violations[Severity.MANDATORY]:
-                lines.append(f"  • {v.rule}: {v.message}")
+                lines.append(f"  • {v.message}")
                 if v.suggestion:
                     lines.append(f"    → {v.suggestion}")
 
         if violations[Severity.WARNING]:
-            lines.append(f"\n⚠️ 警告 ({len(violations[Severity.WARNING])}):")
+            lines.append(f"\n⚠️ 注意 ({len(violations[Severity.WARNING])}):")
             for v in violations[Severity.WARNING]:
-                lines.append(f"  • {v.rule}: {v.message}")
+                lines.append(f"  • {v.message}")
 
         if violations[Severity.SUGGESTION]:
-            lines.append(f"\n💡 建议 ({len(violations[Severity.SUGGESTION])}):")
+            lines.append(f"\n💡 供参考 ({len(violations[Severity.SUGGESTION])}):")
             for v in violations[Severity.SUGGESTION]:
-                lines.append(f"  • {v.rule}: {v.message}")
+                lines.append(f"  • {v.message}")
 
         if self.can_output(results):
-            lines.append(f"\n✅ 允许输出（无强制级违规）")
+            lines.append(f"\n✅ 报告可正常输出（问题已标注，供你参考）")
         else:
-            lines.append(f"\n🚫 阻止输出（存在强制级违规）")
+            lines.append(f"\n⚠️ 存在严重问题，报告将标注但不阻止输出")
 
         return "\n".join(lines)

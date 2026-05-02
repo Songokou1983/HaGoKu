@@ -204,6 +204,14 @@ class CleanerAgent(DataAgentBase):
         # 9. 补充缺失机制信息
         report.missing_mechanism.update(mechanisms)
 
+        # 🎯 情绪价值：清洗完成，鼓励用户
+        if report.bias_risk == "low":
+            self.emit_thinking("清洗完成，数据干净，可以放心分析")
+        elif report.bias_risk == "medium":
+            self.emit_thinking("清洗完成，报告里会标注数据限制，请留意")
+        else:
+            self.emit_thinking("数据修改较多，分析结论会注明数据限制，供你参考")
+
         self.complete({
             "rows_original": report.total_rows_original,
             "rows_after": report.total_rows_after,

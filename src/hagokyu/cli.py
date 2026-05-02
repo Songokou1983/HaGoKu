@@ -258,9 +258,10 @@ def config_cmd(reset: bool) -> None:
         return
 
     config = HaGoKuConfig.load()
+    mode_labels = {"balanced": "规则+AI（平衡）", "rule": "纯规则", "ai": "AI优先"}
     click.echo("⚙️ HaGoKu 配置:")
     click.echo(f"   LLM: {config.llm.model} @ {config.llm.base_url}")
-    click.echo(f"   Manager: {config.manager.mode} (规则={config.manager.rule_weight:.0%}, AI={config.manager.llm_weight:.0%})")
+    click.echo(f"   Manager: {config.manager.mode}（{mode_labels.get(config.manager.mode, config.manager.mode)}）")
     click.echo(f"   用户模式: {config.user_mode.default_mode}")
     click.echo(f"   工作目录: {config.work_dir}")
     click.echo(f"   输出格式: {', '.join(config.output.formats)}")
@@ -516,6 +517,9 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
         click.echo()
 
 
+MAX_REFINEMENT_TURNS = 5
+
+
 def _run_refinement_loop(
     data_path: str,
     project_name: str | None,
@@ -523,13 +527,17 @@ def _run_refinement_loop(
     orch: Any,
     verbosity: str,
 ) -> None:
-    """交互式 refinement REPL loop"""
+    """交互式 refinement REPL loop
+
+    限制：最多 5 轮结构性调整，防止演变成自由 LLM 对话
+    """
     from .manager.refinement import parse_refinement
 
     click.echo()
     click.echo("─" * 50)
-    click.echo("💬 交互模式：调整分析方向或报告格式")
-    click.echo("   输入你的想法，我来调整（输入「退出」结束）")
+    click.echo("💬 交互模式：我会根据当前报告调整格式和范围")
+    click.echo("   支持：缩小范围 / 换指标 / 简化/详细 / 解释结论")
+    click.echo("   输入「退出」结束并保存报告")
     click.echo()
 
     refinement_context: dict[str, Any] = {
@@ -537,10 +545,15 @@ def _run_refinement_loop(
         "current_template": None,
         "verbosity": "standard",
     }
+    turn = 0
 
-    while True:
+    while turn < MAX_REFINEMENT_TURNS:
+        turn += 1
+        remaining = MAX_REFINEMENT_TURNS - turn
+
         try:
-            feedback = input("\n📝 你的想法: ").strip()
+            prompt = f"\n📝 [第{turn}轮，剩{remaining}次调整机会] 你的想法: "
+            feedback = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             click.echo("\n\n再见！报告已保存。")
             break
@@ -553,33 +566,20 @@ def _run_refinement_loop(
 
         # 退出处理
         if intent.refine_type == "exit":
-            click.echo("\n✅ 调整结束！报告已保存。")
+            click.echo("\n✅ 好的！报告已保存，随时可以继续分析。")
             break
 
-        # 无法理解的反馈
-        if intent.clarification_needed and intent.confidence == "low":
-            click.echo(f"\n💭 {intent.clarification_needed}")
+        # 被拦截的反馈（给出引导，不算一轮）
+        if intent.refine_type == "blocked":
+            click.echo(f"\n{intent.guidance}")
+            turn -= 1  # 不消耗轮次
             continue
 
-        # 需要用户确认
-        if intent.clarification_needed:
-            click.echo(f"\n💭 {intent.clarification_needed}")
-            # 等待用户输入
-            try:
-                confirm = input("   请输入: ").strip()
-                if confirm:
-                    # 更新意图
-                    if intent.refine_type == "filter" and intent.filter_column:
-                        intent.filter_value = confirm
-                        intent.clarification_needed = None
-                    elif intent.refine_type == "switch_target":
-                        intent.new_target = confirm
-                        intent.clarification_needed = None
-                    elif intent.refine_type == "add":
-                        intent.add_dimension = confirm
-                        intent.clarification_needed = None
-            except (EOFError, KeyboardInterrupt):
-                break
+        # 无法理解的反馈
+        if intent.refine_type == "unknown":
+            click.echo(f"\n{intent.guidance}")
+            turn -= 1  # 不消耗轮次
+            continue
 
         # 描述将要做的调整
         desc = _describe_refinement(intent)
@@ -589,7 +589,7 @@ def _run_refinement_loop(
         # 执行调整后的重新分析
         try:
             # 根据 refinement 类型构建新的分析参数
-            new_query = _build_refinement_query(feedback, result, intent)
+            new_query = _build_refinement_query(result, intent)
 
             if intent.refine_type == "simplify":
                 refinement_context["verbosity"] = "brief"
@@ -613,7 +613,23 @@ def _run_refinement_loop(
                 click.echo("\n⚠️ 调整失败，报告保持不变")
 
         except Exception as e:
-            click.echo(f"\n⚠️ 调整出错: {e}")
+            click.echo(f"\n⚠️ 调整出错，请重试或输入「退出」保存报告")
+
+        # 最后一轮，给出提示
+        if turn == MAX_REFINEMENT_TURNS:
+            click.echo()
+            click.echo("─" * 50)
+            click.echo("🎉 本轮交互已达上限！")
+            click.echo("   报告已保存，你可以：")
+            click.echo("   • 用新问题重新运行 hagokyu run（基于已有记忆）")
+            click.echo("   • 修改数据后重新分析")
+            click.echo("   • 输入「退出」直接结束")
+            try:
+                more = input("\n   还想继续调整吗？(y/n): ").strip().lower()
+                if more == "y":
+                    turn -= 1  # 再给一次机会
+            except (EOFError, KeyboardInterrupt):
+                break
 
 
 def _describe_refinement(intent: Any) -> str:
@@ -625,27 +641,28 @@ def _describe_refinement(intent: Any) -> str:
         "simplify": "简化报告，只保留关键发现",
         "more_detail": "生成更详细的报告",
         "explain": "解释分析结论背后的原因",
-        "add": f"增加「{intent.add_dimension}」维度的分析",
-        "regenerate": "重新生成完整报告",
-        "refine_query": "按你的新想法重新分析",
+        "blocked": "这个方向需要新的分析（退出后可重新 run）",
     }
     return descriptions.get(intent.refine_type, "")
 
 
-def _build_refinement_query(feedback: str, original_result: dict, intent: Any) -> str:
+def _build_refinement_query(original_result: dict, intent: Any) -> str:
     """根据 refinement 意图构建新的分析 query"""
+    orig_query = original_result.get("query", "")
     if intent.refine_type == "filter" and intent.filter_column:
         val = intent.filter_value or f"[指定{intent.filter_column}]"
-        return f"{original_result.get('query', '')} {intent.filter_column}为{val}"
+        return f"{orig_query} {intent.filter_column}为{val}"
+    elif intent.refine_type == "exclude" and intent.filter_column:
+        val = intent.filter_value or f"[指定{intent.filter_column}]"
+        return f"{orig_query} 排除{val}"
     elif intent.refine_type == "switch_target" and intent.new_target:
-        return f"{original_result.get('query', '')} 指标改为{intent.new_target}"
-    elif intent.refine_type == "add" and intent.add_dimension:
-        return f"{original_result.get('query', '')} 加上{intent.add_dimension}"
-    elif intent.refine_type == "regenerate":
-        return original_result.get("query", "")
+        return f"{orig_query} 指标改为{intent.new_target}"
+    elif intent.refine_type == "simplify":
+        return f"{orig_query} 报告简化为关键发现"
+    elif intent.refine_type == "more_detail":
+        return f"{orig_query} 报告详细展开"
     else:
-        # 其他情况，把用户原话作为新 query
-        return feedback
+        return orig_query
 
 
 def main() -> None:

@@ -306,7 +306,11 @@ class ReporterAgent(DataAgentBase):
         significant = [r for r in results if r.significance == "significant"]
         if not significant:
             if results:
-                return f"分析完成，{len(results)} 项检验未发现统计显著结果——这本身也是重要信息"
+                n = len(results)
+                return (
+                    f"{n} 项分析完成，未发现显著差异——"
+                    "这本身也是重要结论，至少说明这些方向上目前数据不足以得出强结论"
+                )
             return "分析完成，暂无发现"
 
         # 取效应量最大的显著结果
@@ -371,7 +375,11 @@ class ReporterAgent(DataAgentBase):
                 if r.conclusion_plain:
                     parts.append(f"• {r.conclusion_plain}")
         if not_sig:
-            parts.append(f"{len(not_sig)} 项分析未达显著水平，这本身也是有价值的信息——说明这些方向上数据不足以支持强烈结论。")
+            parts.append(
+                f"{len(not_sig)} 项分析未达显著水平。这不是分析失败——"
+                "它告诉我们：目前的数据还不足以在这些方向上得出强结论。"
+                "如果这个结论对你有用，可以考虑增加数据量后再分析。"
+            )
 
         return "\n".join(parts) if parts else "分析完成。"
 

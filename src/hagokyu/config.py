@@ -73,12 +73,16 @@ class HaGoKuConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: Path) -> "HaGoKuConfig":
-        """从 YAML 文件加载配置"""
+        """从 YAML 文件加载配置（失败则返回默认值）"""
         if not path.exists():
             return cls()
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-        return cls(**data)
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f) or {}
+            return cls(**data)
+        except Exception:
+            # YAML 格式错误 → 使用默认配置，不阻断
+            return cls()
 
     @classmethod
     def load(cls, config_path: Optional[Path] = None) -> "HaGoKuConfig":
@@ -105,6 +109,13 @@ class HaGoKuConfig(BaseModel):
         return config
 
     def ensure_work_dir(self) -> None:
-        """确保工作目录存在"""
-        self.work_dir.mkdir(parents=True, exist_ok=True)
-        (self.work_dir / "projects").mkdir(exist_ok=True)
+        """确保工作目录存在（失败则使用临时目录，不阻断）"""
+        try:
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+            (self.work_dir / "projects").mkdir(exist_ok=True)
+        except PermissionError:
+            # 权限不足 → 回退到临时目录
+            import tempfile
+            self.work_dir = Path(tempfile.gettempdir()) / ".hagokyu"
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+            (self.work_dir / "projects").mkdir(exist_ok=True)

@@ -215,10 +215,17 @@ class Orchestrator:
                     impact_warning=self.config.manager.cleaning_impact_warning,
                 )
 
-                # 保存清洗后数据
-                cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-                save_data(df_clean, cleaned_path)
-                cleaned_path_str = str(cleaned_path)
+                # 保存清洗后数据（如有）
+                if df_clean is not None:
+                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
+                    save_data(df_clean, cleaned_path)
+                    cleaned_path_str = str(cleaned_path)
+                else:
+                    cleaned_path_str = ""
+                    self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                        "verdict": "warning",
+                        "detail": "数据清洗未成功，尝试使用原始数据",
+                    })
 
                 # 保存 resume 状态
                 self.memory.save_resume_state(
@@ -228,18 +235,31 @@ class Orchestrator:
                 )
 
                 # 5. 质量检查
-                self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
-                    "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
-                    "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
-                })
+                if cleaning_report:
+                    self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                        "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
+                        "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
+                    })
 
             # 6. Analyst: 统计分析
             if df_clean is None or context is None:
-                raise RuntimeError(
-                    "Pipeline error: cleaned data or context is missing. "
-                    f"(df_clean={'present' if df_clean is not None else 'None'}, "
-                    f"context={'present' if context is not None else 'None'})"
-                )
+                # 尝试加载原始数据继续
+                if context is not None and context.data_path:
+                    try:
+                        from ..tools.data_io import load_data
+                        df_clean = load_data(context.data_path)
+                        self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                            "verdict": "warning",
+                            "detail": "使用原始数据继续分析",
+                        })
+                    except Exception:
+                        raise RuntimeError(
+                            f"无法获取有效数据（context.data_path={context.data_path}），分析无法继续"
+                        )
+                else:
+                    raise RuntimeError(
+                        "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
+                    )
             results = analyst.run(df_clean, context, plan)
 
             # 7. Reporter: 生成报告

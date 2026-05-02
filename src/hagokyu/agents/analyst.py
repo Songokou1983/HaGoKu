@@ -181,8 +181,13 @@ class AnalystAgent(DataAgentBase):
             return results
 
         except Exception as e:
+            # 不崩溃：发射警告，返回已有的部分结果（如果有的话）
             self.fail(str(e))
-            raise
+            self.emit_event(EventType.AGENT_THINKING, {
+                "thought": f"⚠️ Analyst 部分分析失败（{e}），继续生成报告",
+            })
+            # 返回空列表，让报告阶段仍能运行
+            return results if results else []
 
     def _do_regression(
         self,

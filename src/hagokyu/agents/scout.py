@@ -230,13 +230,53 @@ class ScoutAgent(DataAgentBase):
         self.start()
 
         try:
-            # 1. 加载数据
+            # 1. 加载数据（尝试多种方式）
             self.emit_thinking(f"正在加载数据: {data_path}")
             self.emit_tool_call("load_data", data_path)
             df = load_data(data_path)
             self.emit_tool_result(f"加载成功: {len(df)} 行, {len(df.columns)} 列")
 
-            # 2. 数据画像
+        except FileNotFoundError:
+            # 文件不存在 → 尝试常见扩展名
+            from pathlib import Path
+            p = Path(data_path)
+            suffixes = ["", ".csv", ".parquet", ".xlsx", ".json"]
+            found = None
+            for suf in suffixes:
+                candidate = p.parent / (p.stem + suf)
+                if candidate.exists():
+                    found = str(candidate)
+                    break
+            if found:
+                self.emit_thinking(f"文件不存在，尝试 {found}")
+                self.emit_tool_call("load_data", found)
+                df = load_data(found)
+                self.emit_tool_result(f"加载成功: {len(df)} 行, {len(df.columns)} 列")
+                data_path = found
+            else:
+                self.fail(f"文件不存在: {data_path}")
+                # 返回空 context，不阻断 pipeline
+                return DataContext(
+                    data_path=data_path,
+                    n_rows=0,
+                    n_cols=0,
+                    column_semantics=[],
+                    quality_score=0.0,
+                )
+
+        except ValueError as e:
+            # 格式不支持 → 返回空 context
+            self.fail(f"不支持的文件格式: {e}")
+            return DataContext(
+                data_path=data_path,
+                n_rows=0,
+                n_cols=0,
+                column_semantics=[],
+                quality_score=0.0,
+            )
+
+        try:
+            # 2. 数据画像（失败则用最小 profile）
             self.emit_thinking("生成数据画像...")
             self.emit_tool_call("generate_profile")
             profile = generate_profile(df)
@@ -248,6 +288,21 @@ class ScoutAgent(DataAgentBase):
                 f"缺失列={n_cols_with_nulls}"
             )
 
+        except Exception as e:
+            # 画像失败 → 用最小化指标
+            self.emit_thinking(f"数据画像失败（{e}），使用最小推断")
+            profile = {
+                "quality_score": 0.5,
+                "missing_summary": {
+                    "columns_with_nulls": 0,
+                    "column_details": {},
+                    "null_rate": 0.0,
+                },
+                "duplicate_rate": 0.0,
+                "correlations": {},
+            }
+
+        try:
             # 3. 字段语义推断
             self.emit_thinking("推断字段语义...")
             column_semantics = self._infer_all_semantics(df, query)
@@ -297,8 +352,18 @@ class ScoutAgent(DataAgentBase):
             return context
 
         except Exception as e:
+            # 推断/构建失败 → 返回最基本 context
             self.fail(str(e))
-            raise
+            self.emit_event(EventType.AGENT_THINKING, {
+                "thought": f"⚠️ Scout 部分失败（{e}），继续使用最小上下文",
+            })
+            return DataContext(
+                data_path=data_path,
+                n_rows=len(df) if 'df' in dir() else 0,
+                n_cols=len(df.columns) if 'df' in dir() else 0,
+                column_semantics=[],
+                quality_score=profile.get("quality_score", 0.5) if 'profile' in dir() else 0.5,
+            )
 
     def _infer_all_semantics(self, df: pd.DataFrame, query: str = "") -> list[ColumnSemantic]:
         """推断所有列的语义"""

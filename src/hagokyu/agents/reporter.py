@@ -259,7 +259,34 @@ class ReporterAgent(DataAgentBase):
 
         except Exception as e:
             self.fail(str(e))
-            raise
+            # 报告生成失败 → 尝试最小化文本报告
+            self.emit_event(EventType.AGENT_THINKING, {
+                "thought": f"⚠️ Reporter 报告生成失败（{e}），生成最小化摘要",
+            })
+            key_findings = self._extract_key_findings(results)
+            return ReportData(
+                project_name=project_name,
+                query=query,
+                sections=[
+                    ReportSection(
+                        title="⚠️ 分析摘要（报告生成失败）",
+                        content=f"分析过程出错: {e}\n\n共生成 {len(results)} 个结果。",
+                        findings=key_findings,
+                        level=1,
+                    ),
+                ],
+                data_summary={
+                    "n_rows": context.n_rows,
+                    "n_cols": context.n_cols,
+                    "quality_score": context.quality_score,
+                    "null_rate": context.missing_summary.get("null_rate", "N/A"),
+                },
+                cleaning_summary=cleaning_summary or {},
+                findings_summary=key_findings,
+                headline="分析完成（报告部分失败）",
+                metric_cards=[],
+                user_mode=user_mode,
+            )
 
     # ── 吸引力层：一眼抓住 ──────────────────────────────────
 

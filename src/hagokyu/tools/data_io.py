@@ -49,11 +49,23 @@ def load_data(
         ValueError: 不支持的文件格式
     """
     path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"数据文件不存在: {path}")
-
     ext = path.suffix.lower()
     fmt = SUPPORTED_FORMATS.get(ext)
+
+    # 尝试常见扩展名（少假设多适配）
+    if not path.exists() or fmt is None:
+        suffixes = [".csv", ".parquet", ".xlsx", ".json", ".tsv"]
+        for suf in suffixes:
+            candidate = path.parent / (path.stem + suf)
+            if candidate.exists():
+                path = candidate
+                ext = suf
+                fmt = SUPPORTED_FORMATS.get(ext)
+                break
+
+    if not path.exists():
+        raise FileNotFoundError(f"数据文件不存在（尝试过常见扩展名）: {path}")
+
     if fmt is None:
         raise ValueError(
             f"不支持的文件格式: {ext}，"

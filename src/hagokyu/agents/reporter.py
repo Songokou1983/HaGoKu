@@ -103,6 +103,7 @@ class ReporterAgent(DataAgentBase):
         template_dir: str | None = None,
         user_mode: str = "standard",
         df: pd.DataFrame | None = None,
+        business_metrics: list[dict[str, Any]] | None = None,
     ) -> ReportData:
         """
         生成分析报告
@@ -151,6 +152,12 @@ class ReporterAgent(DataAgentBase):
                     # 核心价值层
                     plain_explanation=self._generate_overall_plain(results),
                 ))
+
+            # ── 商业指标 ─────────────────────────────────
+            if business_metrics:
+                biz_section = self._build_business_metrics_section(business_metrics)
+                if biz_section:
+                    sections.append(biz_section)
 
             # 2. 数据概览图表
             overview_charts: list[dict[str, Any]] = []
@@ -298,6 +305,114 @@ class ReporterAgent(DataAgentBase):
                 metric_cards=[],
                 user_mode=user_mode,
             )
+
+    # ── 商业指标章节 ──────────────────────────────────────
+
+    def _build_business_metrics_section(self, metrics: list[dict[str, Any]]) -> ReportSection | None:
+        """构建商业指标章节"""
+        if not metrics:
+            return None
+
+        content_parts = []
+        metric_cards = []
+
+        for m in metrics:
+            m_type = m.get("type", "unknown")
+
+            if m_type == "roi":
+                roi = m.get("roi", m.get("avg_roi", 0))
+                roi_pct = f"{roi:.1f}%" if isinstance(roi, (int, float)) else "N/A"
+                metric_cards.append({
+                    "value": roi_pct,
+                    "label": "ROI（投资回报率）",
+                    "trend": "up" if roi > 0 else "down" if roi < 0 else None,
+                })
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• ROI = {roi_pct}：{interp}")
+
+            elif m_type == "roas":
+                roas = m.get("roas", m.get("avg_roas", 0))
+                roas_str = f"{roas:.1f}x"
+                metric_cards.append({
+                    "value": roas_str,
+                    "label": "ROAS（广告回报）",
+                    "trend": "up" if roas >= 4 else "down" if roas < 1 else None,
+                })
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• ROAS = {roas_str}：{interp}")
+
+            elif m_type == "ltv":
+                ltv = m.get("avg_ltv", 0)
+                metric_cards.append({"value": f"{ltv:.2f}", "label": "LTV（用户生命周期价值）"})
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• 平均 LTV = {ltv:.2f}：{interp}")
+
+            elif m_type == "cac":
+                cac = m.get("cac", 0)
+                metric_cards.append({"value": f"{cac:.2f}", "label": "CAC（获客成本）"})
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• 平均 CAC = {cac:.2f}：{interp}")
+
+            elif m_type == "ltv_cac":
+                ratio = m.get("ratio", 0)
+                metric_cards.append({
+                    "value": f"{ratio:.1f}x",
+                    "label": "LTV/CAC",
+                    "trend": "up" if ratio >= 3 else "down",
+                })
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• LTV/CAC = {ratio:.1f}x：{interp}")
+
+            elif m_type == "growth":
+                growth = m.get("growth_percent", "N/A")
+                metric_cards.append({
+                    "value": growth,
+                    "label": "增长率",
+                    "trend": "up" if growth and growth.startswith("+") else "down",
+                })
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• {interp}")
+
+            elif m_type == "funnel":
+                funnel = m.get("funnel", [])
+                total_conv = m.get("total_conversion_percent", "N/A")
+                biggest_drop = m.get("biggest_drop_stage", "")
+                metric_cards.append({"value": total_conv, "label": "总体转化率"})
+                funnel_lines = [f"• 漏斗共 {len(funnel)} 个阶段，总体转化 {total_conv}"]
+                if biggest_drop:
+                    funnel_lines.append(f"  最大流失在「{biggest_drop}」")
+                for stage in funnel:
+                    stage_name = stage.get("stage", "")
+                    rate = stage.get("from_previous_rate", 1.0)
+                    funnel_lines.append(f"  - {stage_name}: {rate*100:.1f}%")
+                content_parts.extend(funnel_lines)
+
+            elif m_type == "attribution":
+                attrs = m.get("attribution", {})
+                method = m.get("method", "unknown")
+                best = m.get("best_channel", "")
+                content_parts.append(f"• 归因方法：{method}，最优渠道：{best}")
+                for ch, pct in sorted(attrs.items(), key=lambda x: x[1], reverse=True)[:5]:
+                    content_parts.append(f"  - {ch}: {pct}%")
+
+            elif m_type == "payback":
+                period = m.get("payback_period")
+                metric_cards.append({
+                    "value": f"{period}期" if period else "未回本",
+                    "label": "回本周期",
+                })
+                interp = m.get("interpretation", "")
+                content_parts.append(f"• {interp}")
+
+        if not content_parts:
+            return None
+
+        return ReportSection(
+            title="💰 商业指标",
+            content="\n".join(content_parts),
+            level=2,
+            metric_cards=metric_cards if metric_cards else None,
+        )
 
     # ── 吸引力层：一眼抓住 ──────────────────────────────────
 

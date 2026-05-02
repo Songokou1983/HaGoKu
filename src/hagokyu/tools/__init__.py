@@ -9,6 +9,21 @@ from .analysis import (
     regression,
     ttest,
 )
+from .business import (
+    attribution_analysis,
+    calc_break_even,
+    calc_cac,
+    calc_cagr,
+    calc_growth_rate,
+    calc_irr,
+    calc_ltv,
+    calc_ltv_cac_ratio,
+    calc_npv,
+    calc_payback_period,
+    calc_roi,
+    calc_roas,
+    funnel_analysis,
+)
 from .cleaning import (
     CleaningOp,
     CleaningReport,
@@ -31,6 +46,19 @@ from .diagnostics import (
     diagnose_regression,
     generate_diagnostic_plots,
 )
+from .power_analysis import (
+    assess_power_for_data,
+    interpret_effect_size,
+    interpret_nonsignificant_result,
+    power_anova,
+    power_correlation,
+    power_regression,
+    power_ttest,
+    required_n_anova,
+    required_n_correlation,
+    required_n_regression,
+    required_n_ttest,
+)
 from .profiling import (
     generate_full_profile,
     generate_profile,
@@ -52,6 +80,20 @@ __all__ = [
     "mann_whitney_u",
     "regression",
     "ttest",
+    # business
+    "attribution_analysis",
+    "calc_break_even",
+    "calc_cac",
+    "calc_cagr",
+    "calc_growth_rate",
+    "calc_irr",
+    "calc_ltv",
+    "calc_ltv_cac_ratio",
+    "calc_npv",
+    "calc_payback_period",
+    "calc_roi",
+    "calc_roas",
+    "funnel_analysis",
     # cleaning
     "CleaningOp",
     "CleaningReport",
@@ -71,6 +113,18 @@ __all__ = [
     # diagnostics
     "diagnose_regression",
     "generate_diagnostic_plots",
+    # power
+    "assess_power_for_data",
+    "interpret_effect_size",
+    "interpret_nonsignificant_result",
+    "power_anova",
+    "power_correlation",
+    "power_regression",
+    "power_ttest",
+    "required_n_anova",
+    "required_n_correlation",
+    "required_n_regression",
+    "required_n_ttest",
     # profiling
     "generate_full_profile",
     "generate_profile",

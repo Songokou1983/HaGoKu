@@ -57,6 +57,15 @@ class QueryIntent:
             "correlation": ["correlation"],
             "trend": ["trend"],
             "diagnostic": ["regression", "hypothesis_test"],
+            # 商业意图映射到对应的分析 + 商业指标计算
+            "roi_analysis": ["hypothesis_test", "regression"],
+            "ltv_analysis": ["regression", "correlation"],
+            "funnel_conversion": ["hypothesis_test"],
+            "attribution": ["hypothesis_test", "correlation"],
+            "investment_decision": ["regression"],
+            "cac_analysis": ["hypothesis_test", "correlation"],
+            "cohort_analysis": ["hypothesis_test", "trend"],
+            "growth_rate": ["trend", "regression"],
             "exploration": self.fallback_focus,
         }
         return mapping.get(self.intent_type, self.fallback_focus)
@@ -96,6 +105,60 @@ INTENT_PATTERNS: list[tuple[str, str, list[str]]] = [
         "问题|异常|哪里不对|诊断|哪里出问题了|"
         "为什么不|哪里有问题|什么情况",
         ["问题", "异常", "诊断"],
+    ),
+    # ── 商业意图 ────────────────────────────────────────────
+    (
+        "roi_analysis",
+        "roi|ROAS|roas|投资回报|广告回报|"
+        "roi.*分析|广告.*效果|投放.*效果|"
+        "花.*多少钱|成本.*收益|赚了.*亏了",
+        ["ROI", "ROAS", "投资回报", "广告回报", "投放效果"],
+    ),
+    (
+        "ltv_analysis",
+        "ltv|CLV|LTV|clv|用户价值|客户价值|生命周期|"
+        "用户.*值.*钱|一个用户.*多少|用户.*贡献|"
+        "ltv.*分析|用户.*价值.*分析",
+        ["LTV", "CLV", "用户价值", "客户价值", "生命周期价值"],
+    ),
+    (
+        "funnel_conversion",
+        "转化|漏斗|转化率|funnel|conversion|"
+        "流失|每步.*转化|哪个阶段.*流失|"
+        "转化.*分析|漏斗.*分析",
+        ["转化", "漏斗", "转化率", "流失"],
+    ),
+    (
+        "attribution",
+        "归因|attribution|渠道.*贡献|哪个渠道.*贡献|"
+        "首次触达|末次触达|线性归因|"
+        "渠道.*效果|渠道.*价值",
+        ["归因", "渠道归因", "触达归因"],
+    ),
+    (
+        "investment_decision",
+        "回本|盈亏|npv|irr|投资|回收期|"
+        "npv.*分析|irr.*分析|回本.*周期|"
+        "盈亏.*平衡|值得投|能赚钱|回报.*分析",
+        ["回本", "盈亏", "NPV", "IRR", "投资回报"],
+    ),
+    (
+        "cac_analysis",
+        "cac|CAC|获客成本|客户.*成本|获取.*成本|"
+        "拉新.*成本|一个客户.*成本|cac.*分析",
+        ["CAC", "获客成本", "客户获取成本"],
+    ),
+    (
+        "cohort_analysis",
+        "cohort|同期群|群组|cohort.*分析|"
+        "不同.*期.*差异|同期.*对比",
+        ["同期群", "群组分析"],
+    ),
+    (
+        "growth_rate",
+        "增长.*率|cagr|CAGR|环比|同比|"
+        "增速|增长率.*多少|增长.*多少",
+        ["增长率", "CAGR", "环比", "同比", "增速"],
     ),
 ]
 

@@ -24,6 +24,29 @@ from ..tools.analysis import (
     regression,
     ttest,
 )
+from ..tools.power_analysis import (
+    assess_power_for_data,
+    interpret_nonsignificant_result,
+    power_ttest,
+    power_anova,
+    power_correlation,
+    power_regression,
+)
+from ..tools.business import (
+    calc_roi,
+    calc_roas,
+    calc_ltv,
+    calc_cac,
+    calc_ltv_cac_ratio,
+    calc_payback_period,
+    calc_npv,
+    calc_irr,
+    calc_break_even,
+    calc_cagr,
+    calc_growth_rate,
+    attribution_analysis,
+    funnel_analysis,
+)
 from .base import DataAgentBase
 from .scout import DataContext, SemanticType
 
@@ -81,7 +104,15 @@ class AnalystAgent(DataAgentBase):
                 "2. 多组对比：ANOVA 或 Kruskal-Wallis\n"
                 "3. 找关系（哪些因素影响结果）：回归分析\n"
                 "4. 趋势/时间序列：趋势分析或时间序列分析\n"
-                "5. 相关性：Pearson 或 Spearman 相关系数\n\n"
+                "5. 相关性：Pearson 或 Spearman 相关系数\n"
+                "6. 广告/营销效果：ROI/ROAS/LTV/CAC 分析\n"
+                "7. 用户价值：LTV/CLV 计算，payback period 分析\n"
+                "8. 投资决策：NPV/IRR/盈亏平衡点分析\n"
+                "9. 渠道效果：归因分析（首次/末次触达/线性归因）\n"
+                "10. 转化漏斗：funnel 转化率分析\n\n"
+                "【内部指令：功效分析】\n"
+                "1. 分析前：评估当前数据量能否检测到中等效应（功效预检）\n"
+                "2. 分析后：结果不显著时，判断是'真的没效应'还是'数据不够'\n\n"
                 "【内部指令：结论质量标准】\n"
                 "1. 每个结论必须附带统计检验结果（p 值或检验统计量）\n"
                 "2. 显著结果必须附带效应量（说明差异的实际大小）\n"
@@ -119,11 +150,21 @@ class AnalystAgent(DataAgentBase):
 
         try:
             results: list[AnalysisResult] = []
+            business_metrics: list[dict[str, Any]] = []
             focus = plan.get("analyst_focus", [])
             target_col = plan.get("target")
             query = plan.get("query", "")
+            n = len(df)
 
             self.emit_thinking(f"分析计划: focus={focus}, target={target_col}")
+
+            # ── 功效预检：在跑分析前告诉用户数据够不够 ──────────
+            power_warnings = self._check_power_before_analysis(df, context, focus, n)
+            for warning in power_warnings:
+                self.emit_thinking(f"💡 {warning}")
+
+            # ── 商业指标检测 ─────────────────────────────────
+            business_metrics = self._detect_business_metrics(df, context, query)
 
             # 根据计划执行分析
             if "regression" in focus or "causal" in focus:
@@ -173,6 +214,15 @@ class AnalystAgent(DataAgentBase):
                 else:
                     self.emit_thinking("本次分析未发现显著结果——这也是有价值的结论，至少排除了这些可能性")
 
+            # ── 功效解读：对不显著结果判断原因 ─────────────
+            for result in results:
+                if result.significance != "significant" and result.p_value is not None:
+                    power_interp = self._interpret_result_power(
+                        result, df, context, n
+                    )
+                    if power_interp:
+                        self.emit_thinking(f"💡 {power_interp}")
+
             # 对每个结果运行统计护栏
             for result in results:
                 guardrail_results = self.guardrails.check(result.to_dict())
@@ -195,8 +245,9 @@ class AnalystAgent(DataAgentBase):
                     for mv in mandatory_violations:
                         self.emit_thinking(f"🚫 统计质量问题（严重）: {mv.message}")
 
-            self.complete({"n_results": len(results)})
-            return results
+            self.complete({"n_results": len(results), "n_business_metrics": len(business_metrics)})
+            # 附上商业指标到结果中（Reporter 需要）
+            return results, business_metrics
 
         except Exception as e:
             # 不崩溃：发射警告，返回已有的部分结果（如果有的话）
@@ -205,7 +256,7 @@ class AnalystAgent(DataAgentBase):
                 "thought": "⚠️ 分析过程中出现问题，将尝试继续生成报告",
             })
             # 返回空列表，让报告阶段仍能运行
-            return results if results else []
+            return results if results else [], []
 
     def _do_regression(
         self,
@@ -790,3 +841,244 @@ class AnalystAgent(DataAgentBase):
             results.append(result)
 
         return results
+
+    # ── 功效分析 ─────────────────────────────────────────
+
+    def _check_power_before_analysis(
+        self,
+        df: pd.DataFrame,
+        context: DataContext,
+        focus: list[str],
+        n: int,
+    ) -> list[str]:
+        """
+        分析前的功效预检：告诉用户数据量够不够
+
+        在跑分析之前评估功效，帮助用户理解结论的可靠性
+        """
+        warnings = []
+
+        if n < 30:
+            warnings.append(
+                f"⚠️ 数据量偏少（n={n}），检验功效可能不足。"
+                f"如果结果不显著，可能是真的没效应，也可能是数据不够。"
+            )
+            return warnings
+
+        # 根据分析类型评估
+        if "hypothesis_test" in focus or "effect_size" in focus:
+            n_groups = self._count_groups(df, context)
+            if n_groups >= 2:
+                n_per_group = n // n_groups
+                if n_per_group < 15:
+                    warnings.append(
+                        f"⚠️ 每组样本量偏少（n={n_per_group}），"
+                        f"检测中等效应（d≈0.5）的功效可能不足。"
+                    )
+                elif n_per_group >= 30:
+                    power_info = power_ttest(n_per_group, n_per_group, effect_size=0.5)
+                    if "error" not in power_info:
+                        power_pct = power_info.get("power", 0) * 100
+                        if power_pct >= 80:
+                            warnings.append(f"✅ 每组 n={n_per_group}，检测中等效应功效约 {power_pct:.0f}%，足够。")
+                        else:
+                            warnings.append(f"⚠️ 每组 n={n_per_group}，检测中等效应功效约 {power_pct:.0f}%，偏低。")
+
+        if "regression" in focus or "causal" in focus:
+            n_predictors = len([f for f in context.features if f in df.columns])
+            if n_predictors > 0:
+                if n < 10 * n_predictors:
+                    warnings.append(
+                        f"⚠️ 样本量 n={n} 与自变量数 {n_predictors} 的比例偏低，"
+                        f"可能导致过拟合或估计不稳定（经验规则：n ≥ 10 × 自变量数）。"
+                    )
+
+        if "correlation" in focus:
+            if n < 30:
+                warnings.append(
+                    f"⚠️ 相关分析需要足够样本量（n={n}），"
+                    f"当前样本量下只能检测到较强的相关性。"
+                )
+
+        return warnings
+
+    def _interpret_result_power(
+        self,
+        result: AnalysisResult,
+        df: pd.DataFrame,
+        context: DataContext,
+        n: int,
+    ) -> str | None:
+        """
+        对不显著结果做功效解读
+
+        核心问题：p > 0.05 是因为真的没效应，还是因为数据不够？
+        """
+        if result.significance == "significant":
+            return None
+
+        es = result.effect_size
+        es_type = result.effect_type or "cohen_d"
+        if es is None:
+            return None
+
+        interp = interpret_nonsignificant_result(
+            p_value=result.p_value or 1.0,
+            effect_size=es,
+            effect_type=es_type,
+            n=result.sample_size or n,
+            alpha=0.05,
+        )
+
+        if "error" in interp:
+            return None
+
+        verdict = interp.get("verdict", "")
+        suggestion = interp.get("suggestion", "")
+
+        if verdict == "likely_no_effect":
+            return (
+                f"功效解读：效应量 {es:.3f}（{interp.get('effect_interpretation', {}).get('label', '')}），"
+                f"结果不显著更可能是效应本身很小或不存在。"
+            )
+        elif verdict == "possibly_underpowered":
+            power = interp.get("estimated_power", 0)
+            return (
+                f"功效解读：检测到 {es:.3f} 效应，但当前样本量功效约 {power:.0%}（低于 80%）。"
+                f"结果不显著可能是数据不够，建议增加样本后再分析。"
+            )
+        elif verdict == "possibly_underpowered":
+            return (
+                f"功效解读：效应量很小（{es:.3f}），即使有效应也需要更大样本才能检测。"
+                f"建议谨慎解读。"
+            )
+
+        return None
+
+    def _count_groups(self, df: pd.DataFrame, context: DataContext) -> int:
+        """统计分组数（用于功效预检）"""
+        cat_cols = [
+            sem.column_name
+            for sem in context.column_semantics
+            if sem.inferred_type in (SemanticType.CATEGORICAL, SemanticType.BOOLEAN, SemanticType.ORDINAL)
+            and sem.column_name in df.columns
+        ]
+        if not cat_cols:
+            return 2
+        return max(df[col].nunique() for col in cat_cols[:1])
+
+    # ── 商业指标检测 ───────────────────────────────────
+
+    def _detect_business_metrics(
+        self,
+        df: pd.DataFrame,
+        context: DataContext,
+        query: str,
+    ) -> list[dict[str, Any]]:
+        """
+        自动检测商业指标
+
+        根据数据列和用户 query 自动识别并计算商业指标
+        """
+        metrics: list[dict[str, Any]] = []
+        col_names_lower = [c.lower() for c in df.columns]
+
+        # ROI / ROAS
+        if "roi" in query.lower() or "投资回报" in query.lower():
+            revenue_col, cost_col = self._find_cols(df, ["revenue", "销售额", "收入", "gmv", "sales"], ["cost", "成本", "广告费", "花费", "spend"])
+            if revenue_col and cost_col:
+                result = calc_roi(df[revenue_col].sum(), df[cost_col].sum())
+                if "error" not in result:
+                    result["type"] = "roi"
+                    result["revenue_col"] = revenue_col
+                    result["cost_col"] = cost_col
+                    metrics.append(result)
+
+        if "roas" in query.lower() or "广告效果" in query.lower():
+            rev_col, ad_col = self._find_cols(df, ["revenue", "销售额", "收入"], ["ad", "广告", "spend", "花费"])
+            if rev_col and ad_col:
+                result = calc_roas(df[rev_col].sum(), df[ad_col].sum())
+                if "error" not in result:
+                    result["type"] = "roas"
+                    result["revenue_col"] = rev_col
+                    result["ad_spend_col"] = ad_col
+                    metrics.append(result)
+
+        # LTV
+        if "ltv" in query.lower() or "用户价值" in query.lower() or "clv" in query.lower():
+            cust_col, rev_col = self._find_cols(df, ["user", "customer", "客户", "用户", "id"], ["revenue", "ltv", "value", "销售额", "消费"])
+            if cust_col and rev_col:
+                result = calc_ltv(df, cust_col, rev_col)
+                if "error" not in result:
+                    result["type"] = "ltv"
+                    result["customer_col"] = cust_col
+                    result["revenue_col"] = rev_col
+                    metrics.append(result)
+
+        # CAC
+        if "cac" in query.lower() or "获客成本" in query.lower():
+            cust_col, cost_col = self._find_cols(df, ["user", "customer", "客户", "新用户"], ["cost", "成本", "广告", "花费"])
+            if cust_col and cost_col:
+                result = calc_cac(df, cust_col, cost_col)
+                if "error" not in result:
+                    result["type"] = "cac"
+                    metrics.append(result)
+
+        # 增长 / CAGR
+        if any(kw in query.lower() for kw in ["增长", "cagr", "growth", "趋势"]):
+            growth_cols = self._find_numeric_pairs(df)
+            for col1, col2 in growth_cols:
+                result = calc_growth_rate(df[col1].sum(), df[col2].sum())
+                if "error" not in result and result.get("growth") is not None:
+                    result["type"] = "growth"
+                    result["from_col"] = col1
+                    result["to_col"] = col2
+                    metrics.append(result)
+
+        # 漏斗分析
+        if any(kw in query.lower() for kw in ["转化", "漏斗", "funnel", "conversion"]):
+            stage_col = self._find_single_col(df, ["stage", "阶段", "步骤", "step", "status", "状态"])
+            if stage_col:
+                result = funnel_analysis(df, stage_col)
+                if "error" not in result:
+                    result["type"] = "funnel"
+                    result["stage_col"] = stage_col
+                    metrics.append(result)
+
+        # 归因
+        if any(kw in query.lower() for kw in ["归因", "attribution", "渠道", "channel"]):
+            channel_col = self._find_single_col(df, ["channel", "渠道", "source", "来源", "medium"])
+            if channel_col:
+                conv_col = self._find_single_col(df, ["conversion", "转化", "purchase", "buy", "成交", "order"])
+                if conv_col:
+                    result = attribution_analysis(df, conv_col, channel_col, method="last_touch")
+                    if "error" not in result:
+                        result["type"] = "attribution"
+                        result["channel_col"] = channel_col
+                        result["conversion_col"] = conv_col
+                        metrics.append(result)
+
+        return metrics
+
+    def _find_cols(
+        self, df: pd.DataFrame, candidates1: list[str], candidates2: list[str]
+    ) -> tuple[str | None, str | None]:
+        """从候选列表中匹配两列"""
+        col_lower = {c.lower(): c for c in df.columns}
+        col1 = next((col_lower[c] for c in candidates1 if c.lower() in col_lower), None)
+        col2 = next((col_lower[c] for c in candidates2 if c.lower() in col_lower), None)
+        return col1, col2
+
+    def _find_single_col(self, df: pd.DataFrame, candidates: list[str]) -> str | None:
+        """从候选列表中匹配单列"""
+        col_lower = {c.lower(): c for c in df.columns}
+        return next((col_lower[c.lower()] for c in candidates if c.lower() in col_lower), None)
+
+    def _find_numeric_pairs(self, df: pd.DataFrame) -> list[tuple[str, str]]:
+        """找所有数值列对（用于增长分析）"""
+        pairs = []
+        num_cols = [c for c in df.columns if df[c].dtype in (int, float) and df[c].nunique() > 1]
+        for i, c1 in enumerate(num_cols):
+            for c2 in num_cols[i + 1:]:
+                pairs.append((c1, c2))
+        return pairs

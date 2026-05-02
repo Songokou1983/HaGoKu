@@ -269,7 +269,7 @@ class Orchestrator:
                     raise RuntimeError(
                         "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
                     )
-            results = analyst.run(df_clean, context, plan)
+            results, business_metrics = analyst.run(df_clean, context, plan)
 
             # 7. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
@@ -284,6 +284,7 @@ class Orchestrator:
                 template=template,
                 user_mode=user_mode,
                 df=df_clean,
+                business_metrics=business_metrics,
             )
 
             # 8. 保存运行元数据

@@ -58,13 +58,15 @@ class TestGenerateInsightCharts:
             "raw_result": {
                 "test": "ttest",
                 "question": "不同 group 组的 value 有差异吗？",
+                "target": "value",
+                "group_col": "group",
                 "p_value": 0.01,
                 "effect_size": 0.8,
             },
         }]
         charts = generate_insight_charts(df, results, output_dir=str(tmp_path))
         assert len(charts) >= 1
-        assert charts[0]["type"] == "html"
+        assert charts[0]["type"] == "inline_html"
 
     def test_correlation_chart(self, tmp_path):
         """Generate correlation scatter chart"""
@@ -78,6 +80,8 @@ class TestGenerateInsightCharts:
             "raw_result": {
                 "test": "correlation",
                 "question": "x 与 y 之间的关系？",
+                "col1": "x",
+                "col2": "y",
                 "statistic": 0.5,
                 "p_value": 0.01,
             },

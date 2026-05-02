@@ -96,6 +96,12 @@ class Orchestrator:
         # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
         self._llm_client: Any | None = None
 
+        # 设置模块级配置
+        from ..tools.analysis import set_analysis_config
+        from ..tools.cleaning import set_cleaning_config
+        set_analysis_config(self.config.analysis)
+        set_cleaning_config(self.config.cleaning)
+
     def run(
         self,
         data_path: str,
@@ -226,7 +232,12 @@ class Orchestrator:
                 })
 
             # 6. Analyst: 统计分析
-            assert df_clean is not None and context is not None
+            if df_clean is None or context is None:
+                raise RuntimeError(
+                    "Pipeline error: cleaned data or context is missing. "
+                    f"(df_clean={'present' if df_clean is not None else 'None'}, "
+                    f"context={'present' if context is not None else 'None'})"
+                )
             results = analyst.run(df_clean, context, plan)
 
             # 7. Reporter: 生成报告

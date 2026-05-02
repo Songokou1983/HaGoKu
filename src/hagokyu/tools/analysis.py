@@ -7,6 +7,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ..config import AnalysisConfig
+from ..log import get_logger
+
+logger = get_logger("analysis")
+
+# 模块级配置（默认值，可由 Orchestrator 通过 set_analysis_config 覆盖）
+_config = AnalysisConfig()
+
+
+def set_analysis_config(config: AnalysisConfig) -> None:
+    """设置模块级分析配置（由 Orchestrator 在启动时调用）"""
+    global _config
+    _config = config
+
 
 def _insufficient_data(msg: str) -> dict[str, Any]:
     """返回数据不足的标准错误结果"""
@@ -510,7 +524,7 @@ def cross_validate(
     X = df[features].values
     X = sm.add_constant(X)
 
-    kf = KFold(n_splits=actual_k, shuffle=True, random_state=42)
+    kf = KFold(n_splits=actual_k, shuffle=True, random_state=_config.random_state)
 
     train_scores: list[float] = []
     test_scores: list[float] = []
@@ -550,7 +564,8 @@ def cross_validate(
                 if method != "logistic":
                     train_scores.append(_calc_r_squared(y_train, model.predict(X_train)))
                     test_scores.append(_calc_r_squared(y_test, model.predict(X_test)))
-        except Exception:
+        except Exception as e:
+            logger.warning("Cross-validation fold failed: %s", e)
             continue
 
     if not train_scores:
@@ -564,10 +579,10 @@ def cross_validate(
     # 过拟合检测
     if scoring == "r_squared":
         gap = train_mean - test_mean
-        overfitting = gap > 0.15
+        overfitting = gap > _config.overfitting_gap_threshold
     elif scoring in ("rmse", "mae"):
         gap = test_mean - train_mean
-        overfitting = gap / max(train_mean, 1e-10) > 0.15
+        overfitting = gap / max(train_mean, 1e-10) > _config.overfitting_gap_threshold
     else:
         gap = abs(train_mean - test_mean)
         overfitting = False
@@ -726,16 +741,16 @@ def check_test_assumptions(
 
                 # 正态性
                 if len(g1) >= 3:
-                    _, p1 = stats.shapiro(g1[:5000])
+                    _, p1 = stats.shapiro(g1[:_config.shapiro_sample_limit])
                     result["assumptions"]["normality_group1"] = {
                         "p_value": round(float(p1), 4),
-                        "met": p1 > 0.05,
+                        "met": p1 > _config.p_value_threshold,
                     }
                 if len(g2) >= 3:
-                    _, p2 = stats.shapiro(g2[:5000])
+                    _, p2 = stats.shapiro(g2[:_config.shapiro_sample_limit])
                     result["assumptions"]["normality_group2"] = {
                         "p_value": round(float(p2), 4),
-                        "met": p2 > 0.05,
+                        "met": p2 > _config.p_value_threshold,
                     }
 
                 # 方差齐性
@@ -743,7 +758,7 @@ def check_test_assumptions(
                     _, p_levene = stats.levene(g1, g2)
                     result["assumptions"]["equal_variance"] = {
                         "p_value": round(float(p_levene), 4),
-                        "met": p_levene > 0.05,
+                        "met": p_levene > _config.p_value_threshold,
                     }
 
                 # 样本量
@@ -778,10 +793,10 @@ def check_test_assumptions(
             normality_ok = True
             for i, g in enumerate(groups):
                 if len(g) >= 3:
-                    _, p = stats.shapiro(g[:5000])
+                    _, p = stats.shapiro(g[:_config.shapiro_sample_limit])
                     result["assumptions"][f"normality_group{i}"] = {
                         "p_value": round(float(p), 4),
-                        "met": p > 0.05,
+                        "met": p > _config.p_value_threshold,
                     }
                     if p <= 0.05:
                         normality_ok = False
@@ -791,7 +806,7 @@ def check_test_assumptions(
                 _, p_levene = stats.levene(*groups)
                 result["assumptions"]["equal_variance"] = {
                     "p_value": round(float(p_levene), 4),
-                    "met": p_levene > 0.05,
+                    "met": p_levene > _config.p_value_threshold,
                 }
 
             # 样本量
@@ -812,10 +827,10 @@ def check_test_assumptions(
 
             # 正态性（因变量）
             if len(y) >= 3:
-                _, p = stats.shapiro(y[:5000])
+                _, p = stats.shapiro(y[:_config.shapiro_sample_limit])
                 result["assumptions"]["normality_target"] = {
                     "p_value": round(float(p), 4),
-                    "met": p > 0.05,
+                    "met": p > _config.p_value_threshold,
                 }
 
             # 线性暗示（如果有 features）
@@ -847,8 +862,8 @@ def check_test_assumptions(
                         }
                         if max_vif >= 10:
                             result["warnings"].append(f"VIF={max_vif:.1f} >= 10，存在严重共线性")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("VIF calculation skipped: %s", e)
 
             # 样本量（每变量至少 10-15 个观测）
             n_per_var = len(df) / max(len(features), 1)
@@ -867,12 +882,12 @@ def check_test_assumptions(
             if method == "pearson":
                 # 正态性（两个变量）
                 if len(valid) >= 3:
-                    _, p1 = stats.shapiro(valid[col1].values[:5000])
-                    _, p2 = stats.shapiro(valid[col2].values[:5000])
+                    _, p1 = stats.shapiro(valid[col1].values[:_config.shapiro_sample_limit])
+                    _, p2 = stats.shapiro(valid[col2].values[:_config.shapiro_sample_limit])
                     result["assumptions"]["normality"] = {
                         "p_value_col1": round(float(p1), 4),
                         "p_value_col2": round(float(p2), 4),
-                        "met": p1 > 0.05 and p2 > 0.05,
+                        "met": p1 > _config.p_value_threshold and p2 > _config.p_value_threshold,
                     }
                     if p1 <= 0.05 or p2 <= 0.05:
                         result["recommendation"] = "变量非正态，建议使用 Spearman 等级相关"
@@ -1008,7 +1023,8 @@ def interaction_analysis(
             f_test = model.compare_f_test(model_main)
             f_stat = float(f_test[0])
             f_p = float(f_test[1])
-        except Exception:
+        except Exception as e:
+            logger.debug("F-test comparison skipped: %s", e)
             f_stat = None
             f_p = None
     else:
@@ -1108,15 +1124,15 @@ def _check_ttest_assumptions(
 
     # 正态性 (Shapiro-Wilk，样本量 ≤ 5000)
     if len(g1) <= 5000:
-        _, p_norm1 = stats.shapiro(g1[:5000] if len(g1) > 5000 else g1)
-        assumptions["normality_group1"] = {"p_value": float(p_norm1), "met": p_norm1 > 0.05}
+        _, p_norm1 = stats.shapiro(g1[:_config.shapiro_sample_limit] if len(g1) > 5000 else g1)
+        assumptions["normality_group1"] = {"p_value": float(p_norm1), "met": p_norm1 > _config.p_value_threshold}
     if len(g2) <= 5000:
-        _, p_norm2 = stats.shapiro(g2[:5000] if len(g2) > 5000 else g2)
-        assumptions["normality_group2"] = {"p_value": float(p_norm2), "met": p_norm2 > 0.05}
+        _, p_norm2 = stats.shapiro(g2[:_config.shapiro_sample_limit] if len(g2) > 5000 else g2)
+        assumptions["normality_group2"] = {"p_value": float(p_norm2), "met": p_norm2 > _config.p_value_threshold}
 
     # 方差齐性 (Levene's test)
     _, p_levene = stats.levene(g1, g2)
-    assumptions["equal_variance"] = {"p_value": float(p_levene), "met": p_levene > 0.05}
+    assumptions["equal_variance"] = {"p_value": float(p_levene), "met": p_levene > _config.p_value_threshold}
 
     return assumptions
 
@@ -1137,11 +1153,11 @@ def _regression_diagnostics(
     residuals = model.resid
 
     # 正态性
-    _, p_norm = stats.shapiro(residuals[:5000] if len(residuals) > 5000 else residuals)
+    _, p_norm = stats.shapiro(residuals[:_config.shapiro_sample_limit] if len(residuals) > 5000 else residuals)
     diagnostics["residual_normality"] = {
         "test": "shapiro_wilk",
         "p_value": float(p_norm),
-        "met": p_norm > 0.05,
+        "met": p_norm > _config.p_value_threshold,
     }
 
     # 异方差 (Breusch-Pagan)
@@ -1151,12 +1167,10 @@ def _regression_diagnostics(
             "test": "breusch_pagan",
             "statistic": float(bp_test[0]),
             "p_value": float(bp_test[1]),
-            "met": bp_test[1] > 0.05,
+            "met": bp_test[1] > _config.p_value_threshold,
         }
-    except Exception:
-        pass
-
-    # 多重共线性 (VIF)
+    except Exception as e:
+        logger.debug("Breusch-Pagan test skipped: %s", e)
     if len(features) > 1:
         try:
             from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -1166,8 +1180,8 @@ def _regression_diagnostics(
             for i, col in enumerate(features):
                 vif_data[col] = float(variance_inflation_factor(X.values, i))
             diagnostics["vif"] = vif_data
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("VIF calculation skipped: %s", e)
 
     # Durbin-Watson (自相关)
     from statsmodels.stats.stattools import durbin_watson

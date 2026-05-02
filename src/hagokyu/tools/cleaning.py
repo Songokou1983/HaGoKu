@@ -14,6 +14,20 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ..config import CleaningConfig
+from ..log import get_logger
+
+logger = get_logger("cleaning")
+
+# 模块级配置
+_config = CleaningConfig()
+
+
+def set_cleaning_config(config: CleaningConfig) -> None:
+    """设置模块级清洗配置（由 Orchestrator 在启动时调用）"""
+    global _config
+    _config = config
+
 import numpy as np
 import pandas as pd
 
@@ -404,7 +418,7 @@ def detect_outliers_isolation_forest(
     # 填充缺失用于模型
     filled = numeric_df[usable_cols].fillna(numeric_df[usable_cols].median())
 
-    iso = IsolationForest(contamination=contamination, random_state=random_state, n_estimators=100)
+    iso = IsolationForest(contamination=contamination, random_state=random_state, n_estimators=_config.isolation_forest_n_estimators)
     outlier_labels = iso.fit_predict(filled)  # -1 = 异常, 1 = 正常
     outlier_mask = outlier_labels == -1
 
@@ -737,7 +751,7 @@ def clean_data(
 
                     numeric_cols_in_df = df_clean.select_dtypes(include=[np.number]).columns
                     if col in numeric_cols_in_df:
-                        imputer = IterativeImputer(max_iter=10, random_state=42)
+                        imputer = IterativeImputer(max_iter=_config.iterative_imputer_max_iter, random_state=_config.random_state)
                         imputed = imputer.fit_transform(df_clean[numeric_cols_in_df])
                         df_clean[numeric_cols_in_df] = imputed
                         ops_detail = {"method": "MICE (IterativeImputer)", "max_iter": 10}

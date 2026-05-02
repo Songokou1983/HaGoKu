@@ -69,20 +69,36 @@ def run(
 
     # 执行分析
     format_list = list(formats) if formats else None
-    result = orch.run(
-        data_path=data_path,
-        query=query,
-        project_name=project,
-        user_mode=mode,
-        output_dir=output_dir,
-        formats=format_list,
-        resume=resume,
-        schema_path=schema_path,
-    )
+    try:
+        result = orch.run(
+            data_path=data_path,
+            query=query,
+            project_name=project,
+            user_mode=mode,
+            output_dir=output_dir,
+            formats=format_list,
+            resume=resume,
+            schema_path=schema_path,
+        )
+    except FileNotFoundError as e:
+        click.echo(f"\n❌ 文件未找到: {e}", err=True)
+        raise SystemExit(1)
+    except RuntimeError as e:
+        click.echo(f"\n❌ 运行时错误: {e}", err=True)
+        raise SystemExit(1)
+    except Exception as e:
+        click.echo(f"\n❌ 分析失败: {e}", err=True)
+        if verbosity == "verbose":
+            import traceback
+            traceback.print_exc()
+        raise SystemExit(1)
 
     if result["status"] == "completed":
         if verbosity != "quiet":
             click.echo(f"\n✅ 分析完成！报告: {result['output_path']}")
+    else:
+        click.echo(f"\n❌ 分析未能完成: {result.get('error', '未知错误')}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command(name="quick")
@@ -101,14 +117,24 @@ def quick_run(data_path: str, query: str) -> None:
     orch.display = TerminalDisplay(verbosity="quiet")
     orch.event_bus.subscribe(orch.display)
 
-    result = orch.run(
-        data_path=data_path,
-        query=query,
-        user_mode="quick",
-    )
+    try:
+        result = orch.run(
+            data_path=data_path,
+            query=query,
+            user_mode="quick",
+        )
+    except FileNotFoundError as e:
+        click.echo(f"❌ 文件未找到: {e}", err=True)
+        raise SystemExit(1)
+    except Exception as e:
+        click.echo(f"❌ 分析失败: {e}", err=True)
+        raise SystemExit(1)
 
     if result["status"] == "completed":
         click.echo(f"\n📄 报告: {result['output_path']}")
+    else:
+        click.echo(f"❌ 分析未能完成", err=True)
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -238,6 +264,10 @@ def replay(run_id: str, agent: str | None, verbose: bool) -> None:
 
     config = HaGoKuConfig.load()
     projects_dir = config.output.base_dir
+
+    if not projects_dir.exists():
+        click.echo(f"运行 '{run_id}' 不存在或无事件日志（项目目录尚未创建）。")
+        return
 
     # 查找 run 目录
     events_path = None

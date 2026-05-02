@@ -361,7 +361,9 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
 
         {% for chart in section.charts %}
         <div class="chart">
-            {% if chart.get('type') == 'html' and chart.get('path') %}
+            {% if chart.get('type') == 'inline_html' and chart.get('html_snippet') %}
+            {{ chart.html_snippet | safe }}
+            {% elif chart.get('type') == 'html' and chart.get('path') %}
             <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
             {% elif chart.get('type') == 'image' and chart.get('path') %}
             <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
@@ -708,7 +710,9 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         {% for chart in section.charts %}
         <div class="chart">
-            {% if chart.get('type') == 'html' and chart.get('path') %}
+            {% if chart.get('type') == 'inline_html' and chart.get('html_snippet') %}
+            {{ chart.html_snippet | safe }}
+            {% elif chart.get('type') == 'html' and chart.get('path') %}
             <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
             {% elif chart.get('type') == 'image' and chart.get('path') %}
             <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
@@ -821,7 +825,9 @@ AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
         {% endfor %}
         {% for chart in section.charts %}
         <div class="chart">
-            {% if chart.get('type') == 'html' and chart.get('path') %}
+            {% if chart.get('type') == 'inline_html' and chart.get('html_snippet') %}
+            {{ chart.html_snippet | safe }}
+            {% elif chart.get('type') == 'html' and chart.get('path') %}
             <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
             {% elif chart.get('type') == 'image' and chart.get('path') %}
             <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
@@ -1045,7 +1051,9 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
         {% endfor %}
         {% for chart in section.charts %}
         <div class="chart">
-            {% if chart.get('type') == 'html' and chart.get('path') %}
+            {% if chart.get('type') == 'inline_html' and chart.get('html_snippet') %}
+            {{ chart.html_snippet | safe }}
+            {% elif chart.get('type') == 'html' and chart.get('path') %}
             <iframe src="{{ chart.path }}" width="100%" height="400" frameborder="0"></iframe>
             {% elif chart.get('type') == 'image' and chart.get('path') %}
             <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">

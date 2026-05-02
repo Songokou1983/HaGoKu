@@ -275,6 +275,8 @@ class AnalystAgent(DataAgentBase):
             else:
                 conclusion = "回归分析完成。"
 
+            reg_result["target"] = target_col
+            reg_result["features"] = available_features
             return AnalysisResult(
                 result_id=uuid4().hex[:8],
                 analysis_type="regression",
@@ -381,6 +383,8 @@ class AnalystAgent(DataAgentBase):
                         f"{'差异显著' if sig == 'significant' else '差异不显著'}"
                         f"(U={test_result['statistic']:.1f}, p={test_result['p_value']:.4f}, r={test_result['effect_size']:.3f})"
                     )
+                    test_result["target"] = target_col
+                    test_result["group_col"] = group_col
                     return AnalysisResult(
                         result_id=uuid4().hex[:8],
                         analysis_type="hypothesis_test_mann_whitney",
@@ -424,6 +428,8 @@ class AnalystAgent(DataAgentBase):
                         f"{'差异显著' if sig == 'significant' else '差异不显著'}"
                         f"(H={test_result['statistic']:.2f}, p={test_result['p_value']:.4f}, η²_H={test_result['effect_size']:.3f})"
                     )
+                    test_result["target"] = target_col
+                    test_result["group_col"] = group_col
                     return AnalysisResult(
                         result_id=uuid4().hex[:8],
                         analysis_type="hypothesis_test_kruskal_wallis",
@@ -451,6 +457,8 @@ class AnalystAgent(DataAgentBase):
                     f"(F={test_result['f_statistic']:.2f}, p={test_result['p_value']:.4f}, η²={test_result['effect_size']:.3f})"
                 )
 
+            test_result["target"] = target_col
+            test_result["group_col"] = group_col
             return AnalysisResult(
                 result_id=uuid4().hex[:8],
                 analysis_type="hypothesis_test",
@@ -514,6 +522,8 @@ class AnalystAgent(DataAgentBase):
             )
             self.emit_tool_result(conclusion)
 
+            result["target"] = target_col
+            result["time_col"] = time_col
             return AnalysisResult(
                 result_id=uuid4().hex[:8],
                 analysis_type="trend_analysis",
@@ -570,6 +580,9 @@ class AnalystAgent(DataAgentBase):
         col1, col2 = best_pair
         r = best_corr["statistic"]
         p = best_corr["p_value"]
+
+        best_corr["col1"] = col1
+        best_corr["col2"] = col2
 
         sig = "significant" if p < 0.05 else "not_significant"
         direction = "正" if r > 0 else "负"
@@ -701,6 +714,7 @@ class AnalystAgent(DataAgentBase):
 
         try:
             result = interaction_analysis(df, target_col, feat1, feat2)
+            result["target"] = target_col
             if "error" in result:
                 self.emit_tool_result(f"交互分析跳过: {result['message']}")
                 return None

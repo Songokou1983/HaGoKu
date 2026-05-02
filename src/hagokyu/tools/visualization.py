@@ -8,6 +8,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ..log import get_logger
+
+logger = get_logger("visualization")
+
 
 def create_plot(
     plot_type: str,
@@ -342,8 +346,9 @@ def generate_insight_charts(
                 if chart:
                     charts.extend(chart)
 
-        except Exception:
+        except Exception as e:
             # 图表生成失败不应阻止报告生成
+            logger.warning("Chart generation failed for result %d (%s): %s", i, analysis_type, e)
             continue
 
     return charts
@@ -380,7 +385,7 @@ def _chart_regression(
     fname = f"regression_scatter_{idx}.html" if interactive else f"regression_scatter_{idx}.png"
     fpath = str(output_dir / fname) if output_dir else None
 
-    create_plot(
+    fig = create_plot(
         "scatter",
         df,
         x=best_feature,
@@ -391,11 +396,19 @@ def _chart_regression(
         output_path=fpath,
         interactive=interactive,
     )
-    charts.append({
-        "type": "html" if interactive else "image",
+    chart_entry = {
+        "type": "image" if not interactive else "html",
         "path": fpath,
         "title": f"回归拟合: {target} vs {best_feature}",
-    })
+    }
+    # 内嵌 HTML（优先于 iframe）
+    if interactive and fig is not None:
+        try:
+            chart_entry["type"] = "inline_html"
+            chart_entry["html_snippet"] = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        except Exception as e:
+            logger.warning("Failed to generate inline HTML for regression chart: %s", e)
+    charts.append(chart_entry)
 
     # 2. 残差诊断图提示
     diagnostics = raw.get("diagnostics", {})
@@ -419,14 +432,13 @@ def _chart_hypothesis_test(
     """假设检验图表：分组对比 violin/box"""
     charts = []
 
-    # 从 question 推断 target 和 group
-    # 或者从 raw_result 获取
-    test_type = raw.get("test", "")
-    target = None
-    group_col = None
+    # 元数据优先（由 AnalystAgent 注入）
+    target = raw.get("target")
+    group_col = raw.get("group_col")
 
-    if test_type in ("ttest", "mann_whitney_u"):
-        # 从 question 格式推断: "不同 X 组的 Y 有差异吗？"
+    # 降级：从 question 解析
+    if not target or not group_col:
+        test_type = raw.get("test", "")
         q = raw.get("question", "") or ""
         if "的" in q and "组" in q:
             parts = q.split("组")
@@ -440,10 +452,8 @@ def _chart_hypothesis_test(
                 if col in target_hint or target_hint in col:
                     target = col
                     break
-
-    elif test_type in ("one_way_anova", "kruskal_wallis"):
-        target = raw.get("_dv")  # non-standard
-        group_col = raw.get("_between")
+            if target or group_col:
+                logger.warning("Hypothesis test chart: using question-parsed columns (metadata missing)")
 
     if not target or not group_col:
         return charts
@@ -454,7 +464,7 @@ def _chart_hypothesis_test(
     fname = f"hypothesis_comparison_{idx}.html" if interactive else f"hypothesis_comparison_{idx}.png"
     fpath = str(output_dir / fname) if output_dir else None
 
-    create_plot(
+    fig = create_plot(
         "violin" if interactive else "box",
         df,
         x=group_col,
@@ -466,11 +476,18 @@ def _chart_hypothesis_test(
         output_path=fpath,
         interactive=interactive,
     )
-    charts.append({
-        "type": "html" if interactive else "image",
+    chart_entry = {
+        "type": "image" if not interactive else "html",
         "path": fpath,
         "title": f"分组对比: {target} by {group_col}",
-    })
+    }
+    if interactive and fig is not None:
+        try:
+            chart_entry["type"] = "inline_html"
+            chart_entry["html_snippet"] = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        except Exception as e:
+            logger.warning("Failed to generate inline HTML for hypothesis chart: %s", e)
+    charts.append(chart_entry)
 
     return charts
 
@@ -484,21 +501,26 @@ def _chart_correlation(
 ) -> list[dict[str, Any]]:
     """相关性图表：散点图"""
     charts = []
-    col1 = None
-    col2 = None
 
-    # 从 question 推断: "X 与 Y 之间的关系？"
-    q = raw.get("question", "") or ""
-    if "与" in q and "之间" in q:
-        parts = q.split("与")
-        if len(parts) == 2:
-            hint1 = parts[0].strip()
-            hint2 = parts[1].split("之间")[0].strip()
-            for col in df.columns:
-                if col == hint1 or hint1 in col:
-                    col1 = col
-                if col == hint2 or hint2 in col:
-                    col2 = col
+    # 元数据优先
+    col1 = raw.get("col1")
+    col2 = raw.get("col2")
+
+    # 降级：从 question 解析
+    if not col1 or not col2:
+        q = raw.get("question", "") or ""
+        if "与" in q and "之间" in q:
+            parts = q.split("与")
+            if len(parts) == 2:
+                hint1 = parts[0].strip()
+                hint2 = parts[1].split("之间")[0].strip()
+                for col in df.columns:
+                    if col == hint1 or hint1 in col:
+                        col1 = col
+                    if col == hint2 or hint2 in col:
+                        col2 = col
+                if col1 or col2:
+                    logger.warning("Correlation chart: using question-parsed columns (metadata missing)")
 
     if not col1 or not col2:
         return charts
@@ -506,7 +528,7 @@ def _chart_correlation(
     fname = f"correlation_scatter_{idx}.html" if interactive else f"correlation_scatter_{idx}.png"
     fpath = str(output_dir / fname) if output_dir else None
 
-    create_plot(
+    fig = create_plot(
         "scatter",
         df,
         x=col1,
@@ -517,11 +539,18 @@ def _chart_correlation(
         output_path=fpath,
         interactive=interactive,
     )
-    charts.append({
-        "type": "html" if interactive else "image",
+    chart_entry = {
+        "type": "image" if not interactive else "html",
         "path": fpath,
         "title": f"相关分析: {col1} vs {col2}",
-    })
+    }
+    if interactive and fig is not None:
+        try:
+            chart_entry["type"] = "inline_html"
+            chart_entry["html_snippet"] = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        except Exception as e:
+            logger.warning("Failed to generate inline HTML for correlation chart: %s", e)
+    charts.append(chart_entry)
 
     return charts
 
@@ -536,24 +565,26 @@ def _chart_trend(
     """趋势分析图表：时间线图"""
     charts = []
 
-    q = raw.get("question", "") or ""
-    # 推断时间列和目标列
-    time_col = None
-    target = None
+    # 元数据优先
+    time_col = raw.get("time_col")
+    target = raw.get("target")
 
-    # 找 datetime 列
-    for col in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df[col]):
-            time_col = col
-            break
-
-    # 从 question 推断 target
-    if "的" in q:
-        hint = q.split("的")[0].strip()
-        for col in df.select_dtypes(include=[np.number]).columns:
-            if col == hint or hint in col:
-                target = col
+    # 降级：推断
+    if not time_col:
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                time_col = col
                 break
+    if not target:
+        q = raw.get("question", "") or ""
+        if "的" in q:
+            hint = q.split("的")[0].strip()
+            for col in df.select_dtypes(include=[np.number]).columns:
+                if col == hint or hint in col:
+                    target = col
+                    break
+        if target and not time_col:
+            logger.warning("Trend chart: target from question parse, time_col from dataframe scan (metadata missing)")
 
     if not time_col or not target:
         return charts
@@ -564,7 +595,7 @@ def _chart_trend(
     fname = f"trend_line_{idx}.html" if interactive else f"trend_line_{idx}.png"
     fpath = str(output_dir / fname) if output_dir else None
 
-    create_plot(
+    fig = create_plot(
         "line",
         df_sorted,
         x=time_col,
@@ -575,11 +606,18 @@ def _chart_trend(
         output_path=fpath,
         interactive=interactive,
     )
-    charts.append({
-        "type": "html" if interactive else "image",
+    chart_entry = {
+        "type": "image" if not interactive else "html",
         "path": fpath,
         "title": f"趋势分析: {target} over {time_col}",
-    })
+    }
+    if interactive and fig is not None:
+        try:
+            chart_entry["type"] = "inline_html"
+            chart_entry["html_snippet"] = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        except Exception as e:
+            logger.warning("Failed to generate inline HTML for trend chart: %s", e)
+    charts.append(chart_entry)
 
     return charts
 
@@ -602,16 +640,20 @@ def _chart_interaction(
     if feat1 not in df.columns or feat2 not in df.columns:
         return charts
 
-    # 找目标变量
-    target = None
-    q = raw.get("question", "") or ""
-    # 从 "X 和 Y 对 Z 是否存在交互效应？" 格式推断
-    if "对" in q:
-        hint = q.split("对")[1].split("是否存在")[0].strip()
-        for col in df.columns:
-            if col == hint or hint in col:
-                target = col
-                break
+    # 元数据优先
+    target = raw.get("target")
+
+    # 降级：从 question 推断
+    if not target:
+        q = raw.get("question", "") or ""
+        if "对" in q:
+            hint = q.split("对")[1].split("是否存在")[0].strip()
+            for col in df.columns:
+                if col == hint or hint in col:
+                    target = col
+                    break
+            if target:
+                logger.warning("Interaction chart: target from question parse (metadata missing)")
 
     if not target or target not in df.columns:
         return charts

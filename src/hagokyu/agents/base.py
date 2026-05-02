@@ -91,26 +91,9 @@ class DataAgentBase:
 
         使用 instructor 包装以获得结构化输出
         """
-        try:
-            import instructor
-            from openai import OpenAI
+        from ..llm.client import create_structured_llm_client
 
-            client = instructor.from_openai(
-                OpenAI(
-                    base_url=self.llm_config.base_url,
-                    api_key=self.llm_config.api_key,
-                ),
-                mode=instructor.Mode.JSON,
-            )
-            return client
-        except ImportError:
-            # 退回原始 OpenAI
-            from openai import OpenAI
-
-            return OpenAI(
-                base_url=self.llm_config.base_url,
-                api_key=self.llm_config.api_key,
-            )
+        return create_structured_llm_client(self.llm_config)
 
     def get_crewai_agent(self) -> Any:
         """

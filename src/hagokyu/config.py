@@ -15,7 +15,7 @@ class LLMConfig(BaseModel):
 
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "none"
-    model: str = "Qwen3.6-35B-A3B"
+    model: str = "Qwen3.6-35B-A3B"  # 实际模型：llama-server 上的 Qwen3.6-35B GGUF
     temperature: float = 0.6
     max_tokens: int = 8192
     top_p: float = 0.95
@@ -29,6 +29,11 @@ class ManagerModeConfig(BaseModel):
     mode: str = "local_weak"  # local_weak / local_strong / cloud / pure_rule
     rule_weight: float = 0.9
     llm_weight: float = 0.1
+
+    # LLM 计划生成设置
+    llm_plan_enabled: bool = True  # 总开关，本地 LLM 不可用时关闭
+    llm_plan_timeout: float = 30.0  # LLM 计划生成超时（秒）
+    llm_plan_max_tokens: int = 1024  # 计划生成 max_tokens（计划短，不需要 8192）
 
     # 质量阈值
     r_squared_warning: float = 0.3  # R² 低于此值预警
@@ -62,6 +67,24 @@ class UserModeConfig(BaseModel):
     expert_max_interactions: int = 0
 
 
+class AnalysisConfig(BaseModel):
+    """统计分析配置"""
+
+    random_state: int = 42
+    shapiro_sample_limit: int = 5000
+    p_value_threshold: float = 0.05
+    default_k_folds: int = 5
+    overfitting_gap_threshold: float = 0.15
+
+
+class CleaningConfig(BaseModel):
+    """数据清洗配置"""
+
+    isolation_forest_n_estimators: int = 100
+    iterative_imputer_max_iter: int = 10
+    random_state: int = 42
+
+
 class HaGoKuConfig(BaseModel):
     """HaGoKu 全局配置"""
 
@@ -69,6 +92,8 @@ class HaGoKuConfig(BaseModel):
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     user_mode: UserModeConfig = Field(default_factory=UserModeConfig)
+    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
     work_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu")
 
     @classmethod

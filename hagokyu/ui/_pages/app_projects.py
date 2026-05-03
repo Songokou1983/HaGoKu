@@ -111,9 +111,19 @@ def render() -> None:
         with st.expander("➕ 新建空白项目", expanded=True):
             name = st.text_input("项目名称", placeholder="例如: Q1渠道ROI分析")
             desc = st.text_area("描述", placeholder="简要描述这个项目...")
+            custom_dir = st.checkbox("📂 自定义项目位置")
+            parent_dir = None
+            if custom_dir:
+                parent_dir = st.text_input(
+                    "项目存放目录",
+                    value=str(pm.base_dir),
+                    placeholder=str(pm.base_dir),
+                )
             if st.button("创建项目", type="primary") and name:
                 try:
-                    pm.create(name, description=desc or "")
+                    from pathlib import Path
+                    parent = Path(parent_dir) if parent_dir else None
+                    pm.create(name, description=desc or "", parent_dir=parent)
                     st.success(f"✅ 项目 '{name}' 创建成功！")
                     st.rerun()
                 except FileExistsError:
@@ -135,9 +145,19 @@ def render() -> None:
         with st.expander("➕ 新建项目", expanded=False):
             name = st.text_input("项目名称", placeholder="例如: Q1渠道ROI分析")
             desc = st.text_area("描述", placeholder="简要描述这个项目...")
+            custom_dir = st.checkbox("📂 自定义项目位置")
+            parent_dir = None
+            if custom_dir:
+                parent_dir = st.text_input(
+                    "项目存放目录",
+                    value=str(pm.base_dir),
+                    placeholder=str(pm.base_dir),
+                )
             if st.button("创建项目", type="primary") and name:
                 try:
-                    pm.create(name, description=desc or "")
+                    from pathlib import Path
+                    parent = Path(parent_dir) if parent_dir else None
+                    pm.create(name, description=desc or "", parent_dir=parent)
                     st.success(f"✅ 项目 '{name}' 创建成功！")
                     st.rerun()
                 except FileExistsError:

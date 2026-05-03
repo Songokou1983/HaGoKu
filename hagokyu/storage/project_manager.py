@@ -108,16 +108,38 @@ class ProjectManager:
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        # 项目注册表：name → 目录路径（支持自定义目录的项目也能被 list/info 找到）
+        self._registry_path = base_dir.parent / "project_registry.yaml"
+        self._registry: dict[str, str] = {}
+        self._registry_loaded = False
+
+    def _load_registry(self) -> dict[str, str]:
+        if self._registry_loaded:
+            return self._registry
+        self._registry_loaded = True
+        if self._registry_path.exists():
+            try:
+                with open(self._registry_path) as f:
+                    self._registry = yaml.safe_load(f) or {}
+            except Exception:
+                self._registry = {}
+        return self._registry
+
+    def _save_registry(self) -> None:
+        self._registry_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._registry_path, "w") as f:
+            yaml.safe_dump(self._registry, f, allow_unicode=True)
 
     # ── 项目 CRUD ──────────────────────────────────────────────
 
-    def create(self, name: str, description: str = "") -> ProjectInfo:
+    def create(self, name: str, description: str = "", *, parent_dir: Path | None = None) -> ProjectInfo:
         """
         创建新项目（立项）
 
         Args:
             name: 项目名称
             description: 项目描述
+            parent_dir: 项目目录的父目录（留空则使用默认的 ~/.hagokyu/projects/）
 
         Returns:
             ProjectInfo 对象
@@ -125,7 +147,9 @@ class ProjectManager:
         Raises:
             FileExistsError: 项目已存在
         """
-        project_dir = self.base_dir / name
+        base = parent_dir or self.base_dir
+        base.mkdir(parents=True, exist_ok=True)
+        project_dir = base / name
         if project_dir.exists():
             raise FileExistsError(f"项目 '{name}' 已存在")
 
@@ -145,6 +169,10 @@ class ProjectManager:
             "process_files": [],
         }
         self._save_meta(project_dir, meta)
+        # 注册项目路径（用于支持自定义目录的项目也能被 list/info 找到）
+        self._load_registry()
+        self._registry[name] = str(project_dir)
+        self._save_registry()
 
         return ProjectInfo(
             name=name,
@@ -158,30 +186,52 @@ class ProjectManager:
         )
 
     def list(self) -> list[ProjectInfo]:
-        """列出所有项目"""
-        projects = []
-        if not self.base_dir.exists():
-            return projects
+        """列出所有项目（注册表优先，也扫描 base_dir 做向后兼容）"""
+        projects: list[ProjectInfo] = []
+        seen: set[str] = set()
 
-        for project_dir in sorted(self.base_dir.iterdir()):
-            if not project_dir.is_dir():
+        # 1. 注册表中的项目（支持自定义目录）
+        registry = self._load_registry()
+        for name, path_str in registry.items():
+            project_dir = Path(path_str)
+            if not project_dir.exists() or name in seen:
                 continue
             try:
                 info = self._load_project_info(project_dir)
                 if info:
                     projects.append(info)
+                    seen.add(name)
             except Exception:
-                # 跳过损坏的项目目录
                 continue
 
-        return projects
+        # 2. base_dir 中未注册的项目（向后兼容）
+        if self.base_dir.exists():
+            for project_dir in sorted(self.base_dir.iterdir()):
+                if not project_dir.is_dir() or project_dir.name in seen:
+                    continue
+                try:
+                    info = self._load_project_info(project_dir)
+                    if info:
+                        projects.append(info)
+                        seen.add(project_dir.name)
+                except Exception:
+                    continue
+
+        return sorted(projects, key=lambda p: p.last_run or p.created_at, reverse=True)
 
     def info(self, project: str) -> ProjectInfo | None:
         """获取项目详情"""
+        # 1. 注册表中查找（支持自定义目录）
+        registry = self._load_registry()
+        if project in registry:
+            project_dir = Path(registry[project])
+            if project_dir.exists():
+                return self._load_project_info(project_dir)
+        # 2. base_dir 中查找（向后兼容）
         project_dir = self.base_dir / project
-        if not project_dir.exists():
-            return None
-        return self._load_project_info(project_dir)
+        if project_dir.exists():
+            return self._load_project_info(project_dir)
+        return None
 
     def delete(self, project: str) -> bool:
         """
@@ -193,10 +243,18 @@ class ProjectManager:
         Returns:
             是否成功删除
         """
-        project_dir = self.base_dir / project
+        # 注册表中查找真实路径
+        registry = self._load_registry()
+        if project in registry:
+            project_dir = Path(registry[project])
+        else:
+            project_dir = self.base_dir / project
         if not project_dir.exists():
             return False
         shutil.rmtree(project_dir)
+        # 从注册表移除
+        registry.pop(project, None)
+        self._save_registry()
         return True
 
     def rename(self, old_name: str, new_name: str) -> bool:

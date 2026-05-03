@@ -103,7 +103,7 @@ def run() -> None:
 
         # 渲染项目侧边栏（仅非设置页面）
         if "settings" not in selected_page:
-            from .components.project_sidebar import (
+            from hagokyu.ui.components.project_sidebar import (
                 render_project_sidebar,
                 render_quick_upload,
             )
@@ -114,19 +114,19 @@ def run() -> None:
     module_name = page_module.split(".")[-1]
 
     if module_name == "app_projects":
-        from .pages import app_projects
+        from hagokyu.ui.pages import app_projects
         app_projects.render()
     elif module_name == "app_analyze":
-        from .pages import app_analyze
+        from hagokyu.ui.pages import app_analyze
         app_analyze.render()
     elif module_name == "app_report":
-        from .pages import app_report
+        from hagokyu.ui.pages import app_report
         app_report.render()
     elif module_name == "app_settings":
-        from .pages import app_settings
+        from hagokyu.ui.pages import app_settings
         app_settings.render()
     else:
-        from .pages import app_projects
+        from hagokyu.ui.pages import app_projects
         app_projects.render()
 
 

@@ -12,7 +12,7 @@ def init_session_state():
     if "project_manager" not in st.session_state:
         from hagokyu.storage.project_manager import ProjectManager
         config = HaGoKuConfig.load()
-        st.session_state.project_manager = ProjectManager(config.output.base_dir)
+        st.session_state.project_manager = ProjectManager(config.output.project_dir)
     if "current_project" not in st.session_state:
         st.session_state.current_project = None
 

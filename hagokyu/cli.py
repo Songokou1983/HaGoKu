@@ -596,7 +596,7 @@ def replay(run_id: str, agent: str | None, verbose: bool) -> None:
     from .config import HaGoKuConfig
 
     config = HaGoKuConfig.load()
-    projects_dir = config.output.base_dir
+    projects_dir = config.output.project_dir
 
     if not projects_dir.exists():
         click.echo(f"运行 '{run_id}' 不存在或无事件日志（项目目录尚未创建）。")
@@ -723,7 +723,7 @@ def project_create(name: str, desc: str) -> None:
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
 
     try:
         info = pm.create(name, description=desc)
@@ -747,7 +747,7 @@ def project_add(project: str, file_path: str, link: bool) -> None:
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
 
     try:
         info = pm.add_data(project, Path(file_path), copy=not link)
@@ -767,7 +767,7 @@ def project_list() -> None:
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
     projects = pm.list()
 
     if not projects:
@@ -795,7 +795,7 @@ def project_info(project: str) -> None:
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
     info = pm.info(project)
 
     if info is None:
@@ -838,7 +838,7 @@ def project_delete(project: str, force: bool) -> None:
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
 
     if not pm.exists(project):
         click.echo(f"❌ 项目不存在: {project}", err=True)
@@ -884,7 +884,7 @@ def project_run(
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.base_dir)
+    pm = ProjectManager(config.output.project_dir)
 
     # 获取数据文件
     if data:

@@ -92,28 +92,19 @@ def render() -> None:
         placeholder="简要描述这个项目...",
         label_visibility="collapsed",
     )
-
-    folder_path = st.text_input(
-        "📂 项目位置",
-        value=str(pm.base_dir),
-        placeholder=str(pm.base_dir),
-        label_visibility="collapsed",
-    )
-    st.caption(f"项目将创建于：{folder_path}/{name}")
+    st.caption(f"📂 项目将保存至：{pm.base_dir}")
 
     if st.button("💾 创建项目", type="primary", use_container_width=True):
         if not name:
             st.warning("请填写项目名称")
         else:
             try:
-                pm.create(name, description=desc or "", parent_dir=Path(folder_path))
+                pm.create(name, description=desc or "")
                 st.success(f"✅ 项目「{name}」创建成功！")
                 st.session_state.current_project = name
                 st.session_state.nav_page = "analyze"
                 st.rerun()
             except FileExistsError:
                 st.error(f"项目「{name}」已存在")
-            except FileNotFoundError:
-                st.error(f"路径不存在：{folder_path}")
             except Exception as e:
                 st.error(f"创建失败: {e}")

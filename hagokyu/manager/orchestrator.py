@@ -85,7 +85,7 @@ class Orchestrator:
         self.display = TerminalDisplay(verbosity="normal")
         self.output_mgr: OutputManager | None = None  # 按项目初始化
         self.memory: MemoryManager | None = None  # 按项目初始化
-        self.project_mgr = ProjectManager(self.config.output.base_dir)  # 全局项目管理器
+        self.project_mgr = ProjectManager(self.config.output.project_dir)  # 全局项目管理器
 
         # 订阅显示
         self.event_bus.subscribe(self.display)

@@ -61,6 +61,35 @@ def render() -> None:
 
     st.divider()
 
+    # ── 项目文件夹 ──────────────────────────────────────────
+    st.markdown("### 📂 项目文件夹")
+
+    with st.form("project_dir_config", clear_on_submit=False):
+        project_dir = st.text_input(
+            "📂 项目存放路径",
+            value=str(config.output.project_dir),
+            placeholder=str(config.output.project_dir),
+            help="项目文件的存放位置，修改后新建项目会使用新路径",
+        )
+        if st.form_submit_button("💾 保存路径", type="primary", use_container_width=True):
+            from pathlib import Path
+            path = Path(project_dir)
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                st.error(f"❌ 无权限创建目录：{path}")
+            except Exception as e:
+                st.error(f"❌ 路径无效: {e}")
+            else:
+                config.output.project_dir = path
+                try:
+                    config.save()
+                    st.success("✅ 项目文件夹路径已保存，重新加载页面后生效")
+                except Exception as e:
+                    st.error(f"❌ 保存失败: {e}")
+
+    st.divider()
+
     # ── Manager 模式 ────────────────────────────────────────
     st.markdown("### 🎛️ Manager 模式")
 

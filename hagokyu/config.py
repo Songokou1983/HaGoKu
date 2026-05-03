@@ -42,7 +42,7 @@ class ManagerModeConfig(BaseModel):
 class OutputConfig(BaseModel):
     """输出配置"""
 
-    base_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu" / "projects")
+    project_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu" / "projects")
     formats: list[str] = Field(default_factory=lambda: ["html"])
 
 
@@ -113,6 +113,8 @@ class HaGoKuConfig(BaseModel):
             config.llm.api_key = v
         if v := os.getenv("HAGOKYU_WORK_DIR"):
             config.work_dir = Path(v).expanduser()
+        if v := os.getenv("HAGOKYU_PROJECT_DIR"):
+            config.output.project_dir = Path(v).expanduser()
         if v := os.getenv("HAGOKYU_MANAGER_MODE"):
             config.manager.mode = v
         return config
@@ -134,8 +136,8 @@ class HaGoKuConfig(BaseModel):
         if config_path is None:
             config_path = Path.home() / ".hagokyu" / "config.yaml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        # 排除 work_dir 和 output.base_dir（这些由系统决定，不写入用户配置）
-        data = self.model_dump(mode="json", exclude={"work_dir", "output"})
+        # 排除 work_dir（这些由系统决定，不写入用户配置）
+        data = self.model_dump(mode="json", exclude={"work_dir"})
         with open(config_path, "w") as f:
             yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
 

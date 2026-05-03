@@ -323,10 +323,10 @@ def run() -> None:
 
     # ── 页面路由 ────────────────────────────────────────────────
     PAGES = {
-        "🏠 项目": "_pages.app_projects",
-        "📊 分析": "_pages.app_analyze",
-        "📋 报告": "_pages.app_report",
-        "⚙️ 设置": "_pages.app_settings",
+        "📁 项目管理": "_pages.app_projects",
+        "📊 互动分析": "_pages.app_analyze",
+        "📋 报告输出": "_pages.app_report",
+        "⚙️ 系统设置": "_pages.app_settings",
     }
 
     # 侧边栏导航

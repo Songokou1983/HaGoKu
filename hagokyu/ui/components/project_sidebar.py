@@ -19,7 +19,7 @@ def init_session_state():
 
 def render_project_sidebar() -> str | None:
     """
-    侧边栏：轻量级项目切换器
+    侧边栏：只读显示当前项目名称（项目切换统一在分析页进行）。
 
     Returns:
         当前选中的项目名，没有项目则返回 None
@@ -27,7 +27,6 @@ def render_project_sidebar() -> str | None:
     init_session_state()
     pm: ProjectManager = st.session_state.project_manager
     projects = pm.list()
-
     project_names = [p.name for p in projects]
     current = st.session_state.get("current_project")
 
@@ -39,11 +38,11 @@ def render_project_sidebar() -> str | None:
         st.sidebar.info("暂无项目")
         return None
 
-    selected = st.sidebar.selectbox(
-        "📁 项目",
+    st.sidebar.selectbox(
+        "📁 当前项目",
         options=project_names,
         index=project_names.index(current) if current else 0,
         label_visibility="collapsed",
+        disabled=True,
     )
-    st.session_state.current_project = selected
-    return selected
+    return current

@@ -51,11 +51,34 @@ def render() -> None:
     col_data, col_query = st.columns([1, 2])
 
     with col_data:
+        # 项目选择器（与分析页同步，侧边栏+分析页均可切换）
+        all_projects = [p.name for p in pm.list()]
+        current_proj = st.session_state.get("current_project")
+        if current_proj not in all_projects:
+            current_proj = None
+            st.session_state.current_project = None
+
+        project_options = ["（不关联项目）"] + all_projects
+        default_idx = (
+            project_options.index(current_proj)
+            if current_proj in all_projects
+            else 0
+        )
+        selected = st.selectbox(
+            "📁 项目",
+            options=project_options,
+            index=default_idx,
+            label_visibility="collapsed",
+        )
+        active_project = selected if selected != "（不关联项目）" else None
+        st.session_state.current_project = active_project
+
+        st.divider()
         st.markdown("### 1️⃣ 选择数据")
         data_path = render_upload_tab(
             demo_path=demo_path,
             demo_name=demo_name,
-            project_name=st.session_state.get("current_project"),
+            project_name=active_project,
             pm=pm,
         )
 

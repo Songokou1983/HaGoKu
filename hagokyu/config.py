@@ -129,6 +129,16 @@ class HaGoKuConfig(BaseModel):
             self.work_dir.mkdir(exist_ok=True)
             (self.work_dir / "projects").mkdir(exist_ok=True)
 
+    def save(self, config_path: Path | None = None) -> None:
+        """保存配置到 YAML 文件"""
+        if config_path is None:
+            config_path = Path.home() / ".hagokyu" / "config.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        # 排除 work_dir 和 output.base_dir（这些由系统决定，不写入用户配置）
+        data = self.model_dump(mode="json", exclude={"work_dir", "output"})
+        with open(config_path, "w") as f:
+            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+
     def sensitive_fields(self) -> dict[str, str]:
         """返回敏感字段的脱敏值（用于日志/调试输出）"""
         return {

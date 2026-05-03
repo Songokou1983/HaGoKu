@@ -64,11 +64,10 @@ def render() -> None:
         # 直接用 demo_query 预填（不清 session_state，避免重复覆盖）
         query = st.text_area(
             "你想分析什么？",
-            value=demo_query or "",
+            value=st.session_state.get("query_input", demo_query or ""),
             placeholder="例如：哪个渠道roi最高？\n转化漏斗分析\n两组有差异吗？\n哪些因素影响利润？",
             height=120,
             label_visibility="collapsed",
-            key="query_input",
         )
 
         # ── 用户模式选择 ─────────────────────────────────────

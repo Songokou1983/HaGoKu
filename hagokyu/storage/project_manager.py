@@ -95,8 +95,10 @@ class ProjectManager:
     │   └── users.xlsx
     ├── process/          # 清洗后数据、中间结果
     │   └── cleaned_sales.parquet
-    └── output/           # 报告、可视化
-        └── report.html
+    ├── output/           # 报告、可视化
+    │   └── report.html
+    └── memory/           # 项目记忆笔记（notes.md）
+        └── notes.md
 
     用法：
     pm = ProjectManager(Path("~/.hagokyu/projects"))
@@ -154,7 +156,7 @@ class ProjectManager:
             raise FileExistsError(f"项目 '{name}' 已存在")
 
         # 创建目录结构
-        for subdir in ("input", "process", "output"):
+        for subdir in ("input", "process", "output", "memory"):
             (project_dir / subdir).mkdir(parents=True, exist_ok=True)
 
         # 写入元数据（只调用一次 datetime.now()）
@@ -258,16 +260,52 @@ class ProjectManager:
         return True
 
     def rename(self, old_name: str, new_name: str) -> bool:
-        """重命名项目"""
-        old_dir = self.base_dir / old_name
-        new_dir = self.base_dir / new_name
-        if not old_dir.exists() or new_dir.exists():
+        """重命名项目（同时更新注册表和目录名）"""
+        # 获取真实路径
+        registry = self._load_registry()
+        if old_name in registry:
+            old_dir = Path(registry[old_name])
+        else:
+            old_dir = self.base_dir / old_name
+        if not old_dir.exists():
             return False
+
+        new_dir = old_dir.parent / new_name
+        if new_dir.exists():
+            return False
+
         old_dir.rename(new_dir)
+
+        # 更新注册表
+        if old_name in registry:
+            registry[new_name] = str(new_dir)
+            registry.pop(old_name)
+            self._save_registry()
+
+        # 更新 project.yaml 中的 name
+        meta_path = new_dir / "project.yaml"
+        if meta_path.exists():
+            meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+            meta["name"] = new_name
+            self._save_meta(new_dir, meta)
+
+        return True
+
+    def update_description(self, project: str, description: str) -> bool:
+        """更新项目描述"""
+        project_dir = self._resolve_project_dir(project)
+        if project_dir is None:
+            return False
+        meta = self._load_meta(project_dir)
+        meta["description"] = description
+        self._save_meta(project_dir, meta)
         return True
 
     def exists(self, project: str) -> bool:
-        """检查项目是否存在"""
+        """检查项目是否存在（注册表优先）"""
+        registry = self._load_registry()
+        if project in registry:
+            return Path(registry[project]).exists()
         return (self.base_dir / project).exists()
 
     # ── 数据文件管理 ────────────────────────────────────────────
@@ -390,10 +428,18 @@ class ProjectManager:
 
     # ── 路径查询 ────────────────────────────────────────────────
 
-    def get_project_dir(self, project: str) -> Path | None:
-        """获取项目根目录"""
+    def _resolve_project_dir(self, project: str) -> Path | None:
+        """解析项目真实目录（注册表优先）"""
+        registry = self._load_registry()
+        if project in registry:
+            d = Path(registry[project])
+            return d if d.exists() else None
         d = self.base_dir / project
         return d if d.exists() else None
+
+    def get_project_dir(self, project: str) -> Path | None:
+        """获取项目根目录"""
+        return self._resolve_project_dir(project)
 
     def get_latest_data(self, project: str) -> Path | None:
         """获取项目最新添加的输入文件"""
@@ -404,9 +450,9 @@ class ProjectManager:
 
     def get_data_path(self, project: str, filename: str) -> Path | None:
         """获取项目内指定数据文件的绝对路径"""
-        if not self.exists(project):
+        project_dir = self._resolve_project_dir(project)
+        if project_dir is None:
             return None
-        project_dir = self.base_dir / project
         data_path = project_dir / "input" / filename
         return data_path if data_path.exists() else None
 
@@ -427,6 +473,82 @@ class ProjectManager:
             return []
         return [f for f in info.data_files if f.source == "input"]
 
+    # ── 存储统计 ────────────────────────────────────────────────
+
+    def get_storage_stats(self, project: str) -> dict[str, dict[str, Any]]:
+        """
+        获取项目各目录的存储统计
+
+        Returns:
+            {
+                "input":  {"count": int, "size_mb": float},
+                "process": {"count": int, "size_mb": float},
+                "output":  {"count": int, "size_mb": float},
+                "memory":  {"count": int, "size_mb": float},
+                "total":   {"count": int, "size_mb": float},
+            }
+        """
+        project_dir = self._resolve_project_dir(project)
+        if project_dir is None:
+            return {}
+
+        stats = {}
+        total_count = 0
+        total_size = 0.0
+
+        for subdir in ("input", "process", "output", "memory"):
+            dir_path = project_dir / subdir
+            files = [f for f in dir_path.iterdir() if f.is_file()] if dir_path.exists() else []
+            size_bytes = sum(f.stat().st_size for f in files)
+            size_mb = size_bytes / (1024 * 1024)
+            stats[subdir] = {"count": len(files), "size_mb": round(size_mb, 3)}
+            total_count += len(files)
+            total_size += size_bytes
+
+        stats["total"] = {"count": total_count, "size_mb": round(total_size / (1024 * 1024), 3)}
+        return stats
+
+    # ── 记忆笔记 ────────────────────────────────────────────────
+
+    def get_memory_dir(self, project: str) -> Path | None:
+        """获取项目 memory/ 目录路径"""
+        project_dir = self._resolve_project_dir(project)
+        return (project_dir / "memory") if project_dir else None
+
+    def save_memory(self, project: str, notes: str) -> Path | None:
+        """
+        保存项目记忆笔记到 memory/notes.md
+
+        Args:
+            project: 项目名
+            notes: markdown 格式的笔记内容
+
+        Returns:
+            笔记文件路径，或 None（项目不存在）
+        """
+        memory_dir = self.get_memory_dir(project)
+        if memory_dir is None:
+            return None
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        notes_path = memory_dir / "notes.md"
+        notes_path.write_text(notes, encoding="utf-8")
+        return notes_path
+
+    def load_memory(self, project: str) -> str:
+        """
+        加载项目记忆笔记
+
+        Returns:
+            笔记内容（不存在则返回空字符串）
+        """
+        memory_dir = self.get_memory_dir(project)
+        if memory_dir is None:
+            return ""
+        notes_path = memory_dir / "notes.md"
+        if notes_path.exists():
+            return notes_path.read_text(encoding="utf-8")
+        return ""
+
     # ── 运行计数 ────────────────────────────────────────────────
 
     def record_run(self, project: str) -> None:
@@ -441,8 +563,8 @@ class ProjectManager:
 
     def _ensure_project(self, project: str) -> Path:
         """确保项目存在，不存在则抛出"""
-        project_dir = self.base_dir / project
-        if not project_dir.exists():
+        project_dir = self._resolve_project_dir(project)
+        if project_dir is None:
             raise FileNotFoundError(f"项目不存在: {project}")
         return project_dir
 

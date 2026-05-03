@@ -1,6 +1,6 @@
 """HaGoKu Streamlit UI — 文件上传组件
 
-提供上传数据文件、保存临时文件、数据预览等功能。
+提供上传数据文件，保存到项目目录、数据预览等功能。
 """
 
 from __future__ import annotations
@@ -11,15 +11,56 @@ from pathlib import Path
 import streamlit as st
 
 
-def save_uploaded_file(uploaded) -> str:
-    """将 Streamlit 上传的文件保存到临时文件，返回文件路径。
+def save_uploaded_file(
+    uploaded,
+    project_name: str | None = None,
+    pm=None,
+) -> str:
+    """将上传文件保存到项目目录（永久保存）。
 
-    调用方负责在分析结束时清理临时文件（见 cleanup_temp_file）。
+    有项目时：复制到 project_dir/input/，并记录到项目元数据
+    无项目时：保存到临时文件（分析结束后清理）
+
+    Returns:
+        文件路径
     """
     suffix = Path(uploaded.name).suffix
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
-        f.write(uploaded.getvalue())
-        return f.name
+
+    if project_name and pm:
+        # 永久保存到项目的 input 目录
+        proj_info = pm.info(project_name)
+        proj_dir = proj_info.project_dir if proj_info else None
+        if proj_dir is None:
+            proj_dir = Path(tempfile.gettempdir()) / "hagokyu_temp"
+            proj_dir.mkdir(exist_ok=True)
+
+        dest_dir = proj_dir / "input"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / uploaded.name
+
+        # 同名文件自动加序号
+        if dest_path.exists():
+            stem = Path(uploaded.name).stem
+            idx = 1
+            while (dest_dir / f"{stem}_{idx}{suffix}").exists():
+                idx += 1
+            dest_path = dest_dir / f"{stem}_{idx}{suffix}"
+
+        with open(dest_path, "wb") as f:
+            f.write(uploaded.getvalue())
+
+        # 记录到项目元数据
+        try:
+            pm.add_data(project_name, dest_path, copy=False)
+        except FileExistsError:
+            pass  # 已存在
+
+        return str(dest_path)
+    else:
+        # 无项目：临时文件
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
+            f.write(uploaded.getvalue())
+            return f.name
 
 
 def cleanup_temp_file(path: str | None = None) -> None:
@@ -118,14 +159,12 @@ def render_upload_tab(
     demo_path: str | None,
     demo_name: str | None,
     project_name: str | None,
-    pm,  # ProjectManager
+    pm,
 ) -> str | None:
-    """渲染「上传」Tab：演示数据 / 文件上传 / 项目已有。
+    """渲染上传区：演示数据 / 文件上传 / 项目已有文件。
 
-    Args:
-        demo_path: 演示数据路径（来自 session_state._demo_file）
-        demo_name: 演示数据名称（来自 session_state._demo_name）
-        project_name: 当前选中的项目名（来自 session_state.current_project）
+    有项目时：上传文件永久保存到项目目录
+    无项目时：上传文件保存到临时目录（分析结束后清理）
 
     Returns:
         选中的数据文件路径，或 None。
@@ -144,10 +183,12 @@ def render_upload_tab(
         label_visibility="collapsed",
     )
     if uploaded:
-        data_path = save_uploaded_file(uploaded)
-        st.session_state._temp_uploaded_path = data_path
-        st.session_state.uploaded_name = uploaded.name
-        st.success(f"✅ 已加载: {uploaded.name}")
+        data_path = save_uploaded_file(uploaded, project_name=project_name, pm=pm)
+        if project_name:
+            st.session_state._temp_uploaded_path = None  # 不清理永久文件
+        else:
+            st.session_state._temp_uploaded_path = data_path
+        st.success(f"✅ 已保存: {uploaded.name}")
         render_data_preview(data_path)
 
     # 项目已有文件
@@ -165,6 +206,6 @@ def render_upload_tab(
             data_path = file_options[selected_file]
             render_data_preview(data_path)
         else:
-            st.warning(f"「{project_name}」暂无数据文件，请先上传")
+            st.info(f"「{project_name}」暂无数据文件，请上传")
 
     return data_path

@@ -80,13 +80,17 @@ pdf = [
 hagokyu = "hagokyu.cli:main"
 hagokyu-ui = "hagokyu.ui.app:main"
 
-# wheel / sdist 打包：hagokyu 包 + examples 目录
+# wheel / sdist 打包：hagokyu 包 + examples 目录 + streamlit 配置
 [tool.hatch.build.targets.wheel]
 packages = ["hagokyu", "examples"]
 
 # sdist 打包：同上
 [tool.hatch.build.targets.sdist]
 packages = ["hagokyu", "examples"]
+
+# 强制包含 .streamlit 目录（hatchling 默认排除 dotfiles）
+[tool.hatch.build.targets.wheel.force-include]
+".streamlit" = "hagokyu/.streamlit"
 
 [tool.ruff]
 line-length = 100

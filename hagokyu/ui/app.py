@@ -26,6 +26,27 @@ def run() -> None:
     """应用主体（仅在 streamlit subprocess 中调用）"""
     import sys as _sys
 
+    # 确保 .streamlit/config.toml 存在（pip install 后可能不在用户工作目录）
+    _pkg_root = Path(_sys.modules["hagokyu.ui"].__file__).parent.parent
+    _config_src = _pkg_root / ".streamlit" / "config.toml"
+    _config_dest = Path.home() / ".streamlit" / "config.toml"
+    if not _config_dest.exists():
+        _config_dest.parent.mkdir(parents=True, exist_ok=True)
+        _default_config = """[theme]
+primaryColor = "#22d3ee"
+backgroundColor = "#0a0e17"
+secondaryBackgroundColor = "#161b22"
+textColor = "#e2e8f0"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+"""
+        _config_dest.write_text(_default_config)
+
     # streamlit exec() 不会设置 __package__，导致相对导入失败
     _main = _sys.modules.get("__main__")
     if _main is not None and not getattr(_main, "__package__", None):

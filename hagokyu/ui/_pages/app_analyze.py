@@ -2,100 +2,24 @@
 
 from __future__ import annotations
 
-import tempfile
 import threading
 import time
-from pathlib import Path
 
 import streamlit as st
 
 from hagokyu.ui.components.event_log import render_event_log
+from hagokyu.ui.components.file_uploader import (
+    cleanup_session_temp,
+    render_upload_tab,
+)
 from hagokyu.config import HaGoKuConfig
 from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.observability.events import Event
 from hagokyu.storage.project_manager import ProjectManager
 
 
-def _cleanup_temp_file() -> None:
-    """清理上次遗留的临时上传文件"""
-    path = st.session_state.pop("_temp_uploaded_path", None)
-    if path and Path(path).exists():
-        try:
-            Path(path).unlink()
-        except OSError:
-            pass
-
-
-def _render_data_preview(data_path: str) -> None:
-    """渲染数据预览：形状 + 前5行 + 类型信息（容错读取）"""
-    try:
-        import pandas as pd
-        suffix = Path(data_path).suffix.lower()
-
-        # 按扩展名读取，超时/失败时 fallback 到其他格式
-        df = None
-        errors: list[str] = []
-
-        if suffix == ".parquet":
-            try:
-                df = pd.read_parquet(data_path)
-            except Exception as e:
-                errors.append(f"Parquet 解析失败: {e}")
-        elif suffix in (".xlsx", ".xls"):
-            try:
-                df = pd.read_excel(data_path, nrows=2000)
-            except Exception as e:
-                errors.append(f"Excel 解析失败: {e}")
-        elif suffix == ".json":
-            try:
-                df = pd.read_json(data_path, nrows=2000)
-            except Exception:
-                try:
-                    df = pd.read_json(data_path, lines=True, nrows=2000)
-                except Exception as e2:
-                    errors.append(f"JSON 解析失败: {e2}")
-        else:
-            # CSV：尝试多种分隔符
-            for sep in [",", ";", "\t"]:
-                try:
-                    df = pd.read_csv(data_path, sep=sep, nrows=2000, on_bad_lines="skip")
-                    break
-                except Exception:
-                    continue
-
-        if df is None or df.empty:
-            st.warning("⚠️ 无法预览数据：格式无法识别，请确认文件是有效的 CSV/Excel/JSON/Parquet。")
-            if errors:
-                for err in errors:
-                    st.caption(f"  - {err}")
-            return
-
-        rows, cols = df.shape
-        c1, c2, c3 = st.columns(3)
-        c1.metric("行数", f"{rows:,}")
-        c2.metric("列数", cols)
-        c3.metric("内存", f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB")
-
-        # 数据类型
-        with st.expander("📋 字段类型预览"):
-            type_summary = (
-                df.dtypes.rename("类型")
-                .to_frame()
-                .reset_index()
-                .rename(columns={"index": "字段名"})
-            )
-            st.dataframe(type_summary, use_container_width=True, hide_index=True)
-
-        # 前5行
-        with st.expander("👁 数据预览（前5行）"):
-            st.dataframe(df.head(5), use_container_width=True, hide_index=True)
-
-    except Exception as e:
-        st.warning(f"无法预览数据: {e}")
-
-
 def render() -> None:
-    _cleanup_temp_file()
+    cleanup_session_temp()
     pm: ProjectManager = st.session_state.project_manager
     config = HaGoKuConfig.load()
 
@@ -128,50 +52,12 @@ def render() -> None:
 
     with col_data:
         st.markdown("### 1️⃣ 选择数据")
-
-        # Tab: 上传 | 项目已有
-        tab_upload, tab_project = st.tabs(["📤 上传", "📁 项目已有"])
-
-        # 统一 data_path（演示 > 上传 > 项目已有）
-        data_path: str | None = None
-
-        with tab_upload:
-            if demo_path:
-                st.success(f"🎯 演示数据: {demo_name or Path(demo_path).name}")
-                _render_data_preview(demo_path)
-                data_path = demo_path
-            else:
-                uploaded = st.file_uploader(
-                    "上传数据文件",
-                    type=["csv", "xlsx", "xls", "json", "parquet"],
-                    label_visibility="collapsed",
-                )
-                if uploaded:
-                    suffix = Path(uploaded.name).suffix
-                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
-                        f.write(uploaded.getvalue())
-                        data_path = f.name
-                    st.session_state._temp_uploaded_path = data_path
-                    st.session_state.uploaded_name = uploaded.name
-                    st.success(f"✅ 已加载: {uploaded.name}")
-                    _render_data_preview(data_path)
-
-        with tab_project:
-            current = st.session_state.get("current_project")
-            if not current:
-                st.info("请先在侧边栏选择一个项目")
-            else:
-                proj_info = pm.info(current)
-                if proj_info and proj_info.data_files:
-                    file_options = {f.name: str(proj_info.project_dir / f.path) for f in proj_info.data_files}
-                    selected_file = st.selectbox(
-                        f"📄 {current} 的数据文件",
-                        options=list(file_options.keys()),
-                    )
-                    data_path = file_options[selected_file]
-                    _render_data_preview(data_path)
-                else:
-                    st.warning(f"「{current}」暂无数据文件，请先上传")
+        data_path = render_upload_tab(
+            demo_path=demo_path,
+            demo_name=demo_name,
+            project_name=st.session_state.get("current_project"),
+            pm=pm,
+        )
 
     with col_query:
         st.markdown("### 2️⃣ 分析问题")
@@ -355,7 +241,7 @@ def render() -> None:
                     "_analysis_events_h", "analysis_data",
                     "analysis_start"):
             st.session_state.pop(key, None)
-        _cleanup_temp_file()  # 清理临时上传文件
+        cleanup_session_temp()  # 清理临时上传文件
 
     # ── 实时事件流展示 ──────────────────────────────────────
     events = st.session_state.get("analysis_events", [])[-100:]  # 最多保留 100 条

@@ -130,12 +130,14 @@ def run() -> None:
         gap: 0.25rem !important;
     }
     [data-testid="stSidebar"] .stRadio label {
-        font-size: 1rem !important;
+        font-size: 1.05rem !important;
         font-weight: 500 !important;
-        padding: 0.35rem 0.5rem !important;
+        padding: 0.5rem 0.75rem !important;
         border-radius: 6px !important;
         min-height: unset !important;
         color: var(--hagokyu-text) !important;
+        line-height: 1.4 !important;
+        letter-spacing: 0.01em !important;
     }
     [data-testid="stSidebar"] .stRadio label:hover {
         background: rgba(34, 211, 238, 0.08) !important;
@@ -155,6 +157,13 @@ def run() -> None:
     [data-testid="stSidebar"] .stRadio label {
         border: 1px solid transparent !important;
         border-radius: 8px !important;
+    }
+    /* 当前选中项高亮 */
+    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] > label:has(input:checked) {
+        background: rgba(34, 211, 238, 0.12) !important;
+        border-color: var(--hagokyu-accent) !important;
+        color: var(--hagokyu-accent) !important;
+        font-weight: 600 !important;
     }
 
     /* 主内容区卡片 */

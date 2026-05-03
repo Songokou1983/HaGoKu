@@ -23,7 +23,13 @@ LOGO_PNG = str(_UI_DIR / "static" / "logo.png")
 
 
 def run() -> None:
-    """应用主体（被 __main__ 调用，也可在其他进程中使用）"""
+    """应用主体（仅在 streamlit subprocess 中调用）"""
+    # streamlit 用 exec() 运行脚本时不会自动设 __package__，
+    # 导致相对导入失败。手动修复。
+    import sys as _sys
+    _main = _sys.modules.get("__main__")
+    if _main is not None and not getattr(_main, "__package__", None):
+        _main.__package__ = "hagokyu.ui"
     # ── 页面配置 ────────────────────────────────────────────────
     st.set_page_config(
         page_title="HaGoKu — 数据分析平台",
@@ -127,14 +133,22 @@ def main() -> None:
     from pathlib import Path
 
     app_py = Path(__file__).resolve()
+
+    # 已在 hagokyu subprocess 内 → 直接调用 run()，不再启动新 subprocess
+    if os.environ.get("HAGOKYU_SUBPROCESS"):
+        run()
+        return
+
+    os.environ["HAGOKYU_SUBPROCESS"] = "1"
     result = subprocess.run([
-        sys.executable, "-m", "streamlit", "run", str(app_py),
+        sys.executable, "-m", "streamlit", "run",
         "--server.headless=true",
         "--browser.gatherUsageStats=false",
         "--server.port=8501",
-    ])
+        "hagokyu/ui/__main__.py",
+    ], cwd=app_py.parent.parent.parent)
     sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
-    run()
+    main()

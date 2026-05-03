@@ -29,14 +29,24 @@ def run() -> None:
     from pathlib import Path as _Path
 
     # 清除字节码缓存，确保每次启动都加载最新代码
+    import shutil as _shutil
     _root = _Path(__file__).resolve().parent.parent  # 整个 hagokyu 包
     for _dir, _dirs, _files in _os.walk(_root):
-        for _f in list(_files):
+        # 删除当前目录的 .pyc 文件
+        for _f in _files:
             if _f.endswith(".pyc"):
-                _os.unlink(_os.path.join(_dir, _f))
-        for _d in list(_dirs):
-            if _d == "__pycache__":
-                _os.rmdir(_os.path.join(_dir, _d))
+                try:
+                    _os.unlink(_os.path.join(_dir, _f))
+                except OSError:
+                    pass
+        # 跳过 __pycache__ 子目录（用 rmtree 整体删除）
+        _pq_dirs = [_d for _d in _dirs if _d == "__pycache__"]
+        for _d in _pq_dirs:
+            _dirs.remove(_d)
+            try:
+                _shutil.rmtree(_os.path.join(_dir, _d), ignore_errors=True)
+            except OSError:
+                pass
         [_os.rmdir(_os.path.join(_dir, _d)) for _d in _subdirs if _d == "__pycache__"]
 
     # 确保 .streamlit/config.toml 存在（pip install 后可能不在用户工作目录）

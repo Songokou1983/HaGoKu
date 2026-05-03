@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 import streamlit as st
 
@@ -16,6 +18,61 @@ from hagokyu.config import HaGoKuConfig
 from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.observability.events import Event
 from hagokyu.storage.project_manager import ProjectManager
+
+# 内置演示数据集
+DEMO_DATASETS = {
+    "ad_campaign": {
+        "name": "📢 广告投放数据",
+        "query": "哪个广告渠道的 ROI 最高？各渠道转化率有何差异？",
+        "file": "demo_ad_campaign.csv",
+    },
+    "conversion": {
+        "name": "🔽 转化漏斗数据",
+        "query": "分析各渠道的转化漏斗，哪个环节流失最严重？",
+        "file": "demo_conversion.csv",
+    },
+    "user_cohort": {
+        "name": "👤 用户队列数据",
+        "query": "各渠道用户质量和价值有什么差异？哪些是高价值用户群？",
+        "file": "demo_user_cohort.csv",
+    },
+}
+
+
+def _get_demo_path(name: str) -> Path | None:
+    """解析演示数据路径（包内/本地两种模式）"""
+    filename = DEMO_DATASETS[name]["file"]
+    try:
+        import hagokyu
+        pkg_root = Path(hagokyu.__file__).parent.parent
+        path = pkg_root / "examples" / filename
+        if path.exists():
+            return path
+    except Exception:
+        pass
+    # 本地源码
+    local = Path(__file__).parent.parent.parent / "examples" / filename
+    if local.exists():
+        return local
+    return None
+
+
+def _launch_demo(name: str) -> None:
+    """加载演示数据并跳转到分析页面"""
+    info = DEMO_DATASETS[name]
+    src = _get_demo_path(name)
+    if src is None:
+        st.error(f"找不到演示数据: {name}")
+        return
+    suffix = src.suffix
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+        f.write(src.read_bytes())
+        tmp_path = f.name
+    st.session_state._demo_file = tmp_path
+    st.session_state._demo_name = info["name"]
+    st.session_state._demo_query = info["query"]
+    st.session_state.nav_page = "analyze"
+    st.rerun()
 
 
 def render() -> None:
@@ -48,37 +105,40 @@ def render() -> None:
     demo_query = st.session_state.pop("_demo_query", None)
 
     # ── 数据来源选择 ────────────────────────────────────────
+    # ── 强制项目选择（必须先选项目）────────────────────────
+    all_projects = [p.name for p in pm.list()]
+    current_proj = st.session_state.get("current_project")
+    if current_proj not in all_projects:
+        current_proj = None
+        st.session_state.current_project = None
+
+    selected = st.selectbox(
+        "📁 请先选择一个项目",
+        options=all_projects,
+        index=all_projects.index(current_proj) if current_proj in all_projects else 0,
+    )
+    st.session_state.current_project = selected
+
+    if not selected:
+        st.info("请先选择一个项目，或直接体验演示数据。")
+        c1, c2 = st.columns(2)
+        if c1.button("➕ 去创建项目", type="primary", use_container_width=True):
+            st.session_state.nav_page = "projects"
+            st.rerun()
+        if c2.button("🚀 快速体验", use_container_width=True):
+            _launch_demo("ad_campaign")
+        st.stop()
+
+    st.divider()
+
     col_data, col_query = st.columns([1, 2])
 
     with col_data:
-        # 项目选择器（与分析页同步，侧边栏+分析页均可切换）
-        all_projects = [p.name for p in pm.list()]
-        current_proj = st.session_state.get("current_project")
-        if current_proj not in all_projects:
-            current_proj = None
-            st.session_state.current_project = None
-
-        project_options = ["（不关联项目）"] + all_projects
-        default_idx = (
-            project_options.index(current_proj)
-            if current_proj in all_projects
-            else 0
-        )
-        selected = st.selectbox(
-            "📁 项目",
-            options=project_options,
-            index=default_idx,
-            label_visibility="collapsed",
-        )
-        active_project = selected if selected != "（不关联项目）" else None
-        st.session_state.current_project = active_project
-
-        st.divider()
-        st.markdown("### 1️⃣ 选择数据")
+        st.markdown("### 1️⃣ 上传数据")
         data_path = render_upload_tab(
             demo_path=demo_path,
             demo_name=demo_name,
-            project_name=active_project,
+            project_name=selected,
             pm=pm,
         )
 

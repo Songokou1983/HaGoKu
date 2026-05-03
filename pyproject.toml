@@ -79,6 +79,7 @@ pdf = [
 [project.scripts]
 hagokyu = "hagokyu.cli:main"
 hagokyu-ui = "hagokyu.ui.app:main"
+hagokyu-desktop = "hagokyu.ui.launcher:run"
 
 # wheel / sdist 打包：hagokyu 包 + examples 目录 + streamlit 配置
 [tool.hatch.build.targets.wheel]

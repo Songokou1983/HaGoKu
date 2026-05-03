@@ -31,14 +31,14 @@ python3 -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate   # Windows
 
-# 3. 安装（editable 模式，代码更新后自动生效）
+# 3. 安装
 pip install -e .
 
-# 4. 启动 LLM 服务（如果本地部署）
-# llama-server 或其他 OpenAI-compatible 服务，端口 8000
+# 4. 启动 LLM 服务（如本地部署 Qwen 等模型）
 
-# 5. 启动 Web UI
-hagokyu-ui
+# 5. 启动 HaGoKu
+hagokyu-desktop   # 桌面版（推荐）：原生窗口，自动打开浏览器
+hagokyu-ui        # 命令行版：终端里运行
 # 浏览器打开 http://localhost:8501
 ```
 

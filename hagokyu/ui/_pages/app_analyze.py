@@ -263,20 +263,23 @@ def render() -> None:
 
             # 项目存储统计（选中时显示）
             if selected:
-                stats = pm.get_storage_stats(selected)
-                if stats:
-                    total = stats.get("total", {})
-                    input_stat = stats.get("input", {})
-                    if input_stat.get("count", 0) > 0:
-                        st.caption(
-                            f"📥 {input_stat['count']}个文件 "
-                            f"({input_stat.get('size_mb', 0):.1f}MB) "
-                            f"| 💾总计 {total.get('size_mb', 0):.1f}MB"
-                        )
-                    # 记忆提示
-                    notes = pm.load_memory(selected)
-                    if notes:
-                        st.caption("🧠 有记忆笔记")
+                try:
+                    stats = pm.get_storage_stats(selected)
+                    if stats:
+                        total = stats.get("total", {})
+                        input_stat = stats.get("input", {})
+                        if input_stat.get("count", 0) > 0:
+                            st.caption(
+                                f"📥 {input_stat['count']}个文件 "
+                                f"({input_stat.get('size_mb', 0):.1f}MB) "
+                                f"| 💾总计 {total.get('size_mb', 0):.1f}MB"
+                            )
+                        # 记忆提示
+                        notes = pm.load_memory(selected)
+                        if notes:
+                            st.caption("🧠 有记忆笔记")
+                except Exception:
+                    pass  # pm 未初始化时静默跳过
 
         with col_data:
             st.markdown("**📂 数据**")

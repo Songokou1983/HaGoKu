@@ -15,6 +15,14 @@ def _project_key(name: str, suffix: str) -> str:
     return f"{suffix}_{safe}"
 
 
+def _safe_stats(pm, project: str) -> dict:
+    """安全获取存储统计（pm 为 None 时返回空字典）"""
+    try:
+        return pm.get_storage_stats(project)
+    except Exception:
+        return {}
+
+
 def _render_storage_badge(stats: dict) -> str:
     """生成存储统计徽章 HTML"""
     if not stats:
@@ -96,7 +104,7 @@ def _render_project_card(p, pm: ProjectManager) -> None:
             st.caption(f"📅 创建于 {p.created_at.strftime('%m-%d')}")
 
     with col_s:
-        stats = pm.get_storage_stats(p.name)
+        stats = _safe_stats(pm, p.name)
         badge = _render_storage_badge(stats)
         if badge:
             st.caption(badge)
@@ -157,7 +165,7 @@ def render() -> None:
         # 总存储
         total_size_mb = 0.0
         for p in projects:
-            stats = pm.get_storage_stats(p.name)
+            stats = _safe_stats(pm, p.name)
             total_size_mb += stats.get("total", {}).get("size_mb", 0.0)
         col4.metric("总存储", f"{total_size_mb:.1f} MB")
 

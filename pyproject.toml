@@ -80,9 +80,13 @@ pdf = [
 hagokyu = "hagokyu.cli:main"
 hagokyu-ui = "hagokyu.ui.app:main"
 
-# 打包示例数据
+# wheel / sdist 打包：hagokyu 包 + examples 目录
 [tool.hatch.build.targets.wheel]
-packages = ["examples"]
+packages = ["hagokyu", "examples"]
+
+# sdist 打包：同上
+[tool.hatch.build.targets.sdist]
+packages = ["hagokyu", "examples"]
 
 [tool.ruff]
 line-length = 100

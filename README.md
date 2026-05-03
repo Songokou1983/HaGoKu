@@ -14,17 +14,36 @@ HaGoKu 是一个多 Agent 协作的数据分析平台。CLI + Web UI 双入口�
 | 🛡️ 统计护栏 | 三级规则（强制/警告/提示），每个结论都有保障 |
 | 🔌 插件架构 | 新增分析方法无需改核心代码 |
 
-## 安装
+## 安装要求
+
+- **Python**: 3.10+
+- **LLM**: 需要一个 OpenAI-compatible API 服务（默认 `http://localhost:8000/v1`，Qwen3.6-35B）
+
+## 安装步骤
 
 ```bash
+# 1. 克隆项目
+git clone <repo-url>
+cd hagokyu
+
+# 2. 创建虚拟环境（推荐）
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
+
+# 3. 安装（editable 模式，代码更新后自动生效）
 pip install -e .
+
+# 4. 启动 LLM 服务（如果本地部署）
+# llama-server 或其他 OpenAI-compatible 服务，端口 8000
+
+# 5. 启动 Web UI
+hagokyu-ui
+# 浏览器打开 http://localhost:8501
 ```
 
-开发依赖：
-
-```bash
-pip install -e ".[dev]"
-```
+> ⚠️ **代码更新后**：执行 `pip install -e .` 重新安装，使最新代码生效。
+> 如果 UI 显示异常，执行 `pip install -e . --force-reinstall` 强制重装。
 
 ## 快速开始
 
@@ -35,7 +54,7 @@ hagokyu-ui
 # 浏览器打开 http://localhost:8501
 ```
 
-**UI 功能：** 项目管理 → 数据上传 → 快捷分析 → 实时事件流 → 报告查看 → Refinement 对话
+**UI 功能：** 项目管理（创建/编辑/删除）→ 互动分析（Claude 风格三段式）→ 报告输出 → 系统设置
 
 ### CLI
 
@@ -73,14 +92,15 @@ hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
 
 ## 项目管理
 
-每个项目是独立的工作区：
+每个项目是独立的工作区（可通过设置页面配置存放路径）：
 
 ```
 ~/.hagokyu/projects/<项目名>/
-├── project.yaml      # 元数据
+├── project.yaml      # 元数据（描述、运行次数、数据文件列表）
 ├── input/           # 原始数据文件
-├── process/         # 清洗后数据
-└── output/          # 报告、可视化
+├── process/         # 清洗后数据、中间结果
+├── output/          # 报告、可视化
+└── memory/          # 项目记忆笔记（notes.md）
 ```
 
 ## 四个专业 Agent
@@ -153,9 +173,19 @@ manager:
 ## 测试
 
 ```bash
-pytest tests/ -q          # 223 测试
-python /tmp/test_ui_logic.py   # 153 UI 逻辑测试
+pytest tests/ -q          # 255 测试，全部通过
 ```
+
+## 常见问题
+
+**Q: UI 启动报错 `AttributeError` 或显示异常功能？**
+A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagokyu-ui`。
+
+**Q: LLM 连接失败？**
+A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查 `~/.hagokyu/config.yaml` 中的 `base_url` 和 `model` 是否正确。
+
+**Q: 项目文件存放在哪里？**
+A: 默认 `~/.hagokyu/projects/`，可在 UI「系统设置」页面修改「项目文件夹」路径。
 
 ## License
 

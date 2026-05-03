@@ -171,29 +171,23 @@ def render() -> None:
                     data_path = None
 
         with tab_project:
+            # 使用侧边栏选中的当前项目（不再重复选择器）
             current = st.session_state.get("current_project")
-            projects = pm.list()
-            if not projects:
-                st.info("暂无项目，请先上传数据或创建项目")
+            if not current:
+                st.info("请先在侧边栏选择一个项目")
                 data_path = None
             else:
-                project_names = [p.name for p in projects]
-                selected_proj = st.selectbox(
-                    "选择项目",
-                    options=project_names,
-                    index=project_names.index(current) if current and current in project_names else 0,
-                )
-                st.session_state.current_project = selected_proj
-
-                proj_info = pm.info(selected_proj)
+                proj_info = pm.info(current)
                 if proj_info and proj_info.data_files:
                     file_options = {f.name: proj_info.project_dir / f.path for f in proj_info.data_files}
-                    selected_file = st.selectbox("选择数据文件", options=list(file_options.keys()))
+                    selected_file = st.selectbox(
+                        f"📄 {current} 的数据文件",
+                        options=list(file_options.keys()),
+                    )
                     data_path = str(file_options[selected_file])
-                    # 数据预览
                     _render_data_preview(data_path)
                 else:
-                    st.warning("该项目暂无数据文件，请先上传")
+                    st.warning(f"「{current}」暂无数据文件，请先上传")
                     data_path = None
 
     with col_query:

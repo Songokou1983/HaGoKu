@@ -361,7 +361,6 @@ def main() -> None:
     result = subprocess.run([
         sys.executable, "-m", "streamlit", "run",
         "--server.headless=true",
-        "--browser.gatherUsageStats=false",
         "--server.port=8501",
         "hagokyu/ui/__main__.py",
     ], cwd=app_py.parent.parent.parent)

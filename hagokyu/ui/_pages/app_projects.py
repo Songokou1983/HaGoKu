@@ -125,6 +125,8 @@ def render() -> None:
                     parent = Path(parent_dir) if parent_dir else None
                     pm.create(name, description=desc or "", parent_dir=parent)
                     st.success(f"✅ 项目 '{name}' 创建成功！")
+                    st.session_state.current_project = name
+                    st.session_state.nav_page = "analyze"
                     st.rerun()
                 except FileExistsError:
                     st.error(f"项目 '{name}' 已存在")
@@ -159,6 +161,8 @@ def render() -> None:
                     parent = Path(parent_dir) if parent_dir else None
                     pm.create(name, description=desc or "", parent_dir=parent)
                     st.success(f"✅ 项目 '{name}' 创建成功！")
+                    st.session_state.current_project = name
+                    st.session_state.nav_page = "analyze"
                     st.rerun()
                 except FileExistsError:
                     st.error(f"项目 '{name}' 已存在")

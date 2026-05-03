@@ -348,7 +348,7 @@ def run() -> None:
             options=list(PAGES.keys()),
             index=list(PAGES.keys()).index(
                 next((k for k, v in PAGES.items() if "app_" + st.session_state.get("nav_page", "projects") in v),
-                     "🏠 项目")
+                     "📁 项目管理")
             ),
             label_visibility="collapsed",
         )
@@ -358,7 +358,7 @@ def run() -> None:
             from hagokyu.ui.components.project_sidebar import render_project_sidebar
             render_project_sidebar()
 
-    page_module = PAGES.get(selected_page, PAGES["🏠 项目"])
+    page_module = PAGES.get(selected_page, PAGES["📁 项目管理"])
     module_name = page_module.split(".")[-1]
 
     if module_name == "app_projects":

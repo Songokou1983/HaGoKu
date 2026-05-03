@@ -47,57 +47,51 @@ def render() -> None:
         col2.metric("总分析次数", total_runs)
         col3.metric("总数据文件", total_files)
 
-        st.divider()
+        # 项目列表（紧凑单行）
+        sorted_projects = sorted(projects, key=lambda x: x.last_run or x.created_at, reverse=True)
+        for p in sorted_projects:
+            col_n, col_d, col_r, col_a = st.columns([3, 2, 1, 2])
 
-        # 项目卡片
-        for p in sorted(projects, key=lambda x: x.last_run or x.created_at, reverse=True):
-            with st.container():
-                c1, c2, c3 = st.columns([3, 1, 1])
+            with col_n:
+                st.markdown(f"**📁 {p.name}**")
+                if p.description:
+                    st.caption(p.description[:40] + ("…" if len(p.description) > 40 else ""))
 
-                with c1:
-                    st.markdown(f"**📁 {p.name}**")
-                    if p.description:
-                        st.caption(p.description)
-                    file_names = [f.name for f in p.data_files]
-                    if file_names:
-                        st.write("📄 " + " | ".join(f"`{n}`" for n in file_names[:3]))
-                        if len(file_names) > 3:
-                            st.caption(f"...还有 {len(file_names)-3} 个文件")
+            with col_d:
+                files = [f.name for f in p.data_files]
+                if files:
+                    st.caption(f"📄 {len(files)} 个文件")
 
-                with c2:
-                    st.metric("运行", p.run_count)
-                    if p.last_run:
-                        st.caption(f"最近: {p.last_run.strftime('%m-%d %H:%M')}")
+            with col_r:
+                if p.last_run:
+                    st.caption(p.last_run.strftime("%m-%d %H:%M"))
+                else:
+                    st.caption(p.created_at.strftime("创建%m-%d"))
 
-                with c3:
-                    created = p.created_at.strftime("%Y-%m-%d")
-                    st.caption(f"创建于 {created}")
+            with col_a:
+                c1, c2, c3 = st.columns(3)
+                if c1.button("🚀", key=_project_key(p.name, "a"), use_container_width=True, help="分析"):
+                    st.session_state.current_project = p.name
+                    st.session_state.nav_page = "analyze"
+                    st.rerun()
+                if c2.button("📋", key=_project_key(p.name, "r"), use_container_width=True, help="报告"):
+                    st.session_state.current_project = p.name
+                    st.session_state.nav_page = "report"
+                    st.rerun()
+                if c3.button("🗑️", key=_project_key(p.name, "d"), use_container_width=True, help="删除"):
+                    st.session_state[_project_key(p.name, "confirm")] = True
 
-                    if st.button("🚀 分析", key=_project_key(p.name, "analyze"), use_container_width=True):
-                        st.session_state.current_project = p.name
-                        st.session_state.nav_page = "analyze"
+                if st.session_state.get(_project_key(p.name, "confirm")):
+                    st.warning(f"确定删除「{p.name}」？")
+                    cy, cn = st.columns(2)
+                    if cy.button("✅ 确认", key=_project_key(p.name, "y")):
+                        pm.delete(p.name)
+                        st.rerun()
+                    if cn.button("❌ 取消", key=f"cn_{p.name}"):
+                        st.session_state.pop(_project_key(p.name, "confirm"), None)
                         st.rerun()
 
-                    if st.button("📋 报告", key=_project_key(p.name, "rp"), use_container_width=True):
-                        st.session_state.current_project = p.name
-                        st.session_state.nav_page = "report"
-                        st.rerun()
-
-                    if st.button("🗑️", key=_project_key(p.name, "del"), use_container_width=True):
-                        st.session_state[_project_key(p.name, "confirm")] = True
-
-                    if st.session_state.get(_project_key(p.name, "confirm")):
-                        st.warning(f"确定删除 '{p.name}'？")
-                        c_yes, c_no = st.columns(2)
-                        if c_yes.button("✅ 确认", key=_project_key(p.name, "yes")):
-                            pm.delete(p.name)
-                            st.success(f"已删除: {p.name}")
-                            st.rerun()
-                        if c_no.button("❌ 取消", key=f"cn_{p.name}"):
-                            st.session_state.pop(_project_key(p.name, "confirm"), None)
-                            st.rerun()
-
-                st.divider()
+            st.divider()
 
     # ── 新建项目 ─────────────────────────────────────────────
     st.markdown("### ➕ 新建项目")

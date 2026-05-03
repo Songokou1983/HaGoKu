@@ -122,6 +122,41 @@ def run() -> None:
         color: var(--hagokyu-text) !important;
     }
 
+    /* 侧边栏导航：放大间距，更易读 */
+    [data-testid="stSidebar"] .stRadio > div {
+        padding: 0.5rem 0.75rem !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        padding: 0.35rem 0.5rem !important;
+        border-radius: 6px !important;
+        min-height: unset !important;
+        color: var(--hagokyu-text) !important;
+    }
+    [data-testid="stSidebar"] .stRadio label:hover {
+        background: rgba(34, 211, 238, 0.08) !important;
+        color: var(--hagokyu-accent) !important;
+    }
+    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] {
+        margin-top: 0.15rem !important;
+    }
+    /* 去掉导航边框/圆角容器，改成分离式按钮风格 */
+    [data-testid="stSidebar"] .stRadio > div {
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        gap: 0.15rem !important;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        border: 1px solid transparent !important;
+        border-radius: 8px !important;
+    }
+
     /* 主内容区卡片 */
     [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {
         gap: 0.5rem !important;

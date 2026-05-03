@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 from datetime import datetime
 
-from ...observability.events import Event, EventType
+from hagokyu.observability.events import Event, EventType
 
 # Agent emoji + 颜色映射
 AGENT_STYLE = {

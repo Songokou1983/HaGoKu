@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ...config import HaGoKuConfig
-from ...tools import analysis_registry, load_plugins
+from hagokyu.config import HaGoKuConfig
+from hagokyu.tools import analysis_registry, load_plugins
 
 
 def render() -> None:
@@ -112,7 +112,7 @@ def render() -> None:
     # ── 统计护栏 ────────────────────────────────────────────
     st.markdown("### 🛡️ 统计护栏")
 
-    from ...guardrails.statistical import StatisticalGuardrails
+    from hagokyu.guardrails.statistical import StatisticalGuardrails
     g = StatisticalGuardrails()
 
     st.success(f"强制级规则: {len(g.mandatory_rules)} 条")

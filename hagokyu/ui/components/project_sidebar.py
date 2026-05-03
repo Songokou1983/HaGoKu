@@ -6,8 +6,8 @@ import streamlit as st
 from datetime import datetime
 from pathlib import Path
 
-from ...config import HaGoKuConfig
-from ...storage.project_manager import ProjectManager, ProjectInfo
+from hagokyu.config import HaGoKuConfig
+from hagokyu.storage.project_manager import ProjectManager, ProjectInfo
 
 
 def init_session_state():

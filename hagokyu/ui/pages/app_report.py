@@ -10,19 +10,19 @@ from pathlib import Path
 
 import streamlit as st
 
-from ..components.event_log import render_event_log
-from ..components.report_viewer import render_html_report, results_summary
-from ..components.project_sidebar import init_session_state
+from hagokyu.ui.components.event_log import render_event_log
+from hagokyu.ui.components.report_viewer import render_html_report, results_summary
+from hagokyu.ui.components.project_sidebar import init_session_state
 
 # Logo 路径
 _UI_DIR = Path(__file__).parent.parent / "static"
 LOGO_PNG = str(_UI_DIR / "logo.png")
 
-from ...config import HaGoKuConfig
-from ...manager.orchestrator import Orchestrator
-from ...manager.refinement import parse_refinement
-from ...observability.events import Event
-from ...storage.project_manager import ProjectManager
+from hagokyu.config import HaGoKuConfig
+from hagokyu.manager.orchestrator import Orchestrator
+from hagokyu.manager.refinement import parse_refinement
+from hagokyu.observability.events import Event
+from hagokyu.storage.project_manager import ProjectManager
 
 
 def _refine_report_thread(
@@ -43,7 +43,7 @@ def _refine_report_thread(
             events_holder.append(event)
 
         orch.event_bus.subscribe(on_event)
-        from ...observability.display import TerminalDisplay
+        from hagokyu.observability.display import TerminalDisplay
         orch.event_bus.unsubscribe(orch.display)
 
         # 构建 refinement query

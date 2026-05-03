@@ -24,12 +24,17 @@ LOGO_PNG = str(_UI_DIR / "static" / "logo.png")
 
 def run() -> None:
     """应用主体（仅在 streamlit subprocess 中调用）"""
-    # streamlit 用 exec() 运行脚本时不会自动设 __package__，
-    # 导致相对导入失败。手动修复。
     import sys as _sys
+
+    # streamlit exec() 不会设置 __package__，导致相对导入失败
     _main = _sys.modules.get("__main__")
     if _main is not None and not getattr(_main, "__package__", None):
         _main.__package__ = "hagokyu.ui"
+
+    # 确保父包在 sys.modules 中（相对导入需要）
+    if "hagokyu.ui" not in _sys.modules:
+        import hagokyu.ui as _ui_pkg
+        _sys.modules["hagokyu.ui"] = _ui_pkg
     # ── 页面配置 ────────────────────────────────────────────────
     st.set_page_config(
         page_title="HaGoKu — 数据分析平台",

@@ -8,9 +8,9 @@ import streamlit as st
 from datetime import datetime
 from pathlib import Path
 
-from ..components.project_sidebar import init_session_state
-from ...config import HaGoKuConfig
-from ...storage.project_manager import ProjectManager
+from hagokyu.ui.components.project_sidebar import init_session_state
+from hagokyu.config import HaGoKuConfig
+from hagokyu.storage.project_manager import ProjectManager
 
 # Logo 路径
 _UI_DIR = Path(__file__).parent.parent / "static"

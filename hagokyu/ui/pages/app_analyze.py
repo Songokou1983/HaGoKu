@@ -9,12 +9,12 @@ from pathlib import Path
 
 import streamlit as st
 
-from ..components.event_log import render_event_log
-from ..components.project_sidebar import init_session_state
-from ...config import HaGoKuConfig
-from ...manager.orchestrator import Orchestrator
-from ...observability.events import Event
-from ...storage.project_manager import ProjectManager
+from hagokyu.ui.components.event_log import render_event_log
+from hagokyu.ui.components.project_sidebar import init_session_state
+from hagokyu.config import HaGoKuConfig
+from hagokyu.manager.orchestrator import Orchestrator
+from hagokyu.observability.events import Event
+from hagokyu.storage.project_manager import ProjectManager
 
 # Logo 路径
 _UI_DIR = Path(__file__).parent.parent / "static"
@@ -109,7 +109,7 @@ def render() -> None:
     llm_cache_key = "_llm_health"
     cached = st.session_state.get(llm_cache_key)
     if cached is None:
-        from ...tools.health import check_llm
+        from hagokyu.tools.health import check_llm
         result = check_llm(config)
         st.session_state[llm_cache_key] = result
     else:
@@ -302,7 +302,7 @@ def render() -> None:
                     def on_event(event: Event) -> None:
                         events_holder.append(event)
                     orch.event_bus.subscribe(on_event)
-                    from ...observability.display import TerminalDisplay
+                    from hagokyu.observability.display import TerminalDisplay
                     orch.event_bus.unsubscribe(orch.display)
                     result = orch.run(
                         data_path=ad["data_path"],
@@ -341,7 +341,7 @@ def render() -> None:
         evs = st.session_state.get("analysis_events", [])[-50:]  # 显示最近 50 条
         if evs:
             with st.expander("📡 实时事件流", expanded=True):
-                from ..components.event_log import render_event_log
+                from hagokyu.ui.components.event_log import render_event_log
                 render_event_log(evs[-50:])
 
         if waited >= MAX_WAIT:

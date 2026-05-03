@@ -1,4 +1,4 @@
-"""HaGoKu Streamlit UI — 分析页面（含实时事件流）"""
+"""HaGoKu Streamlit UI — 分析页面（Claude 风格三段式）"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 
 import streamlit as st
 
-from hagokyu.ui.components.event_log import render_event_log
 from hagokyu.ui.components.file_uploader import (
     cleanup_session_temp,
     render_upload_tab,
@@ -19,7 +18,8 @@ from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.observability.events import Event
 from hagokyu.storage.project_manager import ProjectManager
 
-# 内置演示数据集
+# ── 演示数据集 ──────────────────────────────────────────
+
 DEMO_DATASETS = {
     "ad_campaign": {
         "name": "📢 广告投放数据",
@@ -40,7 +40,6 @@ DEMO_DATASETS = {
 
 
 def _get_demo_path(name: str) -> Path | None:
-    """解析演示数据路径（包内/本地两种模式）"""
     filename = DEMO_DATASETS[name]["file"]
     try:
         import hagokyu
@@ -50,7 +49,6 @@ def _get_demo_path(name: str) -> Path | None:
             return path
     except Exception:
         pass
-    # 本地源码
     local = Path(__file__).parent.parent.parent / "examples" / filename
     if local.exists():
         return local
@@ -58,7 +56,6 @@ def _get_demo_path(name: str) -> Path | None:
 
 
 def _launch_demo(name: str) -> None:
-    """加载演示数据并跳转到分析页面"""
     info = DEMO_DATASETS[name]
     src = _get_demo_path(name)
     if src is None:
@@ -75,52 +72,209 @@ def _launch_demo(name: str) -> None:
     st.rerun()
 
 
+# ── 工具函数 ────────────────────────────────────────────
+
+def _init_chat_state() -> None:
+    """初始化对话状态"""
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+    if "analysis_running" not in st.session_state:
+        st.session_state.analysis_running = False
+    if "analysis_events" not in st.session_state:
+        st.session_state.analysis_events = []
+    if "analysis_result" not in st.session_state:
+        st.session_state.analysis_result = None
+    if "analysis_error" not in st.session_state:
+        st.session_state.analysis_error = None
+    if "current_data_path" not in st.session_state:
+        st.session_state.current_data_path = None
+
+
+def _render_agent_pipeline(events: list[Event], running: bool) -> None:
+    """渲染 4 个 Agent 的流水线进度"""
+
+    stage = "idle"
+    stage_detail = ""
+
+    if events:
+        last = events[-1]
+        etype_val = getattr(last, "event_type", None)
+        etype = etype_val.value if etype_val else ""
+
+        msg = (last.data.get("message", "") if hasattr(last, "data") else "") or ""
+
+        if "scout" in etype or "data_loaded" in etype or "fields" in etype:
+            stage, stage_pct = "scout", 25
+        elif "clean" in etype or "outlier" in etype or "missing" in etype:
+            stage, stage_pct = "cleaner", 50
+        elif "analysis" in etype or "regression" in etype or "ttest" in etype or "correlation" in etype:
+            stage, stage_pct = "analyst", 75
+        elif "report" in etype or "generate" in etype:
+            stage, stage_pct = "reporter", 95
+        elif "complete" in etype or "finished" in etype:
+            stage, stage_pct = "complete", 100
+        else:
+            stage_pct = 0
+            stage_detail = msg[:80] if msg else etype
+
+        if msg and not stage_detail:
+            stage_detail = msg[:80]
+
+    AGENTS = [
+        ("scout",    "🔍", "🔍 Scout 侦察"),
+        ("cleaner",  "🧹", "🧹 Cleaner 清洗"),
+        ("analyst",  "📊", "📊 Analyst 分析"),
+        ("reporter", "📋", "📋 Reporter 报告"),
+    ]
+
+    active_idx = next((i for i, (s, _, _) in enumerate(AGENTS) if s == stage), -1)
+    if stage == "complete":
+        completed_idx = len(AGENTS) - 1
+    else:
+        completed_idx = max(active_idx, 0)
+
+    cols = st.columns(4)
+    for i, (s, emoji, label) in enumerate(AGENTS):
+        is_done = i < completed_idx
+        is_active = i == active_idx and running
+
+        border_color = "var(--hagokyu-accent)" if is_active else "var(--hagokyu-border)"
+        bg = "rgba(34,211,238,0.08)" if is_active else "transparent"
+        text_color = "var(--hagokyu-accent)" if is_active else ("var(--hagokyu-green)" if is_done else "var(--hagokyu-text-dim)")
+
+        with cols[i]:
+            st.markdown(
+                f"<div style='text-align:center; padding:10px 4px; border-radius:8px; "
+                f"border:1px solid {border_color}; background:{bg};'>"
+                f"<div style='font-size:1.3rem;'>{'✅' if is_done else emoji if is_active else '⏳'}</div>"
+                f"<div style='font-size:11px; color:{text_color}; font-weight:600; margin-top:4px;'>{label}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    if stage_detail:
+        st.caption(f"▸ {stage_detail}")
+
+    if running:
+        pct = max(10, stage_pct)
+        agent_name = AGENTS[active_idx][2] if active_idx >= 0 else ""
+        st.progress(pct / 100.0, text=f"{agent_name} 工作中...")
+
+
+def _render_chat() -> None:
+    """渲染聊天消息历史 + 输入框"""
+    messages = st.session_state.get("chat_messages", [])
+
+    # 消息历史
+    for msg in messages:
+        role = msg["role"]
+        content = msg["content"]
+        if role == "user":
+            with st.chat_message("user"):
+                st.markdown(content)
+        else:
+            with st.chat_message("assistant"):
+                if isinstance(content, dict):
+                    # 分析结果卡片
+                    status = content.get("status", "")
+                    if status == "completed":
+                        dur = content.get("duration_ms", 0) / 1000
+                        n_results = content.get("n_results", 0)
+                        output_path = content.get("output_path", "")
+                        st.success(f"✅ 分析完成（{dur:.1f}s），发现 {n_results} 个结论")
+                        if output_path:
+                            if st.button("📋 查看完整报告", key="view_report_btn"):
+                                st.session_state.last_report_path = output_path
+                                st.session_state.nav_page = "report"
+                                st.rerun()
+                    else:
+                        st.error(content.get("message", "分析未完成"))
+                else:
+                    st.markdown(content)
+
+    # 实时事件流（作为 assistant 消息追加显示）
+    if st.session_state.get("analysis_running"):
+        evs = st.session_state.get("analysis_events", [])[-20:]
+        if evs:
+            latest = evs[-1]
+            detail = ""
+            if hasattr(latest, "data"):
+                detail = latest.data.get("message", str(latest.data))[:200]
+            elif hasattr(latest, "event_type"):
+                detail = str(latest.event_type)
+            if detail:
+                with st.chat_message("assistant"):
+                    st.markdown(f"⏳ {detail[:150]}...")
+
+    # 错误消息
+    error = st.session_state.get("analysis_error")
+    if error:
+        with st.chat_message("assistant"):
+            st.error(f"❌ {error}")
+
+
+# ── 主渲染函数 ──────────────────────────────────────────
+
 def render() -> None:
+    _init_chat_state()
     cleanup_session_temp()
     pm: ProjectManager = st.session_state.project_manager
     config = HaGoKuConfig.load()
 
-    # ── LLM 连接预检（会话内只检查一次）───────────────────
-    llm_cache_key = "_llm_health"
-    cached = st.session_state.get(llm_cache_key)
-    if cached is None:
+    # LLM 预检
+    llm_cache = "_llm_health"
+    if llm_cache not in st.session_state:
         from hagokyu.tools.health import check_llm
         result = check_llm(config)
-        st.session_state[llm_cache_key] = result
+        st.session_state[llm_cache] = result
     else:
-        result = cached
+        result = st.session_state[llm_cache]
 
     if not result.ok:
         st.warning(
             f"⚠️ **LLM 服务不可用**：{result.detail}\n\n"
             + "\n".join(f"• {s}" for s in result.suggestions)
-            + f"\n\n💡 运行 `hagokyu doctor` 检查，或配置正确的 LLM 地址（当前: `{config.llm.base_url}`）"
         )
 
-    st.title("📊 数据分析")
-
-    # ── 演示数据预加载（从项目页点击演示按钮触发）──────────
-    demo_path = st.session_state.pop("_demo_file", None)
-    demo_name = st.session_state.pop("_demo_name", None)
-    demo_query = st.session_state.pop("_demo_query", None)
-
-    # ── 数据来源选择 ────────────────────────────────────────
-    # ── 强制项目选择（必须先选项目）────────────────────────
+    # ── 顶部：项目选择 + 数据上传 ─────────────────────────
     all_projects = [p.name for p in pm.list()]
     current_proj = st.session_state.get("current_project")
     if current_proj not in all_projects:
         current_proj = None
         st.session_state.current_project = None
 
-    selected = st.selectbox(
-        "📁 请先选择一个项目",
-        options=all_projects,
-        index=all_projects.index(current_proj) if current_proj in all_projects else 0,
-    )
-    st.session_state.current_project = selected
+    # 演示数据预加载
+    demo_path = st.session_state.pop("_demo_file", None)
+    demo_name = st.session_state.pop("_demo_name", None)
+    demo_query = st.session_state.pop("_demo_query", None)
+
+    with st.container():
+        col_proj, col_data = st.columns([1, 2])
+
+        with col_proj:
+            st.markdown("**📁 项目**")
+            selected = st.selectbox(
+                "项目",
+                options=all_projects,
+                index=all_projects.index(current_proj) if current_proj in all_projects else 0,
+                label_visibility="collapsed",
+            )
+            st.session_state.current_project = selected
+
+        with col_data:
+            st.markdown("**📂 数据**")
+            data_path = render_upload_tab(
+                demo_path=demo_path,
+                demo_name=demo_name,
+                project_name=selected,
+                pm=pm,
+            )
+            st.session_state.current_data_path = data_path
+
+    st.divider()
 
     if not selected:
-        st.info("请先选择一个项目，或直接体验演示数据。")
+        st.info("请先选择一个项目，再开始分析。")
         c1, c2 = st.columns(2)
         if c1.button("➕ 去创建项目", type="primary", use_container_width=True):
             st.session_state.nav_page = "projects"
@@ -129,220 +283,143 @@ def render() -> None:
             _launch_demo("ad_campaign")
         st.stop()
 
-    st.divider()
+    # ── 中部：Agent 流水线 + 过程日志 ─────────────────────
+    running = st.session_state.get("analysis_running", False)
+    events = st.session_state.get("analysis_events", [])
 
-    col_data, col_query = st.columns([1, 2])
+    with st.container():
+        st.markdown("**🔄 分析流水线**")
+        _render_agent_pipeline(events, running)
 
-    with col_data:
-        st.markdown("### 1️⃣ 上传数据")
-        data_path = render_upload_tab(
-            demo_path=demo_path,
-            demo_name=demo_name,
-            project_name=selected,
-            pm=pm,
-        )
-
-    with col_query:
-        st.markdown("### 2️⃣ 分析问题")
-        # 直接用 demo_query 预填（不清 session_state，避免重复覆盖）
-        query = st.text_area(
-            "你想分析什么？",
-            value=st.session_state.get("query_input", demo_query or ""),
-            placeholder="例如：哪个渠道roi最高？\n转化漏斗分析\n两组有差异吗？\n哪些因素影响利润？",
-            height=120,
-            label_visibility="collapsed",
-        )
-
-        # ── 用户模式选择 ─────────────────────────────────────
-        st.markdown("**报告详细度：**")
-        mode_labels = {
-            "quick": "⚡ 简洁（人话摘要，适合快速浏览）",
-            "standard": "📋 标准（人话+数学细节）",
-            "expert": "🧪 详细（完整统计证据链）",
-        }
-        mode_options = list(mode_labels.keys())
-        default_idx = mode_options.index(config.user_mode.default_mode) \
-            if config.user_mode.default_mode in mode_options else 1
-        selected_mode = st.radio(
-            "报告模式",
-            options=mode_options,
-            format_func=lambda x: mode_labels[x],
-            index=default_idx,
-            label_visibility="collapsed",
-            horizontal=True,
-        )
-
-        # 快捷问题按钮
-        st.markdown("**快捷问题：**")
-        quick_questions = [
-            ("📈 ROI分析", "哪个渠道roi最高"),
-            ("🔬 A/B测试", "两组有差异吗"),
-            ("📊 转化漏斗", "转化漏斗分析"),
-            ("🔗 相关性", "收入和广告费相关吗"),
-            ("📉 回归分析", "哪些因素影响利润"),
-            ("💰 LTV分析", "用户值多少钱"),
-        ]
-        cols = st.columns(3)
-        for i, (label, q) in enumerate(quick_questions):
-            if cols[i % 3].button(label, use_container_width=True):
-                st.session_state.query_input = q
-                st.rerun()
+    # 实时事件日志（展开显示）
+    if events:
+        with st.expander("📡 实时过程", expanded=False):
+            for ev in events[-30:]:
+                ev_type = getattr(ev, "event_type", "unknown")
+                msg = ""
+                if hasattr(ev, "data"):
+                    msg = ev.data.get("message", "") if isinstance(ev.data, dict) else str(ev.data)
+                if msg:
+                    st.caption(f"`{ev_type}` {msg[:120]}")
+                else:
+                    st.caption(f"`{ev_type}`")
 
     st.divider()
 
-    # ── 开始分析按钮 ─────────────────────────────────────────
-    query_val = st.session_state.get("query_input", "")
-    can_run = bool(data_path and query_val)
-    col_btn, col_status = st.columns([1, 3])
+    # ── 底部：对话窗口 ─────────────────────────────────────
+    _render_chat()
 
-    with col_btn:
-        run_clicked = st.button(
-            "🚀 开始分析",
-            type="primary",
-            disabled=not can_run,
-            use_container_width=True,
-        )
+    # 预填 query（演示数据）
+    initial_query = demo_query or ""
 
-    if not data_path:
-        st.warning("请先选择或上传数据文件")
-    if not query_val:
-        st.info("请输入分析问题，或点击快捷问题")
-
-    # ── 分析执行（非阻塞模式）─────────────────────────────────
-    #
-    # 设计原则：Streamlit 脚本每次 rerun 从头执行，不能用 while+sleep 阻塞事件循环。
-    # 策略：线程对象存入 session_state，rerun 时检查 .is_alive() 判断状态。
-    # 用户点击 → 启动线程 → 立即 rerun → 展示进度 → 完成后展示结果
-    #
-    MAX_WAIT = 300  # 最多等 5 分钟
-
-    if run_clicked and data_path and query:
-        # 启动分析：存入 session_state，线程持有 data_path/holders 引用
-        st.session_state.analysis_data = {
-            "data_path": data_path,
-            "query": query_val,
-            "project_name": st.session_state.get("current_project"),
-            "user_mode": selected_mode,
-        }
-        st.session_state.analysis_result = None
-        st.session_state.analysis_error = None
-        st.session_state.analysis_running = True
-        st.session_state.analysis_start = time.time()
-        st.session_state.analysis_events = []
-        st.rerun()  # 立即 rerun，不阻塞
-
-    # 分析进行中：启动后台线程（rerun 时通过 analysis_running 标志触发）
-    if st.session_state.get("analysis_running"):
-        ad = st.session_state.get("analysis_data", {})
-        if not st.session_state.get("_analysis_thread_started"):
-            # 首次 rerun：启动线程，holders 通过闭包引用传递
-            result_holder: list = []
-            error_holder: list = []
-            events_holder: list[Event] = []
-
-            def run():
-                try:
-                    orch = Orchestrator(config)
-                    def on_event(event: Event) -> None:
-                        events_holder.append(event)
-                    orch.event_bus.subscribe(on_event)
-                    from hagokyu.observability.display import TerminalDisplay
-                    orch.event_bus.unsubscribe(orch.display)
-                    result = orch.run(
-                        data_path=ad["data_path"],
-                        query=ad["query"],
-                        project_name=ad.get("project_name"),
-                        user_mode=ad.get("user_mode", "standard"),
-                    )
-                    result_holder.append(result)
-                except Exception as e:
-                    error_holder.append(str(e))
-
-            thread = threading.Thread(target=run, daemon=True)
-            st.session_state._analysis_thread = thread
-            st.session_state._analysis_result_h = result_holder
-            st.session_state._analysis_error_h = error_holder
-            st.session_state._analysis_events_h = events_holder
-            st.session_state._analysis_thread_started = True
-            thread.start()
-
-        # rerun 时：检查线程是否结束，从 holders 读结果
-        thread = st.session_state.get("_analysis_thread")
-        if thread and not thread.is_alive():
-            st.session_state.analysis_result = st.session_state.get("_analysis_result_h", [{}])[0]
-            st.session_state.analysis_error = st.session_state.get("_analysis_error_h", [None])[0]
-            # 最多保留最近 500 条事件，防止内存无限增长
-            all_events = st.session_state.get("_analysis_events_h", [])
-            st.session_state.analysis_events = all_events[-500:]
-            st.session_state.analysis_running = False
-
-        # 显示进度
-        waited = time.time() - st.session_state.get("analysis_start", time.time())
-        progress_pct = min(waited / 60, 0.9)
-        st.progress(progress_pct, text=f"分析中... ({int(waited)}s)")
-
-        # 实时事件流
-        evs = st.session_state.get("analysis_events", [])[-50:]  # 显示最近 50 条
-        if evs:
-            with st.expander("📡 实时事件流", expanded=True):
-                from hagokyu.ui.components.event_log import render_event_log
-                render_event_log(evs[-50:])
-
-        if waited >= MAX_WAIT:
-            st.session_state.analysis_running = False
-            st.session_state.analysis_error = "分析超时（5分钟），请尝试更小规模的数据"
-            st.warning(st.session_state.analysis_error)
-        else:
-            st.info(f"分析进行中... ({int(waited)}s)")
+    # chat 输入框
+    if prompt := st.chat_input("输入分析问题，例如：哪个渠道 ROI 最高？", key="chat_input"):
+        # 用户消息追加
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        if not st.session_state.get("current_data_path"):
+            st.session_state.chat_messages.append({
+                "role": "assistant",
+                "content": "⚠️ 请先在顶部上传或选择数据文件。",
+            })
             st.rerun()
 
-    # 分析完成：展示结果
-    if not st.session_state.get("analysis_running"):
-        result = st.session_state.get("analysis_result")
-        error = st.session_state.get("analysis_error")
+        # 启动分析
+        _start_analysis(
+            data_path=st.session_state.get("current_data_path"),
+            query=prompt,
+            project_name=selected,
+            user_mode=config.user_mode.default_mode,
+            config=config,
+        )
+        st.rerun()
 
-        if error:
-            st.error(f"分析出错: {error}")
-        elif result:
-            if result.get("status") == "completed":
-                dur = result.get("duration_ms", 0) / 1000
-                c1, c2 = st.columns(2)
-                c1.success(f"✅ 分析完成！总耗时: {dur:.1f}s")
-                c2.metric("发现结论", result.get("n_results", 0))
-                if result.get("output_path"):
-                    st.session_state.last_report_path = result["output_path"]
-                    if st.button("📋 查看报告", type="primary"):
-                        st.session_state.nav_page = "report"
-                        st.rerun()
+    # ── 分析进行中：非阻塞轮询（每次 rerun 检查一次）────────
+    if st.session_state.get("analysis_running"):
+        thread = st.session_state.get("_analysis_thread")
+        if thread and not thread.is_alive():
+            # 线程结束：收集结果
+            st.session_state.analysis_result = st.session_state.get("_analysis_result_h", [{}])[0]
+            st.session_state.analysis_error = st.session_state.get("_analysis_error_h", [None])[0]
+            evs = st.session_state.get("_analysis_events_h", [])
+            st.session_state.analysis_events = evs[-500:]
+            st.session_state.analysis_running = False
+            st.rerun()
+        else:
+            # 线程仍在运行：同步最新事件，追加到显示队列
+            evs = st.session_state.get("_analysis_events_h", [])
+            st.session_state.analysis_events = evs[-50:]
+            waited = time.time() - st.session_state.get("_analysis_start", time.time())
+            if waited >= 300:
+                st.session_state.analysis_running = False
+                st.session_state.analysis_error = "分析超时（5分钟）"
+                st.rerun()
             else:
-                st.error(f"分析未完成: {result.get('message', '未知错误')}")
+                st.rerun()
 
-        # 清理 session 状态
+    # ── 分析完成后的处理 ───────────────────────────────────
+    if not running and (st.session_state.get("analysis_result") or st.session_state.get("analysis_error")):
+        result = st.session_state.pop("analysis_result", None)
+        error = st.session_state.pop("analysis_error", None)
         for key in ("_analysis_thread_started", "_analysis_thread",
                     "_analysis_result_h", "_analysis_error_h",
-                    "_analysis_events_h", "analysis_data",
-                    "analysis_start"):
+                    "_analysis_events_h", "_analysis_start",
+                    "analysis_data", "analysis_running",
+                    "analysis_events"):
             st.session_state.pop(key, None)
-        cleanup_session_temp()  # 清理临时上传文件
+        cleanup_session_temp()
 
-    # ── 实时事件流展示 ──────────────────────────────────────
-    events = st.session_state.get("analysis_events", [])[-100:]  # 最多保留 100 条
+        if error:
+            st.session_state.chat_messages.append({"role": "assistant", "content": f"❌ 分析出错：{error}"})
+        elif result:
+            st.session_state.chat_messages.append({"role": "assistant", "content": result})
+        st.rerun()
 
-    if events:
-        st.divider()
-        st.markdown("### 📋 分析日志")
-        with st.expander("查看完整事件流", expanded=True):
-            render_event_log(events)
-    elif not st.session_state.get("analysis_running"):
-        # 空状态：显示引导
-        st.info("""
-        **分析尚未开始。**
 
-        步骤：
-        1. 选择或上传数据
-        2. 输入分析问题
-        3. 点击「🚀 开始分析」
+def _start_analysis(
+    data_path: str,
+    query: str,
+    project_name: str | None,
+    user_mode: str,
+    config: HaGoKuConfig,
+) -> None:
+    """启动后台分析线程（不阻塞，轮询靠 rerun 驱动）"""
+    result_holder: list = []
+    error_holder: list = []
+    events_holder: list[Event] = []
 
-        HaGoKu 会自动完成：数据侦察 → 清洗 → 统计检验 → 商业指标 → 生成报告。
-        每一步都有统计护栏把关。
-        """)
+    def run():
+        try:
+            orch = Orchestrator(config)
+
+            def on_event(event: Event) -> None:
+                events_holder.append(event)
+
+            orch.event_bus.subscribe(on_event)
+            try:
+                from hagokyu.observability.display import TerminalDisplay
+                orch.event_bus.unsubscribe(orch.display)
+            except Exception:
+                pass
+
+            result = orch.run(
+                data_path=data_path,
+                query=query,
+                project_name=project_name,
+                user_mode=user_mode,
+            )
+            result_holder.append(result)
+        except Exception as e:
+            error_holder.append(str(e))
+
+    thread = threading.Thread(target=run, daemon=True)
+    st.session_state.analysis_running = True
+    st.session_state.analysis_start = time.time()
+    st.session_state.analysis_events = []
+    st.session_state.analysis_result = None
+    st.session_state.analysis_error = None
+    st.session_state._analysis_thread = thread
+    st.session_state._analysis_result_h = result_holder
+    st.session_state._analysis_error_h = error_holder
+    st.session_state._analysis_events_h = events_holder
+    st.session_state._analysis_start = time.time()
+    thread.start()

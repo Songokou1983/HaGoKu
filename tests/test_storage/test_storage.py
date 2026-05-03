@@ -187,7 +187,7 @@ class TestArtifactManager:
 class TestOutputManager:
     @pytest.fixture
     def output_mgr(self, tmp_path):
-        config = OutputConfig(base_dir=tmp_path / "projects")
+        config = OutputConfig(project_dir=tmp_path / "projects")
         return OutputManager(config, "test_project")
 
     def test_create_run_dir(self, output_mgr):

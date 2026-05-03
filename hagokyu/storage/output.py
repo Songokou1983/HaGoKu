@@ -22,7 +22,7 @@ class OutputManager:
         """
         self.config = config
         self.project_name = project_name
-        self._project_dir = config.base_dir / project_name
+        self._project_dir = config.project_dir / project_name
         self._project_dir.mkdir(parents=True, exist_ok=True)
 
     @property

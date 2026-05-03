@@ -132,10 +132,12 @@ def render() -> None:
         # Tab: 上传 | 项目已有
         tab_upload, tab_project = st.tabs(["📤 上传", "📁 项目已有"])
 
+        # 统一 data_path（演示 > 上传 > 项目已有）
+        data_path: str | None = None
+
         with tab_upload:
-            # 演示数据 banner
             if demo_path:
-                st.success(f"🎯 正在使用演示数据: {demo_name or Path(demo_path).name}")
+                st.success(f"🎯 演示数据: {demo_name or Path(demo_path).name}")
                 _render_data_preview(demo_path)
                 data_path = demo_path
             else:
@@ -149,48 +151,38 @@ def render() -> None:
                     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
                         f.write(uploaded.getvalue())
                         data_path = f.name
-                    # 记录路径，分析结束时自动清理
                     st.session_state._temp_uploaded_path = data_path
                     st.session_state.uploaded_name = uploaded.name
                     st.success(f"✅ 已加载: {uploaded.name}")
-
-                    # ── 数据预览 ─────────────────────────────────
                     _render_data_preview(data_path)
-                else:
-                    data_path = None
 
         with tab_project:
-            # 使用侧边栏选中的当前项目（不再重复选择器）
             current = st.session_state.get("current_project")
             if not current:
                 st.info("请先在侧边栏选择一个项目")
-                data_path = None
             else:
                 proj_info = pm.info(current)
                 if proj_info and proj_info.data_files:
-                    file_options = {f.name: proj_info.project_dir / f.path for f in proj_info.data_files}
+                    file_options = {f.name: str(proj_info.project_dir / f.path) for f in proj_info.data_files}
                     selected_file = st.selectbox(
                         f"📄 {current} 的数据文件",
                         options=list(file_options.keys()),
                     )
-                    data_path = str(file_options[selected_file])
+                    data_path = file_options[selected_file]
                     _render_data_preview(data_path)
                 else:
                     st.warning(f"「{current}」暂无数据文件，请先上传")
-                    data_path = None
 
     with col_query:
         st.markdown("### 2️⃣ 分析问题")
-        # 预填演示数据推荐问题
-        prefilled = demo_query or st.session_state.get("_prefilled_query", "")
-        if demo_query:
-            st.session_state._prefilled_query = demo_query
+        # 直接用 demo_query 预填（不清 session_state，避免重复覆盖）
         query = st.text_area(
             "你想分析什么？",
-            value=prefilled,
+            value=demo_query or "",
             placeholder="例如：哪个渠道roi最高？\n转化漏斗分析\n两组有差异吗？\n哪些因素影响利润？",
             height=120,
             label_visibility="collapsed",
+            key="query_input",
         )
 
         # ── 用户模式选择 ─────────────────────────────────────
@@ -225,13 +217,14 @@ def render() -> None:
         cols = st.columns(3)
         for i, (label, q) in enumerate(quick_questions):
             if cols[i % 3].button(label, use_container_width=True):
-                query = q
+                st.session_state.query_input = q
                 st.rerun()
 
     st.divider()
 
     # ── 开始分析按钮 ─────────────────────────────────────────
-    can_run = bool(data_path and query)
+    query_val = st.session_state.get("query_input", "")
+    can_run = bool(data_path and query_val)
     col_btn, col_status = st.columns([1, 3])
 
     with col_btn:
@@ -244,7 +237,7 @@ def render() -> None:
 
     if not data_path:
         st.warning("请先选择或上传数据文件")
-    if not query:
+    if not query_val:
         st.info("请输入分析问题，或点击快捷问题")
 
     # ── 分析执行（非阻塞模式）─────────────────────────────────
@@ -259,7 +252,7 @@ def render() -> None:
         # 启动分析：存入 session_state，线程持有 data_path/holders 引用
         st.session_state.analysis_data = {
             "data_path": data_path,
-            "query": query,
+            "query": query_val,
             "project_name": st.session_state.get("current_project"),
             "user_mode": selected_mode,
         }

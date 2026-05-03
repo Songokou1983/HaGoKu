@@ -101,12 +101,8 @@ def run() -> None:
 
         # 渲染项目侧边栏（仅非设置页面）
         if "settings" not in selected_page:
-            from hagokyu.ui.components.project_sidebar import (
-                render_project_sidebar,
-                render_quick_upload,
-            )
+            from hagokyu.ui.components.project_sidebar import render_project_sidebar
             render_project_sidebar()
-            render_quick_upload()
 
     page_module = PAGES.get(selected_page, PAGES["🏠 项目"])
     module_name = page_module.split(".")[-1]

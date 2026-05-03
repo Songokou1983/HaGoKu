@@ -195,8 +195,13 @@ class OutputManager:
     def create_latest_symlink(self, run_dir: Path) -> None:
         """创建 latest 符号链接指向最新运行"""
         latest_path = self._project_dir / "latest"
-        if latest_path.is_symlink() or latest_path.exists():
-            latest_path.unlink()
+        # 安全删除旧链接（忽略 FileNotFoundError）
+        try:
+            if latest_path.is_symlink() or latest_path.exists():
+                latest_path.unlink()
+        except FileNotFoundError:
+            pass
+        # 创建新链接
         latest_path.symlink_to(run_dir)
 
     def list_runs(self) -> list[dict[str, Any]]:

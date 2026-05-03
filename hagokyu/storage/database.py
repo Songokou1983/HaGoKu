@@ -9,6 +9,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# SQL 字段白名单，防止动态 SQL 注入
+_PROJECT_ALLOWED_FIELDS = frozenset({"description", "data_path", "schema_path"})
+_RUN_ALLOWED_FIELDS = frozenset({
+    "query", "plan_json", "status", "completed_at",
+    "duration_ms", "token_count", "manager_mode", "output_path"
+})
+_PROJECT_STATE_ALLOWED_FIELDS = frozenset({
+    "goal", "data_path", "data_hash", "stage", "context_json",
+    "cleaned_path", "cleaning_json", "results_json", "report_path", "next_action", "updated_at"
+})
+
 
 # ── SQL 建表语句 ──────────────────────────────────────────────
 
@@ -126,7 +137,8 @@ class HaGoKuDB:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path))
+        # 添加 timeout 参数，防止并发访问时永久阻塞
+        self.conn = sqlite3.connect(str(db_path), timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
@@ -201,11 +213,15 @@ class HaGoKuDB:
         return [dict(r) for r in rows]
 
     def update_project(self, project_id: str, **kwargs: Any) -> None:
-        """更新项目字段"""
+        """更新项目字段（仅允许白名单内的字段）"""
         if not kwargs:
             return
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [project_id]
+        # 白名单验证，防止 SQL 注入
+        filtered = {k: v for k, v in kwargs.items() if k in _PROJECT_ALLOWED_FIELDS}
+        if not filtered:
+            return
+        sets = ", ".join(f"{k} = ?" for k in filtered)
+        vals = list(filtered.values()) + [project_id]
         self.conn.execute(f"UPDATE projects SET {sets} WHERE id = ?", vals)
         self.conn.commit()
 
@@ -294,14 +310,18 @@ class HaGoKuDB:
         return d
 
     def update_run(self, run_id: str, **kwargs: Any) -> None:
-        """更新运行字段"""
+        """更新运行字段（仅允许白名单内的字段）"""
         if not kwargs:
             return
+        # 白名单验证，防止 SQL 注入
+        filtered = {k: v for k, v in kwargs.items() if k in _RUN_ALLOWED_FIELDS}
+        if not filtered:
+            return
         # plan_json 需要序列化
-        if "plan_json" in kwargs and isinstance(kwargs["plan_json"], dict):
-            kwargs["plan_json"] = json.dumps(kwargs["plan_json"], ensure_ascii=False)
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [run_id]
+        if "plan_json" in filtered and isinstance(filtered["plan_json"], dict):
+            filtered["plan_json"] = json.dumps(filtered["plan_json"], ensure_ascii=False)
+        sets = ", ".join(f"{k} = ?" for k in filtered)
+        vals = list(filtered.values()) + [run_id]
         self.conn.execute(f"UPDATE runs SET {sets} WHERE id = ?", vals)
         self.conn.commit()
 
@@ -367,9 +387,9 @@ class HaGoKuDB:
         return finding
 
     def save_findings(self, findings: list[dict[str, Any]]) -> None:
-        """批量保存发现（事务保证）"""
+        """批量保存发现（事务保证原子性）"""
         now = datetime.now().isoformat()
-        with self.conn:
+        with self.transaction():
             for f in findings:
                 self.conn.execute(
                     "INSERT INTO findings "
@@ -563,28 +583,41 @@ class HaGoKuDB:
 
     def update_project_state(self, project_id: str, **kwargs: Any) -> None:
         """
-        更新项目工作台状态
+        更新项目工作台状态（仅允许白名单内的字段）
 
-        任意字段: goal, data_path, data_hash, stage, context_json,
+        允许字段: goal, data_path, data_hash, stage, context_json,
                   cleaned_path, cleaning_json, results_json, report_path, next_action
         """
         if not kwargs:
             return
+        # 白名单验证，防止 SQL 注入
+        filtered = {k: v for k, v in kwargs.items() if k in _PROJECT_STATE_ALLOWED_FIELDS}
+        if not filtered:
+            return
         # JSON 字段自动序列化
         for key in ("context_json", "cleaning_json", "results_json"):
-            if key in kwargs and not isinstance(kwargs[key], str):
-                kwargs[key] = json.dumps(kwargs[key], ensure_ascii=False)
-        kwargs["updated_at"] = datetime.now().isoformat()
+            if key in filtered and not isinstance(filtered[key], str):
+                filtered[key] = json.dumps(filtered[key], ensure_ascii=False)
+        filtered["updated_at"] = datetime.now().isoformat()
 
-        # 确保 project_state 行存在
-        existing = self.get_project_state(project_id)
-        if existing is None:
-            self.init_project_state(project_id)
+        # 使用 INSERT OR REPLACE 处理竞态，避免 TOCTOU 问题
+        # 先尝试 INSERT，如果已存在则 UPDATE
+        sets = ", ".join(f"{k} = ?" for k in filtered)
+        vals = list(filtered.values()) + [project_id]
 
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [project_id]
-        self.conn.execute(f"UPDATE project_state SET {sets} WHERE project_id = ?", vals)
-        self.conn.commit()
+        with self.transaction():
+            # 尝试直接 UPDATE
+            self.conn.execute(
+                f"UPDATE project_state SET {sets} WHERE project_id = ?",
+                vals
+            )
+            # 如果没有更新任何行，则插入新行
+            if self.conn.execute("SELECT changes()").fetchone()[0] == 0:
+                self.init_project_state(project_id)
+                self.conn.execute(
+                    f"UPDATE project_state SET {sets} WHERE project_id = ?",
+                    vals
+                )
 
     # ── Memory 已迁移到 storage/memory.py (MemoryManager) ───────────
     # memory 表的 SQL 建表语句保留在此（SqliteMemoryBackend 直接操作）

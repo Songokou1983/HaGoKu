@@ -370,12 +370,14 @@ class ScoutAgent(DataAgentBase):
             self.emit_event(EventType.AGENT_THINKING, {
                 "thought": "⚠️ Scout 数据侦察遇到问题，继续使用最小上下文",
             })
+            # 使用 locals() 安全检查变量存在性
+            _locals = locals()
             return DataContext(
                 data_path=data_path,
-                n_rows=len(df) if 'df' in dir() else 0,
-                n_cols=len(df.columns) if 'df' in dir() else 0,
+                n_rows=len(_locals.get('df', pd.DataFrame())),
+                n_cols=len(_locals.get('df', pd.DataFrame()).columns) if 'df' in _locals else 0,
                 column_semantics=[],
-                quality_score=profile.get("quality_score", 0.5) if 'profile' in dir() else 0.5,
+                quality_score=_locals.get('profile', {}).get("quality_score", 0.5),
             )
 
     def _infer_all_semantics(self, df: pd.DataFrame, query: str = "") -> list[ColumnSemantic]:

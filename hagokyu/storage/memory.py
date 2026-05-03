@@ -109,10 +109,20 @@ class MemoryManager:
         yaml_mtime = self._yaml.mtime()
         if yaml_mtime is None:
             return
-        # 简化判断：如果 YAML 存在且非空，就确保 SQLite 有对应记录
-        # 通过检查 SQLite 是否有任何 column_semantic 记录
-        existing = self._sqlite.load(None, category="column_semantic")
-        if not existing:
+        # 比较 YAML 的 mtime 与 SQLite 中记录的时间
+        # 获取 SQLite 中最新的 updated_at
+        sqlite_entries = self._sqlite.load(None, category=None)
+        if sqlite_entries:
+            # 找到最新的 updated_at
+            latest_sqlite_time = max(
+                datetime.fromisoformat(e.get("updated_at", "1970-01-01"))
+                for e in sqlite_entries
+                if e.get("updated_at")
+            )
+            if yaml_mtime > latest_sqlite_time:
+                # YAML 更新，从 YAML 导入到 SQLite
+                self._import_yaml_to_sqlite()
+        else:
             # SQLite 空，从 YAML 导入
             self._import_yaml_to_sqlite()
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import threading
 from dataclasses import dataclass, field
@@ -11,9 +12,89 @@ from typing import Any
 
 import yaml
 
+# Windows 不允许的文件名字符
+_WINDOWS_FORBIDDEN_CHARS = re.compile(r'[<>:"/\\|?*]')
+
 # 每个项目一把锁，防止并发读写 project.yaml 造成数据损坏
 _project_locks: dict[str, threading.Lock] = {}
 _locks_lock = threading.Lock()  # 保护 _project_locks 本身
+
+
+def _validate_project_name(name: str) -> None:
+    """
+    验证项目名称安全性，防止路径遍历和非法字符
+
+    Raises:
+        ValueError: 名称包含危险字符或路径遍历
+    """
+    if not name or not name.strip():
+        raise ValueError("项目名称不能为空")
+
+    # 检查绝对路径
+    if Path(name).is_absolute():
+        raise ValueError("项目名称不能是绝对路径")
+
+    # 检查路径遍历
+    if ".." in name:
+        raise ValueError("项目名称不能包含路径遍历符 '..'")
+
+    # 检查 Windows 非法字符
+    if _WINDOWS_FORBIDDEN_CHARS.search(name):
+        raise ValueError(f"项目名称包含非法字符: {name.strip()}")
+
+    # 检查控制字符
+    if any(ord(c) < 32 for c in name):
+        raise ValueError("项目名称不能包含控制字符")
+
+
+def _safe_rmtree(path: Path, base_dir: Path) -> None:
+    """
+    安全删除目录，防止符号链接攻击
+
+    Args:
+        path: 要删除的目录
+        base_dir: 允许的安全根目录
+
+    Raises:
+        ValueError: 路径越界或存在符号链接指向目录外
+    """
+    # 解析真实路径
+    real_path = path.resolve()
+    real_base = base_dir.resolve()
+
+    # 检查是否在 base_dir 内
+    try:
+        real_path.relative_to(real_base)
+    except ValueError:
+        raise ValueError(f"禁止删除目录外的内容: {path}")
+
+    # 检查是否为符号链接（指向目录外）
+    if path.is_symlink():
+        raise ValueError("禁止删除符号链接")
+
+    # 检查目录内是否有指向外部的符号链接
+    for item in real_path.rglob("*"):
+        if item.is_symlink():
+            try:
+                item.resolve().relative_to(real_base)
+            except ValueError:
+                raise ValueError(f"目录内存在指向外部的符号链接: {item}")
+
+
+def _validate_symlink_target(target: Path, base_dir: Path) -> None:
+    """
+    验证符号链接目标是否安全
+
+    Raises:
+        ValueError: 目标路径越界
+    """
+    real_target = target.resolve()
+    real_base = base_dir.resolve()
+
+    try:
+        real_target.relative_to(real_base)
+    except ValueError:
+        raise ValueError(f"禁止创建指向目录外的符号链接: {target}")
 
 
 def _get_project_lock(project_name: str) -> threading.Lock:
@@ -148,10 +229,21 @@ class ProjectManager:
 
         Raises:
             FileExistsError: 项目已存在
+            ValueError: 项目名称包含非法字符或路径遍历
         """
+        # 验证项目名称安全性
+        _validate_project_name(name)
+
         base = parent_dir or self.base_dir
         base.mkdir(parents=True, exist_ok=True)
         project_dir = base / name
+
+        # 再次验证最终路径安全（防止 parent_dir 被利用）
+        try:
+            project_dir.resolve().relative_to(base.resolve())
+        except ValueError:
+            raise ValueError(f"禁止在目录外创建项目: {project_dir}")
+
         if project_dir.exists():
             raise FileExistsError(f"项目 '{name}' 已存在")
 
@@ -244,6 +336,9 @@ class ProjectManager:
 
         Returns:
             是否成功删除
+
+        Raises:
+            ValueError: 路径越界或存在危险的符号链接
         """
         # 注册表中查找真实路径
         registry = self._load_registry()
@@ -251,8 +346,13 @@ class ProjectManager:
             project_dir = Path(registry[project])
         else:
             project_dir = self.base_dir / project
+
         if not project_dir.exists():
             return False
+
+        # 安全检查：确保删除在 base_dir 内
+        _safe_rmtree(project_dir, self.base_dir)
+
         shutil.rmtree(project_dir)
         # 从注册表移除
         registry.pop(project, None)
@@ -324,6 +424,7 @@ class ProjectManager:
 
         Raises:
             FileNotFoundError: 项目不存在或文件不存在
+            ValueError: 文件路径不安全
         """
         project_dir = self._ensure_project(project)
         source_path = Path(file_path).resolve()
@@ -339,10 +440,12 @@ class ProjectManager:
             shutil.copy2(source_path, dest_path)
             stored_path = Path("input") / dest_path.name
         else:
-            # 符号链接模式
-            dest_path = project_dir / "input" / source_path.name
+            # 符号链接模式 - 始终复制文件，禁止创建指向外部的符号链接
+            # 安全原因：符号链接可能被用于读取敏感文件
+            dest_name = source_path.name
+            dest_path = project_dir / "input" / dest_name
             dest_path = self._unique_path(dest_path)
-            dest_path.symlink_to(source_path.resolve())
+            shutil.copy2(source_path, dest_path)
             stored_path = Path("input") / dest_path.name
 
         size_kb = source_path.stat().st_size / 1024
@@ -643,8 +746,11 @@ class ProjectManager:
         """生成不冲突的文件路径（同名时加序号）"""
         if not path.exists():
             return path
-        # 清理文件名，防止路径遍历（去掉 .. 和斜杠）
-        safe_stem = path.stem.replace("..", "").replace("/", "").replace("\\", "")
+        # 清理文件名，防止路径遍历和非法字符
+        safe_stem = path.stem
+        safe_stem = re.sub(r'\.\.+', '', safe_stem)  # 去掉路径遍历
+        safe_stem = _WINDOWS_FORBIDDEN_CHARS.sub('', safe_stem)  # 去掉 Windows 非法字符
+        safe_stem = safe_stem.strip() or 'file'  # 确保非空
         parent = path.parent
         n = 1
         while True:

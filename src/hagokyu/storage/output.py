@@ -31,11 +31,30 @@ class OutputManager:
         return self._project_dir
 
     @property
-    def data_dir(self) -> Path:
-        """数据目录"""
-        d = self._project_dir / "data"
+    def input_dir(self) -> Path:
+        """输入数据目录"""
+        d = self._project_dir / "input"
         d.mkdir(exist_ok=True)
         return d
+
+    @property
+    def process_dir(self) -> Path:
+        """过程文件目录（清洗后数据、中间结果）"""
+        d = self._project_dir / "process"
+        d.mkdir(exist_ok=True)
+        return d
+
+    @property
+    def output_dir(self) -> Path:
+        """项目级输出目录（报告、可视化）"""
+        d = self._project_dir / "output"
+        d.mkdir(exist_ok=True)
+        return d
+
+    @property
+    def data_dir(self) -> Path:
+        """数据目录（向后兼容，等同于 process_dir）"""
+        return self.process_dir
 
     def create_run_dir(self, run_id: str | None = None) -> Path:
         """
@@ -201,3 +220,23 @@ class OutputManager:
     def get_schema_path(self) -> Path:
         """获取字段语义定义文件路径（已迁移到 MemoryManager，保留兼容）"""
         return self._project_dir / "schema.yaml"
+
+    def get_project_output_path(
+        self,
+        name: str | None = None,
+        fmt: str = "html",
+    ) -> Path:
+        """
+        获取项目级输出路径（不经过 runs/ 子目录，直接放在 output/ 下）
+
+        Args:
+            name: 自定义文件名，默认用日期时间命名
+            fmt: 输出格式
+        """
+        if name is None:
+            date_str = datetime.now().strftime(self.config.date_format)
+            name = self.config.naming.format(
+                project=self.project_name,
+                date=date_str,
+            )
+        return self.output_dir / f"{name}.{fmt}"

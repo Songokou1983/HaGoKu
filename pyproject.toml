@@ -61,6 +61,8 @@ dependencies = [
     # LLM
     "openai>=1.0",
     "langchain-openai>=0.1.0",
+    # UI
+    "streamlit>=1.40",
 ]
 
 [project.optional-dependencies]
@@ -76,6 +78,7 @@ pdf = [
 
 [project.scripts]
 hagokyu = "hagokyu.cli:cli"
+hagokyu-ui = "hagokyu.ui.app:main"
 
 [tool.ruff]
 line-length = 100

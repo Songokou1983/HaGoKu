@@ -120,7 +120,7 @@ class AnalystAgent(DataAgentBase):
         df: pd.DataFrame,
         context: DataContext,
         plan: dict[str, Any],
-    ) -> list[AnalysisResult]:
+    ) -> tuple[list[AnalysisResult], list[dict[str, Any]]]:
         """
         执行统计分析
 
@@ -260,13 +260,15 @@ class AnalystAgent(DataAgentBase):
                 return None
             target_col = target_candidates[0].column_name
 
-        # 确定自变量
+        # 确定自变量：直接使用 Scout 推导的 variable_roles（已排除 identifier/ignore）
+        # Scout.derive_from_column_semantics() 已完成 role 归类，无需重复过滤
+        variable_roles = context.variable_roles or {}
         numeric_features = [
-            sem.column_name
-            for sem in context.column_semantics
-            if sem.inferred_type in (SemanticType.NUMERIC, SemanticType.BOOLEAN)
-            and sem.suggested_role != "identifier"
-            and sem.column_name != target_col
+            col
+            for col, role in variable_roles.items()
+            if role in ("numeric_feature", "binary_feature")
+            and col in df.columns
+            and col != target_col
         ]
 
         if not numeric_features:
@@ -974,11 +976,6 @@ class AnalystAgent(DataAgentBase):
             return (
                 f"功效解读：检测到 {es:.3f} 效应，但当前样本量功效约 {power:.0%}（低于 80%）。"
                 f"结果不显著可能是数据不够，建议增加样本后再分析。"
-            )
-        elif verdict == "possibly_underpowered":
-            return (
-                f"功效解读：效应量很小（{es:.3f}），即使有效应也需要更大样本才能检测。"
-                f"建议谨慎解读。"
             )
 
         return None

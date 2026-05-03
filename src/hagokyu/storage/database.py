@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -155,6 +156,16 @@ class HaGoKuDB:
     def close(self) -> None:
         """关闭连接"""
         self.conn.close()
+
+    @contextmanager
+    def transaction(self):
+        """事务上下文管理器，自动 commit / rollback"""
+        try:
+            yield self.conn
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
 
     # ── Projects ───────────────────────────────────────────
 

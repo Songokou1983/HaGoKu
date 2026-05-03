@@ -16,6 +16,15 @@ class LLMConfig(BaseModel):
     model: str = "Qwen3.6-35B-A3B"  # 模型名称
     base_url: str = "http://localhost:8000/v1"  # API 地址
     api_key: str = "none"  # API Key（本地模型填 none）
+
+    def __repr__(self) -> str:
+        """调试输出时 api_key 只显示前8位"""
+        return (
+            f"LLMConfig(model={self.model!r}, "
+            f"base_url={self.base_url!r}, "
+            f"api_key={self.api_key[:8] + '***' if self.api_key else '(none)'!r}, "
+            f"temperature={self.temperature}, max_tokens={self.max_tokens})"
+        )
     temperature: float = 0.6  # 生成温度
     max_tokens: int = 8192  # 最大 token 数
 
@@ -27,7 +36,7 @@ class ManagerModeConfig(BaseModel):
     llm_plan_enabled: bool = True
     llm_plan_max_tokens: int = 1024
     llm_plan_timeout: int = 30
-    cleaning_impact_warning: float = 0.3  # 是否使用 AI 生成计划
+    cleaning_impact_warning: float = 0.3  # 清洗影响率阈值（超过此比例触发警告）
 
 
 class OutputConfig(BaseModel):
@@ -117,5 +126,22 @@ class HaGoKuConfig(BaseModel):
             # 权限不足 → 回退到临时目录
             import tempfile
             self.work_dir = Path(tempfile.gettempdir()) / ".hagokyu"
-            self.work_dir.mkdir(parents=True, exist_ok=True)
+            self.work_dir.mkdir(exist_ok=True)
             (self.work_dir / "projects").mkdir(exist_ok=True)
+
+    def sensitive_fields(self) -> dict[str, str]:
+        """返回敏感字段的脱敏值（用于日志/调试输出）"""
+        return {
+            "api_key": f"{self.llm.api_key[:8]}***" if self.llm.api_key else "(未设置)",
+        }
+
+    def __repr__(self) -> str:
+        """调试输出时自动脱敏 api_key"""
+        safe = self.sensitive_fields()
+        return (
+            f"HaGoKuConfig(model={self.llm.model!r}, "
+            f"base_url={self.llm.base_url!r}, "
+            f"api_key={safe['api_key']!r}, "
+            f"mode={self.manager.mode})"
+        )
+

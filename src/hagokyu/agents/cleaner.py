@@ -231,13 +231,26 @@ class CleanerAgent(DataAgentBase):
     ) -> list[dict[str, Any]]:
         """基于上下文和检测结果规划清洗操作"""
         operations = []
+        variable_roles = context.variable_roles or {}
+        target_col = context.target
 
         for col in df.columns:
+            role = variable_roles.get(col, "")
+
+            # Scout 标记为忽略或标识的列，跳过处理
+            if role in ("ignore", "identifier"):
+                continue
+
             null_rate = df[col].isnull().mean()
             if null_rate > 0:
                 strategy, reason = suggest_cleaning_strategy(
                     df, col, null_rate, mechanisms.get(col)
                 )
+                # 目标变量列用保守策略，不用 DROP_ROWS
+                if col == target_col and strategy.value == "drop_rows":
+                    from ..tools.cleaning import CleaningStrategy
+                    strategy = CleaningStrategy.FILL_MEDIAN
+                    reason = "目标变量不轻易删行，改用中位数填充"
                 operations.append({
                     "column": col,
                     "strategy": strategy.value,
@@ -246,12 +259,18 @@ class CleanerAgent(DataAgentBase):
 
         # 异常值处理：对 IQR 检测到异常的列，使用 Winsorize 而非删除
         for col, info in outliers.items():
+            role = variable_roles.get(col, "")
+            # 标识列不做异常值处理
+            if role == "identifier":
+                continue
             if info.get("count", 0) > 0 and info.get("rate", 0) < 0.1:
-                # 只对异常率 < 10% 的列做 Winsorize
-                operations.append({
-                    "column": col,
-                    "strategy": "winsorize",
-                    "reason": f"IQR 检测到 {info['count']} 个异常值({info['rate']:.1%})，Winsorize 截断优于删除",
-                })
+                # 目标变量用宽松阈值（<5%）而非通用阈值（<10%）
+                rate_threshold = 0.05 if col == target_col else 0.1
+                if info.get("rate", 0) < rate_threshold:
+                    operations.append({
+                        "column": col,
+                        "strategy": "winsorize",
+                        "reason": f"IQR 检测到 {info['count']} 个异常值({info['rate']:.1%})，Winsorize 截断优于删除",
+                    })
 
         return operations

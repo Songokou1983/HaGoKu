@@ -15,6 +15,7 @@ from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
+from ..storage.project_manager import ProjectManager
 from ..agents.analyst import AnalystAgent, AnalysisResult
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
@@ -84,6 +85,7 @@ class Orchestrator:
         self.display = TerminalDisplay(verbosity="normal")
         self.output_mgr: OutputManager | None = None  # 按项目初始化
         self.memory: MemoryManager | None = None  # 按项目初始化
+        self.project_mgr = ProjectManager(self.config.output.base_dir)  # 全局项目管理器
 
         # 订阅显示
         self.event_bus.subscribe(self.display)
@@ -335,6 +337,10 @@ class Orchestrator:
 
             # 11. 创建 latest 链接
             self.output_mgr.create_latest_symlink(run_dir)
+
+            # 11.5 记录到项目管理器（更新运行计数等）
+            if self.project_mgr.exists(project_name):
+                self.project_mgr.record_run(project_name)
 
             # 12. 事件日志
             events_path = run_dir / "events.jsonl"

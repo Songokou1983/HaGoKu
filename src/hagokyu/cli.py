@@ -469,6 +469,235 @@ def replay(run_id: str, agent: str | None, verbose: bool) -> None:
                 click.echo(f"  {color}{timestamp} [{evt_agent}]{reset} [{evt_type}]")
 
 
+@cli.group(name="project")
+def project_cmd() -> None:
+    """项目管理：立项、添加数据、查看详情
+
+    项目是独立的分析工作区，每个项目有：
+      - input/  原始数据文件
+      - process/ 清洗后数据、中间结果
+      - output/ 报告、可视化
+
+    工作流：
+      hagokyu project create "Q1销售分析"
+      hagokyu project add "Q1销售分析" ~/data/sales.csv
+      hagokyu project run "Q1销售分析" -q "哪个渠道效果最好"
+    """
+    pass
+
+
+@project_cmd.command(name="create")
+@click.argument("name")
+@click.option("--desc", "-d", default="", help="项目描述")
+def project_create(name: str, desc: str) -> None:
+    """创建新项目（立项）"""
+    from .config import HaGoKuConfig
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+
+    try:
+        info = pm.create(name, description=desc)
+        click.echo(f"✅ 项目创建成功: {info.name}")
+        click.echo(f"   目录: {info.project_dir}")
+        click.echo(f"   结构: input/  process/  output/")
+        if desc:
+            click.echo(f"   描述: {desc}")
+    except FileExistsError as e:
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1)
+
+
+@project_cmd.command(name="add")
+@click.argument("project")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--link", "-l", is_flag=True, help="用符号链接而非复制文件")
+def project_add(project: str, file_path: str, link: bool) -> None:
+    """向项目添加数据文件"""
+    from .config import HaGoKuConfig
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+
+    try:
+        info = pm.add_data(project, Path(file_path), copy=not link)
+        proj_info = pm.info(project)
+        mode = "链接" if link else "复制"
+        click.echo(f"✅ {mode}成功: {info.name} ({info.size_kb:.1f} KB)")
+        click.echo(f"   路径: {proj_info.project_dir / info.path}")
+    except FileNotFoundError as e:
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1)
+
+
+@project_cmd.command(name="list")
+def project_list() -> None:
+    """列出所有项目"""
+    from .config import HaGoKuConfig
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+    projects = pm.list()
+
+    if not projects:
+        click.echo("暂无项目。")
+        click.echo("  创建: hagokyu project create <项目名>")
+        return
+
+    click.echo(f"📁 共 {len(projects)} 个项目:\n")
+    for p in projects:
+        date_str = p.created_at.strftime("%Y-%m-%d")
+        run_info = f" | {p.run_count}次运行" if p.run_count > 0 else ""
+        last_str = f"（最近 {p.last_run.strftime('%m-%d %H:%M')}" if p.last_run else ""
+        data_count = len(p.data_files)
+        data_info = f" | 📄 {data_count}个数据文件" if data_count > 0 else ""
+        click.echo(f"  📁 {p.name}  {date_str}{run_info}{last_str}{data_info}")
+        if p.description:
+            click.echo(f"      {p.description}")
+
+
+@project_cmd.command(name="info")
+@click.argument("project")
+def project_info(project: str) -> None:
+    """查看项目详情"""
+    from .config import HaGoKuConfig
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+    info = pm.info(project)
+
+    if info is None:
+        click.echo(f"❌ 项目不存在: {project}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"📁 项目: {info.name}")
+    click.echo(f"   创建: {info.created_at.strftime('%Y-%m-%d %H:%M')}")
+    if info.description:
+        click.echo(f"   描述: {info.description}")
+    click.echo(f"   目录: {info.project_dir}")
+    click.echo(f"   运行: {info.run_count}次" + (
+        f"（最近 {info.last_run.strftime('%Y-%m-%d %H:%M')}）" if info.last_run else ""))
+    click.echo()
+
+    if info.data_files:
+        click.echo(f"  📄 输入文件 ({len(info.data_files)}):")
+        for f in info.data_files:
+            added = f.added_at.strftime("%m-%d %H:%M")
+            click.echo(f"    • {f.name}  {f.size_kb:.1f} KB  添加于 {added}")
+    else:
+        click.echo("  📄 输入文件: （暂无，添加: hagokyu project add）")
+
+    click.echo()
+
+    if info.process_files:
+        click.echo(f"  ⚙️ 过程文件 ({len(info.process_files)}):")
+        for f in info.process_files:
+            click.echo(f"    • {f.name}  {f.size_kb:.1f} KB")
+    else:
+        click.echo("  ⚙️ 过程文件: （暂无，分析后自动生成）")
+
+
+@project_cmd.command(name="delete")
+@click.argument("project")
+@click.option("--force", "-f", is_flag=True, help="跳过确认直接删除")
+def project_delete(project: str, force: bool) -> None:
+    """删除项目"""
+    from .config import HaGoKuConfig
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+
+    if not pm.exists(project):
+        click.echo(f"❌ 项目不存在: {project}", err=True)
+        raise SystemExit(1)
+
+    if not force:
+        click.echo(f"⚠️  确定删除项目 '{project}'？此操作不可恢复。")
+        try:
+            confirm = input("   输入项目名确认: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            click.echo("\n已取消。")
+            return
+        if confirm != project:
+            click.echo("已取消。")
+            return
+
+    pm.delete(project)
+    click.echo(f"✅ 项目已删除: {project}")
+
+
+@project_cmd.command(name="run")
+@click.argument("project")
+@click.option("--data", "-d", default=None, help="指定输入文件（留空则用最新添加的文件）")
+@click.option("--query", "-q", "query", default="", help="分析问题")
+@click.option("--mode", "-m", default=None,
+              type=click.Choice(["quick", "standard", "expert"]),
+              help="用户模式")
+@click.option("--format", "-f", "formats", multiple=True,
+              type=click.Choice(["html", "md", "json"]),
+              help="输出格式")
+def project_run(
+    project: str,
+    data: str | None,
+    query: str,
+    mode: str | None,
+    formats: tuple[str, ...],
+) -> None:
+    """在项目上下文中运行分析（自动使用项目的 input/ 数据）"""
+    from .config import HaGoKuConfig
+    from .manager.orchestrator import Orchestrator
+    from .observability.display import TerminalDisplay
+    from .observability.event_bus import EventBus
+    from .storage.project_manager import ProjectManager
+
+    config = HaGoKuConfig.load()
+    pm = ProjectManager(config.output.base_dir)
+
+    # 获取数据文件
+    if data:
+        data_path = pm.get_data_path(project, data)
+        if data_path is None:
+            click.echo(f"❌ 项目中找不到文件: {data}", err=True)
+            raise SystemExit(1)
+    else:
+        data_path = pm.get_latest_data(project)
+        if data_path is None:
+            click.echo(f"❌ 项目 '{project}' 暂无输入文件", err=True)
+            click.echo(f"   添加数据: hagokyu project add {project} <文件路径>")
+            raise SystemExit(1)
+        click.echo(f"📄 使用: {data_path.name}")
+
+    # 创建编排器
+    orch = Orchestrator(config)
+
+    format_list = list(formats) if formats else None
+    try:
+        result = orch.run(
+            data_path=str(data_path),
+            query=query,
+            project_name=project,
+            user_mode=mode,
+            formats=format_list,
+        )
+    except FileNotFoundError:
+        click.echo("❌ 数据文件未找到", err=True)
+        raise SystemExit(1)
+    except RuntimeError as e:
+        click.echo(f"❌ 分析失败: {e}", err=True)
+        raise SystemExit(1)
+
+    if result["status"] == "completed":
+        click.echo(f"\n✅ 分析完成！报告: {result['output_path']}")
+    else:
+        click.echo("\n❌ 分析未能完成", err=True)
+        raise SystemExit(1)
+
+
 @cli.command()
 @click.argument("project_name", required=False)
 @click.option("--category", "-c", default=None, help="按类别过滤 (column_semantic/cleaning_pref/analysis_pattern/target_variable/user_note)")

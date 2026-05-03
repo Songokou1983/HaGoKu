@@ -58,6 +58,225 @@ def run() -> None:
         },
     )
 
+    # ── 全局样式：终端科技感 ──────────────────────────────────
+    st.html("""
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+    :root {
+        --hagokyu-bg: #0a0e17;
+        --hagokyu-surface: #161b22;
+        --hagokyu-border: #30363d;
+        --hagokyu-accent: #22d3ee;
+        --hagokyu-accent2: #a78bfa;
+        --hagokyu-text: #e2e8f0;
+        --hagokyu-text-dim: #8b949e;
+        --hagokyu-green: #4ade80;
+        --hagokyu-red: #f87171;
+        --hagokyu-yellow: #fbbf24;
+        --hagokyu-font: 'Inter', system-ui, sans-serif;
+        --hagokyu-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    /* 整体字体 & 背景 */
+    html, body, .stApp {
+        background-color: var(--hagokyu-bg) !important;
+        color: var(--hagokyu-text) !important;
+        font-family: var(--hagokyu-font) !important;
+        font-size: 16px !important;
+    }
+
+    /* 基础文字 */
+    p, span, label, .stText, .stCaption, .stMarkdown, li {
+        font-size: 15px !important;
+        color: var(--hagokyu-text) !important;
+    }
+
+    /* 标题层级 */
+    h1 { font-size: 2rem !important; font-weight: 700 !important; color: #f8fafc !important; }
+    h2 { font-size: 1.5rem !important; font-weight: 600 !important; color: #f1f5f9 !important; }
+    h3 { font-size: 1.2rem !important; font-weight: 600 !important; color: #e2e8f0 !important; }
+    h4 { font-size: 1rem !important; font-weight: 600 !important; }
+
+    /* 侧边栏 */
+    [data-testid="stSidebar"] {
+        background-color: #0d1117 !important;
+        border-right: 1px solid var(--hagokyu-border) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: var(--hagokyu-text) !important;
+    }
+
+    /* 侧边栏 radio / selectbox */
+    [data-testid="stSidebar"] .stSelectbox > div > div,
+    [data-testid="stSidebar"] .stRadio > div {
+        background: var(--hagokyu-surface) !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        border-radius: 8px !important;
+        color: var(--hagokyu-text) !important;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        color: var(--hagokyu-text) !important;
+    }
+    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] > label {
+        color: var(--hagokyu-text) !important;
+    }
+
+    /* 主内容区卡片 */
+    [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {
+        gap: 0.5rem !important;
+    }
+
+    /* 按钮 */
+    .stButton > button {
+        background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+        border: 1px solid var(--hagokyu-accent) !important;
+        color: var(--hagokyu-accent) !important;
+        border-radius: 8px !important;
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        transition: all 0.2s !important;
+        letter-spacing: 0.02em !important;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(135deg, #1e4a7a 0%, #1a2e4a 100%) !important;
+        border-color: #67e8f9 !important;
+        color: #67e8f9 !important;
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.25) !important;
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #0e7490 0%, #155e75 100%) !important;
+        border-color: var(--hagokyu-accent) !important;
+        color: #f0fdfa !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%) !important;
+        box-shadow: 0 0 20px rgba(34, 211, 238, 0.4) !important;
+    }
+
+    /* 输入框 */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stNumberInput > div > div > input {
+        background-color: var(--hagokyu-surface) !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        color: var(--hagokyu-text) !important;
+        border-radius: 8px !important;
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 14px !important;
+        transition: border-color 0.2s !important;
+    }
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: var(--hagokyu-accent) !important;
+        box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15) !important;
+    }
+
+    /* tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background: var(--hagokyu-surface) !important;
+        border-radius: 8px 8px 0 0 !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        border-bottom: none !important;
+        gap: 0 !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: var(--hagokyu-text-dim) !important;
+        border-right: 1px solid var(--hagokyu-border) !important;
+        border-radius: 0 !important;
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1rem !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--hagokyu-accent) !important;
+        background: rgba(34, 211, 238, 0.05) !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background: var(--hagokyu-bg) !important;
+        color: var(--hagokyu-accent) !important;
+        border-bottom: 2px solid var(--hagokyu-accent) !important;
+    }
+
+    /* Metric */
+    [data-testid="stMetricValue"] {
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 1.8rem !important;
+        font-weight: 600 !important;
+        color: var(--hagokyu-accent) !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 12px !important;
+        color: var(--hagokyu-text-dim) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+    }
+
+    /* Divider */
+    hr {
+        border-color: var(--hagokyu-border) !important;
+    }
+
+    /* Expander */
+    .streamlit-expander {
+        background: var(--hagokyu-surface) !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        border-radius: 8px !important;
+    }
+    .streamlit-expander > summary {
+        color: var(--hagokyu-text) !important;
+        font-size: 14px !important;
+    }
+
+    /* Success / Warning / Error boxes */
+    .stSuccess { background-color: rgba(74, 222, 128, 0.1) !important; border-left: 3px solid var(--hagokyu-green) !important; }
+    .stWarning { background-color: rgba(251, 191, 36, 0.1) !important; border-left: 3px solid var(--hagokyu-yellow) !important; }
+    .stError   { background-color: rgba(248, 113, 113, 0.1) !important; border-left: 3px solid var(--hagokyu-red) !important; }
+    .stInfo    { background-color: rgba(34, 211, 238, 0.08) !important; border-left: 3px solid var(--hagokyu-accent) !important; }
+
+    /* File uploader */
+    [data-testid="stFileUploadDropzone"] {
+        background: var(--hagokyu-surface) !important;
+        border: 2px dashed var(--hagokyu-border) !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stFileUploadDropzone"]:hover {
+        border-color: var(--hagokyu-accent) !important;
+    }
+
+    /* Dataframe */
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--hagokyu-border) !important;
+        border-radius: 8px !important;
+    }
+
+    /* Progress bar */
+    .stProgress > div > div > div {
+        background: linear-gradient(90deg, #0e7490, #22d3ee) !important;
+    }
+
+    /* Code / pre */
+    code, pre, .stCodeBlock {
+        font-family: var(--hagokyu-mono) !important;
+        background: var(--hagokyu-surface) !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        border-radius: 6px !important;
+        font-size: 13px !important;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--hagokyu-bg) !important; }
+    ::-webkit-scrollbar-thumb { background: var(--hagokyu-border) !important; border-radius: 3px !important; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--hagokyu-text-dim) !important; }
+    </style>
+    """)
+
     # ── Session State 初始化 ────────────────────────────────────
     if "initialized" not in st.session_state:
         st.session_state.initialized = True

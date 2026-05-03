@@ -154,8 +154,7 @@ def render() -> None:
     col3.metric("总数据文件", total_files)
     with col4:
         if st.button("🚀 体验演示数据", use_container_width=True):
-            st.session_state.nav_page = "analyze"
-            st.rerun()
+            _launch_demo("ad_campaign")
 
     st.divider()
 

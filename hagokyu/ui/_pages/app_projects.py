@@ -92,15 +92,37 @@ def render() -> None:
         placeholder="简要描述这个项目...",
         label_visibility="collapsed",
     )
-    st.caption(f"📂 项目将保存在：{pm.base_dir}")
+
+    # 项目位置（原生按钮选 + 文本框可编辑）
+    col_fp, col_lbl = st.columns([1, 4])
+    with col_fp:
+        st.markdown("**项目位置**")
+        from hagokyu.ui.components.folder_picker import render_folder_picker
+        folder_name = render_folder_picker(
+            label="📂",
+            key="new_proj_folder",
+            default="",
+        )
+        if folder_name:
+            st.session_state._new_proj_folder = folder_name
+    with col_lbl:
+        folder_path = st.text_input(
+            "位置路径",
+            value=st.session_state.get("_new_proj_folder", str(pm.base_dir)),
+            placeholder=str(pm.base_dir),
+            label_visibility="collapsed",
+        )
+
+    st.caption(f"项目将创建于：{folder_path}")
 
     if st.button("💾 创建项目", type="primary", use_container_width=True):
         if not name:
             st.warning("请填写项目名称")
         else:
             try:
-                pm.create(name, description=desc or "")
+                pm.create(name, description=desc or "", parent_dir=Path(folder_path))
                 st.success(f"✅ 项目「{name}」创建成功！")
+                st.session_state.pop("_new_proj_folder", None)
                 st.session_state.current_project = name
                 st.session_state.nav_page = "analyze"
                 st.rerun()

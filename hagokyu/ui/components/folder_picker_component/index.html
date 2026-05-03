@@ -1,0 +1,102 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #161b22;
+      padding: 12px 0;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      color: #e2e8f0;
+    }
+    .label {
+      color: #e2e8f0;
+      font-size: 14px;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    .btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      border: 1px solid #22d3ee;
+      color: #22d3ee;
+      border-radius: 8px;
+      padding: 10px 24px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .btn:hover {
+      background: linear-gradient(135deg, #1e4a7a 0%, #1a2e4a 100%);
+      box-shadow: 0 0 12px rgba(34,211,238,0.25);
+      color: #67e8f9;
+    }
+    .hint {
+      color: #8b949e;
+      font-size: 12px;
+      margin-top: 8px;
+      word-break: break-all;
+      min-height: 18px;
+    }
+    .hint.ok { color: #4ade80; }
+    .hint.err { color: #f87171; }
+    .fallback-note {
+      color: #fbbf24;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="label" id="lbl">选择文件夹</div>
+  <button class="btn" id="pickBtn">📂 浏览文件夹...</button>
+  <div class="hint" id="hint"></div>
+
+  <script>
+    const btn = document.getElementById('pickBtn');
+    const hint = document.getElementById('hint');
+
+    function pickFolder() {
+      // 优先用 modern File System Access API（Chrome 86+）
+      if ('showDirectoryPicker' in window) {
+        window.showDirectoryPicker({ mode: 'read' }).then(function(dirHandle) {
+          // 获取完整路径（仅 Chromium 浏览器）
+          var fullPath = dirHandle;
+          hint.textContent = '✓ 已选择: ' + dirHandle.name;
+          hint.className = 'hint ok';
+          // 通知 Streamlit
+          Streamlit.setComponentValue(dirHandle.name);
+        }).catch(function(err) {
+          if (err.name !== 'AbortError') {
+            hint.textContent = '选择失败: ' + err.message;
+            hint.className = 'hint err';
+          }
+        });
+      } else {
+        // 回退：webkitdirectory（仅获取文件夹名）
+        var inp = document.createElement('input');
+        inp.type = 'file';
+        inp.webkitdirectory = true;
+        inp.multiple = false;
+        inp.onchange = function() {
+          var files = this.files;
+          if (!files || files.length === 0) return;
+          var folderName = files[0].webkitRelativePath.split('/')[0];
+          hint.innerHTML = '✓ 已选择: ' + folderName +
+            '<div class="fallback-note">⚠ 仅支持 Chrome/Edge 获取完整路径</div>';
+          hint.className = 'hint ok';
+          Streamlit.setComponentValue(folderName);
+        };
+        inp.click();
+      }
+    }
+
+    btn.addEventListener('click', pickFolder);
+  </script>
+</body>
+</html>

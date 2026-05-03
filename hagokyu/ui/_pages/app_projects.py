@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import streamlit as st
 from pathlib import Path
 
@@ -15,19 +16,15 @@ def _project_key(name: str, suffix: str) -> str:
     return f"{suffix}_{safe}"
 
 
-def _pick_folder(initial: str = "") -> str | None:
-    """弹出系统文件夹选择对话框，返回选中的目录路径。"""
+def _list_dirs(path: str) -> list[str]:
+    """列出可用的子目录（用于路径浏览）"""
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        path = filedialog.askdirectory(initialdir=initial or None)
-        root.destroy()
-        return path if path else None
-    except Exception:
-        return None
+        p = Path(path)
+        if not p.exists() or not p.is_dir():
+            return []
+        return sorted([d.name for d in p.iterdir() if d.is_dir() and not d.name.startswith(".")])
+    except PermissionError:
+        return []
 
 
 def render() -> None:
@@ -102,23 +99,34 @@ def render() -> None:
         label_visibility="collapsed",
     )
 
-    # 目录选择（必填）
-    default_dir = str(Path.home())
-    col_dir, col_btn = st.columns([4, 1])
+    # 路径浏览（必填）
+    cur_dir = st.session_state.get("_new_project_dir", str(Path.home()))
+    subdirs = _list_dirs(cur_dir)
+
+    col_up, col_dir, col_sub = st.columns([1, 3, 2])
+    with col_up:
+        if st.button("⬆️", disabled=(str(Path(cur_dir).parent) == cur_dir), use_container_width=True):
+            st.session_state._new_project_dir = str(Path(cur_dir).parent)
+            st.rerun()
     with col_dir:
         parent_dir = st.text_input(
             "项目位置",
-            value=st.session_state.get("_new_project_dir", default_dir),
-            placeholder="选择或输入文件夹路径",
+            value=cur_dir,
             label_visibility="collapsed",
         )
-    with col_btn:
+    with col_sub:
         st.markdown("")  # 对齐
-        if st.button("📂 选择", use_container_width=True):
-            picked = _pick_folder(parent_dir or default_dir)
-            if picked:
-                st.session_state._new_project_dir = picked
+        if subdirs:
+            selected_sub = st.selectbox(
+                "子目录",
+                options=[""] + subdirs,
+                label_visibility="collapsed",
+            )
+            if selected_sub:
+                st.session_state._new_project_dir = str(Path(cur_dir) / selected_sub)
                 st.rerun()
+        else:
+            st.caption("无子目录")
 
     desc = st.text_area(
         "项目描述（选填）",

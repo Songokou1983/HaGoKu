@@ -9,6 +9,83 @@ import click
 
 from .config import HaGoKuConfig
 
+# 可用的演示数据集
+DEMO_DATASETS = {
+    "ad_campaign": {
+        "name": "广告投放数据",
+        "file": "demo_ad_campaign.csv",
+        "desc": "百度/抖音/微信 3 渠道的广告投放效果（展示/点击/消费/收入）",
+        "suggested_query": "哪个广告渠道的 ROI 最高？各渠道转化率有何差异？",
+    },
+    "conversion": {
+        "name": "转化漏斗数据",
+        "file": "demo_conversion.csv",
+        "desc": "从访问→注册→加购→下单→付款的全链路转化漏斗",
+        "suggested_query": "分析各渠道的转化漏斗，哪个环节流失最严重？",
+    },
+    "user_cohort": {
+        "name": "用户队列数据",
+        "file": "demo_user_cohort.csv",
+        "desc": "用户基本信息、渠道来源、消费行为、会员等级",
+        "suggested_query": "各渠道用户质量和价值有什么差异？哪些是高价值用户群？",
+    },
+}
+
+
+def _get_demo_path(name: str) -> Path | None:
+    """解析 demo 数据集名，返回对应的文件路径（支持包内/本地两种模式）"""
+    if name not in DEMO_DATASETS:
+        return None
+    filename = DEMO_DATASETS[name]["file"]
+
+    # 尝试从包内路径加载（安装后）
+    try:
+        import hagokyu
+        pkg_root = Path(hagokyu.__file__).parent
+        pkg_demo = pkg_root / "examples" / filename
+        if pkg_demo.exists():
+            return pkg_demo
+    except Exception:
+        pass
+
+    # 尝试从源码路径加载（开发模式）
+    # __file__ = src/hagokyu/cli.py → 项目根 = 上3级
+    this_file = Path(__file__)
+    project_root = this_file.parent.parent.parent
+    local_demo = project_root / "examples" / filename
+    if local_demo.exists():
+        return local_demo
+
+    return None
+
+
+WELCOME_SCREEN = """
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║   HaGoKu  用数学的力量，挖出数据背后真正的信息             ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+
+🚀 快速开始：
+   hagokyu demo                            # 查看示例数据
+   hagokyu run --demo ad_campaign -q "哪个渠道roi最高"
+   hagokyu quick --demo conversion
+
+📂 完整命令：
+   hagokyu run <file> -q "问题"          # 运行分析
+   hagokyu profile <file>               # 数据画像
+   hagokyu project create <名称>         # 创建项目
+   hagokyu doctor                         # 检查系统状态
+   hagokyu-ui                            # 启动 Web UI
+
+💡 示例数据（无需准备，直接体验）：
+   ad_campaign   广告投放数据（百度/抖音/微信）
+   conversion   转化漏斗数据
+   user_cohort  用户队列数据
+
+文档：https://github.com/hagokyu/hagokyu
+"""
+
 
 @click.group()
 @click.version_option(package_name="hagokyu")
@@ -18,8 +95,11 @@ def cli() -> None:
 
 
 @cli.command()
-@click.argument("data_path", type=click.Path(exists=True))
+@click.argument("data_path", type=click.Path(exists=True), required=False)
 @click.option("--query", "-q", default="", help="分析问题")
+@click.option("--demo", "-D", default=None,
+              type=click.Choice(list(DEMO_DATASETS.keys())),
+              help="使用内置演示数据集（可简写为 -D ad_campaign）")
 @click.option("--project", "-p", default=None, help="项目名")
 @click.option("--mode", "-m", default=None,
               type=click.Choice(["quick", "standard", "expert"]),
@@ -43,8 +123,9 @@ def cli() -> None:
 @click.option("--interactive", "-i", is_flag=True,
               help="交互模式：分析完成后继续等待你的调整指令")
 def run(
-    data_path: str,
+    data_path: str | None,
     query: str,
+    demo: str | None,
     project: str | None,
     mode: str | None,
     manager_mode: str | None,
@@ -56,10 +137,36 @@ def run(
     verbosity: str,
     interactive: bool = False,
 ) -> None:
-    """运行完整分析流程"""
+    """运行完整分析流程
+
+    示例：
+        hagokyu run data.csv -q "哪个渠道效果最好"
+        hagokyu run --demo ad_campaign -q "哪个渠道roi最高"
+        hagokyu run -D conversion -q "分析转化漏斗"
+    """
     from .manager.orchestrator import Orchestrator
     from .observability.display import TerminalDisplay
     from .observability.event_bus import EventBus
+
+    # --demo 优先：从内置数据集解析路径
+    if demo:
+        resolved = _get_demo_path(demo)
+        if resolved is None:
+            click.echo(f"❌ 找不到演示数据集: {demo}", err=True)
+            click.echo("   使用 `hagokyu demo` 查看可用的演示数据集")
+            raise SystemExit(1)
+        data_path = str(resolved)
+        ds_info = DEMO_DATASETS[demo]
+        if verbosity != "quiet":
+            click.echo(f"📊 演示数据: {ds_info['name']} ({ds_info['desc']})")
+            if not query:
+                query = ds_info["suggested_query"]
+                click.echo(f"   自动推荐问题: {query}")
+    elif not data_path:
+        click.echo("❌ 请提供数据文件路径，或使用 --demo <数据集> 选择演示数据", err=True)
+        click.echo("   可用演示数据: " + " ".join(DEMO_DATASETS.keys()))
+        click.echo("   示例: hagokyu run --demo ad_campaign -q \"哪个渠道roi最高\"")
+        raise SystemExit(1)
 
     # 加载配置
     config = HaGoKuConfig.load()
@@ -127,15 +234,33 @@ def run(
 
 
 @cli.command(name="quick")
-@click.argument("data_path", type=click.Path(exists=True))
+@click.argument("data_path", type=click.Path(exists=True), required=False)
+@click.option("--demo", "-D", default=None,
+              type=click.Choice(list(DEMO_DATASETS.keys())),
+              help="使用内置演示数据集")
 @click.option("--query", "-q", default="", help="分析问题（可选）")
-def quick_run(data_path: str, query: str) -> None:
+def quick_run(data_path: str | None, demo: str | None, query: str) -> None:
     """快速模式：零交互，自动分析
 
     示例：
         hagokyu quick data.csv                          # 自动探索
         hagokyu quick data.csv -q "哪个渠道效果最好"     # 指定问题
+        hagokyu quick --demo ad_campaign               # 用演示数据自动探索
+        hagokyu quick -D conversion                    # 用转化漏斗数据
     """
+    # --demo 优先
+    if demo:
+        resolved = _get_demo_path(demo)
+        if resolved is None:
+            click.echo(f"❌ 找不到演示数据集: {demo}", err=True)
+            raise SystemExit(1)
+        data_path = str(resolved)
+        ds_info = DEMO_DATASETS[demo]
+        click.echo(f"🚀 快速模式：{ds_info['name']}")
+    elif not data_path:
+        click.echo("❌ 请提供数据文件路径，或使用 --demo <数据集>", err=True)
+        raise SystemExit(1)
+
     # 如果没指定问题，设置为自动探索
     if not query:
         click.echo("🚀 快速模式：自动探索数据...")
@@ -172,6 +297,84 @@ def quick_run(data_path: str, query: str) -> None:
     else:
         click.echo("❌ 分析未能完成，请检查数据文件", err=True)
         raise SystemExit(1)
+
+
+@cli.command(name="demo")
+@click.argument("dataset", required=False,
+                type=click.Choice(list(DEMO_DATASETS.keys()) + ["list"]))
+@click.option("--query", "-q", default=None, help="分析问题（可选，留空使用推荐问题）")
+def demo_cmd(dataset: str | None, query: str | None) -> None:
+    """查看或运行内置演示数据集
+
+    示例：
+        hagokyu demo                           # 列出所有演示数据集
+        hagokyu demo ad_campaign               # 查看广告投放数据集详情
+        hagokyu demo ad_campaign -q "哪个渠道roi最高"  # 直接运行分析
+    """
+    if dataset is None or dataset == "list":
+        _list_demos()
+        return
+
+    # 运行指定演示数据集
+    ds_info = DEMO_DATASETS[dataset]
+    resolved = _get_demo_path(dataset)
+    if resolved is None:
+        click.echo(f"❌ 找不到演示数据集: {dataset}", err=True)
+        raise SystemExit(1)
+
+    # 用 demo 数据替换 data_path，重新调用 run 逻辑
+    from .manager.orchestrator import Orchestrator
+    from .observability.display import TerminalDisplay
+
+    config = HaGoKuConfig.load()
+
+    effective_query = query or ds_info["suggested_query"]
+    if not query:
+        click.echo(f"📊 演示数据: {ds_info['name']}")
+        click.echo(f"   {ds_info['desc']}")
+        click.echo(f"   自动使用推荐问题: {effective_query}")
+    else:
+        click.echo(f"📊 演示数据: {ds_info['name']}")
+
+    orch = Orchestrator(config)
+    orch.event_bus.unsubscribe(orch.display)
+    orch.display = TerminalDisplay(verbosity="normal")
+    orch.event_bus.subscribe(orch.display)
+
+    try:
+        result = orch.run(
+            data_path=str(resolved),
+            query=effective_query,
+            user_mode="standard",
+        )
+    except Exception:
+        click.echo("❌ 分析过程中出现意外错误", err=True)
+        raise SystemExit(1)
+
+    if result["status"] == "completed":
+        click.echo(f"\n✅ 报告: {result['output_path']}")
+    else:
+        click.echo("❌ 分析未能完成", err=True)
+        raise SystemExit(1)
+
+
+def _list_demos() -> None:
+    """列出所有可用的演示数据集"""
+    click.echo("📊 HaGoKu 内置演示数据集\n")
+    for key, info in DEMO_DATASETS.items():
+        path = _get_demo_path(key)
+        status = "✅" if path else "❌"
+        click.echo(f"  {status} {key}")
+        click.echo(f"     {info['name']}: {info['desc']}")
+        click.echo(f"     推荐问题: {info['suggested_query']}")
+        if path:
+            click.echo(f"     文件: {path}")
+        click.echo()
+
+    click.echo("用法:")
+    click.echo("  hagokyu demo ad_campaign              # 查看数据详情")
+    click.echo("  hagokyu demo ad_campaign -q \"哪个渠道效果最好\"  # 运行分析")
+    click.echo("  hagokyu run --demo ad_campaign -q \"哪个渠道效果最好\"  # 同上")
 
 
 @cli.command()
@@ -332,6 +535,30 @@ def list_methods(tag: str | None) -> None:
 
     click.echo()
     click.echo("  💡 新增方法：在 ~/.hagokyu/plugins/ 放入 *_plugin.py 文件")
+
+
+@cli.command(name="doctor")
+def doctor_cmd() -> None:
+    """检查系统健康状态（LLM 连接、依赖库）
+
+    示例：
+        hagokyu doctor              # 完整检查
+        hagokyu doctor --llm-only    # 只检查 LLM
+    """
+    from .tools.health import check_system, format_health_report
+
+    click.echo("🔍 HaGoKu 系统健康检查...")
+    results = check_system()
+    click.echo(format_health_report(results))
+
+    # 如果 LLM 不可用，给出配置提示
+    llm_result = next((r for r in results if r.name == "LLM 服务"), None)
+    if llm_result and not llm_result.ok:
+        click.echo()
+        click.echo("💡 快速配置 LLM:")
+        click.echo("   hagokyu config                    # 查看当前配置")
+        click.echo("   # 或设置环境变量:")
+        click.echo("   export HAGOKYU_LLM_BASE_URL=http://localhost:8000/v1")
 
 
 @cli.command()
@@ -963,6 +1190,11 @@ def _build_refinement_query(original_result: dict, intent: Any) -> str:
 
 def main() -> None:
     """入口点"""
+    import sys
+    # 无参数时显示欢迎画面（--help / --version 走正常流程）
+    if len(sys.argv) == 1:
+        click.echo(WELCOME_SCREEN)
+        return
     cli()
 
 

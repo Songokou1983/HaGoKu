@@ -105,12 +105,34 @@ def render() -> None:
     pm: ProjectManager = st.session_state.project_manager
     config = HaGoKuConfig.load()
 
+    # ── LLM 连接预检（会话内只检查一次，避免每次 rerun 都发请求）───
+    llm_cache_key = "_llm_health"
+    cached = st.session_state.get(llm_cache_key)
+    if cached is None:
+        from ...tools.health import check_llm
+        result = check_llm(config)
+        st.session_state[llm_cache_key] = result
+    else:
+        result = cached
+
+    if not result.ok:
+        st.warning(
+            f"⚠️ **LLM 服务不可用**：{result.detail}\n\n"
+            + "\n".join(f"• {s}" for s in result.suggestions)
+            + f"\n\n💡 运行 `hagokyu doctor` 检查系统状态，或配置正确的 LLM 地址（当前: `{config.llm.base_url}`）"
+        )
+
     col_logo, col_text = st.columns([1, 5])
     with col_logo:
         st.image(LOGO_PNG, width=64)
     with col_text:
         st.title("📊 分析")
         st.caption("输入数据 + 问题，HaGoKu 给你带统计检验的完整分析报告")
+
+    # ── 演示数据预加载（从项目页点击演示按钮触发）──────────
+    demo_path = st.session_state.pop("_demo_file", None)
+    demo_name = st.session_state.pop("_demo_name", None)
+    demo_query = st.session_state.pop("_demo_query", None)
 
     # ── 数据来源选择 ────────────────────────────────────────
     col_data, col_query = st.columns([1, 2])
@@ -122,25 +144,31 @@ def render() -> None:
         tab_upload, tab_project = st.tabs(["📤 上传", "📁 项目已有"])
 
         with tab_upload:
-            uploaded = st.file_uploader(
-                "上传数据文件",
-                type=["csv", "xlsx", "xls", "json", "parquet"],
-                label_visibility="collapsed",
-            )
-            if uploaded:
-                suffix = Path(uploaded.name).suffix
-                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
-                    f.write(uploaded.getvalue())
-                    data_path = f.name
-                # 记录路径，分析结束时自动清理
-                st.session_state._temp_uploaded_path = data_path
-                st.session_state.uploaded_name = uploaded.name
-                st.success(f"✅ 已加载: {uploaded.name}")
-
-                # ── 数据预览 ─────────────────────────────────
-                _render_data_preview(data_path)
+            # 演示数据 banner
+            if demo_path:
+                st.success(f"🎯 正在使用演示数据: {demo_name or Path(demo_path).name}")
+                _render_data_preview(demo_path)
+                data_path = demo_path
             else:
-                data_path = None
+                uploaded = st.file_uploader(
+                    "上传数据文件",
+                    type=["csv", "xlsx", "xls", "json", "parquet"],
+                    label_visibility="collapsed",
+                )
+                if uploaded:
+                    suffix = Path(uploaded.name).suffix
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as f:
+                        f.write(uploaded.getvalue())
+                        data_path = f.name
+                    # 记录路径，分析结束时自动清理
+                    st.session_state._temp_uploaded_path = data_path
+                    st.session_state.uploaded_name = uploaded.name
+                    st.success(f"✅ 已加载: {uploaded.name}")
+
+                    # ── 数据预览 ─────────────────────────────────
+                    _render_data_preview(data_path)
+                else:
+                    data_path = None
 
         with tab_project:
             current = st.session_state.get("current_project")
@@ -170,8 +198,13 @@ def render() -> None:
 
     with col_query:
         st.markdown("### 2️⃣ 分析问题")
+        # 预填演示数据推荐问题
+        prefilled = demo_query or st.session_state.get("_prefilled_query", "")
+        if demo_query:
+            st.session_state._prefilled_query = demo_query
         query = st.text_area(
             "你想分析什么？",
+            value=prefilled,
             placeholder="例如：哪个渠道roi最高？\n转化漏斗分析\n两组有差异吗？\n哪些因素影响利润？",
             height=120,
             label_visibility="collapsed",

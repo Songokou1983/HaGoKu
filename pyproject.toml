@@ -77,8 +77,12 @@ pdf = [
 ]
 
 [project.scripts]
-hagokyu = "hagokyu.cli:cli"
+hagokyu = "hagokyu.cli:main"
 hagokyu-ui = "hagokyu.ui.app:main"
+
+# 打包示例数据
+[tool.hatch.build.targets.wheel]
+packages = ["examples"]
 
 [tool.ruff]
 line-length = 100

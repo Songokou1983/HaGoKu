@@ -93,14 +93,16 @@ def render() -> None:
             if Path(p).exists():
                 available_reports.append(("最新报告", p))
 
-        # 从项目拿历史报告
+        # 从项目拿历史报告（支持新旧两种目录结构）
         if current_project:
             proj_dir = pm.get_project_dir(current_project)
             if proj_dir:
-                for run_dir in sorted((proj_dir / "runs").iterdir(), reverse=True)[:10]:
-                    report_file = run_dir / "output" / "report.html"
-                    if report_file.exists():
-                        available_reports.append((run_dir.name, str(report_file)))
+                runs_dir = proj_dir / "runs"
+                if runs_dir.exists():
+                    for run_dir in sorted(runs_dir.iterdir(), reverse=True)[:10]:
+                        report_file = run_dir / "output" / "report.html"
+                        if report_file.exists():
+                            available_reports.append((run_dir.name, str(report_file)))
 
         if available_reports:
             report_options = [r[0] for r in available_reports]

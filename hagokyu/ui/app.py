@@ -323,6 +323,11 @@ def run() -> None:
 
     # ── Session State 初始化 ────────────────────────────────────
     if "initialized" not in st.session_state:
+        from hagokyu.config import HaGoKuConfig
+        from hagokyu.storage.project_manager import ProjectManager
+
+        config = HaGoKuConfig.load()
+        st.session_state.project_manager = ProjectManager(config.output.project_dir)
         st.session_state.initialized = True
         st.session_state.current_project = None
         st.session_state.analysis_result = None

@@ -142,16 +142,25 @@ def render() -> None:
     st.warning(f"警告级规则: {len(g.warning_rules)} 条")
     st.info(f"提示级规则: {len(g.suggestion_rules)} 条")
 
+    def _rule_desc(rule) -> str:
+        """取 description 属性，无则回退到类 docstring"""
+        desc = getattr(rule, "description", None)
+        if desc:
+            return desc[:100]
+        # 回退到类 docstring 第一行
+        doc = getattr(type(rule), "__doc__", None) or ""
+        return doc.strip().split("\n")[0][:100]
+
     with st.expander("查看详细规则"):
         for rule in g.mandatory_rules:
             st.markdown(f"🚫 **{rule.rule_name}**")
-            st.caption(rule.description[:100])
+            st.caption(_rule_desc(rule))
         for rule in g.warning_rules:
             st.markdown(f"⚠️ **{rule.rule_name}**")
-            st.caption(rule.description[:100])
+            st.caption(_rule_desc(rule))
         for rule in g.suggestion_rules:
             st.markdown(f"💡 **{rule.rule_name}**")
-            st.caption(rule.description[:100])
+            st.caption(_rule_desc(rule))
 
     st.divider()
 

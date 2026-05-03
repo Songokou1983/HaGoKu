@@ -69,10 +69,10 @@ def run() -> None:
 
     # ── 页面路由 ────────────────────────────────────────────────
     PAGES = {
-        "🏠 项目": "pages.app_projects",
-        "📊 分析": "pages.app_analyze",
-        "📋 报告": "pages.app_report",
-        "⚙️ 设置": "pages.app_settings",
+        "🏠 项目": "_pages.app_projects",
+        "📊 分析": "_pages.app_analyze",
+        "📋 报告": "_pages.app_report",
+        "⚙️ 设置": "_pages.app_settings",
     }
 
     # 侧边栏导航
@@ -112,19 +112,19 @@ def run() -> None:
     module_name = page_module.split(".")[-1]
 
     if module_name == "app_projects":
-        from hagokyu.ui.pages import app_projects
+        from hagokyu.ui._pages import app_projects
         app_projects.render()
     elif module_name == "app_analyze":
-        from hagokyu.ui.pages import app_analyze
+        from hagokyu.ui._pages import app_analyze
         app_analyze.render()
     elif module_name == "app_report":
-        from hagokyu.ui.pages import app_report
+        from hagokyu.ui._pages import app_report
         app_report.render()
     elif module_name == "app_settings":
-        from hagokyu.ui.pages import app_settings
+        from hagokyu.ui._pages import app_settings
         app_settings.render()
     else:
-        from hagokyu.ui.pages import app_projects
+        from hagokyu.ui._pages import app_projects
         app_projects.render()
 
 

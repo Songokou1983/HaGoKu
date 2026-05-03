@@ -99,8 +99,6 @@ def run() -> None:
             label_visibility="collapsed",
         )
 
-        st.divider()
-
         # 渲染项目侧边栏（仅非设置页面）
         if "settings" not in selected_page:
             from hagokyu.ui.components.project_sidebar import (

@@ -12,12 +12,6 @@ import streamlit as st
 
 from hagokyu.ui.components.event_log import render_event_log
 from hagokyu.ui.components.report_viewer import render_html_report, results_summary
-from hagokyu.ui.components.project_sidebar import init_session_state
-
-# Logo 路径
-_UI_DIR = Path(__file__).parent.parent / "static"
-LOGO_PNG = str(_UI_DIR / "logo.png")
-
 from hagokyu.config import HaGoKuConfig
 from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.manager.refinement import parse_refinement
@@ -78,15 +72,10 @@ def _refine_report_thread(
 
 
 def render() -> None:
-    init_session_state()
     pm: ProjectManager = st.session_state.project_manager
     config = HaGoKuConfig.load()
 
-    col_logo, col_text = st.columns([1, 5])
-    with col_logo:
-        st.image(LOGO_PNG, width=64)
-    with col_text:
-        st.title("📋 分析报告")
+    st.title("📋 分析报告")
 
     # ── 报告选择 ────────────────────────────────────────────
     col_report, col_chat = st.columns([2, 1])

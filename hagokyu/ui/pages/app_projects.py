@@ -8,13 +8,7 @@ import streamlit as st
 from datetime import datetime
 from pathlib import Path
 
-from hagokyu.ui.components.project_sidebar import init_session_state
-from hagokyu.config import HaGoKuConfig
 from hagokyu.storage.project_manager import ProjectManager
-
-# Logo 路径
-_UI_DIR = Path(__file__).parent.parent / "static"
-LOGO_PNG = str(_UI_DIR / "logo.png")
 
 # 内置演示数据集（与 CLI 保持一致）
 DEMO_DATASETS = {
@@ -90,17 +84,8 @@ def _launch_demo(name: str) -> None:
 
 
 def render() -> None:
-    init_session_state()
     pm: ProjectManager = st.session_state.project_manager
     projects = pm.list()
-
-    # ── Hero 区（始终显示）─────────────────────────────────
-    col_logo, col_text = st.columns([1, 5])
-    with col_logo:
-        st.image(LOGO_PNG, width=72)
-    with col_text:
-        st.title("HaGoKu")
-        st.caption("用数学的力量，挖出数据背后真正的信息")
 
     # ── 空状态引导（无项目时显示）────────────────────────────
     if not projects:

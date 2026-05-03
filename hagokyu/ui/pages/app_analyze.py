@@ -10,15 +10,10 @@ from pathlib import Path
 import streamlit as st
 
 from hagokyu.ui.components.event_log import render_event_log
-from hagokyu.ui.components.project_sidebar import init_session_state
 from hagokyu.config import HaGoKuConfig
 from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.observability.events import Event
 from hagokyu.storage.project_manager import ProjectManager
-
-# Logo 路径
-_UI_DIR = Path(__file__).parent.parent / "static"
-LOGO_PNG = str(_UI_DIR / "logo.png")
 
 
 def _cleanup_temp_file() -> None:
@@ -100,12 +95,11 @@ def _render_data_preview(data_path: str) -> None:
 
 
 def render() -> None:
-    init_session_state()
-    _cleanup_temp_file()  # 清理上次遗留的临时上传文件
+    _cleanup_temp_file()
     pm: ProjectManager = st.session_state.project_manager
     config = HaGoKuConfig.load()
 
-    # ── LLM 连接预检（会话内只检查一次，避免每次 rerun 都发请求）───
+    # ── LLM 连接预检（会话内只检查一次）───────────────────
     llm_cache_key = "_llm_health"
     cached = st.session_state.get(llm_cache_key)
     if cached is None:
@@ -119,15 +113,10 @@ def render() -> None:
         st.warning(
             f"⚠️ **LLM 服务不可用**：{result.detail}\n\n"
             + "\n".join(f"• {s}" for s in result.suggestions)
-            + f"\n\n💡 运行 `hagokyu doctor` 检查系统状态，或配置正确的 LLM 地址（当前: `{config.llm.base_url}`）"
+            + f"\n\n💡 运行 `hagokyu doctor` 检查，或配置正确的 LLM 地址（当前: `{config.llm.base_url}`）"
         )
 
-    col_logo, col_text = st.columns([1, 5])
-    with col_logo:
-        st.image(LOGO_PNG, width=64)
-    with col_text:
-        st.title("📊 分析")
-        st.caption("输入数据 + 问题，HaGoKu 给你带统计检验的完整分析报告")
+    st.title("📊 数据分析")
 
     # ── 演示数据预加载（从项目页点击演示按钮触发）──────────
     demo_path = st.session_state.pop("_demo_file", None)

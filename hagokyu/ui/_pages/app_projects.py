@@ -86,7 +86,8 @@ def _render_project_card(p, pm: ProjectManager | None) -> None:
         st.warning(f"确定删除「{p.name}」？此操作不可逆！")
         cy, cn = st.columns(2)
         if cy.button("✅ 确认删除", key=_project_key(p.name, "y"), type="primary"):
-            pm.delete(p.name)
+            if pm:
+                pm.delete(p.name)
             st.rerun()
         if cn.button("❌ 取消", key=_project_key(p.name, "cn")):
             st.session_state.pop(_project_key(p.name, "confirm"), None)
@@ -102,7 +103,8 @@ def _render_project_card(p, pm: ProjectManager | None) -> None:
         )
         c_save, c_cancel = st.columns(2)
         if c_save.button("💾 保存", key=_project_key(p.name, "save_desc"), type="primary"):
-            pm.update_description(p.name, new_desc)
+            if pm:
+                pm.update_description(p.name, new_desc)
             st.session_state.pop(_project_key(p.name, "edit_desc"), None)
             st.rerun()
         if c_cancel.button("取消", key=_project_key(p.name, "cancel_desc")):

@@ -24,7 +24,15 @@ LOGO_PNG = str(_UI_DIR / "static" / "logo.png")
 
 def run() -> None:
     """应用主体（仅在 streamlit subprocess 中调用）"""
+    import os as _os
     import sys as _sys
+    from pathlib import Path as _Path
+
+    # 清除字节码缓存，确保每次启动都加载最新代码
+    _root = _Path(__file__).resolve().parent
+    for _dir, _subdirs, _files in _os.walk(_root):
+        [_os.unlink(_os.path.join(_dir, _f)) for _f in _files if _f.endswith(".pyc")]
+        [_os.rmdir(_os.path.join(_dir, _d)) for _d in _subdirs if _d == "__pycache__"]
 
     # 确保 .streamlit/config.toml 存在（pip install 后可能不在用户工作目录）
     _pkg_root = Path(_sys.modules["hagokyu.ui"].__file__).parent.parent
@@ -419,6 +427,22 @@ def main() -> None:
     import subprocess
     import sys
     from pathlib import Path
+
+    # 启动时清除 Python 字节码缓存，确保加载最新代码
+    _hagokyu_root = Path(__file__).resolve().parent.parent
+    for _root, _dirs, _files in os.walk(_hagokyu_root):
+        for _f in _files:
+            if _f.endswith(".pyc") or _f.endswith("__pycache__"):
+                try:
+                    os.unlink(os.path.join(_root, _f))
+                except OSError:
+                    pass
+        for _d in _dirs:
+            if _d == "__pycache__":
+                try:
+                    os.rmdir(os.path.join(_root, _d))
+                except OSError:
+                    pass
 
     app_py = Path(__file__).resolve()
 

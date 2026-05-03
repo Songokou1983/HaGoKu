@@ -71,9 +71,25 @@ def _refine_report_thread(
         error_holder.append(str(e))
 
 
+def _safe_pm() -> ProjectManager | None:
+    """安全获取 ProjectManager（lazy 初始化）"""
+    try:
+        pm = st.session_state.get("project_manager")
+        if pm is None:
+            pm = ProjectManager(HaGoKuConfig.load().output.project_dir)
+            st.session_state.project_manager = pm
+        return pm
+    except Exception:
+        return None
+
+
 def render() -> None:
-    pm: ProjectManager = st.session_state.project_manager
+    pm = _safe_pm()
     config = HaGoKuConfig.load()
+
+    if pm is None:
+        st.error("❌ 项目管理器初始化失败，请重启 UI（执行 `pip install -e .`）")
+        return
 
     st.title("📋 分析报告")
 

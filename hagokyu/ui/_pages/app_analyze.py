@@ -215,10 +215,22 @@ def _render_chat() -> None:
 
 # ── 主渲染函数 ──────────────────────────────────────────
 
+def _safe_pm() -> ProjectManager | None:
+    """安全获取 ProjectManager（lazy 初始化，pm 可能为 None）"""
+    try:
+        pm = st.session_state.get("project_manager")
+        if pm is None:
+            pm = ProjectManager(HaGoKuConfig.load().output.project_dir)
+            st.session_state.project_manager = pm
+        return pm
+    except Exception:
+        return None
+
+
 def render() -> None:
     _init_chat_state()
     cleanup_session_temp()
-    pm: ProjectManager = st.session_state.project_manager
+    pm = _safe_pm()
     config = HaGoKuConfig.load()
 
     # LLM 预检

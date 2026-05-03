@@ -41,7 +41,21 @@ def _render_storage_badge(stats: dict) -> str:
     return "  ".join(parts) + f"  💾{size_str}"
 
 
-def _render_project_card(p, pm: ProjectManager) -> None:
+def _safe_pm() -> ProjectManager | None:
+    """安全获取 ProjectManager（可能为 None）"""
+    try:
+        pm = st.session_state.get("project_manager")
+        if pm is None:
+            from hagokyu.config import HaGoKuConfig
+            from hagokyu.storage.project_manager import ProjectManager
+            pm = ProjectManager(HaGoKuConfig.load().output.project_dir)
+            st.session_state.project_manager = pm
+        return pm
+    except Exception:
+        return None
+
+
+def _render_project_card(p, pm: ProjectManager | None) -> None:
     """渲染单个项目卡片"""
     # 顶部行：名称 + 操作按钮
     col_n, col_a = st.columns([4, 2])
@@ -112,7 +126,7 @@ def _render_project_card(p, pm: ProjectManager) -> None:
     # 展开详情：记忆笔记 + 数据文件列表
     with st.expander("🔽 展开详情"):
         # 记忆笔记
-        notes = pm.load_memory(p.name)
+        notes = pm.load_memory(p.name) if pm else ""
         st.markdown("**🧠 项目记忆**")
         new_notes = st.text_area(
             "记忆笔记（支持 Markdown）",
@@ -123,8 +137,11 @@ def _render_project_card(p, pm: ProjectManager) -> None:
             placeholder="记录这个项目的背景、目标、关键发现...",
         )
         if st.button("💾 保存记忆", key=_project_key(p.name, "save_notes")):
-            pm.save_memory(p.name, new_notes)
-            st.success("✅ 记忆已保存")
+            if pm:
+                pm.save_memory(p.name, new_notes)
+                st.success("✅ 记忆已保存")
+            else:
+                st.warning("项目管理器未初始化，请重启 UI")
             st.rerun()
 
         # 数据文件列表
@@ -134,11 +151,10 @@ def _render_project_card(p, pm: ProjectManager) -> None:
                 size_str = f"{f.size_kb:.1f}KB" if f.size_kb < 1024 else f"{f.size_kb/1024:.1f}MB"
                 st.markdown(f"- `{f.name}` — {size_str}，{f.added_at.strftime('%m-%d %H:%M')}")
 
-        # 过程文件列表
-        proj_info = pm.info(p.name)
-        if proj_info and proj_info.process_files:
+        # 过程文件列表（已有 process_files 无需再查 pm.info）
+        if p.process_files:
             st.markdown("**⚙️ 过程文件**")
-            for f in proj_info.process_files:
+            for f in p.process_files:
                 size_str = f"{f.size_kb:.1f}KB" if f.size_kb < 1024 else f"{f.size_kb/1024:.1f}MB"
                 st.markdown(f"- `{f.name}` — {size_str}")
 
@@ -146,7 +162,11 @@ def _render_project_card(p, pm: ProjectManager) -> None:
 
 
 def render() -> None:
-    pm: ProjectManager = st.session_state.project_manager
+    pm = _safe_pm()
+    if pm is None:
+        st.error("❌ 项目管理器初始化失败，请重启 UI（执行 `pip install -e .`）")
+        return
+
     projects = pm.list()
 
     # ── 项目概况 ─────────────────────────────────────────────

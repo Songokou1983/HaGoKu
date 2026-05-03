@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import streamlit as st
 from pathlib import Path
 
@@ -16,17 +15,6 @@ def _project_key(name: str, suffix: str) -> str:
     return f"{suffix}_{safe}"
 
 
-def _list_dirs(path: str) -> list[str]:
-    """列出可用的子目录（用于路径浏览）"""
-    try:
-        p = Path(path)
-        if not p.exists() or not p.is_dir():
-            return []
-        return sorted([d.name for d in p.iterdir() if d.is_dir() and not d.name.startswith(".")])
-    except PermissionError:
-        return []
-
-
 def render() -> None:
     pm: ProjectManager = st.session_state.project_manager
     projects = pm.list()
@@ -36,6 +24,7 @@ def render() -> None:
 
     if not projects:
         st.info("还没有任何项目，请创建新项目。")
+        st.caption(f"项目保存在：{pm.base_dir}")
     else:
         total_runs = sum(p.run_count for p in projects)
         total_files = sum(len(p.data_files) for p in projects)
@@ -98,56 +87,24 @@ def render() -> None:
         placeholder="例如: Q1渠道ROI分析",
         label_visibility="collapsed",
     )
-
-    # 路径浏览（必填）
-    cur_dir = st.session_state.get("_new_project_dir", str(Path.home()))
-    subdirs = _list_dirs(cur_dir)
-
-    col_up, col_dir, col_sub = st.columns([1, 3, 2])
-    with col_up:
-        if st.button("⬆️", disabled=(str(Path(cur_dir).parent) == cur_dir), use_container_width=True):
-            st.session_state._new_project_dir = str(Path(cur_dir).parent)
-            st.rerun()
-    with col_dir:
-        parent_dir = st.text_input(
-            "项目位置",
-            value=cur_dir,
-            label_visibility="collapsed",
-        )
-    with col_sub:
-        st.markdown("")  # 对齐
-        if subdirs:
-            selected_sub = st.selectbox(
-                "子目录",
-                options=[""] + subdirs,
-                label_visibility="collapsed",
-            )
-            if selected_sub:
-                st.session_state._new_project_dir = str(Path(cur_dir) / selected_sub)
-                st.rerun()
-        else:
-            st.caption("无子目录")
-
     desc = st.text_area(
         "项目描述（选填）",
         placeholder="简要描述这个项目...",
         label_visibility="collapsed",
     )
+    st.caption(f"📂 项目将保存在：{pm.base_dir}")
 
     if st.button("💾 创建项目", type="primary", use_container_width=True):
         if not name:
             st.warning("请填写项目名称")
-        elif not parent_dir:
-            st.warning("请选择项目位置")
         else:
             try:
-                pm.create(name, description=desc or "", parent_dir=Path(parent_dir))
-                st.success(f"✅ 项目 '{name}' 创建成功！")
-                st.session_state.pop("_new_project_dir", None)
+                pm.create(name, description=desc or "")
+                st.success(f"✅ 项目「{name}」创建成功！")
                 st.session_state.current_project = name
                 st.session_state.nav_page = "analyze"
                 st.rerun()
             except FileExistsError:
-                st.error(f"项目 '{name}' 已存在")
+                st.error(f"项目「{name}」已存在")
             except Exception as e:
                 st.error(f"创建失败: {e}")

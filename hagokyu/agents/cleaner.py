@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from ..config import LLMConfig
+from ..observability.events import EventType
 from ..observability.event_bus import EventBus
 from ..tools.cleaning import (
     CleaningReport,
@@ -67,7 +68,8 @@ class CleanerAgent(DataAgentBase):
         *,
         user_operations: list[dict[str, Any]] | None = None,
         impact_warning: float = 0.10,
-    ) -> tuple[pd.DataFrame, CleaningReport]:
+        phase: str = "full",
+    ) -> tuple[pd.DataFrame, CleaningReport] | dict[str, Any]:
         """
         执行数据清洗
 
@@ -76,9 +78,19 @@ class CleanerAgent(DataAgentBase):
             context: Scout 产出的数据上下文
             user_operations: 用户指定的清洗操作（覆盖自动策略）
             impact_warning: 影响率阈值
+            phase: "full"=完整执行, "strategy_only"=只检测+计划，返回策略供用户确认
 
         Returns:
-            (清洗后的 DataFrame, 清洗报告)
+            phase="full": (清洗后的 DataFrame, 清洗报告)
+            phase="strategy_only": {
+                "status": "cleaner_strategy",
+                "n_rows": int,
+                "n_cols": int,
+                "outliers": dict,         # 异常值检测结果
+                "missing_mechanisms": dict, # 缺失机制检测结果
+                "operations": list[dict],   # 计划的清洗操作
+                "data_quality": str,       # "good"/"medium"/"poor"
+            }
         """
         self.start()
 
@@ -162,6 +174,32 @@ class CleanerAgent(DataAgentBase):
             else:
                 operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
                 self.emit_thinking(f"计划 {len(operations)} 个清洗操作")
+
+            # ── phase="strategy_only"：只检测+计划，不执行清洗，返回策略供确认 ──
+            if phase == "strategy_only":
+                self.emit_thinking("清洗策略已生成，等待用户确认...")
+                self.emit_event(EventType.AGENT_COMPLETED, "Cleaner", {
+                    "result_summary": f"检测完成：{len(outliers_iqr)} 个异常列，{len(mechanisms)} 个缺失列，{len(operations)} 个计划操作",
+                })
+                # 数据质量评估
+                n_rows = len(df)
+                outlier_count = sum(v.get("count", 0) for v in outliers_iqr.values())
+                null_count = df.isnull().sum().sum()
+                if outlier_count / max(n_rows, 1) > 0.1 or null_count / max(n_rows * len(df.columns), 1) > 0.2:
+                    data_quality = "poor"
+                elif outlier_count / max(n_rows, 1) > 0.05 or null_count / max(n_rows * len(df.columns), 1) > 0.1:
+                    data_quality = "medium"
+                else:
+                    data_quality = "good"
+                return {
+                    "status": "cleaner_strategy",
+                    "n_rows": n_rows,
+                    "n_cols": len(df.columns),
+                    "outliers": {k: v for k, v in outliers_iqr.items() if v.get("count", 0) > 0},
+                    "missing_mechanisms": mechanisms,
+                    "operations": operations,
+                    "data_quality": data_quality,
+                }
 
             # 5. 执行清洗（失败则跳过，返回原始数据）
             self.emit_thinking("执行数据清洗...")

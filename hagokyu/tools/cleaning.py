@@ -464,13 +464,15 @@ def winsorize_column(
     Winsorize：将极端值截断到指定分位数，不删除行
 
     Args:
-        series: 数据列
+        series: 数据列（必须为数值类型）
         lower: 下截断分位数
         upper: 上截断分位数
 
     Returns:
         截断后的 Series
     """
+    if not pd.api.types.is_numeric_dtype(series):
+        raise TypeError(f"winsorize_column 仅支持数值类型，收到: {series.dtype}")
     low_val = series.quantile(lower)
     high_val = series.quantile(1 - upper)
     return series.clip(lower=low_val, upper=high_val)
@@ -716,14 +718,22 @@ def clean_data(
                 rows_affected = 0
 
             elif strategy == CleaningStrategy.FILL_MEAN:
-                fill_val = df_clean[col].mean()
-                df_clean[col] = df_clean[col].fillna(fill_val)
-                ops_detail = {"fill_value": round(float(fill_val), 4)}
+                if pd.api.types.is_numeric_dtype(df_clean[col]):
+                    fill_val = df_clean[col].mean()
+                    df_clean[col] = df_clean[col].fillna(fill_val)
+                    ops_detail = {"fill_value": round(float(fill_val), 4)}
+                else:
+                    warnings.append(f"列 '{col}' 为非数值类型，跳过 FILL_MEAN")
+                    continue
 
             elif strategy == CleaningStrategy.FILL_MEDIAN:
-                fill_val = df_clean[col].median()
-                df_clean[col] = df_clean[col].fillna(fill_val)
-                ops_detail = {"fill_value": round(float(fill_val), 4)}
+                if pd.api.types.is_numeric_dtype(df_clean[col]):
+                    fill_val = df_clean[col].median()
+                    df_clean[col] = df_clean[col].fillna(fill_val)
+                    ops_detail = {"fill_value": round(float(fill_val), 4)}
+                else:
+                    warnings.append(f"列 '{col}' 为非数值类型，跳过 FILL_MEDIAN")
+                    continue
 
             elif strategy == CleaningStrategy.FILL_MODE:
                 fill_val = df_clean[col].mode().iloc[0] if len(df_clean[col].mode()) > 0 else ""
@@ -770,6 +780,9 @@ def clean_data(
                 ops_detail = {"flag_column": f"{col}_missing"}
 
             elif strategy == CleaningStrategy.WINSORIZE:
+                if not pd.api.types.is_numeric_dtype(df_clean[col]):
+                    warnings.append(f"列 '{col}' 为非数值类型，跳过 Winsorize")
+                    continue
                 lower_pct = op_spec.get("lower", 0.05)
                 upper_pct = op_spec.get("upper", 0.05)
                 n_before_win = int(((df_clean[col] < df_clean[col].quantile(lower_pct)) | (df_clean[col] > df_clean[col].quantile(1 - upper_pct))).sum())

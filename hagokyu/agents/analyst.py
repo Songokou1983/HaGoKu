@@ -126,7 +126,8 @@ class AnalystAgent(DataAgentBase):
         df: pd.DataFrame,
         context: DataContext,
         plan: dict[str, Any],
-    ) -> tuple[list[AnalysisResult], list[dict[str, Any]]]:
+        phase: str = "full",
+    ) -> tuple[list[AnalysisResult], list[dict[str, Any]]] | dict[str, Any]:
         """
         执行统计分析
 
@@ -134,9 +135,17 @@ class AnalystAgent(DataAgentBase):
             df: 清洗后的数据
             context: 数据上下文
             plan: Manager 的分析计划
+            phase: "full"=完整分析, "preliminary"=初步发现，返回供用户确认方向
 
         Returns:
-            分析结果列表
+            phase="full": (分析结果列表, 商业指标列表)
+            phase="preliminary": {
+                "status": "analyst_preliminary",
+                "power_warnings": list[str],
+                "business_metrics": list[dict],
+                "preliminary_findings": list[dict],  # 每个分析类型的初步发现摘要
+                "suggested_focus": str,               # 建议重点关注的方向
+            }
         """
         self.start()
 
@@ -182,6 +191,41 @@ class AnalystAgent(DataAgentBase):
             # 如果没有匹配到特定分析类型，做通用分析
             if not results:
                 results = self._auto_analyze(df, context, target_col, query)
+
+            # ── phase="preliminary"：初步发现阶段，暂停供用户确认分析方向 ──
+            if phase == "preliminary":
+                self.emit_thinking("初步分析完成，等待用户确认分析方向...")
+                self.emit_event(EventType.AGENT_COMPLETED, "Analyst", {
+                    "result_summary": f"初步发现 {len(results)} 个，待用户确认方向",
+                })
+                # 汇总每个分析类型的初步发现
+                preliminary_findings = []
+                for r in results:
+                    preliminary_findings.append({
+                        "type": r.analysis_type,
+                        "question": r.question,
+                        "p_value": r.p_value,
+                        "significance": r.significance,
+                        "effect_size": r.effect_size,
+                        "effect_type": r.effect_type,
+                        "top_features": getattr(r, "top_features", [])[:5] if hasattr(r, "top_features") else [],
+                        "trend_direction": getattr(r, "trend_direction", None) if hasattr(r, "trend_direction") else None,
+                    })
+                # 建议重点方向（基于初步结果）
+                suggested = ""
+                if results:
+                    top = results[0]
+                    if top.significance == "significant":
+                        suggested = f"初步发现「{top.question}」具有统计显著性，建议重点分析"
+                    else:
+                        suggested = "初步结果均不显著，建议扩大样本或调整分析维度"
+                return {
+                    "status": "analyst_preliminary",
+                    "power_warnings": power_warnings,
+                    "business_metrics": business_metrics,
+                    "preliminary_findings": preliminary_findings,
+                    "suggested_focus": suggested,
+                }
 
             # 增强诊断：对回归结果做交叉验证
             for result in results:
@@ -270,9 +314,18 @@ class AnalystAgent(DataAgentBase):
             # 不崩溃：发射警告，返回已有的部分结果（如果有的话）
             self.fail("分析过程遇到问题")
             self.emit_event(EventType.AGENT_THINKING, {
-                "thought": "⚠️ 分析过程中出现问题，将尝试继续生成报告",
+                "thought": f"⚠️ 分析过程中出现问题，将尝试继续生成报告: {e}",
             })
-            # 返回空列表，让报告阶段仍能运行
+            # preliminary 阶段出错也返回结构化数据
+            if phase == "preliminary":
+                return {
+                    "status": "analyst_preliminary",
+                    "power_warnings": power_warnings,
+                    "business_metrics": business_metrics,
+                    "preliminary_findings": [],
+                    "suggested_focus": "分析遇到问题，请检查数据或重试",
+                    "error": str(e),
+                }
             return results if results else [], []
 
     def _do_regression(

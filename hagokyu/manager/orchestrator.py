@@ -118,6 +118,9 @@ class Orchestrator:
         template: str | None = None,
         resume: bool = False,
         schema_path: str | None = None,
+        phase: str = "full",
+        scout_context: "DataContext | None" = None,
+        cleaning_operations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         主入口：执行完整分析流程
@@ -133,6 +136,13 @@ class Orchestrator:
             template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             resume: 是否从上次断点继续
             schema_path: 外部 schema.yaml 路径
+            phase: 运行阶段
+                - "scout_first": 只跑 Scout，返回字段信息
+                - "cleaning_first": Scout（缓存）+ Cleaner（strategy_only），返回清洗策略
+                - "analyst_first": Scout（缓存）+ Cleaner（strategy_only，已确认）+ Analyst（preliminary）
+                - "full": 完整 pipeline
+            scout_context: Scout 的缓存上下文（用于避免重复跑 Scout）
+            cleaning_operations: 用户确认的清洗操作（Cleaner 直接执行，不重新规划）
 
         Returns:
             运行结果摘要
@@ -205,6 +215,137 @@ class Orchestrator:
                     cleaned_path_str = state["cleaned_path"]
                     if Path(cleaned_path_str).exists():
                         df_clean = pd.read_parquet(cleaned_path_str)
+
+        # ── Scout 单独探索阶段 ──────────────────────────────────
+        # phase="scout_first" 时只跑 Scout，跑完停下来等用户输入问题
+        if phase == "scout_first":
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": "🔍 正在识别数据字段，请稍候...",
+            })
+            scout = ScoutAgent(self.config.llm, self.event_bus)
+            context = scout.run(data_path, query="", project_id=project_name, memory=self.memory)
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": "✅ 字段识别完成，请在下方输入你想分析的问题",
+            })
+            self.event_bus.emit(EventType.AGENT_COMPLETED, "Scout", {
+                "result_summary": f"识别了 {context.n_cols} 个字段，{len(context.get_uncertain_columns())} 个需要确认",
+            })
+            return {
+                "status": "scout_done",
+                "n_cols": context.n_cols,
+                "n_rows": context.n_rows,
+                "columns": [s.column_name for s in context.column_semantics],
+                "uncertain_columns": [s.column_name for s in context.get_uncertain_columns()],
+                "column_descriptions": context.column_descriptions,
+                "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+            }
+
+        # ── Cleaner 策略阶段 ────────────────────────────────────
+        # phase="cleaning_first"：跑 Scout（缓存）+ Cleaner（strategy_only），返回清洗策略供用户确认
+        if phase == "cleaning_first":
+            # Scout（使用缓存上下文或重新跑）
+            if scout_context is not None:
+                context = scout_context
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": f"🔍 使用缓存的字段信息（{context.n_cols} 个字段）",
+                })
+            else:
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": "🔍 Scout 缓存未命中，重新识别字段...",
+                })
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus)
+                context = scout_agent.run(data_path, query="", project_id=project_name, memory=self.memory)
+
+            # Cleaner：只检测+计划，不执行清洗
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": "🧹 检测数据质量，生成清洗策略...",
+            })
+            cleaner = CleanerAgent(self.config.llm, self.event_bus)
+            strategy_result = cleaner.run(
+                data_path, context,
+                user_operations=cleaning_operations,  # 用户确认的操作直接执行
+                impact_warning=self.config.manager.cleaning_impact_warning,
+                phase="strategy_only",
+            )
+            # strategy_only 返回 dict，不是 (DataFrame, Report)
+            if isinstance(strategy_result, dict):
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "Cleaner", {
+                    "result_summary": f"检测完成：{len(strategy_result.get('operations', []))} 个计划操作",
+                })
+                return {
+                    "status": "cleaner_strategy",
+                    "scout_data": {
+                        "n_cols": context.n_cols,
+                        "n_rows": context.n_rows,
+                        "columns": [s.column_name for s in context.column_semantics],
+                        "uncertain_columns": [s.column_name for s in context.get_uncertain_columns()],
+                        "column_descriptions": context.column_descriptions,
+                    },
+                    "outliers": strategy_result.get("outliers", {}),
+                    "missing_mechanisms": strategy_result.get("missing_mechanisms", {}),
+                    "operations": strategy_result.get("operations", []),
+                    "data_quality": strategy_result.get("data_quality", "unknown"),
+                    "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+                }
+            # 正常执行（用户已确认操作，直接清洗）
+            df_clean, cleaning_report = strategy_result
+
+        # ── Analyst 初步发现阶段 ─────────────────────────────────
+        # phase="analyst_first"：Scout（缓存）+ Cleaner（strategy_only，已确认）+ Analyst（preliminary）
+        if phase == "analyst_first":
+            # Scout
+            if scout_context is not None:
+                context = scout_context
+                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                    "thought": f"🔍 使用缓存的字段信息（{context.n_cols} 个字段）",
+                })
+            else:
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus)
+                context = scout_agent.run(data_path, query="", project_id=project_name, memory=self.memory)
+
+            # Cleaner
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": "🧹 数据清洗（已确认策略）...",
+            })
+            cleaner = CleanerAgent(self.config.llm, self.event_bus)
+            strategy_result = cleaner.run(
+                data_path, context,
+                user_operations=cleaning_operations,
+                impact_warning=self.config.manager.cleaning_impact_warning,
+                phase="strategy_only",
+            )
+            if isinstance(strategy_result, dict):
+                # 用户未确认操作，用自动规划的执行
+                auto_ops = strategy_result.get("operations", [])
+                df_clean, cleaning_report = cleaner.run(
+                    data_path, context,
+                    user_operations=auto_ops,
+                    impact_warning=self.config.manager.cleaning_impact_warning,
+                    phase="full",
+                )
+            else:
+                df_clean, cleaning_report = strategy_result
+
+            # Analyst：初步发现
+            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                "thought": "📊 初步分析，发现数据中的规律...",
+            })
+            analyst = AnalystAgent(self.config.llm, self.event_bus)
+            analyst_result = analyst.run(df_clean, context, plan, phase="preliminary")
+            if isinstance(analyst_result, dict):
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "Analyst", {
+                    "result_summary": f"初步发现 {len(analyst_result.get('preliminary_findings', []))} 个，待确认",
+                })
+                return {
+                    "status": "analyst_preliminary",
+                    "power_warnings": analyst_result.get("power_warnings", []),
+                    "business_metrics": analyst_result.get("business_metrics", []),
+                    "preliminary_findings": analyst_result.get("preliminary_findings", []),
+                    "suggested_focus": analyst_result.get("suggested_focus", ""),
+                    "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
+                    "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+                }
+            results, business_metrics = analyst_result
 
         try:
             # ── LLM 门卫：分类用户问题 ────────────────────────────

@@ -102,170 +102,186 @@ gatherUsageStats = false
         },
     )
 
-    # ── 全局样式：终端科技感 ──────────────────────────────────
+    # ── 全局样式：Retro-Futuristic 终端 ────────────────────────
     st.html("""
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
     <style>
     :root {
         --hagokyu-bg: #0a0e17;
-        --hagokyu-surface: #161b22;
-        --hagokyu-border: #30363d;
-        --hagokyu-accent: #22d3ee;
-        --hagokyu-accent2: #a78bfa;
-        --hagokyu-text: #e2e8f0;
-        --hagokyu-text-dim: #8b949e;
-        --hagokyu-green: #4ade80;
-        --hagokyu-red: #f87171;
-        --hagokyu-yellow: #fbbf24;
-        --hagokyu-font: 'Inter', system-ui, sans-serif;
-        --hagokyu-mono: 'JetBrains Mono', 'Fira Code', monospace;
+        --hagokyu-surface: #0d1117;
+        --hagokyu-border: #21262d;
+        --hagokyu-accent: #00ffff;
+        --hagokyu-magenta: #ff006e;
+        --hagokyu-text: #c9d1d9;
+        --hagokyu-text-dim: #6e7681;
+        --hagokyu-green: #00ff41;
+        --hagokyu-red: #ff453a;
+        --hagokyu-yellow: #ffd60a;
+        --hagokyu-mono: 'Space Mono', monospace;
+        --hagokyu-display: 'VT323', monospace;
     }
 
     /* 整体字体 & 背景 */
     html, body, .stApp {
         background-color: var(--hagokyu-bg) !important;
         color: var(--hagokyu-text) !important;
-        font-family: var(--hagokyu-font) !important;
-        font-size: 16px !important;
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 15px !important;
     }
 
     /* 基础文字 */
     p, span, label, .stText, .stCaption, .stMarkdown, li {
-        font-size: 15px !important;
+        font-size: 14px !important;
         color: var(--hagokyu-text) !important;
     }
 
-    /* 标题层级 */
-    h1 { font-size: 2rem !important; font-weight: 700 !important; color: #f8fafc !important; }
-    h2 { font-size: 1.5rem !important; font-weight: 600 !important; color: #f1f5f9 !important; }
-    h3 { font-size: 1.2rem !important; font-weight: 600 !important; color: #e2e8f0 !important; }
-    h4 { font-size: 1rem !important; font-weight: 600 !important; }
+    /* 标题层级 — VT323 标题感 */
+    h1 { font-family: var(--hagokyu-display) !important; font-size: 2.8rem !important; font-weight: 400 !important; color: var(--hagokyu-accent) !important; letter-spacing: 0.05em !important; }
+    h2 { font-family: var(--hagokyu-display) !important; font-size: 2rem !important; font-weight: 400 !important; color: #f0fdfa !important; letter-spacing: 0.04em !important; }
+    h3 { font-family: var(--hagokyu-mono) !important; font-size: 1rem !important; font-weight: 700 !important; color: var(--hagokyu-accent) !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
+    h4 { font-size: 0.875rem !important; font-weight: 700 !important; color: var(--hagokyu-text) !important; }
+
+    /* CRT 扫描线 — 全局 overlay */
+    [data-testid="stMainBlockContainer"]::before {
+        content: '';
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 0, 0, 0.07) 2px,
+            rgba(0, 0, 0, 0.07) 4px
+        );
+        pointer-events: none;
+        z-index: 9999;
+    }
 
     /* 侧边栏 */
     [data-testid="stSidebar"] {
-        background-color: #0d1117 !important;
+        background-color: #070b11 !important;
         border-right: 1px solid var(--hagokyu-border) !important;
     }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
         color: var(--hagokyu-text) !important;
     }
-
-    /* 侧边栏 radio / selectbox */
-    [data-testid="stSidebar"] .stSelectbox > div > div,
-    [data-testid="stSidebar"] .stRadio > div {
-        background: var(--hagokyu-surface) !important;
-        border: 1px solid var(--hagokyu-border) !important;
-        border-radius: 8px !important;
-        color: var(--hagokyu-text) !important;
-    }
-    [data-testid="stSidebar"] .stRadio label {
-        color: var(--hagokyu-text) !important;
-    }
-    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] > label {
-        color: var(--hagokyu-text) !important;
+    [data-testid="stSidebar"] h2 {
+        font-family: var(--hagokyu-display) !important;
+        font-size: 1.8rem !important;
+        color: var(--hagokyu-magenta) !important;
+        text-shadow: 0 0 8px var(--hagokyu-magenta) !important;
     }
 
-    /* 侧边栏导航：放大间距，更易读 */
-    [data-testid="stSidebar"] .stRadio > div {
-        padding: 0.5rem 0.75rem !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0.25rem !important;
-    }
-    [data-testid="stSidebar"] .stRadio label {
-        font-size: 1.05rem !important;
-        font-weight: 500 !important;
-        padding: 0.5rem 0.75rem !important;
-        border-radius: 6px !important;
-        min-height: unset !important;
-        color: var(--hagokyu-text) !important;
-        line-height: 1.4 !important;
-        letter-spacing: 0.01em !important;
-    }
-    [data-testid="stSidebar"] .stRadio label:hover {
-        background: rgba(34, 211, 238, 0.08) !important;
-        color: var(--hagokyu-accent) !important;
-    }
-    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] {
-        margin-top: 0.15rem !important;
-    }
-    /* 去掉导航边框/圆角容器，改成分离式按钮风格 */
+    /* 侧边栏导航：flat terminal 风格 */
     [data-testid="stSidebar"] .stRadio > div {
         background: transparent !important;
         border: none !important;
         border-radius: 0 !important;
         padding: 0 !important;
-        gap: 0.15rem !important;
+        gap: 0.1rem !important;
     }
     [data-testid="stSidebar"] .stRadio label {
+        font-family: var(--hagokyu-mono) !important;
+        font-size: 0.8rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.12em !important;
+        padding: 0.6rem 0.75rem !important;
         border: 1px solid transparent !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
+        min-height: unset !important;
+        color: var(--hagokyu-text-dim) !important;
+        line-height: 1 !important;
     }
-    /* 当前选中项高亮 */
+    [data-testid="stSidebar"] .stRadio label:hover {
+        background: transparent !important;
+        color: var(--hagokyu-accent) !important;
+        text-shadow: 0 0 6px var(--hagokyu-accent) !important;
+    }
     [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] > label:has(input:checked) {
-        background: rgba(34, 211, 238, 0.12) !important;
+        background: transparent !important;
         border-color: var(--hagokyu-accent) !important;
         color: var(--hagokyu-accent) !important;
-        font-weight: 600 !important;
+        text-shadow: 0 0 8px var(--hagokyu-accent) !important;
+        font-weight: 700 !important;
+    }
+    [data-testid="stSidebar"] .stRadio [data-testid="stRadio"] {
+        margin-top: 0 !important;
     }
 
-    /* 主内容区卡片 */
+    /* 主内容区 */
     [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {
         gap: 0.5rem !important;
     }
 
-    /* 按钮 */
+    /* 按钮 — flat + neon glow */
     .stButton > button {
-        background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+        background: #0d1117 !important;
         border: 1px solid var(--hagokyu-accent) !important;
         color: var(--hagokyu-accent) !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        transition: all 0.2s !important;
-        letter-spacing: 0.02em !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.1em !important;
+        transition: box-shadow 0.15s, color 0.15s !important;
     }
     .stButton > button:hover {
-        background: linear-gradient(135deg, #1e4a7a 0%, #1a2e4a 100%) !important;
-        border-color: #67e8f9 !important;
-        color: #67e8f9 !important;
-        box-shadow: 0 0 12px rgba(34, 211, 238, 0.25) !important;
+        background: #0d1117 !important;
+        color: var(--hagokyu-accent) !important;
+        border-color: var(--hagokyu-accent) !important;
+        box-shadow: 0 0 16px rgba(0, 255, 255, 0.35), inset 0 0 8px rgba(0, 255, 255, 0.08) !important;
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #0e7490 0%, #155e75 100%) !important;
+        background: var(--hagokyu-accent) !important;
+        color: #0a0e17 !important;
         border-color: var(--hagokyu-accent) !important;
-        color: #f0fdfa !important;
+        box-shadow: 0 0 10px rgba(0, 255, 255, 0.3) !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%) !important;
-        box-shadow: 0 0 20px rgba(34, 211, 238, 0.4) !important;
+        background: #00ffff !important;
+        box-shadow: 0 0 28px rgba(0, 255, 255, 0.6), 0 0 8px rgba(0, 255, 255, 0.4) !important;
+        color: #0a0e17 !important;
     }
 
     /* 输入框 */
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea,
     .stNumberInput > div > div > input {
-        background-color: var(--hagokyu-surface) !important;
+        background-color: #070b11 !important;
         border: 1px solid var(--hagokyu-border) !important;
         color: var(--hagokyu-text) !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 14px !important;
-        transition: border-color 0.2s !important;
+        font-size: 13px !important;
+        transition: border-color 0.15s, box-shadow 0.15s !important;
     }
     .stTextInput > div > div > input:focus,
     .stTextArea > div > div > textarea:focus,
     .stNumberInput > div > div > input:focus {
         border-color: var(--hagokyu-accent) !important;
-        box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15) !important;
+        box-shadow: 0 0 0 1px var(--hagokyu-accent), 0 0 12px rgba(0, 255, 255, 0.15) !important;
+        outline: none !important;
+    }
+
+    /* selectbox */
+    .stSelectbox > div > div {
+        background-color: #070b11 !important;
+        border: 1px solid var(--hagokyu-border) !important;
+        border-radius: 0 !important;
+        color: var(--hagokyu-text) !important;
+        font-family: var(--hagokyu-mono) !important;
+    }
+    .stSelectbox > div > div:hover {
+        border-color: var(--hagokyu-accent) !important;
     }
 
     /* tabs */
     .stTabs [data-baseweb="tab-list"] {
-        background: var(--hagokyu-surface) !important;
-        border-radius: 8px 8px 0 0 !important;
+        background: #070b11 !important;
+        border-radius: 0 !important;
         border: 1px solid var(--hagokyu-border) !important;
         border-bottom: none !important;
         gap: 0 !important;
@@ -276,33 +292,37 @@ gatherUsageStats = false
         border-right: 1px solid var(--hagokyu-border) !important;
         border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 14px !important;
-        font-weight: 500 !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.08em !important;
         padding: 0.5rem 1rem !important;
     }
     .stTabs [data-baseweb="tab"]:hover {
         color: var(--hagokyu-accent) !important;
-        background: rgba(34, 211, 238, 0.05) !important;
+        background: transparent !important;
     }
     .stTabs [aria-selected="true"] {
         background: var(--hagokyu-bg) !important;
         color: var(--hagokyu-accent) !important;
         border-bottom: 2px solid var(--hagokyu-accent) !important;
+        text-shadow: 0 0 6px var(--hagokyu-accent) !important;
     }
 
     /* Metric */
     [data-testid="stMetricValue"] {
         font-family: var(--hagokyu-mono) !important;
-        font-size: 1.8rem !important;
-        font-weight: 600 !important;
-        color: var(--hagokyu-accent) !important;
+        font-size: 1.6rem !important;
+        font-weight: 700 !important;
+        color: var(--hagokyu-green) !important;
+        text-shadow: 0 0 8px rgba(0, 255, 65, 0.5) !important;
     }
     [data-testid="stMetricLabel"] {
         font-family: var(--hagokyu-mono) !important;
-        font-size: 12px !important;
+        font-size: 10px !important;
         color: var(--hagokyu-text-dim) !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
+        letter-spacing: 0.1em !important;
     }
 
     /* Divider */
@@ -314,54 +334,57 @@ gatherUsageStats = false
     .streamlit-expander {
         background: var(--hagokyu-surface) !important;
         border: 1px solid var(--hagokyu-border) !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
     }
     .streamlit-expander > summary {
         color: var(--hagokyu-text) !important;
-        font-size: 14px !important;
+        font-size: 13px !important;
+        font-family: var(--hagokyu-mono) !important;
     }
 
     /* Success / Warning / Error boxes */
-    .stSuccess { background-color: rgba(74, 222, 128, 0.1) !important; border-left: 3px solid var(--hagokyu-green) !important; }
-    .stWarning { background-color: rgba(251, 191, 36, 0.1) !important; border-left: 3px solid var(--hagokyu-yellow) !important; }
-    .stError   { background-color: rgba(248, 113, 113, 0.1) !important; border-left: 3px solid var(--hagokyu-red) !important; }
-    .stInfo    { background-color: rgba(34, 211, 238, 0.08) !important; border-left: 3px solid var(--hagokyu-accent) !important; }
+    .stSuccess { background-color: rgba(0, 255, 65, 0.06) !important; border-left: 2px solid var(--hagokyu-green) !important; }
+    .stWarning { background-color: rgba(255, 214, 10, 0.06) !important; border-left: 2px solid var(--hagokyu-yellow) !important; }
+    .stError   { background-color: rgba(255, 69, 58, 0.06) !important; border-left: 2px solid var(--hagokyu-red) !important; }
+    .stInfo    { background-color: rgba(0, 255, 255, 0.04) !important; border-left: 2px solid var(--hagokyu-accent) !important; }
 
     /* File uploader */
     [data-testid="stFileUploadDropzone"] {
-        background: var(--hagokyu-surface) !important;
-        border: 2px dashed var(--hagokyu-border) !important;
-        border-radius: 12px !important;
+        background: #070b11 !important;
+        border: 1px dashed var(--hagokyu-border) !important;
+        border-radius: 0 !important;
     }
     [data-testid="stFileUploadDropzone"]:hover {
         border-color: var(--hagokyu-accent) !important;
+        box-shadow: inset 0 0 12px rgba(0, 255, 255, 0.05) !important;
     }
 
     /* Dataframe */
     [data-testid="stDataFrame"] {
         border: 1px solid var(--hagokyu-border) !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
     }
 
-    /* Progress bar */
+    /* Progress bar — neon glow */
     .stProgress > div > div > div {
-        background: linear-gradient(90deg, #0e7490, #22d3ee) !important;
+        background: var(--hagokyu-accent) !important;
+        box-shadow: 0 0 8px var(--hagokyu-accent), 0 0 16px rgba(0, 255, 255, 0.3) !important;
     }
 
     /* Code / pre */
     code, pre, .stCodeBlock {
         font-family: var(--hagokyu-mono) !important;
-        background: var(--hagokyu-surface) !important;
+        background: #070b11 !important;
         border: 1px solid var(--hagokyu-border) !important;
-        border-radius: 6px !important;
-        font-size: 13px !important;
+        border-radius: 0 !important;
+        font-size: 12px !important;
     }
 
     /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: var(--hagokyu-bg) !important; }
-    ::-webkit-scrollbar-thumb { background: var(--hagokyu-border) !important; border-radius: 3px !important; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--hagokyu-text-dim) !important; }
+    ::-webkit-scrollbar-thumb { background: var(--hagokyu-border) !important; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--hagokyu-accent) !important; }
     </style>
     """)
 
@@ -395,8 +418,8 @@ gatherUsageStats = false
         with col_title:
             st.markdown("""
             <div style="padding: 0.3rem 0;">
-                <h2 style="margin:0; color:#a78bfa;">HaGoKu</h2>
-                <p style="margin:0.1rem 0; color:#888; font-size:0.8rem;">用数学的力量</p>
+                <div style="font-family:'VT323',monospace;font-size:2.2rem;color:#ff006e;letter-spacing:0.06em;text-shadow:0 0 10px #ff006e,2px 0 0 #00ffff,-2px 0 0 #ff006e;line-height:1;">HaGoKu</div>
+                <div style="font-family:'Space Mono',monospace;font-size:0.65rem;color:#6e7681;text-transform:uppercase;letter-spacing:0.15em;margin-top:0.15rem;">用数学的力量</div>
             </div>
             """, unsafe_allow_html=True)
         st.divider()

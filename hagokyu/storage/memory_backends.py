@@ -83,6 +83,7 @@ class SqliteMemoryBackend(MemoryBackend):
 
     def __init__(self, db: HaGoKuDB) -> None:
         self._conn = db.conn
+        self._index_ensured = False
 
     def save(
         self,
@@ -95,12 +96,15 @@ class SqliteMemoryBackend(MemoryBackend):
     ) -> None:
         now = datetime.now().isoformat()
         mem_id = f"{project_id or '_global'}:{category}:{key}"
+        # 确保 idx_memory_uniq 索引存在（旧 DB 可能没有），只检查一次
+        if not self._index_ensured:
+            self._conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_uniq ON memory(project_id, category, key)"
+            )
+            self._index_ensured = True
         self._conn.execute(
-            "INSERT INTO memory (id, project_id, category, key, value, source, confidence, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(project_id, category, key) DO UPDATE SET "
-            "value = excluded.value, source = excluded.source, "
-            "confidence = excluded.confidence, updated_at = excluded.updated_at",
+            "INSERT OR REPLACE INTO memory (id, project_id, category, key, value, source, confidence, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (mem_id, project_id, category, key, value, source, confidence, now, now),
         )
         self._conn.commit()

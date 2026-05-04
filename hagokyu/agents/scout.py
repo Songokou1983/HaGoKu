@@ -444,7 +444,7 @@ class ScoutAgent(DataAgentBase):
                         },
                     )
 
-            # 9. LLM 总结数据概况（自然语言回复）
+            # 9. LLM 生成每个字段的自然语言描述
             columns_info = ", ".join(
                 f"{cs.column_name}({cs.inferred_type.value})"
                 for cs in context.column_semantics[:10]
@@ -465,6 +465,63 @@ class ScoutAgent(DataAgentBase):
             )
             if llm_summary:
                 self.emit_thinking(f"📊 数据概况：{llm_summary}")
+
+            # 10. 为每个字段生成自然语言描述（批量 LLM 调用，一次性生成所有字段说明）
+            self.emit_thinking("生成字段说明...")
+            field_specs = []
+            for cs in context.column_semantics:
+                col = cs.column_name
+                sample_val = ""
+                try:
+                    vals = df[col].dropna().unique()
+                    if len(vals) > 0:
+                        sample_val = str(list(vals[:5])).strip("[]")
+                except Exception:
+                    pass
+                field_specs.append(
+                    f"[{col}] 类型={cs.inferred_type.value} 置信={cs.confidence:.0%} "
+                    f"依据={cs.evidence} 示例={sample_val if sample_val else '无'}"
+                )
+            # 批量生成，一次 LLM 调用
+            field_block = "\n".join(field_specs)
+            batch_desc = self.call_llm(
+                prompt=(
+                    f"为以下每个字段生成一句中文自然语言描述（20字以内）：\n"
+                    f"{field_block}\n\n"
+                    f"格式要求：每行一个，格式为「字段名：描述」"
+                ),
+                system="你是专业数据分析师。对每个字段，用20字以内的中文短语描述其含义。输出格式：字段名：描述",
+            ).strip()
+
+            # 解析 LLM 输出，填充 column_descriptions
+            for line in batch_desc.split("\n"):
+                line = line.strip()
+                if not line or not line[0].isalpha():
+                    continue
+                # 格式：字段名：描述
+                if "：" in line:
+                    col_name, desc_text = line.split("：", 1)
+                    col_name = col_name.strip()
+                    desc_text = desc_text.strip()
+                    if col_name in [cs.column_name for cs in context.column_semantics]:
+                        context.column_descriptions[col_name] = desc_text
+
+            # 兜底：对没生成描述的字段，用模板补全
+            for cs in context.column_semantics:
+                if cs.column_name not in context.column_descriptions:
+                    type_map = {
+                        "numeric": "数值型",
+                        "categorical": "分类型",
+                        "datetime": "时间型",
+                        "id": "标识符",
+                        "text": "文本型",
+                        "boolean": "布尔型",
+                        "unknown": "未知类型",
+                    }
+                    type_ch = type_map.get(cs.inferred_type.value, cs.inferred_type.value)
+                    context.column_descriptions[cs.column_name] = f"{cs.column_name}（{type_ch}）"
+
+            self.emit_thinking(f"字段说明生成完成（{len(context.column_descriptions)} 个）")
 
             self.complete({"n_columns": len(df.columns), "uncertain": len(uncertain)})
             return context

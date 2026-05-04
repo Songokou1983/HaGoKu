@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# 加载 ~/.hagokyu/.env 中的环境变量
+_load_env_path = Path.home() / ".hagokyu" / ".env"
+if _load_env_path.exists():
+    load_dotenv(_load_env_path)
 
 
 class LLMConfig(BaseModel):

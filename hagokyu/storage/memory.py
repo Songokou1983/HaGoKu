@@ -119,7 +119,8 @@ class MemoryManager:
                 for e in sqlite_entries
                 if e.get("updated_at")
             )
-            if yaml_mtime > latest_sqlite_time:
+            yaml_dt = datetime.fromtimestamp(yaml_mtime)
+            if yaml_dt > latest_sqlite_time:
                 # YAML 更新，从 YAML 导入到 SQLite
                 self._import_yaml_to_sqlite()
         else:

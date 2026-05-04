@@ -407,8 +407,19 @@ def render() -> None:
                 all_projects = []
         current_proj = st.session_state.get("current_project")
         if current_proj not in all_projects:
-            current_proj = None
-            st.session_state.current_project = None
+            # 尝试找第一个有数据文件的项目，避免默认选到空项目（如 "runs"）
+            first_with_data = None
+            if pm:
+                for pname in all_projects:
+                    try:
+                        info = pm.info(pname)
+                        if info and info.data_files:
+                            first_with_data = pname
+                            break
+                    except Exception:
+                        pass
+            current_proj = first_with_data if first_with_data else all_projects[0] if all_projects else None
+            st.session_state.current_project = current_proj
 
         col_proj, col_data, col_btn = st.columns([1, 1, 1])
 

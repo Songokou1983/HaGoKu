@@ -161,7 +161,7 @@ def _analyst_finding_message(prelim_data: dict) -> str:
 
 
 def _render_agent_pipeline(events: list[Event], running: bool) -> None:
-    """一行进度条 + 4 个阶段标签"""
+    """横向进度条 + 4 个阶段标签（占满一行）"""
 
     # 根据最后一个事件判断当前进度
     pct = 0
@@ -174,31 +174,45 @@ def _render_agent_pipeline(events: list[Event], running: bool) -> None:
         if "complete" in etype or "finished" in etype:
             pct, stage_label = 100, "完成"
         elif "report" in etype or "generate" in etype:
-            pct, stage_label = 80, "生成报告"
+            pct, stage_label = 85, "生成报告"
         elif "analysis" in etype or "regression" in etype or "ttest" in etype or "correlation" in etype:
-            pct, stage_label = 60, "分析中"
+            pct, stage_label = 55, "分析数据"
         elif "clean" in etype or "outlier" in etype or "missing" in etype:
-            pct, stage_label = 40, "清洗数据"
+            pct, stage_label = 35, "清洗数据"
         elif "scout" in etype or "data_loaded" in etype or "fields" in etype:
-            pct, stage_label = 20, "识别字段"
+            pct, stage_label = 15, "识别字段"
 
     labels = ["Scout", "Cleaner", "Analyst", "Reporter"]
-    active_idx = min(pct // 25, 3)  # 0-19:0, 20-39:1, 40-59:2, 60-79:3
+    active_idx = min(int(pct) // 25, 3)
     if pct == 100:
         active_idx = 3
 
-    cols = st.columns([2, 1, 1, 1, 1, 2])
-    with cols[0]:
-        st.markdown(f"<span style='color:#6e7681;font-family:Space Mono,monospace;font-size:11px;'>{stage_label}</span>", unsafe_allow_html=True)
-    with cols[1]:
-        st.progress(pct / 100.0)
-    with cols[2]:
-        for i, lbl in enumerate(labels):
-            is_done = i < active_idx
-            is_active = i == active_idx and running and pct < 100
-            color = "#00ff41" if is_done else ("#00ffff" if is_active else "#3d4450")
-            dot = "●" if is_active else ("○" if is_done else "○")
-            st.markdown(f"<span style='color:{color};font-size:9px;font-family:Space Mono,monospace;'>{dot} {lbl}</span>", unsafe_allow_html=True)
+    # 横向进度条（填满整行，用 CSS 实现）
+    filled = pct
+    unfilled = 100 - pct
+
+    bar_html = f"""
+    <div style='display:flex;align-items:center;gap:0;width:100%;height:8px;border-radius:4px;overflow:hidden;background:#21262d;'>
+        <div style='width:{filled}%;height:100%;background:linear-gradient(90deg,#00ffff,#00ff41);border-radius:4px 0 0 4px;transition:width 0.3s;'></div>
+        <div style='width:{unfilled}%;height:100%;'></div>
+    </div>
+    """
+    st.markdown(bar_html, unsafe_allow_html=True)
+
+    # 4 个阶段标签（横向排列，填满整行）
+    cols = st.columns(4)
+    for i, (lbl, col) in enumerate(zip(labels, cols)):
+        is_done = i < active_idx
+        is_active = i == active_idx and running and pct < 100
+        color = "#00ff41" if is_done else ("#00ffff" if is_active else "#3d4450")
+        dot = "●" if is_active else "○"
+        text = f"{dot} {lbl}"
+        if is_done:
+            text = f"✓ {lbl}"
+        col.markdown(
+            f"<span style='color:{color};font-family:Space Mono,monospace;font-size:11px;'>{text}</span>",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_chat() -> None:

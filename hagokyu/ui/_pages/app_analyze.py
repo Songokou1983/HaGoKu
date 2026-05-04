@@ -166,24 +166,51 @@ def _render_agent_pipeline(events: list[Event], running: bool) -> None:
     # 根据最后一个事件判断当前进度
     pct = 0
     stage_label = "等待开始"
+    # 当前阶段索引（用于判断哪些阶段已完成）
+    # scout_first: Scout完成后=阶段0，此时应显示 Scout=✓, 其余=○
+    # cleaning_first: Cleaner完成后=阶段1，应显示 Scout=✓, Cleaner=✓, 其余=○
+    # analyst_first: Analyst完成后=阶段2，应显示 Scout=✓, Cleaner=✓, Analyst=✓, Reporter=○
+    # full: Reporter完成后=阶段3，全部=✓
+    current_stage = 0  # 当前活动阶段（0-3）
     if events:
         last = events[-1]
         etype_val = getattr(last, "event_type", None)
         etype = etype_val.value if etype_val else ""
+        agent_name = getattr(last, "agent", "") or ""
 
         if "complete" in etype or "finished" in etype:
-            pct, stage_label = 100, "完成"
+            # 根据 agent 名判断是哪个阶段完成
+            if agent_name == "Reporter":
+                current_stage = 3
+                pct, stage_label = 100, "完成"
+            elif agent_name == "Analyst":
+                current_stage = 2
+                pct, stage_label = 75, "分析完成"
+            elif agent_name == "Cleaner":
+                current_stage = 1
+                pct, stage_label = 50, "清洗完成"
+            elif agent_name == "Scout":
+                current_stage = 0
+                pct, stage_label = 25, "字段识别完成"
+            else:
+                # 默认：认为是完整流程结束
+                current_stage = 3
+                pct, stage_label = 100, "完成"
         elif "report" in etype or "generate" in etype:
             pct, stage_label = 85, "生成报告"
+            current_stage = 3
         elif "analysis" in etype or "regression" in etype or "ttest" in etype or "correlation" in etype:
             pct, stage_label = 55, "分析数据"
+            current_stage = 2
         elif "clean" in etype or "outlier" in etype or "missing" in etype:
             pct, stage_label = 35, "清洗数据"
+            current_stage = 1
         elif "scout" in etype or "data_loaded" in etype or "fields" in etype:
             pct, stage_label = 15, "识别字段"
+            current_stage = 0
 
     labels = ["Scout", "Cleaner", "Analyst", "Reporter"]
-    active_idx = min(int(pct) // 25, 3)
+    active_idx = current_stage  # 当前活动阶段（正在跑的那个）
     if pct == 100:
         active_idx = 3
 
@@ -532,7 +559,7 @@ def render() -> None:
                 st.rerun()
 
             # 用户确认字段 → 进入清洗阶段
-            # 构建 Scout 上下文
+            # 构建 Scout 上下文（包含完整的 column_semantics，供 Cleaner/Analyst 使用）
             scout_ctx = None
             if scout_data:
                 try:
@@ -540,7 +567,7 @@ def render() -> None:
                         "data_path": data_path,
                         "n_rows": scout_data.get("n_rows", 0),
                         "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": [],
+                        "column_semantics": scout_data.get("column_semantics", []),
                         "quality_score": 0.5,
                         "column_descriptions": scout_data.get("column_descriptions", {}),
                     })
@@ -578,7 +605,7 @@ def render() -> None:
                         "data_path": data_path,
                         "n_rows": scout_data.get("n_rows", 0),
                         "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": [],
+                        "column_semantics": scout_data.get("column_semantics", []),
                         "quality_score": 0.5,
                         "column_descriptions": scout_data.get("column_descriptions", {}),
                     })
@@ -623,7 +650,7 @@ def render() -> None:
                         "data_path": data_path,
                         "n_rows": scout_data.get("n_rows", 0),
                         "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": [],
+                        "column_semantics": scout_data.get("column_semantics", []),
                         "quality_score": 0.5,
                         "column_descriptions": scout_data.get("column_descriptions", {}),
                     })
@@ -657,7 +684,7 @@ def render() -> None:
                         "data_path": data_path,
                         "n_rows": scout_data.get("n_rows", 0),
                         "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": [],
+                        "column_semantics": scout_data.get("column_semantics", []),
                         "quality_score": 0.5,
                         "column_descriptions": scout_data.get("column_descriptions", {}),
                     })

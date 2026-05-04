@@ -82,6 +82,7 @@ class SqliteMemoryBackend(MemoryBackend):
     """SQLite 存储后端，直接操作 memory 表"""
 
     def __init__(self, db: HaGoKuDB) -> None:
+        self._db = db  # 保留 HaGoKuDB 实例以使用线程锁
         self._conn = db.conn
         self._index_ensured = False
 
@@ -96,18 +97,19 @@ class SqliteMemoryBackend(MemoryBackend):
     ) -> None:
         now = datetime.now().isoformat()
         mem_id = f"{project_id or '_global'}:{category}:{key}"
-        # 确保 idx_memory_uniq 索引存在（旧 DB 可能没有），只检查一次
-        if not self._index_ensured:
+        # 通过 transaction() 使用线程锁（包含索引创建 + 数据写入）
+        with self._db.transaction():
+            # 确保 idx_memory_uniq 索引存在（旧 DB 可能没有），只检查一次
+            if not self._index_ensured:
+                self._conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_uniq ON memory(project_id, category, key)"
+                )
+                self._index_ensured = True
             self._conn.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_uniq ON memory(project_id, category, key)"
+                "INSERT OR REPLACE INTO memory (id, project_id, category, key, value, source, confidence, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (mem_id, project_id, category, key, value, source, confidence, now, now),
             )
-            self._index_ensured = True
-        self._conn.execute(
-            "INSERT OR REPLACE INTO memory (id, project_id, category, key, value, source, confidence, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (mem_id, project_id, category, key, value, source, confidence, now, now),
-        )
-        self._conn.commit()
 
     def load(
         self,
@@ -150,17 +152,17 @@ class SqliteMemoryBackend(MemoryBackend):
         return result
 
     def delete(self, project_id: str | None, category: str, key: str) -> bool:
-        if project_id is None:
-            cursor = self._conn.execute(
-                "DELETE FROM memory WHERE project_id IS NULL AND category = ? AND key = ?",
-                (category, key),
-            )
-        else:
-            cursor = self._conn.execute(
-                "DELETE FROM memory WHERE project_id = ? AND category = ? AND key = ?",
-                (project_id, category, key),
-            )
-        self._conn.commit()
+        with self._db.transaction():
+            if project_id is None:
+                cursor = self._conn.execute(
+                    "DELETE FROM memory WHERE project_id IS NULL AND category = ? AND key = ?",
+                    (category, key),
+                )
+            else:
+                cursor = self._conn.execute(
+                    "DELETE FROM memory WHERE project_id = ? AND category = ? AND key = ?",
+                    (project_id, category, key),
+                )
         return cursor.rowcount > 0
 
     def get_latest_mtime(self, project_id: str | None) -> str | None:

@@ -235,6 +235,7 @@ class Orchestrator:
                 "n_cols": context.n_cols,
                 "n_rows": context.n_rows,
                 "columns": [s.column_name for s in context.column_semantics],
+                "column_semantics": [s.to_dict() for s in context.column_semantics],
                 "uncertain_columns": [s.column_name for s in context.get_uncertain_columns()],
                 "column_descriptions": context.column_descriptions,
                 "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
@@ -308,23 +309,33 @@ class Orchestrator:
                 "thought": "🧹 数据清洗（已确认策略）...",
             })
             cleaner = CleanerAgent(self.config.llm, self.event_bus)
-            strategy_result = cleaner.run(
-                data_path, context,
-                user_operations=cleaning_operations,
-                impact_warning=self.config.manager.cleaning_impact_warning,
-                phase="strategy_only",
-            )
-            if isinstance(strategy_result, dict):
-                # 用户未确认操作，用自动规划的执行
-                auto_ops = strategy_result.get("operations", [])
+            if cleaning_operations is not None:
+                # 用户已确认策略 → 执行清洗
                 df_clean, cleaning_report = cleaner.run(
                     data_path, context,
-                    user_operations=auto_ops,
+                    user_operations=cleaning_operations,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                     phase="full",
                 )
             else:
-                df_clean, cleaning_report = strategy_result
+                # 未确认 → 只返回策略供用户确认
+                strategy_result = cleaner.run(
+                    data_path, context,
+                    user_operations=cleaning_operations,
+                    impact_warning=self.config.manager.cleaning_impact_warning,
+                    phase="strategy_only",
+                )
+                if isinstance(strategy_result, dict):
+                    # 用户未确认操作，用自动规划的执行
+                    auto_ops = strategy_result.get("operations", [])
+                    df_clean, cleaning_report = cleaner.run(
+                        data_path, context,
+                        user_operations=auto_ops,
+                        impact_warning=self.config.manager.cleaning_impact_warning,
+                        phase="full",
+                    )
+                else:
+                    df_clean, cleaning_report = strategy_result
 
             # Analyst：初步发现
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {

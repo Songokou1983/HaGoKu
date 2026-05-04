@@ -178,7 +178,8 @@ class CleanerAgent(DataAgentBase):
             # ── phase="strategy_only"：只检测+计划，不执行清洗，返回策略供确认 ──
             if phase == "strategy_only":
                 self.emit_thinking("清洗策略已生成，等待用户确认...")
-                self.emit_event(EventType.AGENT_COMPLETED, "Cleaner", {
+                self.emit_event(EventType.AGENT_COMPLETED, {
+                    "agent": "Cleaner",
                     "result_summary": f"检测完成：{len(outliers_iqr)} 个异常列，{len(mechanisms)} 个缺失列，{len(operations)} 个计划操作",
                 })
                 # 数据质量评估

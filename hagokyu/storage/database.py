@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -137,12 +138,13 @@ class HaGoKuDB:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        # 添加 timeout 参数，防止并发访问时永久阻塞
-        self.conn = sqlite3.connect(str(db_path), timeout=30)
+        # check_same_thread=False 允许从 worker 线程访问（由 _lock 保证线程安全）
+        self.conn = sqlite3.connect(str(db_path), timeout=30, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self._init_tables()
+        self._lock = threading.RLock()  # 保护 conn 的线程锁
 
     @classmethod
     def get_instance(cls, db_path: Path | None = None) -> HaGoKuDB:
@@ -171,13 +173,14 @@ class HaGoKuDB:
 
     @contextmanager
     def transaction(self):
-        """事务上下文管理器，自动 commit / rollback"""
-        try:
-            yield self.conn
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        """事务上下文管理器，自动 commit / rollback（线程安全）"""
+        with self._lock:
+            try:
+                yield self.conn
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
 
     # ── Projects ───────────────────────────────────────────
 

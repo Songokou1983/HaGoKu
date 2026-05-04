@@ -195,7 +195,8 @@ class AnalystAgent(DataAgentBase):
             # ── phase="preliminary"：初步发现阶段，暂停供用户确认分析方向 ──
             if phase == "preliminary":
                 self.emit_thinking("初步分析完成，等待用户确认分析方向...")
-                self.emit_event(EventType.AGENT_COMPLETED, "Analyst", {
+                self.emit_event(EventType.AGENT_COMPLETED, {
+                    "agent": "Analyst",
                     "result_summary": f"初步发现 {len(results)} 个，待用户确认方向",
                 })
                 # 汇总每个分析类型的初步发现

@@ -18,11 +18,6 @@ def init_session_state():
 
 
 def render_project_sidebar() -> str | None:
-    """
-    侧边栏：只读显示当前项目名称（项目切换统一在分析页进行）。
-    """
+    """侧边栏：仅初始化 session state，不显示任何内容"""
     init_session_state()
-    current = st.session_state.get("current_project")
-    if current:
-        st.sidebar.markdown(f"📁 **{current}**")
-    return current
+    return st.session_state.get("current_project")

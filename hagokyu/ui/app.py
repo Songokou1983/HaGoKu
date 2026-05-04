@@ -49,7 +49,8 @@ def run() -> None:
                 pass
 
     # 确保 .streamlit/config.toml 存在（pip install 后可能不在用户工作目录）
-    _pkg_root = Path(_sys.modules["hagokyu.ui"].__file__).parent.parent
+    _ui_mod = _sys.modules.get("hagokyu.ui")
+    _pkg_root = Path(_ui_mod.__file__).parent.parent if _ui_mod and hasattr(_ui_mod, "__file__") and _ui_mod.__file__ else _Path(__file__).parent.parent
     _config_src = _pkg_root / ".streamlit" / "config.toml"
     _config_dest = Path.home() / ".streamlit" / "config.toml"
     if not _config_dest.exists():

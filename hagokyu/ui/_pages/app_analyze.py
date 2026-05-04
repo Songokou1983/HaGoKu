@@ -108,6 +108,15 @@ def _render_chat() -> None:
                                 st.session_state.last_report_path = output_path
                                 st.session_state.nav_page = "report"
                                 st.rerun()
+                    elif status == "skipped":
+                        # 问题与数据无关，LLM 直接回答
+                        llm_resp = content.get("llm_response", "")
+                        if llm_resp:
+                            st.info(f"🤖 {llm_resp}")
+                        else:
+                            st.info("这个问题和当前数据集无关，无法通过分析回答。")
+                    elif status == "ambiguous":
+                        st.warning(f"❓ {content.get('llm_response', '需要更多信息才能判断')}")
                     else:
                         st.error(content.get("message", "分析未完成"))
                 else:

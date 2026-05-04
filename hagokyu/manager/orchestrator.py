@@ -207,6 +207,31 @@ class Orchestrator:
                         df_clean = pd.read_parquet(cleaned_path_str)
 
         try:
+            # ── LLM 门卫：分类用户问题 ────────────────────────────
+            if context is None and query:
+                classification, llm_response = scout.classify_query(query, data_path=data_path)
+                if classification == "not_relevant":
+                    self.event_bus.emit(EventType.AGENT_THINKING, "Scout", {
+                        "thought": f"🤖 {llm_response}",
+                    })
+                    return {
+                        "status": "skipped",
+                        "reason": "query_not_relevant_to_data",
+                        "llm_response": llm_response,
+                        "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+                    }
+                elif classification == "ambiguous":
+                    self.event_bus.emit(EventType.AGENT_THINKING, "Scout", {
+                        "thought": f"❓ {llm_response}",
+                    })
+                    return {
+                        "status": "ambiguous",
+                        "reason": "query_needs_clarification",
+                        "llm_response": llm_response,
+                        "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+                    }
+                # relevant → 继续跑分析 pipeline
+
             # Scout + Cleaner（如果不是 resume）
             if context is None:
                 # 3. Scout: 数据侦察（传入 MemoryManager）

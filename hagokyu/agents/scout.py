@@ -217,6 +217,78 @@ class ScoutAgent(DataAgentBase):
             event_bus=event_bus,
         )
 
+    def classify_query(self, query: str, data_path: str = "", columns_info: str = "") -> tuple[str, str]:
+        """
+        LLM 分类用户问题，决定是否需要跑分析 pipeline。
+
+        Args:
+            query: 用户输入的问题
+            data_path: 数据文件路径（用于获取列名）
+            columns_info: 可选，已知的列信息字符串
+
+        Returns:
+            (classification, response)
+            - "relevant": 问题和数据有关，应该跑分析
+            - "not_relevant": 问题无关，response 是直接回复
+            - "ambiguous": 模糊，response 是需要确认的内容
+        """
+        if not query or not query.strip():
+            return "relevant", ""
+
+        # 如果没提供列信息，快速加载 header 获取列名（不加载数据）
+        if not columns_info and data_path:
+            try:
+                from pathlib import Path as _Path
+                p = _Path(data_path)
+                suffix = p.suffix.lower()
+                if suffix == ".csv":
+                    import pandas as pd
+                    cols = pd.read_csv(data_path, nrows=0).columns.tolist()
+                    columns_info = ", ".join(cols)
+                elif suffix in (".xlsx", ".xls"):
+                    import pandas as pd
+                    cols = pd.read_excel(data_path, nrows=0).columns.tolist()
+                    columns_info = ", ".join(cols)
+                else:
+                    columns_info = "(未知格式)"
+            except Exception:
+                columns_info = "(无法读取列信息)"
+
+        cols_desc = columns_info or "(无列信息)"
+
+        resp = self.call_llm(
+            prompt=(
+                f"用户问题是：「{query}」\n\n"
+                f"数据集包含这些列：{cols_desc}\n\n"
+                f"请判断：这个问题能不能通过分析这个数据集来回答？\n"
+                f"回答格式（三选一）：\n"
+                f"RELEVANT: [一句话说明这个数据如何回答此问题]\n"
+                f"NOT_RELEVANT: [一句话直接回答用户问题，不跑分析]\n"
+                f"AMBIGUOUS: [一句话说明需要什么额外信息才能判断]"
+            ),
+            system=(
+                "你是数据分析师的门卫。\n"
+                "如果问题可以通过分析数据回答 → RELEVANT\n"
+                "如果问题是常识/天气/新闻/个人问题等和数据分析无关 → NOT_RELEVANT（直接回答用户，不跑分析）\n"
+                "如果问题模糊 → AMBIGUOUS\n"
+                "只判断问题是否和数据相关，不要分析数据。"
+            ),
+        )
+
+        if not resp:
+            return "relevant", ""
+
+        upper = resp.strip().upper()
+        if upper.startswith("NOT_RELEVANT:"):
+            answer = resp.split(":", 1)[1].strip()
+            return "not_relevant", answer
+        elif upper.startswith("AMBIGUOUS:"):
+            clarification = resp.split(":", 1)[1].strip()
+            return "ambiguous", clarification
+        else:
+            reason = resp.split(":", 1)[1].strip() if ":" in resp else resp
+            return "relevant", reason
+
     def run(
         self,
         data_path: str,

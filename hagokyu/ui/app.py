@@ -47,7 +47,6 @@ def run() -> None:
                 _shutil.rmtree(_os.path.join(_dir, _d), ignore_errors=True)
             except OSError:
                 pass
-        [_os.rmdir(_os.path.join(_dir, _d)) for _d in _subdirs if _d == "__pycache__"]
 
     # 确保 .streamlit/config.toml 存在（pip install 后可能不在用户工作目录）
     _pkg_root = Path(_sys.modules["hagokyu.ui"].__file__).parent.parent

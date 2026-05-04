@@ -56,7 +56,7 @@ def run() -> None:
     if not _config_dest.exists():
         _config_dest.parent.mkdir(parents=True, exist_ok=True)
         _default_config = """[theme]
-primaryColor = "#22d3ee"
+primaryColor = "#38bdf8"
 backgroundColor = "#0a0e17"
 secondaryBackgroundColor = "#161b22"
 textColor = "#e2e8f0"
@@ -110,7 +110,7 @@ gatherUsageStats = false
     :root {
         --hagokyu-bg: #0a0e17;
         --hagokyu-surface: #0d1117;
-        --hagokyu-border: #21262d;
+        --hagokyu-border: #38bdf8;
         --hagokyu-accent: #00ffff;
         --hagokyu-magenta: #ff006e;
         --hagokyu-text: #c9d1d9;
@@ -118,6 +118,7 @@ gatherUsageStats = false
         --hagokyu-green: #00ff41;
         --hagokyu-red: #ff453a;
         --hagokyu-yellow: #ffd60a;
+        --hagokyu-orange: #ffb347;
         --hagokyu-mono: 'Space Mono', monospace;
         --hagokyu-display: 'VT323', monospace;
     }
@@ -385,6 +386,17 @@ gatherUsageStats = false
     ::-webkit-scrollbar-track { background: var(--hagokyu-bg) !important; }
     ::-webkit-scrollbar-thumb { background: var(--hagokyu-border) !important; }
     ::-webkit-scrollbar-thumb:hover { background: var(--hagokyu-accent) !important; }
+
+    /* Chat 消息框 — 橙色边框 */
+    [data-testid="stChatMessageContent"] {
+        border: 1px solid var(--hagokyu-orange) !important;
+        border-radius: 0 !important;
+        box-shadow: 0 0 8px rgba(255, 179, 71, 0.15) !important;
+    }
+    /* Chat 消息avatar */
+    [data-testid="stChatMessage"] {
+        border-left: 2px solid var(--hagokyu-orange) !important;
+    }
     </style>
     """)
 
@@ -405,9 +417,10 @@ gatherUsageStats = false
     # ── 页面路由 ────────────────────────────────────────────────
     PAGES = {
         "📁 项目管理": "_pages.app_projects",
-        "📊 互动分析": "_pages.app_analyze",
+        "💬 互动分析": "_pages.app_analyze",
         "📋 报告输出": "_pages.app_report",
         "⚙️ 系统设置": "_pages.app_settings",
+        "📚 知识库（RAG）": "_pages.app_knowledge",
     }
 
     # 侧边栏导航
@@ -418,8 +431,8 @@ gatherUsageStats = false
         with col_title:
             st.markdown("""
             <div style="padding: 0.3rem 0;">
-                <div style="font-family:'VT323',monospace;font-size:2.2rem;color:#ff006e;letter-spacing:0.06em;text-shadow:0 0 10px #ff006e,2px 0 0 #00ffff,-2px 0 0 #ff006e;line-height:1;">HaGoKu</div>
-                <div style="font-family:'Space Mono',monospace;font-size:0.65rem;color:#6e7681;text-transform:uppercase;letter-spacing:0.15em;margin-top:0.15rem;">用数学的力量</div>
+                <div style="font-family:'VT323',monospace;font-size:2.5rem;font-weight:bold;color:#ffb347;letter-spacing:0.06em;text-shadow:0 1px 0 #cc8c2c,0 2px 0 #b3772a,0 3px 0 #996624,0 4px 8px rgba(0,0,0,0.5);line-height:1;">HaGoKu</div>
+                <div style="font-family:'Space Mono',monospace;font-size:1rem;color:#ffffff;letter-spacing:0.08em;margin-top:0.35rem;">让每个小模型，都能做专业级商业分析</div>
             </div>
             """, unsafe_allow_html=True)
         st.divider()
@@ -434,8 +447,8 @@ gatherUsageStats = false
             label_visibility="collapsed",
         )
 
-        # 渲染项目侧边栏（仅非设置页面）
-        if "settings" not in selected_page:
+        # 渲染项目侧边栏（仅项目管理/互动分析/报告输出页面）
+        if selected_page in ("📁 项目管理", "💬 互动分析", "📋 报告输出"):
             from hagokyu.ui.components.project_sidebar import render_project_sidebar
             render_project_sidebar()
 
@@ -454,6 +467,9 @@ gatherUsageStats = false
     elif module_name == "app_settings":
         from hagokyu.ui._pages import app_settings
         app_settings.render()
+    elif module_name == "app_knowledge":
+        from hagokyu.ui._pages import app_knowledge
+        app_knowledge.render()
     else:
         from hagokyu.ui._pages import app_projects
         app_projects.render()

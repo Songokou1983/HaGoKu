@@ -111,7 +111,6 @@ class Orchestrator:
         query: str = "",
         *,
         project_name: str | None = None,
-        mode: str = "standard",
         user_mode: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
@@ -129,7 +128,6 @@ class Orchestrator:
             data_path: 数据文件路径
             query: 用户的分析问题
             project_name: 项目名（默认从文件名推断）
-            mode: Manager 模式 (local_weak / local_strong / cloud / pure_rule)
             user_mode: 用户模式 (quick / standard / expert)
             output_dir: 自定义输出目录
             formats: 报告输出格式
@@ -185,8 +183,8 @@ class Orchestrator:
         })
 
         # 2. 创建分析计划
-        plan = self._create_plan(query, mode, parsed_intent=parsed_intent)
-        self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode=mode)
+        plan = self._create_plan(query, parsed_intent=parsed_intent)
+        self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
         # 初始化 Agent
         scout = ScoutAgent(self.config.llm, self.event_bus)
@@ -552,53 +550,25 @@ class Orchestrator:
     def _create_plan(
         self,
         query: str,
-        mode: str,
         parsed_intent: Any | None = None,
     ) -> dict[str, Any]:
         """
-        创建分析计划
-
-        简单模式：
-        - rule: 纯规则，快速
-        - balanced: 规则 + AI 调整
-        - ai: AI 生成
+        创建分析计划：规则优先匹配，AI 辅助微调
         """
         rule_plan = self.rule_engine.match_plan(query)
 
-        # 纯规则模式：基于解析意图调整 plan_name
-        if mode == "rule" or not self.config.manager.llm_plan_enabled:
-            if rule_plan:
-                rule_plan["rule_match"] = True
-                # 用解析意图增强计划
-                if parsed_intent and parsed_intent.target:
-                    rule_plan["target"] = parsed_intent.target
-                return rule_plan
-            plan = self._generic_plan(query)
-            if parsed_intent and parsed_intent.target:
-                plan["target"] = parsed_intent.target
-            return plan
-
-        # AI 优先模式
-        if mode == "ai":
-            llm_plan = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
-            if llm_plan is not None:
-                return llm_plan
-            # LLM 失败降级
-            if rule_plan:
-                rule_plan["rule_match"] = True
-                return rule_plan
-            return self._generic_plan(query)
-
-        # balanced 模式（默认）：规则优先，AI 调整
         if rule_plan:
-            # 先用规则，AI 做微调
+            # 规则匹配成功，AI 做微调
             llm_plan = self._create_plan_hybrid(query, rule_plan, parsed_intent=parsed_intent)
             if llm_plan is not None:
+                llm_plan["rule_match"] = True
                 return llm_plan
             rule_plan["rule_match"] = True
+            if parsed_intent and parsed_intent.target:
+                rule_plan["target"] = parsed_intent.target
             return rule_plan
 
-        # 无匹配规则，降级到 AI 生成
+        # 无匹配规则，AI 生成
         llm_plan = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
         if llm_plan is not None:
             return llm_plan

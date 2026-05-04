@@ -38,10 +38,6 @@ class LLMConfig(BaseModel):
 class ManagerModeConfig(BaseModel):
     """Manager 模式配置"""
 
-    mode: str = "balanced"  # balanced(规则+AI) / rule(纯规则) / ai(AI优先)
-    llm_plan_enabled: bool = True
-    llm_plan_max_tokens: int = 1024
-    llm_plan_timeout: int = 30
     cleaning_impact_warning: float = 0.3  # 清洗影响率阈值（超过此比例触发警告）
 
 
@@ -121,8 +117,6 @@ class HaGoKuConfig(BaseModel):
             config.work_dir = Path(v).expanduser()
         if v := os.getenv("HAGOKYU_PROJECT_DIR"):
             config.output.project_dir = Path(v).expanduser()
-        if v := os.getenv("HAGOKYU_MANAGER_MODE"):
-            config.manager.mode = v
         return config
 
     def ensure_work_dir(self) -> None:
@@ -159,7 +153,6 @@ class HaGoKuConfig(BaseModel):
         return (
             f"HaGoKuConfig(model={self.llm.model!r}, "
             f"base_url={self.llm.base_url!r}, "
-            f"api_key={safe['api_key']!r}, "
-            f"mode={self.manager.mode})"
+            f"api_key={safe['api_key']!r})"
         )
 

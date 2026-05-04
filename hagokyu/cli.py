@@ -105,9 +105,6 @@ def cli() -> None:
 @click.option("--mode", "-m", default=None,
               type=click.Choice(["quick", "standard", "expert"]),
               help="用户模式 (quick/standard/expert)")
-@click.option("--manager-mode", default=None,
-              type=click.Choice(["balanced", "rule", "ai"]),
-              help="Manager 模式: balanced=规则+AI / rule=纯规则 / ai=AI优先")
 @click.option("--output-dir", "-o", default=None, help="输出目录")
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),
@@ -129,7 +126,6 @@ def run(
     demo: str | None,
     project: str | None,
     mode: str | None,
-    manager_mode: str | None,
     output_dir: str | None,
     formats: tuple[str, ...],
     template: str | None,
@@ -171,8 +167,6 @@ def run(
 
     # 加载配置
     config = HaGoKuConfig.load()
-    if manager_mode:
-        config.manager.mode = manager_mode
 
     # 创建编排器
     orch = Orchestrator(config)
@@ -462,10 +456,8 @@ def config_cmd(reset: bool) -> None:
         return
 
     config = HaGoKuConfig.load()
-    mode_labels = {"balanced": "规则+AI（平衡）", "rule": "纯规则", "ai": "AI优先"}
     click.echo("⚙️ HaGoKu 配置:")
     click.echo(f"   LLM: {config.llm.model} @ {config.llm.base_url}")
-    click.echo(f"   Manager: {config.manager.mode}（{mode_labels.get(config.manager.mode, config.manager.mode)}）")
     click.echo(f"   用户模式: {config.user_mode.default_mode}")
     click.echo(f"   工作目录: {config.work_dir}")
     click.echo(f"   输出格式: {', '.join(config.output.formats)}")

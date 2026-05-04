@@ -1,76 +1,16 @@
-"""HaGoKu Streamlit UI — 分析页面（Claude 风格三段式）"""
+"""HaGoKu Streamlit UI — 分析页面"""
 
 from __future__ import annotations
 
-import tempfile
 import threading
 import time
-from pathlib import Path
 
 import streamlit as st
 
-from hagokyu.ui.components.file_uploader import (
-    cleanup_session_temp,
-    render_upload_tab,
-)
 from hagokyu.config import HaGoKuConfig
 from hagokyu.manager.orchestrator import Orchestrator
 from hagokyu.observability.events import Event
 from hagokyu.storage.project_manager import ProjectManager
-
-# ── 演示数据集 ──────────────────────────────────────────
-
-DEMO_DATASETS = {
-    "ad_campaign": {
-        "name": "📢 广告投放数据",
-        "query": "哪个广告渠道的 ROI 最高？各渠道转化率有何差异？",
-        "file": "demo_ad_campaign.csv",
-    },
-    "conversion": {
-        "name": "🔽 转化漏斗数据",
-        "query": "分析各渠道的转化漏斗，哪个环节流失最严重？",
-        "file": "demo_conversion.csv",
-    },
-    "user_cohort": {
-        "name": "👤 用户队列数据",
-        "query": "各渠道用户质量和价值有什么差异？哪些是高价值用户群？",
-        "file": "demo_user_cohort.csv",
-    },
-}
-
-
-def _get_demo_path(name: str) -> Path | None:
-    filename = DEMO_DATASETS[name]["file"]
-    try:
-        import hagokyu
-        pkg_root = Path(hagokyu.__file__).parent.parent
-        path = pkg_root / "examples" / filename
-        if path.exists():
-            return path
-    except Exception:
-        pass
-    local = Path(__file__).parent.parent.parent / "examples" / filename
-    if local.exists():
-        return local
-    return None
-
-
-def _launch_demo(name: str) -> None:
-    info = DEMO_DATASETS[name]
-    src = _get_demo_path(name)
-    if src is None:
-        st.error(f"找不到演示数据: {name}")
-        return
-    suffix = src.suffix
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-        f.write(src.read_bytes())
-        tmp_path = f.name
-    st.session_state._demo_file = tmp_path
-    st.session_state._demo_name = info["name"]
-    st.session_state._demo_query = info["query"]
-    st.session_state.nav_page = "analyze"
-    st.rerun()
-
 
 # ── 工具函数 ────────────────────────────────────────────
 
@@ -229,7 +169,6 @@ def _safe_pm() -> ProjectManager | None:
 
 def render() -> None:
     _init_chat_state()
-    cleanup_session_temp()
     pm = _safe_pm()
     config = HaGoKuConfig.load()
 
@@ -255,13 +194,10 @@ def render() -> None:
         current_proj = None
         st.session_state.current_project = None
 
-    # 演示数据预加载
-    demo_path = st.session_state.pop("_demo_file", None)
-    demo_name = st.session_state.pop("_demo_name", None)
-    demo_query = st.session_state.pop("_demo_query", None)
+    # 演示数据预加载（已移除）
 
     with st.container():
-        col_proj, col_data = st.columns([1, 2])
+        col_proj, col_data, col_btn = st.columns([1, 1, 1])
 
         with col_proj:
             st.markdown("**📁 项目**")
@@ -273,46 +209,47 @@ def render() -> None:
             )
             st.session_state.current_project = selected
 
-            # 项目存储统计（选中时显示）
-            if selected:
-                try:
-                    stats = pm.get_storage_stats(selected)
-                    if stats:
-                        total = stats.get("total", {})
-                        input_stat = stats.get("input", {})
-                        if input_stat.get("count", 0) > 0:
-                            st.caption(
-                                f"📥 {input_stat['count']}个文件 "
-                                f"({input_stat.get('size_mb', 0):.1f}MB) "
-                                f"| 💾总计 {total.get('size_mb', 0):.1f}MB"
-                            )
-                        # 记忆提示
-                        notes = pm.load_memory(selected)
-                        if notes:
-                            st.caption("🧠 有记忆笔记")
-                except Exception:
-                    pass  # pm 未初始化时静默跳过
-
         with col_data:
             st.markdown("**📂 数据**")
-            data_path = render_upload_tab(
-                demo_path=demo_path,
-                demo_name=demo_name,
-                project_name=selected,
-                pm=pm,
+            files = []
+            if selected and pm:
+                try:
+                    info = pm.info(selected)
+                    if info and info.data_files:
+                        files = [f.name for f in info.data_files]
+                except Exception:
+                    pass
+            selected_file = st.selectbox(
+                "选择数据文件",
+                files if files else ["（无）"],
+                label_visibility="collapsed",
             )
+            if selected_file and selected_file != "（无）" and pm:
+                data_path = str(pm.get_data_path(selected, selected_file))
+            else:
+                data_path = None
             st.session_state.current_data_path = data_path
+
+        with col_btn:
+            has_file = bool(data_path)
+            if st.button("🚀 启动分析", type="primary", use_container_width=True,
+                         disabled=not has_file,
+                         help="选择项目和文件后启动分析"):
+                st.session_state._launch_clicked = True
 
     st.divider()
 
+    # 处理启动按钮点击
+    if st.session_state.pop("_launch_clicked", False) and selected and data_path:
+        _start_analysis(data_path=data_path, query="", project_name=selected,
+                        user_mode=config.user_mode.default_mode, config=config)
+        st.rerun()
+
     if not selected:
         st.info("请先选择一个项目，再开始分析。")
-        c1, c2 = st.columns(2)
-        if c1.button("➕ 去创建项目", type="primary", use_container_width=True):
+        if st.button("➕ 去创建项目", type="primary", use_container_width=True):
             st.session_state.nav_page = "projects"
             st.rerun()
-        if c2.button("🚀 快速体验", use_container_width=True):
-            _launch_demo("ad_campaign")
         st.stop()
 
     # ── 中部：Agent 流水线 + 过程日志 ─────────────────────
@@ -341,8 +278,6 @@ def render() -> None:
     # ── 底部：对话窗口 ─────────────────────────────────────
     _render_chat()
 
-    # 预填 query（演示数据）
-    initial_query = demo_query or ""
 
     # chat 输入框
     if prompt := st.chat_input("输入分析问题，例如：哪个渠道 ROI 最高？", key="chat_input"):
@@ -398,8 +333,7 @@ def render() -> None:
                     "analysis_data", "analysis_running",
                     "analysis_events"):
             st.session_state.pop(key, None)
-        cleanup_session_temp()
-
+    
         if error:
             st.session_state.chat_messages.append({"role": "assistant", "content": f"❌ 分析出错：{error}"})
         elif result:

@@ -174,108 +174,87 @@ def render() -> None:
     if not result.ok:
         st.warning(f"⚠️ **LLM 服务不可用**：{result.detail}")
 
-    # ── 布局 CSS：三层固定/滚动/固定 ────────────────────────
-    st.markdown("""
+    # ── CSS：三层布局 ──────────────────────────────────────
+    st.html("""
     <style>
-    /* Layer 1: 固定在顶部 */
-    .layer-header {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        background: #0a0e17;
-        padding: 0.5rem 0 0.5rem;
-        border-bottom: 1px solid #30363d;
+    /* Layer 1: st.container(key="layer1") → 固定在顶部 */
+    section[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"]:first-child {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 100 !important;
+        background: #0a0e17 !important;
+        border-bottom: 1px solid #30363d !important;
     }
-    /* Layer 2: 滚动区域 */
-    .layer-chat {
-        height: calc(100vh - 220px);
-        overflow-y: auto;
-        padding: 0.5rem 0;
-    }
-    /* Layer 3: 固定在底部 */
-    .layer-input {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        z-index: 100;
-        background: #0a0e17;
-        padding: 0.75rem 1rem;
-        border-top: 1px solid #30363d;
-    }
-    /* 隐藏 Streamlit 默认 chat_input 的 fixed 行为 */
-    section[data-testid="stChatInput"] {
-        position: relative !important;
-        bottom: auto !important;
+    /* Layer 2: st.container(key="layer2") → 内容滚动 */
+    section[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"]:nth-child(2) {
+        overflow-y: auto !important;
+        max-height: calc(100vh - 180px) !important;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """)
 
-    # ── 第一层：标题 + 选择器 + 启动按钮 + 进度条 ──────────
-    st.markdown('<div class="layer-header">', unsafe_allow_html=True)
+    # ── 第一层（固定）：标题 + 选择器 + 进度条 ──────────
+    with st.container(key="layer1"):
+        st.markdown("## 💬 互动分析（选择项目和数据后，输入分析问题启动）")
 
-    st.markdown("## 💬 互动分析（选择项目和数据后，输入分析问题启动）")
-
-    all_projects: list[str] = []
-    if pm:
-        try:
-            all_projects = [p.name for p in pm.list()]
-        except Exception:
-            all_projects = []
-    current_proj = st.session_state.get("current_project")
-    if current_proj not in all_projects:
-        current_proj = None
-        st.session_state.current_project = None
-
-    col_proj, col_data, col_btn = st.columns([1, 1, 1])
-
-    with col_proj:
-        st.markdown("**📁 项目**")
-        selected = st.selectbox(
-            "项目",
-            options=all_projects if all_projects else ["（请先创建项目）"],
-            index=all_projects.index(current_proj) if current_proj in all_projects else 0,
-            label_visibility="collapsed",
-            disabled=not all_projects,
-        )
-        st.session_state.current_project = selected
-
-    with col_data:
-        st.markdown("**📂 数据**")
-        files: list[str] = []
-        data_path: str | None = None
-        if selected and pm and selected != "（请先创建项目）":
+        all_projects: list[str] = []
+        if pm:
             try:
-                info = pm.info(selected)
-                if info and info.data_files:
-                    files = [f.name for f in info.data_files]
+                all_projects = [p.name for p in pm.list()]
             except Exception:
-                pass
-        selected_file = st.selectbox(
-            "选择数据文件",
-            files if files else ["（无）"],
-            label_visibility="collapsed",
-        )
-        if selected_file and selected_file != "（无）" and pm:
-            try:
-                data_path = str(pm.get_data_path(selected, selected_file))
-            except Exception:
-                data_path = None
-        st.session_state.current_data_path = data_path
+                all_projects = []
+        current_proj = st.session_state.get("current_project")
+        if current_proj not in all_projects:
+            current_proj = None
+            st.session_state.current_project = None
 
-    with col_btn:
-        st.markdown("&nbsp;")
-        has_file = bool(data_path)
-        if st.button("🚀 启动分析", type="primary", use_container_width=True,
-                     disabled=not has_file, help="选择项目和文件后启动"):
-            st.session_state._launch_clicked = True
+        col_proj, col_data, col_btn = st.columns([1, 1, 1])
 
-    # 进度条（第三行）
-    running = st.session_state.get("analysis_running", False)
-    events = st.session_state.get("analysis_events", [])
-    _render_agent_pipeline(events, running)
+        with col_proj:
+            st.markdown("**📁 项目**")
+            selected = st.selectbox(
+                "项目",
+                options=all_projects if all_projects else ["（请先创建项目）"],
+                index=all_projects.index(current_proj) if current_proj in all_projects else 0,
+                label_visibility="collapsed",
+                disabled=not all_projects,
+            )
+            st.session_state.current_project = selected
 
-    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 Layer 1
+        with col_data:
+            st.markdown("**📂 数据**")
+            files: list[str] = []
+            data_path: str | None = None
+            if selected and pm and selected != "（请先创建项目）":
+                try:
+                    info = pm.info(selected)
+                    if info and info.data_files:
+                        files = [f.name for f in info.data_files]
+                except Exception:
+                    pass
+            selected_file = st.selectbox(
+                "选择数据文件",
+                files if files else ["（无）"],
+                label_visibility="collapsed",
+            )
+            if selected_file and selected_file != "（无）" and pm:
+                try:
+                    data_path = str(pm.get_data_path(selected, selected_file))
+                except Exception:
+                    data_path = None
+            st.session_state.current_data_path = data_path
+
+        with col_btn:
+            st.markdown("&nbsp;")
+            has_file = bool(data_path)
+            if st.button("🚀 启动分析", type="primary", use_container_width=True,
+                         disabled=not has_file, help="选择项目和文件后启动"):
+                st.session_state._launch_clicked = True
+
+        # 进度条（第三行）
+        running = st.session_state.get("analysis_running", False)
+        events = st.session_state.get("analysis_events", [])
+        _render_agent_pipeline(events, running)
 
     # 无项目时提示
     if not all_projects or selected == "（请先创建项目）":
@@ -291,13 +270,11 @@ def render() -> None:
                         user_mode=config.user_mode.default_mode, config=config)
         st.rerun()
 
-    # ── 第二层：滚动聊天区域 ──────────────────────────────
-    st.markdown('<div class="layer-chat">', unsafe_allow_html=True)
-    _render_chat()
-    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 Layer 2
+    # ── 第二层（滚动）：聊天记录 ─────────────────────────
+    with st.container(key="layer2"):
+        _render_chat()
 
-    # ── 第三层：固定输入框 ────────────────────────────────
-    st.markdown('<div class="layer-input">', unsafe_allow_html=True)
+    # ── 第三层（固定）：输入框 ──────────────────────────
     if prompt := st.chat_input("输入分析问题，例如：哪个渠道 ROI 最高？", key="chat_input"):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         if not st.session_state.get("current_data_path"):
@@ -314,7 +291,6 @@ def render() -> None:
             config=config,
         )
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 Layer 3
 
     # ── 轮询逻辑（不渲染 UI，只更新状态）────────────────
     if st.session_state.get("analysis_running"):

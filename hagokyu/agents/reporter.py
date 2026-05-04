@@ -272,6 +272,23 @@ class ReporterAgent(DataAgentBase):
                 html = generator.generate_html(report, template_name=template)
                 self.emit_tool_result(f"HTML 报告已生成 ({len(html)} 字符)")
 
+            # LLM 总结关键发现（自然语言回复给用户）
+            if key_findings:
+                findings_text = "\n".join(
+                    f"- {f.get('question', '')}: {f.get('conclusion_plain', '')}"
+                    for f in key_findings[:5]
+                )
+                llm_response = self.call_llm(
+                    prompt=(
+                        f"基于以下分析发现，向用户用 2-3 句话总结核心结论和可操作建议：\n{findings_text}\n"
+                        f"语气：专业但易懂，像资深数据分析师在向决策者汇报。\n"
+                        f"格式：结论 + 建议，各一句话。"
+                    ),
+                    system="你是专业数据分析师，向决策者总结分析结论和行动建议。简洁有力，2-3句话。",
+                )
+                if llm_response:
+                    self.emit_thinking(f"📋 总结：{llm_response}")
+
             self.complete({"n_sections": len(sections), "n_findings": len(key_findings)})
             return report
 

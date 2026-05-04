@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -167,6 +168,16 @@ class DataAgentBase:
                 response_model=None,
             )
             return response.choices[0].message.content or ""
+
+    def call_llm(self, prompt: str, system: str = "") -> str:
+        """
+        同步调用 LLM（内部封装 asyncio.run）
+        """
+        try:
+            return asyncio.run(self.ask_llm(prompt, system))
+        except Exception as e:
+            self.emit_thinking(f"[LLM 调用失败] {e}")
+            return ""
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(role={self.role!r})"

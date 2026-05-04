@@ -361,6 +361,28 @@ class ScoutAgent(DataAgentBase):
                         },
                     )
 
+            # 9. LLM 总结数据概况（自然语言回复）
+            columns_info = ", ".join(
+                f"{cs.column_name}({cs.inferred_type.value})"
+                for cs in context.column_semantics[:10]
+            )
+            if len(context.column_semantics) > 10:
+                columns_info += f" ... 等{len(context.column_semantics)}列"
+            quality_note = "质量不错" if context.quality_score >= 0.8 else "质量一般，建议关注数据问题"
+            llm_summary = self.call_llm(
+                prompt=(
+                    f"用 1-2 句话向用户总结这份数据：\n"
+                    f"- 行数：{context.n_rows}，列数：{context.n_cols}\n"
+                    f"- 质量评分：{context.quality_score:.0%}（{quality_note}）\n"
+                    f"- 列类型：{columns_info}\n"
+                    f"- 主要问题：{context.warnings if context.warnings else '无警告'}\n"
+                    f"语气要简洁专业，像一个数据分析师在介绍数据集。"
+                ),
+                system="你是一个专业数据分析师，用简洁、专业的语言向用户介绍数据集概况。50字以内。",
+            )
+            if llm_summary:
+                self.emit_thinking(f"📊 数据概况：{llm_summary}")
+
             self.complete({"n_columns": len(df.columns), "uncertain": len(uncertain)})
             return context
 

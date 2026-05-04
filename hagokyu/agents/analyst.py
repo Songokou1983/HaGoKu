@@ -231,6 +231,31 @@ class AnalystAgent(DataAgentBase):
                     for mv in mandatory_violations:
                         self.emit_thinking(f"🚫 统计质量问题（严重）: {mv.message}")
 
+            # LLM 总结分析结论（自然语言回复）
+            if results:
+                top = results[0]
+                summary_parts = [f"**{top.question}**："]
+                if top.p_value is not None:
+                    sig = "显著" if top.significance == "significant" else "不显著"
+                    summary_parts.append(f"p={top.p_value:.4f}（{sig}）")
+                if top.effect_size is not None:
+                    summary_parts.append(f"效应量={top.effect_size:.3f}")
+                if top.conclusion_plain:
+                    summary_parts.append(top.conclusion_plain)
+                result_summary = "，".join(summary_parts)
+
+                llm_response = self.call_llm(
+                    prompt=(
+                        f"向用户用 1-2 句话解释这个分析结论：\n{result_summary}\n"
+                        f"如果 p < 0.05，用肯定语气说发现了什么。\n"
+                        f"如果 p >= 0.05，用中性语气说没有发现显著关系，并提示可能原因。\n"
+                        f"商业场景下，这个结论意味着什么？"
+                    ),
+                    system="你是专业数据分析师，用商业易懂的语言解释统计结论。100字以内。",
+                )
+                if llm_response:
+                    self.emit_thinking(f"📊 结论：{llm_response}")
+
             self.complete({"n_results": len(results), "n_business_metrics": len(business_metrics)})
             # 附上商业指标到结果中（Reporter 需要）
             return results, business_metrics

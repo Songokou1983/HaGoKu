@@ -717,6 +717,8 @@ def _start_analysis(
 
             def on_event(event: Event) -> None:
                 events_holder.append(event)
+                # 同步写到 session_state，让 UI 能实时读取
+                st.session_state.analysis_events = list(events_holder)
 
             orch.event_bus.subscribe(on_event)
             try:
@@ -740,7 +742,7 @@ def _start_analysis(
 
     thread = threading.Thread(target=run, daemon=True)
     st.session_state.analysis_running = True
-    st.session_state.analysis_events = []
+    st.session_state.analysis_events = events_holder  # 复用线程的 list，append 直接生效
     st.session_state.analysis_result = None
     st.session_state.analysis_error = None
     st.session_state._analysis_thread = thread

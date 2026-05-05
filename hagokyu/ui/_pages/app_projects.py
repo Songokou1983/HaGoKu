@@ -56,28 +56,33 @@ def _safe_pm() -> ProjectManager | None:
 
 
 def _render_project_card(p, pm: ProjectManager | None) -> None:
-    """渲染单个项目卡片"""
-    # 顶部行：名称 + 操作按钮
-    col_n, col_a = st.columns([4, 2])
-    with col_n:
-        st.markdown(f"**📁 {p.name}**")
-        if p.description:
-            st.caption(p.description[:50] + ("…" if len(p.description) > 50 else ""))
-
+    """渲染单个项目卡片，一行排列"""
+    col_name, col_desc, col_time, col_a, col_b, col_c, col_d = st.columns([2, 5, 2, 1, 1, 1, 1])
+    with col_name:
+        st.markdown(f"<span style='font-size:17px;'>{p.name}</span>", unsafe_allow_html=True)
+    with col_desc:
+        st.markdown(f"<span style='font-size:15px;color:#9ca3af;'>{p.description[:60] + ('…' if p.description and len(p.description) > 60 else '')}</span>", unsafe_allow_html=True)
+    with col_time:
+        if p.last_run:
+            st.markdown(f"<span style='font-size:14px;color:#6e7681;'>🔄 更新于 {p.last_run.strftime('%m-%d %H:%M')}</span>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<span style='font-size:14px;color:#6e7681;'>📅 创建于 {p.created_at.strftime('%m-%d')}</span>", unsafe_allow_html=True)
     with col_a:
-        c1, c2, c3, c4 = st.columns(4)
-        if c1.button("🚀", key=_project_key(p.name, "a"), use_container_width=True, help="分析"):
+        if st.button("🚀", key=_project_key(p.name, "a"), help="分析"):
             st.session_state.current_project = p.name
             st.session_state.nav_page = "analyze"
             st.rerun()
-        if c2.button("📋", key=_project_key(p.name, "r"), use_container_width=True, help="报告"):
+    with col_b:
+        if st.button("📋", key=_project_key(p.name, "r"), help="报告"):
             st.session_state.current_project = p.name
             st.session_state.nav_page = "report"
             st.rerun()
-        if c3.button("📝", key=_project_key(p.name, "e"), use_container_width=True, help="编辑描述"):
+    with col_c:
+        if st.button("📝", key=_project_key(p.name, "e"), help="编辑"):
             st.session_state[_project_key(p.name, "edit_desc")] = True
             st.rerun()
-        if c4.button("🗑️", key=_project_key(p.name, "d"), use_container_width=True, help="删除"):
+    with col_d:
+        if st.button("🗑️", key=_project_key(p.name, "d"), help="删除"):
             st.session_state[_project_key(p.name, "confirm")] = True
             st.rerun()
 
@@ -111,56 +116,7 @@ def _render_project_card(p, pm: ProjectManager | None) -> None:
             st.session_state.pop(_project_key(p.name, "edit_desc"), None)
             st.rerun()
 
-    # 元信息行：时间 / 文件统计
-    col_t, col_s = st.columns([1, 3])
-    with col_t:
-        if p.last_run:
-            st.caption(f"🔄 最近 {p.last_run.strftime('%m-%d %H:%M')}")
-        else:
-            st.caption(f"📅 创建于 {p.created_at.strftime('%m-%d')}")
-
-    with col_s:
-        stats = _safe_stats(pm, p.name)
-        badge = _render_storage_badge(stats)
-        if badge:
-            st.caption(badge)
-
-    # 展开详情：记忆笔记 + 数据文件列表
-    with st.expander("🔽 展开详情"):
-        # 记忆笔记
-        notes = pm.load_memory(p.name) if pm else ""
-        st.markdown("**🧠 项目记忆**")
-        new_notes = st.text_area(
-            "记忆笔记（支持 Markdown）",
-            value=notes,
-            height=120,
-            key=_project_key(p.name, "notes_input"),
-            label_visibility="collapsed",
-            placeholder="记录这个项目的背景、目标、关键发现...",
-        )
-        if st.button("💾 保存记忆", key=_project_key(p.name, "save_notes")):
-            if pm:
-                pm.save_memory(p.name, new_notes)
-                st.success("✅ 记忆已保存")
-            else:
-                st.warning("项目管理器未初始化，请重启 UI")
-            st.rerun()
-
-        # 数据文件列表
-        if p.data_files:
-            st.markdown("**📥 数据文件**")
-            for f in p.data_files:
-                size_str = f"{f.size_kb:.1f}KB" if f.size_kb < 1024 else f"{f.size_kb/1024:.1f}MB"
-                st.markdown(f"- `{f.name}` — {size_str}，{f.added_at.strftime('%m-%d %H:%M')}")
-
-        # 过程文件列表（已有 process_files 无需再查 pm.info）
-        if p.process_files:
-            st.markdown("**⚙️ 过程文件**")
-            for f in p.process_files:
-                size_str = f"{f.size_kb:.1f}KB" if f.size_kb < 1024 else f"{f.size_kb/1024:.1f}MB"
-                st.markdown(f"- `{f.name}` — {size_str}")
-
-    st.divider()
+    # st.divider()
 
 
 def render() -> None:
@@ -172,24 +128,22 @@ def render() -> None:
     projects = pm.list()
 
     # ── 项目概况 ─────────────────────────────────────────────
-    st.markdown("### 📊 项目概况")
+    st.markdown("# 📊 项目概况")
 
     if not projects:
         st.info("还没有任何项目，请创建新项目。")
         st.caption(f"📂 项目保存在：{pm.base_dir}")
     else:
-        total_runs = sum(p.run_count for p in projects)
-        total_files = sum(len(p.data_files) for p in projects)
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("项目数", len(projects))
-        col2.metric("总分析次数", total_runs)
-        col3.metric("总数据文件", total_files)
-        # 总存储
-        total_size_mb = 0.0
-        for p in projects:
-            stats = _safe_stats(pm, p.name)
-            total_size_mb += stats.get("total", {}).get("size_mb", 0.0)
-        col4.metric("总存储", f"{total_size_mb:.1f} MB")
+        # 表头
+        h_name, h_desc, h_time, h_btn = st.columns([2, 5, 2, 4])
+        with h_name:
+            st.markdown("<div style='text-align:center;'>**项目名称**</div>", unsafe_allow_html=True)
+        with h_desc:
+            st.markdown("<div style='text-align:center;'>**项目描述**</div>", unsafe_allow_html=True)
+        with h_time:
+            st.markdown("<div style='text-align:center;'>**更新时间**</div>", unsafe_allow_html=True)
+        with h_btn:
+            st.markdown("<div style='text-align:center;'>**操作**</div>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -201,7 +155,7 @@ def render() -> None:
             _render_project_card(p, pm)
 
     # ── 新建项目 ─────────────────────────────────────────────
-    st.markdown("### ➕ 新建项目")
+    st.markdown("# ➕ 新建项目")
 
     name = st.text_input(
         "项目名称",

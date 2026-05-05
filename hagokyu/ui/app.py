@@ -128,20 +128,20 @@ gatherUsageStats = false
         background-color: var(--hagokyu-bg) !important;
         color: var(--hagokyu-text) !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 15px !important;
+        font-size: 18px !important;
     }
 
     /* 基础文字 */
     p, span, label, .stText, .stCaption, .stMarkdown, li {
-        font-size: 14px !important;
+        font-size: 17px !important;
         color: var(--hagokyu-text) !important;
     }
 
     /* 标题层级 — VT323 标题感 */
-    h1 { font-family: var(--hagokyu-display) !important; font-size: 2.8rem !important; font-weight: 400 !important; color: var(--hagokyu-accent) !important; letter-spacing: 0.05em !important; }
-    h2 { font-family: var(--hagokyu-display) !important; font-size: 2rem !important; font-weight: 400 !important; color: #f0fdfa !important; letter-spacing: 0.04em !important; }
-    h3 { font-family: var(--hagokyu-mono) !important; font-size: 1rem !important; font-weight: 700 !important; color: var(--hagokyu-accent) !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
-    h4 { font-size: 0.875rem !important; font-weight: 700 !important; color: var(--hagokyu-text) !important; }
+    h1 { font-family: var(--hagokyu-display) !important; font-size: 3.2rem !important; font-weight: 400 !important; color: var(--hagokyu-accent) !important; letter-spacing: 0.05em !important; }
+    h2 { font-family: var(--hagokyu-display) !important; font-size: 2.4rem !important; font-weight: 400 !important; color: #f0fdfa !important; letter-spacing: 0.04em !important; }
+    h3 { font-family: var(--hagokyu-mono) !important; font-size: 1.3rem !important; font-weight: 700 !important; color: var(--hagokyu-accent) !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
+    h4 { font-size: 1.1rem !important; font-weight: 700 !important; color: var(--hagokyu-text) !important; }
 
     /* CRT 扫描线 — 全局 overlay */
     [data-testid="stMainBlockContainer"]::before {
@@ -169,7 +169,7 @@ gatherUsageStats = false
     }
     [data-testid="stSidebar"] h2 {
         font-family: var(--hagokyu-display) !important;
-        font-size: 1.8rem !important;
+        font-size: 2.4rem !important;
         color: var(--hagokyu-magenta) !important;
         text-shadow: 0 0 8px var(--hagokyu-magenta) !important;
     }
@@ -184,11 +184,11 @@ gatherUsageStats = false
     }
     [data-testid="stSidebar"] .stRadio label {
         font-family: var(--hagokyu-mono) !important;
-        font-size: 0.8rem !important;
+        font-size: 1.1rem !important;
         font-weight: 700 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.12em !important;
-        padding: 0.6rem 0.75rem !important;
+        padding: 0.8rem 1rem !important;
         border: 1px solid transparent !important;
         border-radius: 0 !important;
         min-height: unset !important;
@@ -223,7 +223,7 @@ gatherUsageStats = false
         color: var(--hagokyu-accent) !important;
         border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 12px !important;
+        font-size: 15px !important;
         font-weight: 700 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.1em !important;
@@ -256,7 +256,7 @@ gatherUsageStats = false
         color: var(--hagokyu-text) !important;
         border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 13px !important;
+        font-size: 16px !important;
         transition: border-color 0.15s, box-shadow 0.15s !important;
     }
     .stTextInput > div > div > input:focus,
@@ -274,6 +274,7 @@ gatherUsageStats = false
         border-radius: 0 !important;
         color: var(--hagokyu-text) !important;
         font-family: var(--hagokyu-mono) !important;
+        font-size: 16px !important;
     }
     .stSelectbox > div > div:hover {
         border-color: var(--hagokyu-accent) !important;
@@ -293,11 +294,11 @@ gatherUsageStats = false
         border-right: 1px solid var(--hagokyu-border) !important;
         border-radius: 0 !important;
         font-family: var(--hagokyu-mono) !important;
-        font-size: 12px !important;
+        font-size: 15px !important;
         font-weight: 700 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.08em !important;
-        padding: 0.5rem 1rem !important;
+        padding: 0.7rem 1.2rem !important;
     }
     .stTabs [data-baseweb="tab"]:hover {
         color: var(--hagokyu-accent) !important;
@@ -313,14 +314,14 @@ gatherUsageStats = false
     /* Metric */
     [data-testid="stMetricValue"] {
         font-family: var(--hagokyu-mono) !important;
-        font-size: 1.6rem !important;
+        font-size: 2rem !important;
         font-weight: 700 !important;
         color: var(--hagokyu-green) !important;
         text-shadow: 0 0 8px rgba(0, 255, 65, 0.5) !important;
     }
     [data-testid="stMetricLabel"] {
         font-family: var(--hagokyu-mono) !important;
-        font-size: 10px !important;
+        font-size: 13px !important;
         color: var(--hagokyu-text-dim) !important;
         text-transform: uppercase !important;
         letter-spacing: 0.1em !important;
@@ -339,7 +340,7 @@ gatherUsageStats = false
     }
     .streamlit-expander > summary {
         color: var(--hagokyu-text) !important;
-        font-size: 13px !important;
+        font-size: 16px !important;
         font-family: var(--hagokyu-mono) !important;
     }
 
@@ -378,7 +379,7 @@ gatherUsageStats = false
         background: #070b11 !important;
         border: 1px solid var(--hagokyu-border) !important;
         border-radius: 0 !important;
-        font-size: 12px !important;
+        font-size: 15px !important;
     }
 
     /* Scrollbar */

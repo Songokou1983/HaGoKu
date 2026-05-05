@@ -155,7 +155,6 @@ class Orchestrator:
         self.event_bus.emit(EventType.RUN_STARTED, "Manager", {
             "query": query,
             "project": project_name,
-            "mode": mode,
         })
 
         self.output_mgr = OutputManager(self.config.output, project_name)
@@ -335,12 +334,13 @@ class Orchestrator:
                 else:
                     df_clean, cleaning_report = strategy_result
 
-            # Analyst：初步发现
+            # Analyst：初步发现或完整分析（取决于phase）
+            analyst_phase = "full" if phase == "full" else "preliminary"
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
-                "thought": "📊 初步分析，发现数据中的规律...",
+                "thought": "📊 初步分析，发现数据中的规律..." if analyst_phase == "preliminary" else "📊 完整分析中...",
             })
             analyst = AnalystAgent(self.config.llm, self.event_bus)
-            analyst_result = analyst.run(df_clean, context, plan, phase="preliminary")
+            analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
             if isinstance(analyst_result, dict):
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "Analyst", {
                     "result_summary": f"初步发现 {len(analyst_result.get('preliminary_findings', []))} 个，待确认",
@@ -689,8 +689,8 @@ class Orchestrator:
                 messages=messages,
                 response_model=LLMPlanResponse,
                 temperature=self.config.llm.temperature,
-                max_tokens=self.config.manager.llm_plan_max_tokens,
-                timeout=self.config.manager.llm_plan_timeout,
+                max_tokens=self.config.llm.max_tokens,
+                timeout=30,
             )
 
             # 服务端二次校验 analyst_focus

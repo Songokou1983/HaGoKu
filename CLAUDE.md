@@ -93,7 +93,7 @@ hagokyu-ui              # 启动 Web UI（Streamlit，端口 8501）
 ```
 
 - **架构**: Manager → Scout → Cleaner → Analyst → Reporter
-- **LLM**: llama-server (localhost:8000/v1)，Qwen3.6-35B-A3B Q4_K_M
+- **LLM**: MiniMax 云端（`~/.hagokyu/.env` 配置），**不要动 Hermes 的本地 35B**
 - **代码量**: 18,607 行 Python，223 pytest 100% 通过
 - **UI**: Streamlit，terminal/sci-fi 深色主题（JetBrains Mono + Inter 字体）
 - **包布局**: flat（`hagokyu/` 在项目根，不用 `src/hagokyu/`）

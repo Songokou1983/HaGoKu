@@ -27,6 +27,7 @@ def _poll_and_update() -> None:
         st.session_state.analysis_result = _results[0] if _results else None
         st.session_state.analysis_error = _errors[0] if _errors else None
         st.session_state.analysis_running = False
+        st.session_state._just_finished = True  # 标记：刚结束，本 render 继续显示 thinking panel
     else:
         waited = time.time() - st.session_state.get("_analysis_start", time.time())
         if waited >= 300:
@@ -49,6 +50,8 @@ def _init_chat_state() -> None:
         st.session_state.current_data_path = None
     if "_events_shown_count" not in st.session_state:
         st.session_state._events_shown_count = 0
+    if "_just_finished" not in st.session_state:
+        st.session_state._just_finished = False
     # Scout 字段确认
     if "awaiting_field_confirmation" not in st.session_state:
         st.session_state.awaiting_field_confirmation = False
@@ -89,6 +92,43 @@ AGENT_LABEL = {
     "analyst":  "📊 Analyst",
     "reporter": "📋 Reporter",
 }
+
+# 字段中文名称映射（常见英文缩写 → 中文）
+FIELD_CHINESE_NAMES = {
+    # 常见收入/财务
+    "Inc": "收入", "Revenue": "收入", "Sales": "销售额", "Amount": "金额",
+    "Cost": "成本", "Profit": "利润", "Margin": "利润率",
+    # 常见维度
+    "Date": "日期", "Time": "时间", "Period": "期间", "Year": "年份", "Month": "月份",
+    "Channel": "渠道", "Region": "区域", "Country": "国家", "City": "城市",
+    "BU": "业务单元", "Dept": "部门", "Team": "团队",
+    # 常见指标
+    "Count": "数量", "Num": "数量", "Total": "合计", "Avg": "均值",
+    "Rate": "比率", "Ratio": "比率", "Percentage": "百分比",
+    # 常见ID
+    "ID": "编号", "Code": "编码", "Name": "名称", "Type": "类型",
+    # 布尔
+    "Is": "是否", "Has": "是否有", "Flag": "标记",
+}
+# 通用中文名称推断：从英文字段名提取有意义的中文
+def _infer_chinese_name(field: str) -> str:
+    """从英文字段名推断中文名称"""
+    # 精确匹配
+    for eng, chi in FIELD_CHINESE_NAMES.items():
+        if field.lower() == eng.lower():
+            return chi
+    # 前缀匹配（如 Inc1 → 收入）
+    for eng, chi in FIELD_CHINESE_NAMES.items():
+        if field.lower().startswith(eng.lower()):
+            return chi
+    # 去除常见后缀（1, 2, _new, _old 等）
+    import re
+    base = re.sub(r'[\d_]+$', '', field)
+    for eng, chi in FIELD_CHINESE_NAMES.items():
+        if base.lower() == eng.lower():
+            return chi
+    # 全大写转首字母大写（无匹配时）
+    return field
 
 
 def _scout_field_message(scout_data: dict) -> str:
@@ -161,6 +201,136 @@ def _analyst_finding_message(prelim_data: dict) -> str:
 
 
 
+
+
+def _render_thinking_panel() -> None:
+    """实时 Thinking 面板：显示模型信息 + 思考时间 + 工具调用流 + 进度"""
+    from hagokyu.config import HaGoKuConfig
+    config = HaGoKuConfig.load()
+
+    evs = st.session_state.get("analysis_events", [])
+    elapsed = time.time() - st.session_state.get("_analysis_start", time.time())
+    elapsed_str = f"{int(elapsed)}"
+
+    # CSS for pulsing dot
+    st.html(f"""
+    <style>
+    @keyframes pulse-dot {{
+        0%, 100% {{ opacity: 1; transform: scale(1); }}
+        50% {{ opacity: 0.4; transform: scale(0.85); }}
+    }}
+    .thinking-dot {{
+        display: inline-block;
+        width: 8px; height: 8px;
+        background: #38bdf8;
+        border-radius: 50%;
+        margin-right: 6px;
+        animation: pulse-dot 1.2s ease-in-out infinite;
+        box-shadow: 0 0 6px #38bdf8;
+    }}
+    .thinking-panel {{
+        background: #0d1117;
+        border: 1px solid #38bdf8;
+        border-radius: 4px;
+        padding: 12px 16px;
+        margin: 8px 0;
+        font-family: 'Space Mono', monospace;
+    }}
+    .thinking-header {{
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 10px;
+        color: #c9d1d9;
+        font-size: 12px;
+    }}
+    .thinking-timer {{
+        color: #38bdf8;
+        font-weight: 700;
+        font-size: 13px;
+    }}
+    .tool-line {{
+        color: #6e7681;
+        font-size: 12px;
+        padding: 2px 0;
+        border-left: 2px solid #21262d;
+        padding-left: 8px;
+        margin: 3px 0 3px 8px;
+    }}
+    .tool-line.tool-call {{
+        color: #f0e68c;
+        border-left-color: #f0e68c;
+    }}
+    .tool-line.tool-result {{
+        color: #4ade80;
+        border-left-color: #4ade80;
+    }}
+    .tool-line.agent-thinking {{
+        color: #38bdf8;
+        border-left-color: #38bdf8;
+    }}
+    .thinking-end {{
+        clear: both;
+    }}
+    </style>
+    """)
+
+    # 计算当前阶段
+    current_agent = "Scout"
+    tool_calls = []
+    latest_thought = ""  # 最新的思考内容
+    for ev in reversed(evs):
+        ev_type = str(getattr(ev, "event_type", ""))
+        agent = getattr(ev, "agent", "") or ""
+        data = getattr(ev, "data", {}) or {}
+        if "tool_called" in ev_type.lower():
+            tool_calls.append(("call", data.get("tool", ""), data.get("args_summary", "")))
+        elif "tool_result" in ev_type.lower():
+            tool_calls.append(("result", data.get("summary", "")))
+        elif "thinking" in ev_type.lower() and not latest_thought:
+            # 保留最新的思考内容
+            thought = data.get("thought", "")
+            if thought:
+                latest_thought = thought
+        if agent.lower() in ("scout", "cleaner", "analyst", "reporter"):
+            current_agent = agent.capitalize()
+            break
+
+    # 显示面板
+    st.markdown(f"""
+    <div class="thinking-panel">
+        <div class="thinking-header">
+            <span style="color:#6e7681;">模型：</span>
+            <span style="color:#c9d1d9;">{config.llm.model}</span>
+            <span style="color:#6e7681; margin-left:8px;">状态：</span>
+            <span class="thinking-timer"><span class="thinking-dot"></span>思考 {elapsed_str} 秒</span>
+            <span style="color:#6e7681; margin-left:8px;">当前：</span>
+            <span style="color:#38bdf8;">{current_agent}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 显示当前思考内容（Agent正在想什么）
+    if latest_thought:
+        st.markdown(f"""
+        <div class="tool-line agent-thinking">💭 {latest_thought}</div>
+        """, unsafe_allow_html=True)
+
+    # 显示最近的工具调用（最多显示最后3个）
+    if tool_calls:
+        for tc in tool_calls[-3:]:
+            if tc[0] == "call":
+                st.markdown(f"""
+                <div class="tool-line tool-call">🔧 {tc[1]}（{tc[2]}）</div>
+                """, unsafe_allow_html=True)
+            else:
+                result = tc[1][:80] + "..." if len(tc[1]) > 80 else tc[1]
+                st.markdown(f"""
+                <div class="tool-line tool-result">  → {result}</div>
+                """, unsafe_allow_html=True)
+
+    # 进度条
+    _render_agent_pipeline(evs, True)
 
 
 def _render_agent_pipeline(events: list[Event], running: bool) -> None:
@@ -330,33 +500,91 @@ def _render_chat() -> None:
                         else:
                             st.markdown(content)
 
-    # 实时事件流（逐条显示，只显示新事件防重复）
-    if st.session_state.get("analysis_running"):
-        evs = st.session_state.get("analysis_events", [])
-        shown_count = st.session_state.get("_events_shown_count", 0)
-        new_evs = evs[shown_count:]
-        for ev in new_evs:
-            ev_str = str(getattr(ev, "event_type", ""))
-            if "scout" in ev_str or "data_loaded" in ev_str or "fields" in ev_str:
-                agent, color, label = "scout", AGENT_COLOR["scout"], AGENT_LABEL["scout"]
-            elif "clean" in ev_str or "outlier" in ev_str or "missing" in ev_str:
-                agent, color, label = "cleaner", AGENT_COLOR["cleaner"], AGENT_LABEL["cleaner"]
-            elif "analysis" in ev_str or "regression" in ev_str or "ttest" in ev_str:
-                agent, color, label = "analyst", AGENT_COLOR["analyst"], AGENT_LABEL["analyst"]
-            elif "report" in ev_str or "generate" in ev_str:
-                agent, color, label = "reporter", AGENT_COLOR["reporter"], AGENT_LABEL["reporter"]
-            else:
-                continue
-            detail = ""
-            if hasattr(ev, "data") and isinstance(ev.data, dict):
-                detail = ev.data.get("thought", ev.data.get("message", ""))
-            if detail:
-                with st.chat_message("assistant"):
-                    st.markdown(
-                        f'<span style="color:{color};font-family:Space Mono,monospace;">'
-                        f'**{label}:**</span> ⏳ {detail[:150]}',
-                        unsafe_allow_html=True,
-                    )
+    # 实时事件流（像Claude Code那样，在聊天流里滚动显示每一步）
+    evs = st.session_state.get("analysis_events", [])
+    shown_count = st.session_state.get("_events_shown_count", 0)
+    new_evs = evs[shown_count:]
+    for ev in new_evs:
+        ev_str = str(getattr(ev, "event_type", ""))
+        agent_name = getattr(ev, "agent", "") or ""
+
+        # 映射到 Agent 颜色
+        if agent_name.lower() in ("scout",):
+            color, label = AGENT_COLOR["scout"], AGENT_LABEL["scout"]
+        elif agent_name.lower() in ("cleaner",):
+            color, label = AGENT_COLOR["cleaner"], AGENT_LABEL["cleaner"]
+        elif agent_name.lower() in ("analyst",):
+            color, label = AGENT_COLOR["analyst"], AGENT_LABEL["analyst"]
+        elif agent_name.lower() in ("reporter",):
+            color, label = AGENT_COLOR["reporter"], AGENT_LABEL["reporter"]
+        elif agent_name.lower() in ("manager",):
+            color, label = "#a78bfa", "🧠 Manager"
+        else:
+            color, label = "#6e7681", f"🔧 {agent_name}"
+
+        # 显示内容
+        ev_data = getattr(ev, "data", {}) or {}
+        if "tool_called" in ev_str.lower():
+            # 工具调用：Claude Code风格
+            tool = ev_data.get("tool", "")
+            args = ev_data.get("args_summary", "")
+            st.markdown(
+                f'<span style="color:#f0e68c;font-family:JetBrains Mono,monospace;font-size:18px;">'
+                f'🔧 {tool}</span> <span style="color:#9ca3af;font-size:17px;">({args})</span>',
+                unsafe_allow_html=True,
+            )
+        elif "tool_result" in ev_str.lower():
+            # 工具结果
+            result = ev_data.get("summary", "")
+            if result:
+                st.markdown(
+                    f'<span style="color:#4ade80;margin-left:20px;font-family:JetBrains Mono,monospace;font-size:18px;">'
+                    f'→ {result[:120]}{"..." if len(result) > 120 else ""}</span>',
+                    unsafe_allow_html=True,
+                )
+        elif "thinking" in ev_str.lower():
+            # 思考过程
+            thought = ev_data.get("thought", "")
+            if thought:
+                st.markdown(
+                    f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:18px;">'
+                    f'**{label}** 💭 {thought[:150]}</span>',
+                    unsafe_allow_html=True,
+                )
+        elif "complete" in ev_str.lower() or "finished" in ev_str.lower():
+            # 阶段完成
+            summary = ev_data.get("result_summary", ev_data.get("message", ""))
+            if summary:
+                st.markdown(
+                    f'<span style="color:#4ade80;font-family:JetBrains Mono,monospace;font-size:18px;">'
+                    f'✓ {label}: {summary[:80]}</span>',
+                    unsafe_allow_html=True,
+                )
+        elif "error" in ev_str.lower():
+            # 错误
+            err = ev_data.get("error", ev_data.get("message", "未知错误"))
+            st.markdown(
+                f'<span style="color:#f87171;font-family:JetBrains Mono,monospace;font-size:18px;">'
+                f'❌ {err[:80]}</span>',
+                unsafe_allow_html=True,
+            )
+        elif "start" in ev_str.lower():
+            # Agent启动
+            st.markdown(
+                f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:18px;">'
+                f'▶ {label} 开始工作</span>',
+                unsafe_allow_html=True,
+            )
+        else:
+            # 其他事件：显示摘要
+            summary = ev_data.get("thought", ev_data.get("message", ev_data.get("result_summary", "")))
+            if summary:
+                st.markdown(
+                    f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:18px;">'
+                    f'{label}: {summary[:80]}</span>',
+                    unsafe_allow_html=True,
+                )
+    if new_evs:
         st.session_state._events_shown_count = len(evs)
 
     # 错误消息
@@ -385,6 +613,10 @@ def render() -> None:
     pm = _safe_pm()
     config = HaGoKuConfig.load()
 
+    # 每次 render 都检查后台线程状态（不只是启动时）
+    if st.session_state.get("analysis_running"):
+        _poll_and_update()
+
     # LLM 预检
     llm_cache = "_llm_health"
     if llm_cache not in st.session_state:
@@ -400,20 +632,20 @@ def render() -> None:
     # ── CSS：三层布局 ──────────────────────────────────────
     st.html("""
     <style>
-    /* 全局字体加大一号 */
+    /* 全局字体加大 */
     body, .stApp, section[data-testid="stMainBlockContainer"] {
-        font-size: 17px !important;
+        font-size: 20px !important;
     }
     section[data-testid="stMainBlockContainer"] .stText, section[data-testid="stMainBlockContainer"] p {
-        font-size: 17px !important;
+        font-size: 20px !important;
         line-height: 1.6 !important;
     }
     section[data-testid="stMainBlockContainer"] .stMarkdown {
-        font-size: 17px !important;
+        font-size: 20px !important;
     }
     section[data-testid="stMainBlockContainer"] label, section[data-testid="stMainBlockContainer"] .stSelectbox label,
     section[data-testid="stMainBlockContainer"] .stTextInput label {
-        font-size: 15px !important;
+        font-size: 18px !important;
     }
     /* 按钮：不要纯色填充，改成微透明底+细边框，参照终端/VS Code 风格 */
     /* 主按钮：低饱和青色底 + 淡边框，白色文字 */
@@ -425,7 +657,7 @@ def render() -> None:
         font-weight: 600 !important;
         letter-spacing: 0.03em !important;
         box-shadow: none !important;
-        font-size: 16px !important;
+        font-size: 18px !important;
     }
     .stButton > button:hover {
         background: rgba(8, 145, 178, 0.30) !important;
@@ -469,7 +701,8 @@ def render() -> None:
     if _was_running:
         _poll_and_update()
         if st.session_state.get("analysis_running"):
-            st.rerun()  # 仍在运行 → 继续刷新 UI
+            # 线程仍在运行 → rerun 继续刷新，下一次 render 会显示聊天事件
+            st.rerun()
         # 刚结束：保留 events 让进度条显示 complete 阶段，再清理
     elif _has_result:
         # 分析结束 → 显示结果（不清理 events，进度条显示完成状态）
@@ -486,41 +719,77 @@ def render() -> None:
         elif _result:
             status = _result.get("status", "") if isinstance(_result, dict) else ""
             if status == "scout_done":
-                # Scout 完成：字段理解用表格展示，等用户确认
-                st.session_state.awaiting = "field_confirmation"
+                # Scout 完成：直接继续进入清洗阶段，不等待确认
                 st.session_state.scout_done_data = _result
-
-                # 构建字段理解表格
-                headers = ["字段名", "语义类型", "角色", "说明"]
-                rows = []
-                col_semantics = {s["column_name"]: s for s in _result.get("column_semantics", [])}
-                uncertain = set(_result.get("uncertain_columns", []))
-                for col in _result.get("columns", []):
-                    sem = col_semantics.get(col, {})
-                    inferred_type = sem.get("inferred_type", "unknown")
-                    suggested_role = sem.get("suggested_role", "feature")
-                    desc = _result.get("column_descriptions", {}).get(col, "")
-                    rows.append([col, inferred_type, suggested_role, desc])
-
+                scout_data = _result
+                scout_ctx = None
+                if scout_data:
+                    try:
+                        scout_ctx = DataContext.from_dict({
+                            "data_path": st.session_state.get("current_data_path", ""),
+                            "n_rows": scout_data.get("n_rows", 0),
+                            "n_cols": scout_data.get("n_cols", 0),
+                            "column_semantics": scout_data.get("column_semantics", []),
+                            "quality_score": 0.5,
+                            "column_descriptions": scout_data.get("column_descriptions", {}),
+                        })
+                    except Exception:
+                        pass
+                # 构建简短字段说明
+                n_cols = scout_data.get("n_cols", 0)
+                n_rows = scout_data.get("n_rows", 0)
+                cols = scout_data.get("columns", [])
+                col_list = ", ".join(cols[:6])
+                if len(cols) > 6:
+                    col_list += f" 等{n_cols}个"
                 st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "agent": "scout",
-                    "content": f"我对这份数据（{_result.get('n_rows', 0)} 行 × {_result.get('n_cols', 0)} 列）的字段理解如下：",
-                    "table_data": {
-                        "headers": headers,
-                        "rows": rows,
-                        "uncertain": list(uncertain),
-                    },
+                    "role": "assistant", "agent": "scout",
+                    "content": f"我已理解这份数据（{n_rows}行×{n_cols}列）：{col_list}。正在检测数据质量..."
                 })
+                _start_analysis(
+                    data_path=st.session_state.get("current_data_path", ""),
+                    query=st.session_state.get("current_query", ""),
+                    project_name=selected,
+                    user_mode=config.user_mode.default_mode,
+                    config=config,
+                    phase="cleaning_first",
+                    scout_context=scout_ctx,
+                )
+                st.rerun()
             elif status == "cleaner_strategy":
-                # Cleaner 完成：Cleaner 在 Chat 里说策略，设置等待用户回复
-                st.session_state.awaiting = "cleaning_confirmation"
-                st.session_state.cleaning_strategy_data = _result
-                msg = _cleaner_strategy_message(_result)
-                st.session_state.chat_messages.append({"role": "assistant", "agent": "cleaner", "content": msg})
+                # Cleaner 完成：直接继续进入分析阶段
+                scout_data = st.session_state.get("scout_done_data", {})
+                scout_ctx = None
+                if scout_data:
+                    try:
+                        scout_ctx = DataContext.from_dict({
+                            "data_path": st.session_state.get("current_data_path", ""),
+                            "n_rows": scout_data.get("n_rows", 0),
+                            "n_cols": scout_data.get("n_cols", 0),
+                            "column_semantics": scout_data.get("column_semantics", []),
+                            "quality_score": 0.5,
+                            "column_descriptions": scout_data.get("column_descriptions", {}),
+                        })
+                    except Exception:
+                        pass
+                ops = _result.get("operations", [])
+                n_ops = len(ops)
+                st.session_state.chat_messages.append({
+                    "role": "assistant", "agent": "cleaner",
+                    "content": f"数据质量检测完成，计划执行{n_ops}个清洗操作。正在开始分析..."
+                })
+                _start_analysis(
+                    data_path=st.session_state.get("current_data_path", ""),
+                    query=st.session_state.get("current_query", ""),
+                    project_name=selected,
+                    user_mode=config.user_mode.default_mode,
+                    config=config,
+                    phase="full",
+                    scout_context=scout_ctx,
+                    cleaning_operations=ops if ops else None,
+                )
+                st.rerun()
             elif status == "analyst_preliminary":
-                # Analyst 完成：Analyst 在 Chat 里说初步发现，设置等待用户回复
-                st.session_state.awaiting = "analyst_confirmation"
                 st.session_state.analyst_preliminary_data = _result
                 msg = _analyst_finding_message(_result)
                 st.session_state.chat_messages.append({"role": "assistant", "agent": "analyst", "content": msg})
@@ -617,16 +886,20 @@ def render() -> None:
     if st.session_state.pop("_launch_clicked", False) and data_path:
         st.session_state.chat_messages.append({
             "role": "assistant",
-            "content": f"🚀 开始分析 {selected}..."
+            "content": f"🚀 开始分析 {selected}，正在加载数据..."
         })
+        st.session_state.analysis_running = True
+        st.session_state._analysis_start = time.time()
+        st.session_state.analysis_events = []
+        st.session_state._events_shown_count = 0
         _start_analysis(data_path=data_path, query="", project_name=selected,
                         user_mode=config.user_mode.default_mode, config=config, phase="scout_first")
-        _poll_and_update()
         st.rerun()
 
     # ── 第二层（滚动）：聊天记录 ─────────────────────────
     with st.container(key="layer2"):
         _render_chat()
+
 
     # ── 第三层（固定）：输入框 ──────────────────────────
     if prompt := st.chat_input(key="chat_input"):
@@ -639,331 +912,33 @@ def render() -> None:
             })
             st.rerun()
 
-        awaiting = st.session_state.get("awaiting")
-        data_path = st.session_state.get("current_data_path", "")
-
-        # ── 阶段 1：等用户确认字段理解 ────────────────────
-        if awaiting == "field_confirmation":
-            scout_data = st.session_state.get("scout_done_data", {})
-            text = prompt.lower().strip()
-
-            # 保存用户的输入作为查询（如果是实质性问题，而非简单确认）
-            # 如果用户只是简单确认（少于10个字符且不含疑问词），不覆盖已保存的查询
-            if len(prompt.strip()) >= 10 or any(k in prompt for k in ["?", "？", "哪些", "哪个", "什么", "如何", "怎么"]):
-                st.session_state.current_query = prompt.strip()
-
-            # 检测用户是否有修正意图
-            if any(k in text for k in ["不对", "错了", "不是", "改", "修正", "更正"]):
-                st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "scout",
-                    "content": "好的，请告诉我每个字段正确的理解是什么，我会记录下来。"
-                })
-                st.session_state.awaiting = "field_correction"
-                st.rerun()
-
-            # 用户确认（无修正意图）→ 显示表格，等Explicit确认
-            cols = scout_data.get("columns", [])[:15]
-            col_semantics = {s["column_name"]: s for s in scout_data.get("column_semantics", [])}
-            uncertain = set(scout_data.get("uncertain_columns", []))
-            headers = ["字段名", "语义类型", "角色", "说明"]
-            rows = []
-            for col in cols:
-                sem = col_semantics.get(col, {})
-                rows.append([
-                    col,
-                    sem.get("inferred_type", "unknown"),
-                    sem.get("suggested_role", "feature"),
-                    scout_data.get("column_descriptions", {}).get(col, ""),
-                ])
+        # 全部交给 Scout 对话：Scout 是活的，自己决定什么时候问用户、什么时候继续
+        # 不再是状态机驱动，而是 Scout Agent 自主对话
+        if st.session_state.get("analysis_running"):
+            # 分析进行中，不接受新输入
             st.session_state.chat_messages.append({
                 "role": "assistant",
-                "agent": "scout",
-                "content": "好的，字段理解如下：",
-                "table_data": {
-                    "headers": headers,
-                    "rows": rows,
-                    "uncertain": list(uncertain) if uncertain else [],
-                },
+                "content": "⏳ 分析进行中，请稍候..."
             })
-            st.session_state.awaiting = "field_confirmed"
             st.rerun()
+            return
 
-        # ── 阶段 1b：等用户修正字段后确认 ───────────────────
-        elif awaiting == "field_correction":
-            # 用户提供了修正内容 → 解析并更新 scout_done_data
-            # 简单解析：用户输入 "字段名: 解释" 或 "字段名 - 解释" 格式
-            scout_data = st.session_state.get("scout_done_data", {})
-            corrections_raw = prompt.strip()
-            corrections = {}
-            current_descs = dict(scout_data.get("column_descriptions", {}))
-
-            # 尝试解析用户输入的修正
-            for line in corrections_raw.split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                # 支持格式: "字段名: 解释" 或 "字段名 - 解释" 或 "字段名 是 ..."
-                for sep in [":", " - ", " 是 ", "="]:
-                    if sep in line:
-                        parts = line.split(sep, 1)
-                        if len(parts) == 2:
-                            col = parts[0].strip().strip('"*')
-                            desc = parts[1].strip()
-                            corrections[col] = desc
-                            current_descs[col] = desc
-                            break
-
-            # 更新 scout_done_data
-            scout_data["column_descriptions"] = current_descs
-            st.session_state.scout_done_data = scout_data
-
-            # 显示更新后的字段理解表格
-            cols = scout_data.get("columns", [])[:15]
-            col_semantics = {s["column_name"]: s for s in scout_data.get("column_semantics", [])}
-            uncertain = set(scout_data.get("uncertain_columns", []))
-            headers = ["字段名", "语义类型", "角色", "说明"]
-            rows = []
-            for col in cols:
-                sem = col_semantics.get(col, {})
-                desc = current_descs.get(col, scout_data.get("column_descriptions", {}).get(col, ""))
-                marker = " ✏️" if col in corrections else ""
-                rows.append([
-                    col + marker,
-                    sem.get("inferred_type", "unknown"),
-                    sem.get("suggested_role", "feature"),
-                    desc,
-                ])
-            st.session_state.chat_messages.append({
-                "role": "assistant",
-                "agent": "scout",
-                "content": f"已更新字段理解（{len(corrections)} 处修正）：",
-                "table_data": {
-                    "headers": headers,
-                    "rows": rows,
-                    "uncertain": list(uncertain) if uncertain else [],
-                },
-            })
-            st.session_state.awaiting = "field_confirmed"
-            st.rerun()
-
-        # ── 阶段 1c：字段理解已确认，等Explicit确认 ────────
-        elif awaiting == "field_confirmed":
-            scout_data = st.session_state.get("scout_done_data", {})
-            text = prompt.lower().strip()
-
-            # 用户再次要求修正 → 回去修正
-            if any(k in text for k in ["不对", "错了", "不是", "改", "修正", "更正"]):
-                st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "scout",
-                    "content": "好的，请告诉我每个字段正确的理解是什么，我会记录下来。"
-                })
-                st.session_state.awaiting = "field_correction"
-                st.rerun()
-
-            # 用户确认 → 进入清洗阶段
-            scout_ctx = None
-            if scout_data:
-                try:
-                    scout_ctx = DataContext.from_dict({
-                        "data_path": data_path,
-                        "n_rows": scout_data.get("n_rows", 0),
-                        "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": scout_data.get("column_semantics", []),
-                        "quality_score": 0.5,
-                        "column_descriptions": scout_data.get("column_descriptions", {}),
-                    })
-                except Exception:
-                    scout_ctx = None
-
-            st.session_state.awaiting = None
-            st.session_state.chat_messages.append({
-                "role": "assistant", "agent": "scout",
-                "content": "好的，字段理解已确认。我现在去检测数据质量，制定清洗方案，请稍候..."
-            })
-            _start_analysis(
-                data_path=data_path,
-                query=st.session_state.get("current_query", ""),
-                project_name=selected,
-                user_mode=config.user_mode.default_mode,
-                config=config,
-                phase="cleaning_first",
-                scout_context=scout_ctx,
-            )
-            st.rerun()
-
-        # ── 阶段 2：等用户确认清洗策略 ────────────────
-        elif awaiting == "cleaning_confirmation":
-            strategy_data = st.session_state.get("cleaning_strategy_data", {})
-            text = prompt.lower().strip()
-            ops = strategy_data.get("operations", [])
-            skip_cleaning = False
-
-            # 检测否定/调整意图
-            if any(k in text for k in ["不对", "错了", "不改", "不洗", "跳过", "直接分析", "不需要"]):
-                skip_cleaning = True
-                confirmed_msg = "好的，跳过清洗，直接用原始数据进行分析。\n\n"
-            else:
-                confirmed_msg = f"好的，清洗方案如下（共 {len(ops)} 个操作）：\n\n"
-                for op in ops[:8]:
-                    col = op.get("column", "")
-                    reason = op.get("reason", "")
-                    confirmed_msg += f"• **{col}**：{reason[:60]}{'...' if len(reason) > 60 else ''}\n"
-                if len(ops) > 8:
-                    confirmed_msg += f"... 还有 {len(ops) - 8} 个操作\n"
-            confirmed_msg += "\n确认执行吗？（输入「确认」继续，或告诉我需要调整的地方）"
-
-            st.session_state.chat_messages.append({
-                "role": "assistant", "agent": "cleaner",
-                "content": confirmed_msg
-            })
-            # 保存当前决策，等Explicit确认
-            st.session_state._cleaning_skip = skip_cleaning
-            st.session_state.awaiting = "cleaning_confirmed"
-            st.rerun()
-
-        # ── 阶段 2b：清洗策略已确认，等Explicit确认 ────────
-        elif awaiting == "cleaning_confirmed":
-            strategy_data = st.session_state.get("cleaning_strategy_data", {})
-            ops = strategy_data.get("operations", [])
-            skip_cleaning = st.session_state.get("_cleaning_skip", False)
-            text = prompt.lower().strip()
-
-            # 用户要求调整 → 回去重新确认（清空保存的决策）
-            if any(k in text for k in ["不对", "错了", "调整", "改", "修正"]):
-                st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "cleaner",
-                    "content": "好的，请告诉我需要怎么调整清洗策略。"
-                })
-                st.session_state.awaiting = "cleaning_adjustment"
-                st.session_state.pop("_cleaning_skip", None)
-                st.rerun()
-
-            # 用户确认 → 进入分析阶段
-            scout_data = st.session_state.get("scout_done_data", {})
-            scout_ctx = None
-            if scout_data:
-                try:
-                    scout_ctx = DataContext.from_dict({
-                        "data_path": data_path,
-                        "n_rows": scout_data.get("n_rows", 0),
-                        "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": scout_data.get("column_semantics", []),
-                        "quality_score": 0.5,
-                        "column_descriptions": scout_data.get("column_descriptions", {}),
-                    })
-                except Exception:
-                    scout_ctx = None
-
-            st.session_state.awaiting = None
-            st.session_state.pop("_cleaning_skip", None)
-
-            if skip_cleaning:
-                st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "cleaner",
-                    "content": "好的，跳过清洗，开始初步分析，请稍候..."
-                })
-                ops = []
-
-            _start_analysis(
-                data_path=data_path,
-                query=st.session_state.get("current_query", ""),
-                project_name=selected,
-                user_mode=config.user_mode.default_mode,
-                config=config,
-                phase="analyst_first",
-                scout_context=scout_ctx,
-                cleaning_operations=ops if ops else None,
-            )
-            st.rerun()
-
-        # ── 阶段 3：等用户确认分析方向 ────────────────
-        elif awaiting == "analyst_confirmation":
-            prelim_data = st.session_state.get("analyst_preliminary_data", {})
-            text = prompt.lower().strip()
-            findings = prelim_data.get("preliminary_findings", [])
-            suggested = prelim_data.get("suggested_focus", "")
-
-            # 显示初步发现摘要
-            confirmed_msg = "初步分析结果如下：\n\n"
-            if findings:
-                for f in findings[:5]:
-                    sig = "✅ 显著" if f.get("significance") == "significant" else "⚪ 不显著"
-                    q = f.get("question", "")
-                    p = f.get("p_value")
-                    p_str = f"（p={p:.4f}）" if p is not None else ""
-                    confirmed_msg += f"• {sig} {p_str}：{q}\n"
-            else:
-                confirmed_msg += "• 未发现显著统计规律\n"
-            if suggested:
-                confirmed_msg += f"\n💡 {suggested}\n"
-            confirmed_msg += "\n确认完善分析并生成完整报告吗？（输入「确认」继续，或告诉我重点关注的方向）"
-
-            st.session_state.chat_messages.append({
-                "role": "assistant", "agent": "analyst",
-                "content": confirmed_msg
-            })
-            st.session_state.awaiting = "analyst_confirmed"
-            st.rerun()
-
-        # ── 阶段 3b：分析方向已确认，等Explicit确认 ────────
-        elif awaiting == "analyst_confirmed":
-            text = prompt.lower().strip()
-
-            # 用户要求调整方向 → 回去重新确认
-            if any(k in text for k in ["不对", "错了", "调整", "改", "重点", "关注"]):
-                st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "analyst",
-                    "content": "好的，请告诉我你想重点关注哪个分析方向。"
-                })
-                st.session_state.awaiting = "analyst_adjustment"
-                st.rerun()
-
-            # 用户确认 → 进入完整分析
-            scout_data = st.session_state.get("scout_done_data", {})
-            scout_ctx = None
-            if scout_data:
-                try:
-                    scout_ctx = DataContext.from_dict({
-                        "data_path": data_path,
-                        "n_rows": scout_data.get("n_rows", 0),
-                        "n_cols": scout_data.get("n_cols", 0),
-                        "column_semantics": scout_data.get("column_semantics", []),
-                        "quality_score": 0.5,
-                        "column_descriptions": scout_data.get("column_descriptions", {}),
-                    })
-                except Exception:
-                    scout_ctx = None
-
-            st.session_state.awaiting = None
-            st.session_state.chat_messages.append({
-                "role": "assistant", "agent": "analyst",
-                "content": "好的，分析方向已确认。正在完善分析并生成完整报告，请稍候..."
-            })
-            _start_analysis(
-                data_path=data_path,
-                query=st.session_state.get("current_query", ""),
-                project_name=selected,
-                user_mode=config.user_mode.default_mode,
-                config=config,
-                phase="full",
-                scout_context=scout_ctx,
-            )
-            st.rerun()
-
-        # ── 自由输入（未在任何等待阶段）────────────────
-        else:
-            # 保存用户查询，供后续阶段使用
-            st.session_state.current_query = prompt
-            # 正常对话模式：直接启动完整分析
-            _start_analysis(
-                data_path=data_path,
-                query=prompt,
-                project_name=selected,
-                user_mode=config.user_mode.default_mode,
-                config=config,
-                phase="cleaning_first",  # 从清洗开始（Scout 缓存由 orchestrator 处理）
-            )
-            st.rerun()
+        # 分析完成或空闲时，用户可以自由输入
+        # 保存用户输入作为查询，然后启动完整 pipeline
+        st.session_state.current_query = prompt
+        st.session_state.chat_messages.append({
+            "role": "assistant",
+            "content": f"好的，我来分析这个问题，请稍候..."
+        })
+        _start_analysis(
+            data_path=st.session_state.get("current_data_path", ""),
+            query=prompt,
+            project_name=selected,
+            user_mode=config.user_mode.default_mode,
+            config=config,
+            phase="full",  # 直接跑完整 pipeline，不分段确认
+        )
+        st.rerun()
 
 
 def _start_analysis(

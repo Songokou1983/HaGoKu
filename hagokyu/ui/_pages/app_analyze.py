@@ -697,6 +697,9 @@ def render() -> None:
     # ── 轮询 + 分析完成处理（在 UI 渲染之前）────────────────
     _was_running = st.session_state.get("analysis_running", False)
     _has_result = st.session_state.get("analysis_result") or st.session_state.get("analysis_error")
+    # 确保 selected 和 data_path 在任何代码路径都能访问
+    selected = st.session_state.get("current_project", "")
+    data_path = st.session_state.get("current_data_path", "")
 
     if _was_running:
         _poll_and_update()
@@ -749,7 +752,7 @@ def render() -> None:
                 _start_analysis(
                     data_path=st.session_state.get("current_data_path", ""),
                     query=st.session_state.get("current_query", ""),
-                    project_name=selected,
+                    project_name=st.session_state.current_project,
                     user_mode=config.user_mode.default_mode,
                     config=config,
                     phase="cleaning_first",
@@ -781,7 +784,7 @@ def render() -> None:
                 _start_analysis(
                     data_path=st.session_state.get("current_data_path", ""),
                     query=st.session_state.get("current_query", ""),
-                    project_name=selected,
+                    project_name=st.session_state.current_project,
                     user_mode=config.user_mode.default_mode,
                     config=config,
                     phase="full",

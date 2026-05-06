@@ -57,6 +57,8 @@ def _init_chat_state() -> None:
         st.session_state.awaiting_field_confirmation = False
     if "scout_done_data" not in st.session_state:
         st.session_state.scout_done_data = None
+    if "scout_confirm_data" not in st.session_state:
+        st.session_state.scout_confirm_data = None
     # Cleaner 策略确认
     if "awaiting_cleaning_confirmation" not in st.session_state:
         st.session_state.awaiting_cleaning_confirmation = False
@@ -721,7 +723,32 @@ def render() -> None:
             st.session_state.chat_messages.append({"role": "assistant", "content": f"❌ 分析出错：{_error}"})
         elif _result:
             status = _result.get("status", "") if isinstance(_result, dict) else ""
-            if status == "scout_done":
+            if status == "scout_confirm":
+                # Scout 暂停，等用户确认字段含义
+                st.session_state.scout_confirm_data = _result
+                st.session_state.awaiting_field_confirmation = True
+                # 显示 Scout LLM 生成的消息
+                message = _result.get("message", "")
+                if message:
+                    st.session_state.chat_messages.append({
+                        "role": "assistant",
+                        "agent": "scout",
+                        "content": message,
+                    })
+                # 显示待确认的字段列表
+                pending_items = _result.get("pending_items", [])
+                if pending_items:
+                    field_lines = ["**待确认的字段：**"]
+                    for item in pending_items:
+                        col = item.get("column", "")
+                        desc = item.get("description", "")
+                        field_lines.append(f"- **{col}**：{desc}")
+                    st.session_state.chat_messages.append({
+                        "role": "assistant",
+                        "content": "\n".join(field_lines),
+                    })
+                st.rerun()
+            elif status == "scout_done":
                 # Scout 完成：直接继续进入清洗阶段，不等待确认
                 st.session_state.scout_done_data = _result
                 scout_data = _result
@@ -760,40 +787,20 @@ def render() -> None:
                 )
                 st.rerun()
             elif status == "cleaner_strategy":
-                # Cleaner 完成：直接继续进入分析阶段
-                scout_data = st.session_state.get("scout_done_data", {})
-                scout_ctx = None
-                if scout_data:
-                    try:
-                        scout_ctx = DataContext.from_dict({
-                            "data_path": st.session_state.get("current_data_path", ""),
-                            "n_rows": scout_data.get("n_rows", 0),
-                            "n_cols": scout_data.get("n_cols", 0),
-                            "column_semantics": scout_data.get("column_semantics", []),
-                            "quality_score": 0.5,
-                            "column_descriptions": scout_data.get("column_descriptions", {}),
-                        })
-                    except Exception:
-                        pass
-                ops = _result.get("operations", [])
-                n_ops = len(ops)
+                # Cleaner 暂停，等用户确认清洗策略
+                st.session_state.cleaning_strategy_data = _result
+                st.session_state.awaiting_cleaning_confirmation = True
+                # 显示清洗策略消息
+                msg = _cleaner_strategy_message(_result)
                 st.session_state.chat_messages.append({
-                    "role": "assistant", "agent": "cleaner",
-                    "content": f"数据质量检测完成，计划执行{n_ops}个清洗操作。正在开始分析..."
+                    "role": "assistant",
+                    "agent": "cleaner",
+                    "content": msg,
                 })
-                _start_analysis(
-                    data_path=st.session_state.get("current_data_path", ""),
-                    query=st.session_state.get("current_query", ""),
-                    project_name=st.session_state.current_project,
-                    user_mode=config.user_mode.default_mode,
-                    config=config,
-                    phase="full",
-                    scout_context=scout_ctx,
-                    cleaning_operations=ops if ops else None,
-                )
                 st.rerun()
             elif status == "analyst_preliminary":
                 st.session_state.analyst_preliminary_data = _result
+                st.session_state.awaiting_analyst_confirmation = True
                 msg = _analyst_finding_message(_result)
                 st.session_state.chat_messages.append({"role": "assistant", "agent": "analyst", "content": msg})
             elif status in ("completed", "skipped", "ambiguous"):
@@ -915,6 +922,179 @@ def render() -> None:
             })
             st.rerun()
 
+        # Scout 字段确认模式：等用户确认/修正字段
+        if st.session_state.get("awaiting_field_confirmation"):
+            scout_confirm_data = st.session_state.get("scout_confirm_data", {})
+            pending_items = scout_confirm_data.get("pending_items", [])
+
+            # 解析用户输入
+            confirmed = {}
+            corrected = {}
+            comments = {}
+
+            prompt_lower = prompt.strip()
+            if prompt_lower == "确认" or prompt_lower == "ok" or prompt_lower == "yes":
+                # 用户确认所有字段
+                for item in pending_items:
+                    col = item.get("column", "")
+                    desc = item.get("description", "")
+                    if col:
+                        confirmed[col] = desc
+            else:
+                # 解析 "column=description" 或 "column: description" 格式的修正
+                import re
+                # 匹配 field=value 或 field: value 格式
+                pattern = r'([^=:]+)[:=]\s*(.+)'
+                for match in re.finditer(pattern, prompt):
+                    col = match.group(1).strip()
+                    desc = match.group(2).strip()
+                    if col and desc:
+                        corrected[col] = desc
+
+            # 调用 Orchestrator 继续 Scout 对话
+            st.session_state.analysis_running = True
+            st.session_state.analysis_events = []
+            st.session_state._events_shown_count = 0
+            st.session_state.awaiting_field_confirmation = False
+
+            # 从 scout_confirm_data 中提取 context
+            scout_data = scout_confirm_data.get("data", {})
+            column_semantics = scout_data.get("column_semantics", [])
+            column_descriptions = scout_data.get("column_descriptions", {})
+
+            # 重建 Scout 可用的 context
+            scout_context = {
+                "data_path": st.session_state.get("current_data_path", ""),
+                "n_rows": scout_confirm_data.get("data", {}).get("n_rows", 0),
+                "n_cols": scout_confirm_data.get("data", {}).get("n_cols", 0),
+                "column_semantics": column_semantics,
+                "quality_score": scout_data.get("quality_score", 0.5),
+                "missing_summary": {},
+                "warnings": scout_data.get("warnings", []),
+                "column_descriptions": column_descriptions,
+            }
+
+            # 构建 continue 调用的输入
+            continue_input = {
+                "agent": "scout",
+                "phase": "confirm_fields",
+                "data_path": st.session_state.get("current_data_path", ""),
+                "query": scout_confirm_data.get("message", ""),
+                "context": scout_context,
+                "confirmed": confirmed,
+                "corrected": corrected,
+                "comments": comments,
+            }
+
+            def _do_respond():
+                orch = Orchestrator(config)
+                result = orch.respond(
+                    user_input=continue_input,
+                    project_name=st.session_state.current_project,
+                )
+                st.session_state._analysis_result_h = [result]
+                st.session_state.analysis_running = False
+
+            threading.Thread(target=_do_respond, daemon=True).start()
+            st.rerun()
+            return
+
+        # Cleaner 策略确认模式
+        if st.session_state.get("awaiting_cleaning_confirmation"):
+            cleaning_data = st.session_state.get("cleaning_strategy_data", {})
+            ops = cleaning_data.get("operations", [])
+            confirmed_ops = cleaning_data.get("operations", [])
+
+            prompt_lower = prompt.strip().lower()
+            if prompt_lower == "确认" or prompt_lower == "ok" or prompt_lower == "yes":
+                # 用户确认所有操作
+                confirmed_ops = ops
+            elif prompt_lower.startswith("跳过") or prompt_lower == "skip":
+                # 用户跳过清洗
+                confirmed_ops = []
+
+            st.session_state.confirmed_cleaning_operations = confirmed_ops if confirmed_ops else None
+            st.session_state.awaiting_cleaning_confirmation = False
+
+            # 继续进入分析阶段
+            scout_data = st.session_state.get("scout_done_data", {})
+            scout_ctx = None
+            if scout_data:
+                try:
+                    scout_ctx = DataContext.from_dict({
+                        "data_path": st.session_state.get("current_data_path", ""),
+                        "n_rows": scout_data.get("n_rows", 0),
+                        "n_cols": scout_data.get("n_cols", 0),
+                        "column_semantics": scout_data.get("column_semantics", []),
+                        "quality_score": 0.5,
+                        "column_descriptions": scout_data.get("column_descriptions", {}),
+                    })
+                except Exception:
+                    pass
+
+            st.session_state.analysis_running = True
+            st.session_state.analysis_events = []
+            st.session_state._events_shown_count = 0
+
+            def _do_clean_then_analyse():
+                result = _run_cleaning_and_analyst(
+                    data_path=st.session_state.get("current_data_path", ""),
+                    query=st.session_state.get("current_query", ""),
+                    project_name=st.session_state.current_project,
+                    user_mode=config.user_mode.default_mode,
+                    config=config,
+                    scout_context=scout_ctx,
+                    cleaning_operations=st.session_state.confirmed_cleaning_operations,
+                )
+                st.session_state._analysis_result_h = [result]
+                st.session_state.analysis_running = False
+
+            threading.Thread(target=_do_clean_then_analyse, daemon=True).start()
+            st.rerun()
+            return
+
+        # Analyst 初步发现确认模式
+        if st.session_state.get("awaiting_analyst_confirmation"):
+            prelim_data = st.session_state.get("analyst_preliminary_data", {})
+            st.session_state.awaiting_analyst_confirmation = False
+
+            # 用户确认了分析方向，继续运行完整分析
+            scout_data = st.session_state.get("scout_done_data", {})
+            scout_ctx = None
+            if scout_data:
+                try:
+                    scout_ctx = DataContext.from_dict({
+                        "data_path": st.session_state.get("current_data_path", ""),
+                        "n_rows": scout_data.get("n_rows", 0),
+                        "n_cols": scout_data.get("n_cols", 0),
+                        "column_semantics": scout_data.get("column_semantics", []),
+                        "quality_score": 0.5,
+                        "column_descriptions": scout_data.get("column_descriptions", {}),
+                    })
+                except Exception:
+                    pass
+
+            st.session_state.analysis_running = True
+            st.session_state.analysis_events = []
+            st.session_state._events_shown_count = 0
+
+            def _do_full_analysis():
+                result = _start_full_pipeline(
+                    data_path=st.session_state.get("current_data_path", ""),
+                    query=st.session_state.get("current_query", ""),
+                    project_name=st.session_state.current_project,
+                    user_mode=config.user_mode.default_mode,
+                    config=config,
+                    scout_context=scout_ctx,
+                    cleaning_operations=st.session_state.confirmed_cleaning_operations,
+                )
+                st.session_state._analysis_result_h = [result]
+                st.session_state.analysis_running = False
+
+            threading.Thread(target=_do_full_analysis, daemon=True).start()
+            st.rerun()
+            return
+
         # 全部交给 Scout 对话：Scout 是活的，自己决定什么时候问用户、什么时候继续
         # 不再是状态机驱动，而是 Scout Agent 自主对话
         if st.session_state.get("analysis_running"):
@@ -1005,3 +1185,85 @@ def _start_analysis(
     st.session_state._analysis_start = time.time()
     st.session_state._events_shown_count = 0
     thread.start()
+
+
+def _run_cleaning_and_analyst(
+    data_path: str,
+    query: str,
+    project_name: str | None,
+    user_mode: str,
+    config: HaGoKuConfig,
+    scout_context: "DataContext | None" = None,
+    cleaning_operations: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """运行 Cleaner（已确认策略）+ Analyst（初步发现），返回 analyst_preliminary"""
+    result_holder: list = []
+    error_holder: list = []
+
+    try:
+        orch = Orchestrator(config)
+
+        def on_event(event: Event) -> None:
+            events = st.session_state.get("analysis_events", [])
+            events.append(event)
+            st.session_state.analysis_events = events
+
+        orch.event_bus.subscribe(on_event)
+
+        result = orch.run(
+            data_path=data_path,
+            query=query,
+            project_name=project_name,
+            user_mode=user_mode,
+            phase="analyst_first",
+            scout_context=scout_context,
+            cleaning_operations=cleaning_operations,
+        )
+        result_holder.append(result)
+    except Exception as e:
+        error_holder.append(str(e))
+
+    if error_holder:
+        return {"status": "error", "message": error_holder[0]}
+    return result_holder[0] if result_holder else {"status": "error", "message": "未知错误"}
+
+
+def _start_full_pipeline(
+    data_path: str,
+    query: str,
+    project_name: str | None,
+    user_mode: str,
+    config: HaGoKuConfig,
+    scout_context: "DataContext | None" = None,
+    cleaning_operations: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """运行完整 pipeline（Scout + Cleaner + Analyst + Reporter），返回最终结果"""
+    result_holder: list = []
+    error_holder: list = []
+
+    try:
+        orch = Orchestrator(config)
+
+        def on_event(event: Event) -> None:
+            events = st.session_state.get("analysis_events", [])
+            events.append(event)
+            st.session_state.analysis_events = events
+
+        orch.event_bus.subscribe(on_event)
+
+        result = orch.run(
+            data_path=data_path,
+            query=query,
+            project_name=project_name,
+            user_mode=user_mode,
+            phase="full",
+            scout_context=scout_context,
+            cleaning_operations=cleaning_operations,
+        )
+        result_holder.append(result)
+    except Exception as e:
+        error_holder.append(str(e))
+
+    if error_holder:
+        return {"status": "error", "message": error_holder[0]}
+    return result_holder[0] if result_holder else {"status": "error", "message": "未知错误"}

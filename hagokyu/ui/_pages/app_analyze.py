@@ -894,10 +894,6 @@ def render() -> None:
 
     # 处理启动按钮：只跑 Scout，等用户输入问题
     if st.session_state.pop("_launch_clicked", False) and data_path:
-        st.session_state.chat_messages.append({
-            "role": "assistant",
-            "content": f"🚀 开始分析 {selected}，正在加载数据..."
-        })
         st.session_state.analysis_running = True
         st.session_state._analysis_start = time.time()
         st.session_state.analysis_events = []

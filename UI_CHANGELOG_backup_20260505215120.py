@@ -143,7 +143,7 @@ def render() -> None:
     projects = pm.list()
 
     # ── 项目概况 ─────────────────────────────────────────────
-    st.markdown("<h2 style='font-size:2.5rem !important; color:#00ffff !important; font-family:\"Space Mono\",monospace !important; margin:0;'>📊 项目概况</h2>", unsafe_allow_html=True)
+    st.markdown("# 📊 项目概况")
 
     if not projects:
         st.info("还没有任何项目，请创建新项目。")

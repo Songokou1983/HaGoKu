@@ -16,6 +16,7 @@ from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
 from ..storage.project_manager import ProjectManager
+from ..agents._scribe.agent import ScribeAgent
 from ..agents.analyst import AnalystAgent, AnalysisResult
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
@@ -161,6 +162,10 @@ class Orchestrator:
         schema_file = self.output_mgr.project_dir / "schema.yaml"
         self.memory = MemoryManager(self.db, schema_path=schema_file)
 
+        # 初始化 Scribe Agent（看板驱动）
+        self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
+        self.scribe.init_pipeline()
+
         # 处理 --schema 参数
         if schema_path:
             n = self.memory.import_schema_yaml(project_name, Path(schema_path))
@@ -221,11 +226,11 @@ class Orchestrator:
             })
             scout = ScoutAgent(self.config.llm, self.event_bus)
             context = scout.run(data_path, query="", project_id=project_name, memory=self.memory)
+            # Scribe 已通过 EventBus 钩子自动完成 Scout 任务（done），Cleaner 已被 promote 到 ready
+            # 停下来等用户确认字段含义：block Cleaner
+            self.scribe.block_task("cleaner", "等用户确认字段含义")
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "✅ 字段识别完成，请在下方输入你想分析的问题",
-            })
-            self.event_bus.emit(EventType.AGENT_COMPLETED, "Scout", {
-                "result_summary": f"识别了 {context.n_cols} 个字段，{len(context.get_uncertain_columns())} 个需要确认",
             })
             return {
                 "status": "scout_done",
@@ -384,16 +389,8 @@ class Orchestrator:
 
             # Scout + Cleaner（如果不是 resume）
             if context is None:
-                # 3. Scout: 数据侦察（传入 MemoryManager）
+                # 3. Scout: 数据侦察（Scout 自己会和用户对话确认字段）
                 context = scout.run(data_path, query, project_id=project_name, memory=self.memory)
-
-                # 3.5 用户交互：确认不确定的字段
-                uncertain = context.get_uncertain_columns()
-                if uncertain and user_mode != "quick":
-                    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "Manager", {
-                        "question": f"有 {len(uncertain)} 个字段需要确认，是否继续？",
-                        "uncertain_columns": [s.column_name for s in uncertain],
-                    })
 
                 # 4. Cleaner: 数据清洗
                 df_clean, cleaning_report = cleaner.run(
@@ -789,3 +786,158 @@ class Orchestrator:
             parts.append(f"\n【筛选条件】：{parsed_intent.filters}")
 
         return "".join(parts)
+
+    def _request_field_confirmation(
+        self,
+        context: "DataContext",
+        project_name: str,
+    ) -> "DataContext | None":
+        """
+        Scout 识别完字段后，和用户对话确认字段含义。
+        Scout 展示理解，用户纠正，直到用户确认。
+        必须用户明确说"好"才能继续。
+        """
+        print("\n" + "=" * 60)
+        print("📋 字段理解")
+        print("=" * 60)
+
+        # 展示 Scout 识别出的所有字段
+        print("\n我看到了这些字段：")
+        for sem in context.column_semantics:
+            col = sem.column_name
+            desc = context.column_descriptions.get(col, sem.inferred_type.value)
+            print(f"  {col} → {desc}")
+
+        print("\n有不对的，纠正我。直接说就行")
+        print("  比如：Inc1 是销售额，不是收入")
+        print()
+
+        corrections: dict[str, dict[str, str]] = {}
+
+        while True:
+            user_input = input("➜ ").strip()
+
+            if user_input.lower() in ("cancel", "q", "取消"):
+                print("\n❌ 已取消")
+                return None
+
+            if not user_input:
+                continue
+
+            # 用户说"好"或"继续"或"是"表示确认
+            if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
+                # Scout 展示最终理解，建议进入数据清洗
+                print("\n📋 最终字段理解：")
+                for sem in context.column_semantics:
+                    col = sem.column_name
+                    desc = context.column_descriptions.get(col, sem.inferred_type.value)
+                    print(f"  {col} = {desc}")
+                print("\n我准备进入数据清洗阶段，可以吗？")
+                confirm = input("➜ (回车确认，或继续纠正) ").strip()
+                if confirm.lower() in ("好", "是", "ok", "y", "yes", ""):
+                    break
+                elif confirm:
+                    user_input = confirm
+                else:
+                    continue
+
+            # 让 LLM 理解用户说的话，更新 context
+            understood = self._llm_understand_field_update(context, user_input)
+            if understood:
+                corrections.update(understood)
+
+        if corrections:
+            print(f"\n📝 保存 {len(corrections)} 个字段...")
+            for col, info in corrections.items():
+                context.column_descriptions[col] = f"{info['chinese_name']}（{info['business_meaning']}）"
+                for s in context.column_semantics:
+                    if s.column_name == col:
+                        s.evidence = info['business_meaning']
+                        break
+            self._save_field_descriptions(project_name, corrections)
+
+        print("\n✅ 进入数据清洗...")
+        return context
+
+    def _llm_understand_field_update(
+        self,
+        context: "DataContext",
+        user_input: str,
+    ) -> dict[str, dict[str, str]] | None:
+        """让 LLM 理解用户说的字段更新，返回更新的字段字典"""
+        try:
+            from openai import OpenAI
+
+            columns = [s.column_name for s in context.column_semantics]
+
+            client = OpenAI(
+                api_key=self.config.llm.api_key,
+                base_url=self.config.llm.base_url,
+            )
+
+            response = client.chat.completions.create(
+                model=self.config.llm.model,
+                messages=[
+                    {"role": "system", "content": "你是数据分析师。用户告诉你字段的含义。请理解用户说的话，提取出字段名、中文名、业务含义。\n输出格式（JSON，只输出JSON）：\n{\"字段名\": {\"chinese_name\": \"中文名\", \"business_meaning\": \"业务含义\"}}"},
+                    {"role": "user", "content": f"字段列表：{', '.join(columns)}\n用户说：{user_input}"}
+                ],
+                temperature=0.1,
+                max_tokens=200,
+            )
+            import json
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+            result = json.loads(result_text.strip())
+
+            valid_updates = {}
+            for col, info in result.items():
+                if col in columns:
+                    valid_updates[col] = info
+                    print(f"   ✅ {col} = {info['chinese_name']}（{info['business_meaning']}）")
+
+            return valid_updates if valid_updates else None
+
+        except Exception as e:
+            print(f"   ⚠️ 没理解：{e}")
+            return None
+
+    def _save_field_descriptions(
+        self,
+        project_name: str,
+        corrections: dict[str, dict[str, str]],
+    ) -> None:
+        """保存用户确认的字段描述到 memory/schema.yaml"""
+        if not corrections:
+            return
+
+        try:
+            # 构建 schema 更新
+            schema_file = self.output_mgr.project_dir / "schema.yaml"
+            import yaml
+
+            # 读取现有 schema
+            schema_data = {}
+            if schema_file.exists():
+                with open(schema_file, "r", encoding="utf-8") as f:
+                    schema_data = yaml.safe_load(f) or {}
+
+            if "columns" not in schema_data:
+                schema_data["columns"] = {}
+
+            # 更新 columns
+            for col, info in corrections.items():
+                if col not in schema_data["columns"]:
+                    schema_data["columns"][col] = {}
+                schema_data["columns"][col]["description"] = f"{info['chinese_name']}（{info['business_meaning']}）"
+
+            # 写回 schema.yaml
+            schema_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(schema_file, "w", encoding="utf-8") as f:
+                yaml.dump(schema_data, f, allow_unicode=True, default_flow_style=False)
+
+        except Exception as e:
+            # 保存失败不影响主流程，只打印警告
+            print(f"   ⚠️ 保存字段描述失败: {e}")

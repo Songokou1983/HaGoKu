@@ -1,0 +1,13 @@
+knowledge:
+- id: example-01
+  field: Inc1
+  meaning: 第一个收入指标
+  data_pattern: 高唯一数值列，列名含Inc
+  inferred_role: feature
+  confidence: 0.85
+  tags:
+  - 数值型
+  - 收入
+  - 高唯一值
+  created_at: '2026-05-06'
+  use_count: 3

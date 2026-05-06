@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
+import re
 from typing import Any
 
 import numpy as np
@@ -15,179 +14,18 @@ from ..observability.events import EventType
 from ..tools.data_io import get_data_info, load_data
 from ..tools.profiling import generate_profile, suggest_column_roles
 from .base import DataAgentBase
+from .types import DataContext, ColumnSemantic, SemanticType
 
-
-class SemanticType(Enum):
-    """列语义类型"""
-
-    ID = "id"
-    NUMERIC = "numeric"
-    CATEGORICAL = "categorical"
-    ORDINAL = "ordinal"
-    BOOLEAN = "boolean"
-    DATETIME = "datetime"
-    TARGET = "target"
-    TEXT = "text"
-    UNKNOWN = "unknown"
-
-
-@dataclass
-class ColumnSemantic:
-    """列语义推断结果"""
-
-    column_name: str
-    inferred_type: SemanticType
-    confidence: float  # 0-1
-    evidence: str  # 推断依据
-    needs_user_input: bool = False
-    suggested_role: str = "feature"  # feature / target / identifier / time_index
-    user_override: str | None = None  # 用户修正后的类型
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "column_name": self.column_name,
-            "inferred_type": self.inferred_type.value,
-            "confidence": self.confidence,
-            "evidence": self.evidence,
-            "needs_user_input": self.needs_user_input,
-            "suggested_role": self.suggested_role,
-        }
-
-
-@dataclass
-class DataContext:
-    """Scout 产出的数据上下文"""
-
-    # 基础信息
-    data_path: str
-    n_rows: int
-    n_cols: int
-    column_semantics: list[ColumnSemantic] = field(default_factory=list)
-    quality_score: float = 0.0
-    missing_summary: dict[str, Any] = field(default_factory=dict)
-    correlation_highlights: list[dict[str, Any]] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-
-    # 分析上下文（Scout 的真正价值，来自 PROJECT.md 设计）
-    target: str | None = None
-    features: list[str] = field(default_factory=list)
-    confounders: list[str] = field(default_factory=list)
-    time_column: str | None = None
-    group_columns: list[str] = field(default_factory=list)
-    column_descriptions: dict[str, str] = field(default_factory=dict)
-    units: dict[str, str] = field(default_factory=dict)
-    missing_patterns: dict[str, str] = field(default_factory=dict)
-    outlier_candidates: list[str] = field(default_factory=list)
-    variable_roles: dict[str, str] = field(default_factory=dict)
-    suggested_analyses: list[str] = field(default_factory=list)
-    user_constraints: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "data_path": self.data_path,
-            "n_rows": self.n_rows,
-            "n_cols": self.n_cols,
-            "column_semantics": [s.to_dict() for s in self.column_semantics],
-            "quality_score": self.quality_score,
-            "missing_summary": self.missing_summary,
-            "correlation_highlights": self.correlation_highlights,
-            "warnings": self.warnings,
-            "target": self.target,
-            "features": self.features,
-            "confounders": self.confounders,
-            "time_column": self.time_column,
-            "group_columns": self.group_columns,
-            "column_descriptions": self.column_descriptions,
-            "units": self.units,
-            "missing_patterns": self.missing_patterns,
-            "outlier_candidates": self.outlier_candidates,
-            "variable_roles": self.variable_roles,
-            "suggested_analyses": self.suggested_analyses,
-            "user_constraints": self.user_constraints,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DataContext:
-        """从 to_dict() 的输出重建 DataContext，正确处理 column_semantics 反序列化"""
-        data = data.copy()
-        # 反序列化 column_semantics：dict → ColumnSemantic
-        raw_sems = data.pop("column_semantics", [])
-        column_semantics = []
-        for s in raw_sems:
-            if isinstance(s, ColumnSemantic):
-                column_semantics.append(s)
-            elif isinstance(s, dict):
-                inferred_type = s.get("inferred_type", "unknown")
-                if isinstance(inferred_type, str):
-                    try:
-                        inferred_type = SemanticType(inferred_type)
-                    except ValueError:
-                        inferred_type = SemanticType.UNKNOWN
-                column_semantics.append(ColumnSemantic(
-                    column_name=s.get("column_name", ""),
-                    inferred_type=inferred_type,
-                    confidence=s.get("confidence", 0.0),
-                    evidence=s.get("evidence", ""),
-                    needs_user_input=s.get("needs_user_input", False),
-                    suggested_role=s.get("suggested_role", "feature"),
-                    user_override=s.get("user_override"),
-                ))
-        return cls(column_semantics=column_semantics, **data)
-
-    def get_uncertain_columns(self) -> list[ColumnSemantic]:
-        """获取需要用户确认的列"""
-        return [s for s in self.column_semantics if s.needs_user_input]
-
-    def get_target_candidates(self) -> list[ColumnSemantic]:
-        """获取可能的目标变量"""
-        return [s for s in self.column_semantics if s.suggested_role == "target"]
-
-    def derive_from_column_semantics(self) -> None:
-        """从 column_semantics 推导 target/features/confounders/variable_roles 等"""
-        features = []
-        confounders = []
-        variable_roles = {}
-
-        for sem in self.column_semantics:
-            role = sem.suggested_role
-            col = sem.column_name
-            variable_roles[col] = role
-
-            # 跳过忽略列和标识列
-            if role in ("ignore", "identifier"):
-                continue
-
-            # 目标变量
-            if role == "target" and not self.target:
-                self.target = col
-                continue
-
-            # 混淆变量
-            if role == "control":
-                confounders.append(col)
-                continue
-
-            # 时间列
-            if role in ("time_index", "time") and not self.time_column:
-                self.time_column = col
-                continue
-
-            # 分组列
-            if role == "group":
-                if col not in self.group_columns:
-                    self.group_columns.append(col)
-                continue
-
-            # 其他作为特征
-            features.append(col)
-
-        # 只在没设置过时才覆盖
-        if not self.features:
-            self.features = features
-        if not self.confounders:
-            self.confounders = confounders
-        if not self.variable_roles:
-            self.variable_roles = variable_roles
+# 常见业务术语 → 列名映射（兜底用）
+COMMON_COLUMN_ALIASES: dict[str, list[str]] = {
+    "销售额": ["Inc1", "Inc2", "收入", "营收", "sales", "revenue"],
+    "收入": ["Inc1", "Inc2", "revenue"],
+    "利润": ["Bos1", "Bos2", "profit"],
+    "成本": ["Bos1", "Bos2", "cost"],
+    "订单": ["Ord1", "Ord2", "order"],
+    "用户": ["Usr1", "User1", "user"],
+    "客户": ["Cust1", "customer"],
+}
 
 
 class ScoutAgent(DataAgentBase):
@@ -431,18 +269,50 @@ class ScoutAgent(DataAgentBase):
             if profile["missing_summary"].get("null_rate", 0) > 0.1:
                 context.warnings.append(f"缺失率 {profile['missing_summary']['null_rate']:.1%} 较高")
 
-            # 8. 如果有用户输入请求
+            # 8. 不确定的字段，逐个问用户，等用户回答
             uncertain = context.get_uncertain_columns()
             if uncertain:
+                print("\n" + "=" * 60)
+                print("📋 字段理解")
+                print("=" * 60)
+                print("\n这些字段我不太确定，请告诉我：\n")
+
                 for col_sem in uncertain:
-                    self.emit_event(
-                        EventType.USER_INPUT_REQUESTED,
-                        {
-                            "question": f"列 '{col_sem.column_name}' 推断为 {col_sem.inferred_type.value}（置信度 {col_sem.confidence:.0%}），"
-                                        f"依据: {col_sem.evidence}。是否正确？",
-                            "column": col_sem.column_name,
-                        },
-                    )
+                    col = col_sem.column_name
+                    inferred = col_sem.inferred_type.value
+                    print(f"  {col} → {inferred}（置信度 {col_sem.confidence:.0%}）")
+
+                print("\n有不对的，告诉我。比如：Inc1是销售额")
+                print('说"好了"就继续\n')
+
+                while True:
+                    user_input = input("➜ ").strip()
+
+                    if user_input.lower() in ("好了", "ok", "o", "继续", "next", "y", "yes", ""):
+                        break
+
+                    if user_input.lower() in ("cancel", "q", "取消"):
+                        raise KeyboardInterrupt("用户取消")
+
+                    if not user_input:
+                        continue
+
+                    # 用户纠正了某个字段
+                    if "," in user_input or "是" in user_input or "=" in user_input:
+                        # 简单解析：字段名是/=值
+                        for part in user_input.replace("，", ",").replace("=", ",").split(","):
+                            part = part.strip()
+                            if not part:
+                                continue
+                            # 找字段名
+                            for known_col in [s.column_name for s in context.column_semantics]:
+                                if known_col.lower() in part.lower():
+                                    # 提取值
+                                    val = part.replace(known_col, "").replace("是", "").replace("的", "").strip()
+                                    if val:
+                                        context.column_descriptions[known_col] = val
+                                        print(f"   ✅ {known_col} = {val}")
+                                    break
 
             # 9. LLM 生成每个字段的自然语言描述
             columns_info = ", ".join(
@@ -494,6 +364,7 @@ class ScoutAgent(DataAgentBase):
             ).strip()
 
             # 解析 LLM 输出，填充 column_descriptions
+            # 注意：不要覆盖已经从 memory/schema.yaml 加载的描述（更准确）
             for line in batch_desc.split("\n"):
                 line = line.strip()
                 if not line or not line[0].isalpha():
@@ -504,7 +375,8 @@ class ScoutAgent(DataAgentBase):
                     col_name = col_name.strip()
                     desc_text = desc_text.strip()
                     if col_name in [cs.column_name for cs in context.column_semantics]:
-                        context.column_descriptions[col_name] = desc_text
+                        if col_name not in context.column_descriptions:
+                            context.column_descriptions[col_name] = desc_text
 
             # 兜底：对没生成描述的字段，用模板补全
             for cs in context.column_semantics:

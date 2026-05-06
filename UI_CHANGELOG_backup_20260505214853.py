@@ -98,7 +98,7 @@ def _render_project_card(p, pm: ProjectManager | None) -> None:
             st.session_state.pop(_project_key(p.name, "confirm"), None)
             st.rerun()
 
-    # 编辑描述 + 文件管理
+    # 编辑描述
     if st.session_state.get(_project_key(p.name, "edit_desc")):
         new_desc = st.text_area(
             "项目描述",
@@ -106,21 +106,6 @@ def _render_project_card(p, pm: ProjectManager | None) -> None:
             key=_project_key(p.name, "desc_input"),
             label_visibility="collapsed",
         )
-
-        # 文件列表
-        if p.data_files:
-            st.markdown("**📥 数据文件**")
-            for f in p.data_files:
-                fc1, fc2 = st.columns([8, 1])
-                with fc1:
-                    size = f"{f.size_kb:.1f}KB" if f.size_kb < 1024 else f"{f.size_kb/1024:.1f}MB"
-                    st.caption(f"📄 {f.name} — {size}")
-                with fc2:
-                    if st.button("🗑️", key=_project_key(f"{p.name}_{f.name}", "df")):
-                        if pm:
-                            pm.remove_data(p.name, f.name)
-                        st.rerun()
-
         c_save, c_cancel = st.columns(2)
         if c_save.button("💾 保存", key=_project_key(p.name, "save_desc"), type="primary"):
             if pm:
@@ -143,7 +128,7 @@ def render() -> None:
     projects = pm.list()
 
     # ── 项目概况 ─────────────────────────────────────────────
-    st.markdown("<h2 style='font-size:2.5rem !important; color:#00ffff !important; font-family:\"Space Mono\",monospace !important; margin:0;'>📊 项目概况</h2>", unsafe_allow_html=True)
+    st.markdown("# 📊 项目概况")
 
     if not projects:
         st.info("还没有任何项目，请创建新项目。")

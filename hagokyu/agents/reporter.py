@@ -15,6 +15,8 @@ from ..tools.visualization import generate_data_overview_charts, generate_insigh
 from .analyst import AnalysisResult
 from .base import DataAgentBase
 from .scout import DataContext
+from ._interactive import InteractionMixin
+from .types import InteractionResult
 
 
 # ── 效应量大小判断 ──────────────────────────────────────────
@@ -60,12 +62,17 @@ def _format_effect_size(effect_size: float | None, effect_type: str = "") -> str
     return f"{es:.2f}"
 
 
-class ReporterAgent(DataAgentBase):
+class ReporterAgent(DataAgentBase, InteractionMixin):
     """报告员：用吸引力层抓住用户，用核心价值层留住用户"""
 
-    def __init__(self, llm_config: LLMConfig, event_bus: EventBus) -> None:
+    def __init__(
+        self,
+        llm_config: LLMConfig,
+        event_bus: EventBus,
+        scribe: "ScribeAgent | None" = None,
+    ) -> None:
         super().__init__(
-            role="Reporter",
+            role="reporter",
             goal="给你一份看得懂的报告：一句话说清楚关键发现，底下有细节支撑",
             backstory=(
                 "【你的职责】报告生成：把分析结果变成一份谁都看得懂的报告，核心发现要一句话说清楚。\n\n"
@@ -91,8 +98,14 @@ class ReporterAgent(DataAgentBase):
             llm_config=llm_config,
             event_bus=event_bus,
         )
+        self.scribe = scribe
 
-    def run(
+        # 交互状态
+        self._phase = "begin"
+        self._results: list[AnalysisResult] = []
+        self._context: DataContext | None = None
+        self._cleaning_summary: dict[str, Any] = {}
+        self._report_data: dict[str, Any] = {}
         self,
         results: list[AnalysisResult],
         context: DataContext,
@@ -325,6 +338,113 @@ class ReporterAgent(DataAgentBase):
                 metric_cards=[],
                 user_mode=user_mode,
             )
+
+    # ── 交互式接口 ────────────────────────────────────────
+
+    def begin(
+        self,
+        results: list[AnalysisResult],
+        context: DataContext,
+        cleaning_summary: dict[str, Any] | None = None,
+        *,
+        project_name: str = "分析项目",
+        query: str = "",
+        df: pd.DataFrame | None = None,
+        business_metrics: list[dict[str, Any]] | None = None,
+    ) -> InteractionResult:
+        """
+        开始 Reporter 交互。
+
+        流程：预览报告结构 → 确认模板 → 生成报告 → 完成
+        """
+        self._results = results
+        self._context = context
+        self._cleaning_summary = cleaning_summary or {}
+
+        self.start()  # emits AGENT_STARTED → Scribe claims task
+
+        self._phase = "confirm_template"
+
+        # 提取关键信息用于确认
+        key_findings = self._extract_key_findings(results)
+        n_sig = sum(1 for f in key_findings if f.get("significance") == "significant")
+
+        templates = [
+            {"id": "default", "name": "标准报告", "desc": "通用双轨结构"},
+            {"id": "executive_brief", "name": "高管简报", "desc": "一句话结论 + 关键指标卡片"},
+            {"id": "business_analysis", "name": "业务分析", "desc": "含 ROI/渠道分析"},
+            {"id": "ab_test", "name": "A/B测试", "desc": "对比实验结论"},
+        ]
+
+        # block，等用户确认模板
+        if self.scribe:
+            self.scribe.block_task("reporter", "等用户选择报告模板")
+        return self._pause(
+            phase="confirm_template",
+            message=f"分析完成：{len(results)} 项分析，{n_sig} 项显著发现。请选择报告模板：",
+            needs_confirmation=True,
+            confirmation_prompt="选择报告模板",
+            pending_items=templates,
+            data={
+                "n_results": len(results),
+                "n_significant": n_sig,
+                "key_findings": key_findings[:3],
+                "project_name": project_name,
+                "query": query,
+                "business_metrics": business_metrics or [],
+            },
+        )
+
+    def respond(
+        self,
+        user_input: dict,
+        *,
+        output_path: str | None = None,
+        formats: list[str] | None = None,
+        template: str | None = None,
+        user_mode: str = "standard",
+        df: pd.DataFrame | None = None,
+    ) -> InteractionResult:
+        """
+        处理用户对模板的确认响应，生成最终报告。
+        """
+        if self._phase != "confirm_template":
+            return self._done("done", "阶段错误，请重新开始", {})
+
+        selected_template = user_input.get("selected_template", "default")
+        if not template:
+            template = selected_template
+
+        # 解除 block
+        if self.scribe:
+            self.scribe.unblock_task("reporter")
+
+        # 生成报告
+        report = self.run(
+            results=self._results,
+            context=self._context,
+            cleaning_summary=self._cleaning_summary,
+            project_name=self._report_data.get("project_name", "分析项目"),
+            query=self._report_data.get("query", ""),
+            output_path=output_path,
+            formats=formats,
+            template=template,
+            user_mode=user_mode,
+            df=df,
+            business_metrics=self._report_data.get("business_metrics"),
+        )
+
+        # Reporter 是最后一环，直接完成
+        self.complete({"n_sections": len(report.sections), "n_findings": len(report.findings_summary) if report.findings_summary else 0})
+
+        return self._done(
+            phase="done",
+            message=f"✅ 报告已生成！共 {len(report.sections)} 个章节",
+            data={
+                "report_sections": len(report.sections),
+                "key_findings_count": len(report.findings_summary) if report.findings_summary else 0,
+            },
+        )
 
     # ── 商业指标章节 ──────────────────────────────────────
 

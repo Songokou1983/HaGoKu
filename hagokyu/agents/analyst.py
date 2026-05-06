@@ -35,6 +35,8 @@ from ..tools.power_analysis import (
 )
 from .base import DataAgentBase
 from .scout import DataContext, SemanticType
+from ._interactive import InteractionMixin
+from .types import InteractionResult
 
 
 @dataclass
@@ -76,12 +78,17 @@ class AnalysisResult:
         }
 
 
-class AnalystAgent(DataAgentBase):
+class AnalystAgent(DataAgentBase, InteractionMixin):
     """数理分析员：用统计方法挖出数据背后的真相"""
 
-    def __init__(self, llm_config: LLMConfig, event_bus: EventBus) -> None:
+    def __init__(
+        self,
+        llm_config: LLMConfig,
+        event_bus: EventBus,
+        scribe: "ScribeAgent | None" = None,
+    ) -> None:
         super().__init__(
-            role="Analyst",
+            role="analyst",
             goal="用统计方法回答你的问题，每个结论都有数据支撑，不会乱下结论",
             backstory=(
                 "【你的职责】统计分析：用统计方法挖出数据背后的结论，每个结论都有 p 值、效应量、置信区间支撑。\n\n"
@@ -120,6 +127,14 @@ class AnalystAgent(DataAgentBase):
             event_bus=event_bus,
         )
         self.guardrails = StatisticalGuardrails()
+        self.scribe = scribe
+
+        # 交互状态
+        self._phase = "begin"
+        self._df: pd.DataFrame | None = None
+        self._context: DataContext | None = None
+        self._plan: dict[str, Any] = {}
+        self._preliminary_results: dict | None = None
 
     def run(
         self,
@@ -329,6 +344,126 @@ class AnalystAgent(DataAgentBase):
                 }
             return results if results else [], []
 
+    # ── 交互式接口 ────────────────────────────────────────
+
+    def begin(
+        self,
+        df: pd.DataFrame,
+        context: DataContext,
+        plan: dict[str, Any],
+    ) -> InteractionResult:
+        """
+        开始 Analyst 交互。
+
+        流程：初步分析 → 确认重点方向 → 完整分析 → 询问下一步
+        """
+        self._df = df
+        self._context = context
+        self._plan = plan
+
+        self.start()  # emits AGENT_STARTED → Scribe claims task
+
+        try:
+            # 运行初步分析（phase=preliminary）
+            preliminary = self.run(df, context, plan, phase="preliminary")
+
+            if isinstance(preliminary, dict) and preliminary.get("status") == "analyst_preliminary":
+                self._preliminary_results = preliminary
+                self._phase = "confirm_focus"
+
+                # block，等用户确认分析方向
+                if self.scribe:
+                    self.scribe.block_task("analyst", "等用户确认分析方向")
+                return self._pause(
+                    phase="confirm_focus",
+                    message="初步分析完成，请确认重点分析方向：",
+                    needs_confirmation=True,
+                    confirmation_prompt="选择或调整重点分析方向",
+                    pending_items=preliminary.get("preliminary_findings", []),
+                    data={
+                        "power_warnings": preliminary.get("power_warnings", []),
+                        "business_metrics": preliminary.get("business_metrics", []),
+                        "suggested_focus": preliminary.get("suggested_focus", ""),
+                    },
+                )
+            else:
+                # 无需确认，直接进入下一步
+                return self._write_memory_and_ask_next(preliminary)
+
+        except Exception as e:
+            self.fail(str(e))
+            return self._done("done", f"Analyst 失败: {e}", {"error": str(e)})
+
+    def respond(
+        self,
+        user_input: dict,
+    ) -> InteractionResult:
+        """
+        处理用户对分析方向的确认响应。
+
+        user_input 格式:
+          {
+            "confirmed_focus": ["regression", "correlation"],
+            "corrected_focus": ["hypothesis_test"],
+          }
+        """
+        if self._phase != "confirm_focus":
+            return self._done("done", "阶段错误，请重新开始", {})
+
+        confirmed_focus = user_input.get("confirmed_focus", [])
+        corrected_focus = user_input.get("corrected_focus", [])
+
+        # 更新分析计划
+        final_focus = confirmed_focus if confirmed_focus else corrected_focus
+        if final_focus:
+            self._plan = self._plan.copy()
+            self._plan["analyst_focus"] = final_focus
+
+        # 解除 block
+        if self.scribe:
+            self.scribe.unblock_task("analyst")
+
+        self.start()  # emits AGENT_STARTED
+
+        # 运行完整分析
+        results, business_metrics = self.run(
+            self._df,
+            self._context,
+            self._plan,
+            phase="full",
+        )
+
+        return self._write_memory_and_ask_next((results, business_metrics))
+
+    def _write_memory_and_ask_next(
+        self,
+        results_data: tuple[list[AnalysisResult], list[dict[str, Any]]],
+    ) -> InteractionResult:
+        """写记忆后询问用户是否进入报告阶段"""
+        self._phase = "next_step"
+
+        results, business_metrics = results_data
+        n_sig = sum(1 for r in results if r.significance == "significant")
+
+        summary = f"完成 {len(results)} 项分析，{n_sig} 项显著发现"
+
+        # block，等用户确认进入下一步
+        if self.scribe:
+            self.scribe.block_task("analyst", "等用户确认进入报告阶段")
+        self.complete({"n_results": len(results), "n_business_metrics": len(business_metrics)})
+
+        return self._pause(
+            phase="next_step",
+            message=summary + "\n\n建议进入「报告阶段」，是否确认？",
+            actions=["生成报告", "继续分析", "结束分析"],
+            pending_items=[],
+            data={
+                "n_results": len(results),
+                "n_significant": n_sig,
+                "n_business_metrics": len(business_metrics),
+            },
+        )
+
     def _do_regression(
         self,
         df: pd.DataFrame,
@@ -344,6 +479,16 @@ class AnalystAgent(DataAgentBase):
                 self.emit_thinking("无法确定因变量，跳过回归分析")
                 return None
             target_col = target_candidates[0].column_name
+
+        # 如果 target_col 不在数据中，尝试用 Scout 的字段别名解析
+        if target_col and target_col not in df.columns:
+            resolved = context.resolve_column_alias(target_col)
+            if resolved and resolved in df.columns:
+                self.emit_thinking(f"字段别名解析: {target_col} → {resolved}")
+                target_col = resolved
+            else:
+                self.emit_tool_error(f"回归分析失败: 因变量 '{target_col}' 不在数据中")
+                return None
 
         # 确定自变量：直接使用 Scout 推导的 variable_roles（已排除 identifier/ignore）
         # Scout.derive_from_column_semantics() 已完成 role 归类，无需重复过滤
@@ -466,6 +611,16 @@ class AnalystAgent(DataAgentBase):
 
         if not target_col:
             target_col = num_cols[0] if num_cols else None
+
+        # 如果 target_col 不在数据中，尝试用 Scout 的字段别名解析
+        if target_col and target_col not in df.columns:
+            resolved = context.resolve_column_alias(target_col)
+            if resolved and resolved in df.columns:
+                self.emit_thinking(f"字段别名解析: {target_col} → {resolved}")
+                target_col = resolved
+            else:
+                self.emit_thinking("无法确定检验变量组合，跳过假设检验")
+                return None
 
         if not target_col or not cat_cols:
             self.emit_thinking("无法确定检验变量组合，跳过假设检验")

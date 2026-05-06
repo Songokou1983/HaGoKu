@@ -139,7 +139,7 @@ gatherUsageStats = false
 
     /* 标题层级 — VT323 标题感 */
     h1 { font-family: var(--hagokyu-display) !important; font-size: 3.2rem !important; font-weight: 400 !important; color: var(--hagokyu-accent) !important; letter-spacing: 0.05em !important; }
-    h2 { font-family: var(--hagokyu-display) !important; font-size: 2.4rem !important; font-weight: 400 !important; color: #f0fdfa !important; letter-spacing: 0.04em !important; }
+    h2 { font-family: var(--hagokyu-display) !important; font-size: 2.8rem !important; font-weight: 400 !important; color: var(--hagokyu-accent) !important; letter-spacing: 0.04em !important; }
     h3 { font-family: var(--hagokyu-mono) !important; font-size: 1.3rem !important; font-weight: 700 !important; color: var(--hagokyu-accent) !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
     h4 { font-size: 1.1rem !important; font-weight: 700 !important; color: var(--hagokyu-text) !important; }
 
@@ -236,15 +236,15 @@ gatherUsageStats = false
         box-shadow: 0 0 16px rgba(0, 255, 255, 0.35), inset 0 0 8px rgba(0, 255, 255, 0.08) !important;
     }
     .stButton > button[kind="primary"] {
-        background: var(--hagokyu-accent) !important;
-        color: #0a0e17 !important;
-        border-color: var(--hagokyu-accent) !important;
-        box-shadow: 0 0 10px rgba(0, 255, 255, 0.3) !important;
+        background: #1a3a4a !important;
+        color: #7dd3fc !important;
+        border-color: #0ea5e9 !important;
+        box-shadow: 0 0 6px rgba(14, 165, 233, 0.2) !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background: #00ffff !important;
-        box-shadow: 0 0 28px rgba(0, 255, 255, 0.6), 0 0 8px rgba(0, 255, 255, 0.4) !important;
-        color: #0a0e17 !important;
+        background: #164e63 !important;
+        box-shadow: 0 0 16px rgba(14, 165, 233, 0.4), 0 0 4px rgba(14, 165, 233, 0.3) !important;
+        color: #bae6fd !important;
     }
 
     /* 输入框 */
@@ -345,10 +345,10 @@ gatherUsageStats = false
     }
 
     /* Success / Warning / Error boxes */
-    .stSuccess { background-color: rgba(0, 255, 65, 0.06) !important; border-left: 2px solid var(--hagokyu-green) !important; }
-    .stWarning { background-color: rgba(255, 214, 10, 0.06) !important; border-left: 2px solid var(--hagokyu-yellow) !important; }
-    .stError   { background-color: rgba(255, 69, 58, 0.06) !important; border-left: 2px solid var(--hagokyu-red) !important; }
-    .stInfo    { background-color: rgba(0, 255, 255, 0.04) !important; border-left: 2px solid var(--hagokyu-accent) !important; }
+    .stSuccess { background-color: rgba(34, 197, 94, 0.08) !important; border-left: 2px solid #22c55e !important; }
+    .stWarning { background-color: rgba(234, 179, 8, 0.08) !important; border-left: 2px solid #eab308 !important; }
+    .stError   { background-color: rgba(248, 113, 113, 0.08) !important; border-left: 2px solid #f87171 !important; }
+    .stInfo    { background-color: rgba(56, 189, 248, 0.06) !important; border-left: 2px solid #38bdf8 !important; }
 
     /* File uploader */
     [data-testid="stFileUploadDropzone"] {

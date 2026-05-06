@@ -71,10 +71,20 @@ class CleaningConfig(BaseModel):
     random_state: int = 42
 
 
+class EmbeddingConfig(BaseModel):
+    """向量嵌入配置"""
+
+    base_url: str = "https://api.openai-proxy.org/v1"
+    api_key: str = "none"
+    model: str = "text-embedding-3-small"
+    dimension: int = 1536
+
+
 class HaGoKuConfig(BaseModel):
     """HaGoKu 全局配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     user_mode: UserModeConfig = Field(default_factory=UserModeConfig)
@@ -117,6 +127,12 @@ class HaGoKuConfig(BaseModel):
             config.work_dir = Path(v).expanduser()
         if v := os.getenv("HAGOKYU_PROJECT_DIR"):
             config.output.project_dir = Path(v).expanduser()
+        if v := os.getenv("HAGOKYU_EMBEDDING_BASE_URL"):
+            config.embedding.base_url = v
+        if v := os.getenv("HAGOKYU_EMBEDDING_API_KEY"):
+            config.embedding.api_key = v
+        if v := os.getenv("HAGOKYU_EMBEDDING_MODEL"):
+            config.embedding.model = v
         return config
 
     def ensure_work_dir(self) -> None:
@@ -145,6 +161,7 @@ class HaGoKuConfig(BaseModel):
         """返回敏感字段的脱敏值（用于日志/调试输出）"""
         return {
             "api_key": f"{self.llm.api_key[:8]}***" if self.llm.api_key else "(未设置)",
+            "embedding_api_key": f"{self.embedding.api_key[:8]}***" if self.embedding.api_key else "(未设置)",
         }
 
     def __repr__(self) -> str:

@@ -1,0 +1,31 @@
+knowledge:
+- id: example-01
+  condition: 数值列 + 缺失率 < 5%
+  action: 均值填充
+  risk: low
+  tags:
+  - 缺失值
+  - 数值型
+  - 低缺失率
+  created_at: '2026-05-06'
+  use_count: 2
+- id: example-02
+  condition: 数值列 + 异常值(IQR>3σ)
+  action: 截断而非删除
+  risk: low
+  tags:
+  - 异常值
+  - 数值型
+  - 截断
+  created_at: '2026-05-06'
+  use_count: 2
+- id: example-03
+  condition: 类别列 + 缺失率 > 20%
+  action: 独热编码 + 缺失标记为Unknown
+  risk: medium
+  tags:
+  - 缺失值
+  - 类别型
+  - 高缺失率
+  created_at: '2026-05-06'
+  use_count: 2

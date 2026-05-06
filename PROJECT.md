@@ -1294,83 +1294,99 @@ sales.csv → Scout(raw.parquet) → Cleaner(cleaned.parquet) → Analyst(result
 
 ## 项目结构
 
+**注意**：使用 flat 布局（`hagokyu/` 在项目根），不是 `src/` 布局。
+
 ```
-hagokyu/
+hagokyu/                          # 项目根
 ├── pyproject.toml
 ├── README.md
-├── PROJECT.md                       # 本文件
+├── PROJECT.md                    # 本文件
 ├── .env.example
-├── src/
-│   └── hagokyu/
-│       ├── __init__.py
-│       ├── cli.py                   # CLI 入口
-│       ├── config.py                # 全局配置 + Manager 模式
-│       ├── orchestrator.py          # 编排器
-│       │
-│       ├── manager/
-│       │   ├── __init__.py
-│       │   ├── planner.py           # 分析计划生成
-│       │   ├── rule_engine.py       # 规则引擎
-│       │   ├── quality_checker.py   # 质量检查
-│       │   └── modes.py             # 权重模式定义
-│       │
-│       ├── agents/
-│       │   ├── __init__.py
-│       │   ├── base.py              # DataAgent 基类
-│       │   ├── scout.py
-│       │   ├── cleaner.py
-│       │   ├── analyst.py
-│       │   └── reporter.py
-│       │
-│       ├── tools/
-│       │   ├── __init__.py
-│       │   ├── data_io.py           # 数据加载 (Pandas, DuckDB)
-│       │   ├── profiling.py         # 数据画像 (ydata-profiling, missingno)
-│       │   ├── cleaning.py          # 统计感知清洗 (sklearn, PyOD, Cleanlab)
-│       │   ├── validation.py        # 数据验证 (Great Expectations)
-│       │   ├── analysis.py          # 统计分析 (Pingouin, Statsmodels)
-│       │   ├── diagnostics.py       # 模型诊断 (Statsmodels)
-│       │   ├── automl.py            # AutoML (FLAML)
-│       │   ├── causal.py            # 因果推断 (DoWhy) [V3]
-│       │   ├── visualization.py     # 洞察图 (Plotly, Matplotlib)
-│       │   └── reporting.py         # 报告渲染 (Jinja2) + 导出 (Quarto)
-│       │
-│       ├── guardrails/
-│       │   ├── __init__.py
-│       │   ├── statistical.py       # 统计护栏核心
-│       │   ├── mandatory.py         # 强制级规则
-│       │   ├── warnings.py          # 警告级规则
-│       │   └── suggestions.py       # 提示级规则
-│       │
-│       ├── storage/
-│       │   ├── __init__.py
-│       │   ├── project.py           # 项目管理（创建/列表/归档）
-│       │   ├── artifact.py          # DataArtifact 定义 + Parquet 管理
-│       │   ├── lineage.py           # 数据血缘追踪
-│       │   ├── database.py          # SQLite 元数据库
-│       │   ├── sources.py           # 数据源管理（文件/DB/API）
-│       │   └── output.py            # 输出命名 + 存放路径管理
-│       │
-│       ├── observability/
-│       │   ├── __init__.py
-│       │   ├── event_bus.py         # 事件总线
-│       │   ├── events.py            # 事件类型定义
-│       │   ├── display.py           # 终端实时显示
-│       │   └── replay.py            # 执行回放
-│       │
-│       ├── templates/
-│       │   ├── business_analysis/   # 商业分析模板
-│       │   ├── academic/            # 学术报告模板
-│       │   ├── ab_test/             # A/B 测试模板
-│       │   ├── executive_brief/     # 高管简报模板
-│       │   └── data_audit/          # 数据审计模板
-│       │
-│       └── prompts/
-│           ├── manager.yaml
-│           ├── scout.yaml
-│           ├── cleaner.yaml
-│           ├── analyst.yaml
-│           └── reporter.yaml
+├── hagokyu/                     # flat 布局，所有代码在这里
+│   ├── __init__.py
+│   ├── cli.py                   # CLI 入口
+│   ├── config.py                # 全局配置 + Manager 模式
+│   ├── orchestrator.py          # 编排器
+│   │
+│   ├── manager/
+│   │   ├── __init__.py
+│   │   ├── planner.py           # 分析计划生成
+│   │   ├── rule_engine.py       # 规则引擎
+│   │   ├── quality_checker.py   # 质量检查
+│   │   └── modes.py             # 权重模式定义
+│   │
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── scout/               # Scout Agent（独立文件夹）
+│   │   │   ├── agent.py
+│   │   │   ├── prompt.md
+│   │   │   ├── memory.md
+│   │   │   └── knowledge.yaml
+│   │   ├── cleaner/             # Cleaner Agent（独立文件夹）
+│   │   │   ├── agent.py
+│   │   │   ├── prompt.md
+│   │   │   └── memory.md
+│   │   ├── analyst/             # Analyst Agent（独立文件夹）
+│   │   │   ├── agent.py
+│   │   │   ├── prompt.md
+│   │   │   └── memory.md
+│   │   ├── reporter/            # Reporter Agent（独立文件夹）
+│   │   │   ├── agent.py
+│   │   │   ├── prompt.md
+│   │   │   └── memory.md
+│   │   └── _scribe/             # Scribe Agent（内部记录员）
+│   │       └── agent.py
+│   │
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── data_io.py           # 数据加载 (Pandas, DuckDB)
+│   │   ├── profiling.py         # 数据画像 (ydata-profiling, missingno)
+│   │   ├── cleaning.py          # 统计感知清洗 (sklearn, PyOD, Cleanlab)
+│   │   ├── validation.py        # 数据验证 (Great Expectations)
+│   │   ├── analysis.py          # 统计分析 (Pingouin, Statsmodels)
+│   │   ├── diagnostics.py       # 模型诊断 (Statsmodels)
+│   │   ├── automl.py            # AutoML (FLAML)
+│   │   ├── causal.py            # 因果推断 (DoWhy) [V3]
+│   │   ├── visualization.py     # 洞察图 (Plotly, Matplotlib)
+│   │   └── reporting.py         # 报告渲染 (Jinja2) + 导出 (Quarto)
+│   │
+│   ├── guardrails/
+│   │   ├── __init__.py
+│   │   ├── statistical.py       # 统计护栏核心
+│   │   ├── mandatory.py         # 强制级规则
+│   │   ├── warnings.py          # 警告级规则
+│   │   └── suggestions.py       # 提示级规则
+│   │
+│   ├── storage/
+│   │   ├── __init__.py
+│   │   ├── kanban.py            # 项目看板（SQLite）
+│   │   ├── project_manager.py   # 项目管理（创建/列表/归档）
+│   │   ├── artifact.py          # DataArtifact 定义 + Parquet 管理
+│   │   ├── lineage.py           # 数据血缘追踪
+│   │   ├── database.py          # SQLite 元数据库
+│   │   ├── sources.py           # 数据源管理（文件/DB/API）
+│   │   └── output.py            # 输出命名 + 存放路径管理
+│   │
+│   ├── observability/
+│   │   ├── __init__.py
+│   │   ├── event_bus.py         # 事件总线
+│   │   ├── events.py            # 事件类型定义
+│   │   ├── display.py           # 终端实时显示
+│   │   └── replay.py            # 执行回放
+│   │
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── app.py               # Streamlit 入口
+│   │   ├── _pages/              # 页面（Streamlit 要求 _ 前缀）
+│   │   ├── components/          # 组件
+│   │   └── static/              # 静态资源
+│   │
+│   └── prompts/
+│       ├── manager.yaml
+│       ├── scout.yaml
+│       ├── cleaner.yaml
+│       ├── analyst.yaml
+│       └── reporter.yaml
 │
 ├── tests/
 │   ├── test_guardrails/

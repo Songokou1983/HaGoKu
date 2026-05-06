@@ -190,11 +190,11 @@ class Orchestrator:
         plan = self._create_plan(query, parsed_intent=parsed_intent)
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
-        # 初始化 Agent
-        scout = ScoutAgent(self.config.llm, self.event_bus)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus)
-        analyst = AnalystAgent(self.config.llm, self.event_bus)
-        reporter = ReporterAgent(self.config.llm, self.event_bus)
+        # 初始化 Agent（传入 scribe 用于看板 block/unblock）
+        scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+        analyst = AnalystAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+        reporter = ReporterAgent(self.config.llm, self.event_bus, scribe=self.scribe)
 
         # Resume 支持
         context: DataContext | None = None
@@ -218,29 +218,24 @@ class Orchestrator:
                     if Path(cleaned_path_str).exists():
                         df_clean = pd.read_parquet(cleaned_path_str)
 
-        # ── Scout 单独探索阶段 ──────────────────────────────────
-        # phase="scout_first" 时只跑 Scout，跑完停下来等用户输入问题
+        # ── Scout 交互确认阶段 ──────────────────────────────────
+        # phase="scout_first" 时只跑 Scout，返回 pending_items 供用户确认
         if phase == "scout_first":
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "🔍 正在识别数据字段，请稍候...",
             })
-            scout = ScoutAgent(self.config.llm, self.event_bus)
-            context = scout.run(data_path, query="", project_id=project_name, memory=self.memory)
-            # Scribe 已通过 EventBus 钩子自动完成 Scout 任务（done），Cleaner 已被 promote 到 ready
-            # 停下来等用户确认字段含义：block Cleaner
-            self.scribe.block_task("cleaner", "等用户确认字段含义")
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
-                "thought": "✅ 字段识别完成，请在下方输入你想分析的问题",
-            })
+            scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+            ir = scout.begin(data_path=data_path, query=query, project_id=project_name)
+            # begin() 已触发 AGENT_STARTED（由 Scribe claim 任务），并在需要确认时 block 了看板
+            # 返回 InteractionResult 给 UI 显示确认项
             return {
-                "status": "scout_done",
-                "n_cols": context.n_cols,
-                "n_rows": context.n_rows,
-                "columns": [s.column_name for s in context.column_semantics],
-                "column_semantics": [s.to_dict() for s in context.column_semantics],
-                "uncertain_columns": [s.column_name for s in context.get_uncertain_columns()],
-                "column_descriptions": context.column_descriptions,
-                "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
+                "status": "scout_confirm",
+                "phase": ir.phase,
+                "message": ir.message,
+                "needs_confirmation": ir.needs_confirmation,
+                "pending_items": ir.pending_items,
+                "data": ir.data,
+                "final": ir.final,
             }
 
         # ── Cleaner 策略阶段 ────────────────────────────────────
@@ -903,6 +898,98 @@ class Orchestrator:
         except Exception as e:
             print(f"   ⚠️ 没理解：{e}")
             return None
+
+    def respond(
+        self,
+        user_input: dict,
+        project_name: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        处理 Agent 暂停后的用户响应，继续工作流。
+
+        user_input 格式:
+          {
+            "agent": "scout",           # 当前等待的 agent
+            "phase": "confirm_fields",   # 当前阶段
+            "confirmed": {...},          # Scout.respond() 格式
+            "action": "进入清洗",        # 用户选择的操作（next_step 阶段）
+          }
+
+        Returns:
+            与 run() 返回格式相同的 dict
+        """
+        agent_name = user_input.get("agent", "")
+        phase = user_input.get("phase", "")
+
+        # 重新初始化 scribe（因为 respond() 是新调用，scribe 需要恢复状态）
+        if self.output_mgr is None:
+            self.output_mgr = OutputManager(self.config.output, project_name or "default")
+        self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
+
+        if agent_name == "scout" and phase == "confirm_fields":
+            # 恢复 Scout 状态
+            scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+            # 从 user_input 恢复 Scout 内部状态
+            scout._phase = "confirm_fields"
+            scout._data_path = user_input.get("data_path", "")
+            scout._query = user_input.get("query", "")
+            scout._context = user_input.get("context")
+
+            ir = scout.respond(user_input, project_id=project_name)
+
+            if ir.final:
+                # Scout 完成了，返回后续指令
+                return {
+                    "status": "scout_done",
+                    "message": ir.message,
+                    "phase": ir.phase,
+                    "data": ir.data,
+                    "final": True,
+                }
+
+            # Scout 再次暂停（next_step），返回给 UI
+            return {
+                "status": "scout_next_step",
+                "phase": ir.phase,
+                "message": ir.message,
+                "actions": ir.actions,
+                "pending_items": ir.pending_items,
+                "data": ir.data,
+                "final": ir.final,
+            }
+
+        elif agent_name == "scout" and phase == "next_step":
+            action = user_input.get("action", "")
+            if action in ("进入清洗", "继续"):
+                # 进入清洗阶段
+                return {
+                    "status": "ready_for_cleaning",
+                    "phase": "cleaning_first",
+                    "message": "好的，进入清洗阶段",
+                    "data": user_input.get("data", {}),
+                }
+            elif action in ("重新理解字段", "重新开始"):
+                # 重新跑 Scout
+                return {
+                    "status": "restart_scout",
+                    "phase": "scout_first",
+                    "message": "好的，重新开始字段理解",
+                }
+            elif action in ("结束分析", "结束"):
+                return {
+                    "status": "done",
+                    "message": "分析结束",
+                }
+            return {
+                "status": "done",
+                "message": "未知的操作",
+            }
+
+        # 未知 agent/phase
+        return {
+            "status": "error",
+            "message": f"未知阶段: {agent_name}/{phase}",
+        }
 
     def _save_field_descriptions(
         self,

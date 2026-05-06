@@ -224,6 +224,17 @@ class ScoutAgent(InteractionMixin):
             # 生成字段描述
             self._generate_field_descriptions(context, df)
 
+            # 提取样本值（用于 LLM 理解字段含义）
+            sample_values = {}
+            for col in df.columns:
+                try:
+                    vals = df[col].dropna().unique()
+                    if len(vals) > 0:
+                        sample_values[col] = ", ".join(str(v) for v in vals[:3])
+                except Exception:
+                    pass
+            context["_sample_values"] = sample_values
+
             self._context = context
             self._phase = "confirm_fields"
 
@@ -233,19 +244,20 @@ class ScoutAgent(InteractionMixin):
                 # block 看板，等用户确认
                 if self.scribe:
                     self.scribe.block_task("scout", "等用户确认字段含义")
-                self._emit(EventType.AGENT_THINKING, {"thought": f"识别 {len(uncertain)} 个字段需确认"})
+                self._emit(EventType.AGENT_THINKING, {"thought": f"识别 {len(uncertain)} 个字段需确认，正在生成确认消息..."})
+
+                # 用 LLM 生成完整确认消息（传入所有字段，不只是 uncertain）
+                llm_message = self._generate_confirmation_message(context["column_semantics"], context)
+
                 return self._pause(
                     phase="confirm_fields",
-                    message="以下字段需要你确认理解是否正确：",
+                    message=llm_message,
                     needs_confirmation=True,
                     confirmation_prompt="请逐个确认或修正字段含义",
                     pending_items=[
                         {
                             "column": s["column_name"],
-                            "inferred_type": s["inferred_type"],
-                            "confidence": s["confidence"],
                             "description": context["column_descriptions"].get(s["column_name"], ""),
-                            "evidence": s.get("evidence", ""),
                         }
                         for s in uncertain
                     ],
@@ -494,8 +506,8 @@ class ScoutAgent(InteractionMixin):
         variable_roles = {}
 
         for sem in context["column_semantics"]:
-            col = sem["column_name"]
-            role = sem["suggested_role"]
+            col = sem.get("column_name", sem.get("column"))
+            role = sem.get("suggested_role", "feature")
             variable_roles[col] = role
 
             if role in ("ignore", "identifier"):
@@ -548,10 +560,8 @@ class ScoutAgent(InteractionMixin):
             knowledge_hint = ""
 
         client = self._create_llm_client()
+        result = ""
         try:
-            system_prompt = "你是专业数据分析师，对每个字段用20字以内描述。格式：字段名：描述"
-            if knowledge_hint:
-                system_prompt += f"\n\n{knowledge_hint}"
             response = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=[
@@ -600,6 +610,69 @@ class ScoutAgent(InteractionMixin):
                 type_ch = type_map.get(sem["inferred_type"], sem["inferred_type"])
                 context["column_descriptions"][col] = f"{col}（{type_ch}）"
 
+    def _generate_confirmation_message(self, column_semantics: list, context: dict) -> str:
+        """用 LLM 生成字段确认的完整消息（三列：字段名、中文名、含义理解）"""
+        # 构建字段列表给 LLM
+        field_info = []
+        for s in column_semantics:
+            col = s["column_name"]
+            desc = context["column_descriptions"].get(col, "")
+            sample_val = context.get("_sample_values", {}).get(col, "")
+            field_info.append(f"- {col}: {desc} | 示例: {sample_val}" if sample_val else f"- {col}: {desc}")
+
+        fields_text = "\n".join(field_info)
+
+        system_prompt = """你是一个数据分析助手，正在帮助用户理解数据字段的含义。
+
+你的任务是：
+1. 为每个字段生成三列信息：字段名（原始列名）、中文名（后续分析用的简短名称）、含义理解（业务含义）
+2. 确认完成后，告知用户如何继续：
+   - 如果所有字段理解正确 → 用户可以输入"确认"继续下一步
+   - 如果某个字段理解有误 → 用户会告诉你正确含义
+   - 如果某字段完全不认识 → 用户会补充说明
+
+重要规则：
+- **字段名照抄原始列名**，不要翻译
+- **中文名要简短**，后续分析时会用到
+- **含义理解要详细**，说明这个字段在业务中的具体含义"""
+
+        user_prompt = f"""请为以下字段生成理解：
+
+{fields_text}
+
+数据概况：{context.get('n_rows', 0)} 行，{context.get('n_cols', 0)} 列
+
+要求：生成三列的 Markdown 表格（字段名、中文名、含义理解）。"""
+
+        client = self._create_llm_client()
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.5,
+                max_tokens=1200,
+            )
+            result = response.choices[0].message.content or ""
+
+            # 提取思考标签外的内容（MiniMax 模型输出 <think>...</think>）
+            import re
+            result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
+
+            return result
+        except Exception as e:
+            # LLM 失败时回退到简单消息
+            return f"""数据包含 {len(column_semantics)} 个字段，请确认以下理解是否正确：
+
+{fields_text}
+
+确认流程：
+- 如果所有字段理解正确 → 输入"确认"继续
+- 如果某个字段理解有误 → 直接告诉我正确的含义，如"Inc1的中文名=销售额"
+- 如果某字段完全不理解 → 告诉我这个字段是什么意思"""
+
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
         """将高置信度字段推断结果写入知识库"""
         if not project_id:
@@ -643,9 +716,12 @@ class ScoutAgent(InteractionMixin):
         self._save_memory()
 
     def _create_llm_client(self):
-        """创建 LLM 客户端"""
-        from ...llm.client import create_structured_llm_client
-        return create_structured_llm_client(self.llm_config)
+        """创建 LLM 客户端（原始 OpenAI，不走 instructor）"""
+        from openai import OpenAI
+        return OpenAI(
+            base_url=self.llm_config.base_url,
+            api_key=self.llm_config.api_key,
+        )
 
     # ── 对话接口（供 UI 调用） ──────────────────────────────
 

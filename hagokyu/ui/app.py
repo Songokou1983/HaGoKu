@@ -388,16 +388,6 @@ gatherUsageStats = false
     ::-webkit-scrollbar-thumb { background: var(--hagokyu-border) !important; }
     ::-webkit-scrollbar-thumb:hover { background: var(--hagokyu-accent) !important; }
 
-    /* Chat 消息框 — 橙色边框 */
-    [data-testid="stChatMessageContent"] {
-        border: 1px solid var(--hagokyu-orange) !important;
-        border-radius: 0 !important;
-        box-shadow: 0 0 8px rgba(255, 179, 71, 0.15) !important;
-    }
-    /* Chat 消息avatar */
-    [data-testid="stChatMessage"] {
-        border-left: 2px solid var(--hagokyu-orange) !important;
-    }
     </style>
     """)
 

@@ -142,15 +142,13 @@ def _scout_field_message(scout_data: dict) -> str:
     n_rows = scout_data.get("n_rows", 0)
     n_cols = scout_data.get("n_cols", 0)
     cols = scout_data.get("columns", [])
-    uncertain = set(scout_data.get("uncertain_columns", []))
     descs = scout_data.get("column_descriptions", {})
 
     lines = [f"我对这份数据（{n_rows} 行 × {n_cols} 列）的字段理解如下：", ""]
     shown = cols[:15]
     for col in shown:
         desc = descs.get(col, f"{col}")
-        marker = "⚠️ " if col in uncertain else "• "
-        lines.append(f"{marker}**{col}**：{desc}")
+        lines.append(f"{col}：{desc}")
     if len(cols) > 15:
         lines.append(f"... 还有 {len(cols) - 15} 个字段省略")
     lines.extend(["", "这些理解对吗？如果有误请告诉我，我会修正。"])
@@ -473,26 +471,16 @@ def _render_chat() -> None:
                             )
                         else:
                             st.markdown(content)
-                        # 渲染表格
-                        import pandas as pd
+                        # 渲染 Markdown 表格
                         headers = table_data.get("headers", [])
                         rows = table_data.get("rows", [])
-                        uncertain = set(table_data.get("uncertain", []))
                         if headers and rows:
-                            df = pd.DataFrame(rows, columns=headers)
-                            # 高亮 uncertain 行
-                            def _highlight_uncertain(row):
-                                if uncertain and row.iloc[0] in uncertain:
-                                    return ["background-color: rgba(255,200,0,0.15)"] * len(row)
-                                return [""] * len(row)
-                            st.dataframe(
-                                df.style.apply(_highlight_uncertain, axis=1),
-                                hide_index=True,
-                                use_container_width=True,
-                            )
-                            if uncertain:
-                                st.caption(f"⚠️ {len(uncertain)} 个字段需要你确认")
-                        st.caption("⚠️ 标记的字段需要你确认。如不重要，输入「确认」继续即可；如有误请告诉我。")
+                            md = "| " + " | ".join(headers) + " |\n"
+                            md += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                            for row in rows:
+                                md += "| " + " | ".join(str(v) for v in row) + " |\n"
+                            st.markdown(md)
+                        st.caption("如字段有误请告诉我，我会修正。如无误，输入「确认」继续即可。")
                     else:
                         # 普通文本消息：Agent 有角色时加颜色标签
                         if agent and agent in AGENT_COLOR:
@@ -1000,13 +988,21 @@ def render() -> None:
             }
 
             def _do_respond():
-                orch = Orchestrator(config)
-                result = orch.respond(
-                    user_input=continue_input,
-                    project_name=st.session_state.current_project,
-                )
-                st.session_state._analysis_result_h = [result]
-                st.session_state.analysis_running = False
+                try:
+                    orch = Orchestrator(config)
+                    result = orch.respond(
+                        user_input=continue_input,
+                        project_name=st.session_state.current_project,
+                    )
+                    st.session_state._analysis_result_h = [result]
+                    st.session_state.analysis_running = False
+                except Exception as e:
+                    import traceback
+                    st.session_state.chat_messages.append({
+                        "role": "assistant",
+                        "content": f"❌ 处理出错：{e}\n{traceback.format_exc()}",
+                    })
+                    st.session_state.analysis_running = False
 
             threading.Thread(target=_do_respond, daemon=True).start()
             st.rerun()

@@ -642,7 +642,9 @@ class ScoutAgent(InteractionMixin):
 
 数据概况：{context.get('n_rows', 0)} 行，{context.get('n_cols', 0)} 列
 
-要求：生成三列的 Markdown 表格（字段名、中文名、含义理解）。"""
+只输出一个 Markdown 表格，不要任何说明文字。表格格式：
+| 字段名 | 中文名 | 含义理解 |
+| --- | --- | --- |"""
 
         client = self._create_llm_client()
         try:
@@ -661,7 +663,7 @@ class ScoutAgent(InteractionMixin):
             import re
             result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
 
-            return result
+            return result.strip() if result.strip() else "（字段理解生成失败）"
         except Exception as e:
             # LLM 失败时回退到简单消息
             return f"""数据包含 {len(column_semantics)} 个字段，请确认以下理解是否正确：

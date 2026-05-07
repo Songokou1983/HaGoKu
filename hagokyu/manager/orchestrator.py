@@ -259,19 +259,28 @@ class Orchestrator:
                 "thought": "🧹 检测数据质量，生成清洗策略...",
             })
             cleaner = CleanerAgent(self.config.llm, self.event_bus)
-            strategy_result = cleaner.run(
-                data_path, context,
-                user_operations=cleaning_operations,  # 用户确认的操作直接执行
-                impact_warning=self.config.manager.cleaning_impact_warning,
-                phase="strategy_only",
-            )
-            # strategy_only 返回 dict，不是 (DataFrame, Report)
+            strategy_result = cleaner.get_strategy_summary(data_path, context)
+            operations = strategy_result.get("operations", [])
+            quality = strategy_result.get("data_quality", "unknown")
+            quality_labels = {"good": "数据质量良好", "medium": "数据质量一般", "poor": "数据质量问题较多"}
+            if operations:
+                llm_message = f"数据质量：{quality_labels.get(quality, quality)}。我计划执行 {len(operations)} 个清洗操作："
+                for op in operations[:6]:
+                    col = op.get("column", "")
+                    reason = op.get("reason", "")
+                    llm_message += f"\n• **{col}**：{reason[:50]}{'...' if len(reason) > 50 else ''}"
+                if len(operations) > 6:
+                    llm_message += f"\n... 还有 {len(operations) - 6} 个操作"
+                llm_message += "\n\n这个清洗方案可以吗？或者你想调整某个处理方式？"
+            else:
+                llm_message = f"数据质量：{quality_labels.get(quality, quality)}。未检测到需要清洗的问题，数据可以直接分析。这个清洗方案可以吗？或者你想做其他特殊处理？"
             if isinstance(strategy_result, dict):
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "Cleaner", {
-                    "result_summary": f"检测完成：{len(strategy_result.get('operations', []))} 个计划操作",
+                    "result_summary": f"检测完成：{len(operations)} 个计划操作",
                 })
                 return {
                     "status": "cleaner_strategy",
+                    "message": llm_message,
                     "scout_data": {
                         "n_cols": context.n_cols,
                         "n_rows": context.n_rows,
@@ -281,8 +290,8 @@ class Orchestrator:
                     },
                     "outliers": strategy_result.get("outliers", {}),
                     "missing_mechanisms": strategy_result.get("missing_mechanisms", {}),
-                    "operations": strategy_result.get("operations", []),
-                    "data_quality": strategy_result.get("data_quality", "unknown"),
+                    "operations": operations,
+                    "data_quality": quality,
                     "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
                 }
             # 正常执行（用户已确认操作，直接清洗）
@@ -345,12 +354,33 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "Analyst", {
                     "result_summary": f"初步发现 {len(analyst_result.get('preliminary_findings', []))} 个，待确认",
                 })
+                findings = analyst_result.get("preliminary_findings", [])
+                suggested = analyst_result.get("suggested_focus", "")
+                power_warnings = analyst_result.get("power_warnings", [])[:2]
+                llm_lines = []
+                if power_warnings:
+                    llm_lines.append(f"⚡ {power_warnings[0]}")
+                if findings:
+                    llm_lines.append(f"初步找到了 {len(findings)} 个分析方向：")
+                    for f in findings[:5]:
+                        sig = "✅ 显著" if f.get("significance") == "significant" else "⚪ 不显著"
+                        q = f.get("question", "")
+                        p = f.get("p_value")
+                        p_str = f"（p={p:.4f}）" if p is not None else ""
+                        llm_lines.append(f"• {sig} {p_str}：{q}")
+                else:
+                    llm_lines.append("初步分析没有发现明显的统计规律。")
+                if suggested:
+                    llm_lines.append(f"💡 {suggested}")
+                llm_lines.append("\n你想重点关注哪个方向？或者有其他想看的维度？")
+                llm_message = "\n".join(llm_lines)
                 return {
                     "status": "analyst_preliminary",
-                    "power_warnings": analyst_result.get("power_warnings", []),
+                    "message": llm_message,
+                    "power_warnings": power_warnings,
                     "business_metrics": analyst_result.get("business_metrics", []),
-                    "preliminary_findings": analyst_result.get("preliminary_findings", []),
-                    "suggested_focus": analyst_result.get("suggested_focus", ""),
+                    "preliminary_findings": findings,
+                    "suggested_focus": suggested,
                     "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
                     "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
                 }
@@ -526,6 +556,7 @@ class Orchestrator:
 
             return {
                 "status": "completed",
+                "message": f"✅ 分析完成！共生成 {len(results)} 项发现，报告已保存。",
                 "run_id": run_id,
                 "project": project_name,
                 "output_path": output_path,

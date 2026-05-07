@@ -809,8 +809,8 @@ def render() -> None:
                 # Cleaner 暂停，等用户确认清洗策略
                 st.session_state.cleaning_strategy_data = _result
                 st.session_state.awaiting_cleaning_confirmation = True
-                # 显示清洗策略消息
-                msg = _cleaner_strategy_message(_result)
+                # 显示清洗策略消息（来自 orchestrator 构造的消息）
+                msg = _result.get("message", "数据清洗策略已生成，请确认。")
                 st.session_state.chat_messages.append({
                     "role": "assistant",
                     "agent": "cleaner",
@@ -820,14 +820,16 @@ def render() -> None:
             elif status == "analyst_preliminary":
                 st.session_state.analyst_preliminary_data = _result
                 st.session_state.awaiting_analyst_confirmation = True
-                msg = _analyst_finding_message(_result)
+                msg = _result.get("message", "初步分析已完成，请确认分析方向。")
                 st.session_state.chat_messages.append({"role": "assistant", "agent": "analyst", "content": msg})
             elif status in ("completed", "skipped", "ambiguous"):
                 st.session_state.awaiting = None
-                st.session_state.chat_messages.append({"role": "assistant", "content": _result.get("message", _result)})
+                msg = _result.get("message") or _result.get("llm_response") or "处理完成。"
+                st.session_state.chat_messages.append({"role": "assistant", "content": msg})
             else:
                 st.session_state.awaiting = None
-                st.session_state.chat_messages.append({"role": "assistant", "content": _result.get("message", str(_result))})
+                msg = _result.get("message") or f"未知状态: {status}"
+                st.session_state.chat_messages.append({"role": "assistant", "content": msg})
 
     # ── 第一层（固定）：标题 + 选择器 + 进度条 ──────────
     with st.container(key="layer1"):
@@ -1181,10 +1183,6 @@ def render() -> None:
         # 分析完成或空闲时，用户可以自由输入
         # 保存用户输入作为查询，然后启动完整 pipeline
         st.session_state.current_query = prompt
-        st.session_state.chat_messages.append({
-            "role": "assistant",
-            "content": f"好的，我来分析这个问题，请稍候..."
-        })
         _start_analysis(
             data_path=st.session_state.get("current_data_path", ""),
             query=prompt,

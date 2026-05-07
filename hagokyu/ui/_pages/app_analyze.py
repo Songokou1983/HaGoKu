@@ -525,8 +525,10 @@ def _render_chat() -> None:
             ev_data = getattr(ev, "data", {}) or {}
             thought = ev_data.get("thought", "")
             result_summary = ev_data.get("result_summary", "")
-            # 跳过工具调用和工具结果
+            # 跳过工具调用、工具结果、Agent启动
             if "tool_called" in ev_str or "tool_result" in ev_str:
+                continue
+            if ev_str.endswith(".started") or "start" in ev_str:
                 continue
             # 跳过包含内部噪音关键词的 thinking
             if "thinking" in ev_str and thought:
@@ -575,12 +577,6 @@ def _render_chat() -> None:
                         st.markdown(
                             f'<span style="color:#f87171;font-family:JetBrains Mono,monospace;font-size:16px;">'
                             f'❌ {err[:80]}</span>',
-                            unsafe_allow_html=True,
-                        )
-                    elif "start" in ev_str.lower():
-                        st.markdown(
-                            f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
-                            f'▶ {label} 开始工作</span>',
                             unsafe_allow_html=True,
                         )
                     else:

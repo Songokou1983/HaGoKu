@@ -252,7 +252,7 @@ class Orchestrator:
                     "thought": "🔍 Scout 缓存未命中，重新识别字段...",
                 })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus)
-                context = scout_agent.run(data_path, query="", project_id=project_name, memory=self.memory)
+                context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner：只检测+计划，不执行清洗
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
@@ -308,7 +308,7 @@ class Orchestrator:
                 })
             else:
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus)
-                context = scout_agent.run(data_path, query="", project_id=project_name, memory=self.memory)
+                context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
@@ -415,7 +415,7 @@ class Orchestrator:
             # Scout + Cleaner（如果不是 resume）
             if context is None:
                 # 3. Scout: 数据侦察（Scout 自己会和用户对话确认字段）
-                context = scout.run(data_path, query, project_id=project_name, memory=self.memory)
+                context = scout.run(data_path, query, project_id=project_name)
 
                 # 4. Cleaner: 数据清洗
                 df_clean, cleaning_report = cleaner.run(

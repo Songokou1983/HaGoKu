@@ -506,85 +506,91 @@ def _render_chat() -> None:
                         else:
                             st.markdown(content)
 
-    # 实时事件流（像Claude Code那样，统一用chat_message气泡渲染）
+    # 实时事件流（只显示有意义的进度，隐藏内部噪音）
     evs = st.session_state.get("analysis_events", [])
     shown_count = st.session_state.get("_events_shown_count", 0)
     new_evs = evs[shown_count:]
     if new_evs:
-        with st.chat_message("assistant"):
-            for ev in new_evs:
-                ev_str = str(getattr(ev, "event_type", ""))
-                agent_name = getattr(ev, "agent", "") or ""
+        # 过滤：只保留对用户有意义的事件
+        # 隐藏：工具调用(tool_called)、工具结果(tool_result)、内部状态日志
+        skip_keywords = [
+            "正在加载数据", "加载成功", "生成数据画像", "质量=",
+            "正在识别数据字段", "理解你的问题", "识别", "需确认",
+            "检测数据质量", "生成清洗策略", "初步分析",
+            "tool_called", "tool_result",
+        ]
+        meaningful_evs = []
+        for ev in new_evs:
+            ev_str = str(getattr(ev, "event_type", "")).lower()
+            ev_data = getattr(ev, "data", {}) or {}
+            thought = ev_data.get("thought", "")
+            result_summary = ev_data.get("result_summary", "")
+            # 跳过工具调用和工具结果
+            if "tool_called" in ev_str or "tool_result" in ev_str:
+                continue
+            # 跳过包含内部噪音关键词的 thinking
+            if "thinking" in ev_str and thought:
+                if any(kw in thought for kw in skip_keywords):
+                    continue
+            meaningful_evs.append(ev)
 
-                # 映射到 Agent 颜色
-                if agent_name.lower() in ("scout",):
-                    color, label = AGENT_COLOR["scout"], AGENT_LABEL["scout"]
-                elif agent_name.lower() in ("cleaner",):
-                    color, label = AGENT_COLOR["cleaner"], AGENT_LABEL["cleaner"]
-                elif agent_name.lower() in ("analyst",):
-                    color, label = AGENT_COLOR["analyst"], AGENT_LABEL["analyst"]
-                elif agent_name.lower() in ("reporter",):
-                    color, label = AGENT_COLOR["reporter"], AGENT_LABEL["reporter"]
-                elif agent_name.lower() in ("manager",):
-                    color, label = "#a78bfa", "🧠 Manager"
-                else:
-                    color, label = "#6e7681", f"🔧 {agent_name}"
+        if meaningful_evs:
+            with st.chat_message("assistant"):
+                for ev in meaningful_evs:
+                    ev_str = str(getattr(ev, "event_type", ""))
+                    agent_name = getattr(ev, "agent", "") or ""
 
-                # 显示内容
-                ev_data = getattr(ev, "data", {}) or {}
-                if "tool_called" in ev_str.lower():
-                    tool = ev_data.get("tool", "")
-                    args = ev_data.get("args_summary", "")
-                    st.markdown(
-                        f'<span style="color:#f0e68c;font-family:JetBrains Mono,monospace;font-size:16px;">'
-                        f'🔧 {tool}</span> <span style="color:#9ca3af;font-size:15px;">({args})</span>',
-                        unsafe_allow_html=True,
-                    )
-                elif "tool_result" in ev_str.lower():
-                    result = ev_data.get("summary", "")
-                    if result:
+                    if agent_name.lower() in ("scout",):
+                        color, label = AGENT_COLOR["scout"], AGENT_LABEL["scout"]
+                    elif agent_name.lower() in ("cleaner",):
+                        color, label = AGENT_COLOR["cleaner"], AGENT_LABEL["cleaner"]
+                    elif agent_name.lower() in ("analyst",):
+                        color, label = AGENT_COLOR["analyst"], AGENT_LABEL["analyst"]
+                    elif agent_name.lower() in ("reporter",):
+                        color, label = AGENT_COLOR["reporter"], AGENT_LABEL["reporter"]
+                    elif agent_name.lower() in ("manager",):
+                        color, label = "#a78bfa", "🧠 Manager"
+                    else:
+                        color, label = "#6e7681", f"🔧 {agent_name}"
+
+                    ev_data = getattr(ev, "data", {}) or {}
+                    if "thinking" in ev_str.lower():
+                        thought = ev_data.get("thought", "")
+                        if thought:
+                            st.markdown(
+                                f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
+                                f'**{label}** 💭 {thought[:150]}</span>',
+                                unsafe_allow_html=True,
+                            )
+                    elif "complete" in ev_str.lower() or "finished" in ev_str.lower():
+                        summary = ev_data.get("result_summary", ev_data.get("message", ""))
+                        if summary:
+                            st.markdown(
+                                f'<span style="color:#4ade80;font-family:JetBrains Mono,monospace;font-size:16px;">'
+                                f'✓ {label}: {summary[:80]}</span>',
+                                unsafe_allow_html=True,
+                            )
+                    elif "error" in ev_str.lower():
+                        err = ev_data.get("error", ev_data.get("message", "未知错误"))
                         st.markdown(
-                            f'<span style="color:#4ade80;margin-left:16px;font-family:JetBrains Mono,monospace;font-size:16px;">'
-                            f'→ {result[:120]}{"..." if len(result) > 120 else ""}</span>',
+                            f'<span style="color:#f87171;font-family:JetBrains Mono,monospace;font-size:16px;">'
+                            f'❌ {err[:80]}</span>',
                             unsafe_allow_html=True,
                         )
-                elif "thinking" in ev_str.lower():
-                    thought = ev_data.get("thought", "")
-                    if thought:
+                    elif "start" in ev_str.lower():
                         st.markdown(
                             f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
-                            f'**{label}** 💭 {thought[:150]}</span>',
+                            f'▶ {label} 开始工作</span>',
                             unsafe_allow_html=True,
                         )
-                elif "complete" in ev_str.lower() or "finished" in ev_str.lower():
-                    summary = ev_data.get("result_summary", ev_data.get("message", ""))
-                    if summary:
-                        st.markdown(
-                            f'<span style="color:#4ade80;font-family:JetBrains Mono,monospace;font-size:16px;">'
-                            f'✓ {label}: {summary[:80]}</span>',
-                            unsafe_allow_html=True,
-                        )
-                elif "error" in ev_str.lower():
-                    err = ev_data.get("error", ev_data.get("message", "未知错误"))
-                    st.markdown(
-                        f'<span style="color:#f87171;font-family:JetBrains Mono,monospace;font-size:16px;">'
-                        f'❌ {err[:80]}</span>',
-                        unsafe_allow_html=True,
-                    )
-                elif "start" in ev_str.lower():
-                    st.markdown(
-                        f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
-                        f'▶ {label} 开始工作</span>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    summary = ev_data.get("thought", ev_data.get("message", ev_data.get("result_summary", "")))
-                    if summary:
-                        st.markdown(
-                            f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
-                            f'{label}: {summary[:80]}</span>',
-                            unsafe_allow_html=True,
-                        )
+                    else:
+                        summary = ev_data.get("thought", ev_data.get("message", ev_data.get("result_summary", "")))
+                        if summary:
+                            st.markdown(
+                                f'<span style="color:{color};font-family:JetBrains Mono,monospace;font-size:16px;">'
+                                f'{label}: {summary[:80]}</span>',
+                                unsafe_allow_html=True,
+                            )
         st.session_state._events_shown_count = len(evs)
 
     # 错误消息

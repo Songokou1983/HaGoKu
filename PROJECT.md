@@ -283,56 +283,109 @@ hagokyu run sales.csv --query "分析趋势" --mode expert     # 资深
 
 ---
 
-## 五个角色的完整定义
+## 角色定义 — 四 Agent + 仲裁器 + Scribe
 
 
 ### Agent 能力架构
 
 
+
+每个 Agent 通过**四件套**获得能力，而不是通过写死决策：
+
+| 组件 | 文件 | 作用 | 写死什么 / 不写什么 |
+|------|------|------|---------------------|
+| **提示词** | `prompt.md` | 角色定义 + 工作原则 + 流程约束 | ✅ 写死：你是谁、你必须遵守什么、你不应该做什么。❌ 不写：具体方法选择、具体话术、决策路径 |
+| **项目记忆** | `memory.md` | 项目级经验积累（用户偏好、字段确认历史） | ✅ 写死：格式和结构。❌ 不写：通用方法论（那是知识库的事） |
+| **方法经验库** | `knowledge.yaml` + `knowledge.py` | 场景→方法映射（置信度+使用次数+成功/失败） | ✅ 写死：格式和索引结构。❌ 不写：决策规则——知识库是**参考**，Agent 自主判断是否适用 |
+| **LLM 自由通道** | 运行时 | 知识库未覆盖的方法，LLM 自主选择 | ✅ 写死：必须用白名单库、必须声明理由、仍受 Guardrails 约束。❌ 不写：具体可选方法列表 |
+
+**四件套的关系**：
+- 提示词定义了 Agent 的**身份和边界**（"你是分析师，你拥有这些能力，你必须遵守这些规则"）
+- 项目记忆让 Agent 在同一项目内有**连续性**（上次跑过什么、用户偏好什么、字段确认历史）
+- 方法经验库让 Agent 有**经验参考**（遇到类似场景时，Scribe 自动注入相关知识，Agent 参考但不盲从）
+- LLM 自由通道让 Agent 有**创造力**（知识库没覆盖的方法也能用，只要声明理由、受护栏约束）
+
+**三层方法获取架构**——Agent 选择方法时，同时参考三层信息：
+
+    第一层：工具集（确定性，写死）
+      └─ check_assumptions, regression, hypothesis_test, effect_size ...
+      └─ 经过验证的、有标准化输出的方法
+      └─ Agent 优先使用，因为输出格式有保障
+
+    第二层：方法经验库（经验性，Scribe 注入）
+      └─ agent/knowledge.yaml：场景→方法映射
+      └─ kb/：领域文章（统计方法指南、业务框架）
+      └─ Scribe 在 Agent 启动前自动检索匹配，注入 prompt
+      └─ Agent 参考经验，结合当前数据特征判断是否适用
+
+    第三层：LLM 自由发挥（开放通道）
+      └─ 知识库也没覆盖的方法，LLM 可以自己选
+      └─ 约束：
+         ① 必须声明理由："我选择XXX，因为当前数据YYY"
+         ② 仍受 Guardrails 约束（必须有检验、有效应量、有置信区间）
+         ③ 必须用白名单库（pandas/scipy/statsmodels/pingouin/sklearn）
+         ④ 结果标注 method_source: "llm_initiative"
+         ⑤ 执行失败时，降级到工具集的保守方法
+
+**三层不是串行**（先查工具→再查知识库→最后自由发挥），而是**并行**的——LLM 在理解数据和问题后，同时参考三层信息，自主选择。工具集是"有保障的快车道"，经验库是"前辈的笔记"，LLM 自己的知识是"创造力通道"。**流程约束方向和底线，不约束能力发挥。**
+
+**Agent 自由发挥的边界**：
+- 在职责范围内自主选择方法、决定交互方式和措辞
+- 知识库未覆盖的方法也可以选择（LLM 自由通道），但必须声明理由、受护栏约束
+- 受提示词中的流程约束和护栏规则限制
+- 通过看板 blocked 状态主动暂停与用户互动
+- 不在职责范围内的事不做（Scout 不做分析，Analyst 不做清洗）
+- **流程约束方向和底线，不约束能力发挥**——约束的是"必须检验、必须有效应量、必须告知用户"，不约束"用什么方法、怎么说"
+
 ---
 
-### Manager（总管）— 理解问题本质，调度全局
+### 仲裁器（原 Manager 总管）— 跨 Agent 综合判断
 
-**职责**：理解用户问题的本质，制定分析策略，调度 Agent，质检结果。
+> **设计变更说明**：原"Manager 总管"已拆解。意图解析归 QueryParser + Scout，计划制定归规则引擎 + LLM 微调，调度归 Scribe + 看板，质量把关归 Guardrails。只保留**跨 Agent 仲裁**作为 Orchestrator 内的仲裁逻辑，不再是独立 Agent。去掉了一个 Agent 的 LLM 开销，让决策更透明、更可审计。
 
-**核心能力**：
+**仲裁器做什么**：
 
-1. **意图解析** — 把用户的自然语言问题翻译为分析计划
-   - "这份数据有什么问题？" → 数据画像 + 异常检测
-   - "广告有没有效果？" → 因果推断方向
-   - "帮我做个报告" → 标准 EDA + 建模 + 报告
+当一个 Agent 的输出需要另一个 Agent 做不同选择，或者输出质量需要综合判断时，仲裁器介入：
 
-2. **计划制定** — 生成分析步骤，决定哪些 Agent 参与、跳过哪些
-   ```python
-   class AnalysisPlan:
-       steps: list[PlanStep]
-       skip_agents: list[str]        # 跳过的 agent
-       focus_areas: list[str]        # 重点关注的分析方向
-       required_tests: list[str]     # 强制执行的检验
-       quality_thresholds: dict      # 质量门槛 (R², p-value 等)
-   ```
+```python
+class Arbitrator:
+    """Orchestrator 内的仲裁逻辑 - 规则优先，LLM 兜底"""
 
-3. **质量把关** — 检查每个 Agent 的输出是否达标
-   - R² 太低？决定重试还是换模型还是如实报告
-   - p 值不显著？决定补充检验还是接受零结果
-   - 清洗影响太大？要求 Cleaner 换策略
+    def arbitrate(self, agent_output, context, guardrails_results):
+        # 1. Guardrails 强制违规 → 阻止输出
+        if any(r.severity == "mandatory" and not r.passed for r in guardrails_results):
+            return Arbitration(action="block", reason="Guardrails 强制违规")
+        # 2. 规则可判断的场景
+        rule_result = self._rule_arbitrate(agent_output, context)
+        if rule_result is not None:
+            return rule_result
+        # 3. 规则判断不了 → LLM 仲裁（极少触发）
+        return self._llm_arbitrate(agent_output, context)
 
-4. **LLM 主导 + 规则兜底** — Manager 的决策模式
-   - LLM 负责理解用户意图、制定分析策略、决定分析路径
-   - 规则引擎作为兜底：当 LLM 调用失败或返回无效结果时，回退到关键词匹配的预设计划模板
-   - 规则引擎作为护栏：校验 Agent 输出完整性、检查质量阈值、处理错误和降级
+    def _rule_arbitrate(self, output, context):
+        # R² 过低 + 全不显著
+        if output.r_squared and output.r_squared < 0.1:
+            if all(p > 0.05 for p in output.p_values):
+                return Arbitration(action="accept_zero", reason="R²<0.1且全不显著，接受零结果")
+        # 清洗影响大
+        if hasattr(output, 'impact_rate') and output.impact_rate > 0.1:
+            return Arbitration(action="block", reason="清洗影响>10%，等用户确认")
+        return None  # 规则无法判断
+```
 
-**规则引擎的角色**——护栏与兜底，不是替代：
+**仲裁规则完整表**：
 
-- **护栏**（防止犯错）：统计指标阈值自动判断质量（R²<0.3 预警，p>0.05 标记不显著）；Agent 输出 schema 校验完整性；错误处理和降级策略
-- **兜底**（LLM 失败时的安全网）：当 LLM 无法生成有效计划时，回退到关键词匹配的预设计划模板
-- **不做的事**：规则引擎不替 Agent 做方法选择、不替 Agent 写回复话术、不替 Agent 决定互动时机
+| 场景 | 条件 | 仲裁结果 |
+|------|------|----------|
+| R² 过低 | R² < 0.1 且所有 p > 0.05 | 接受零结果，Reporter 强调"未发现显著模式" |
+| R² 偏低 | 0.1 ≤ R² < 0.3 | 允许输出，标注"解释力有限" |
+| 清洗影响大 | impact > 10% | block，等用户确认 |
+| Guardrails 强制违规 | 任何 mandatory violation | 阻止输出，要求 Agent 修正 |
+| Agent 执行失败 | try/except 捕获 | 降级到保守方案，继续 |
+| LLM 调用超时 | timeout | 规则引擎兜底计划 |
+| 多重共线性高 | VIF > 10 | 警告，建议删除或合并变量 |
 
-**AI 负责的决策**：
-- 理解用户问题的本质意图
-- 制定分析策略和选择分析路径
-- 结果的综合解读
-- 决定何时与用户互动（通过看板 blocked 状态）
+**仲裁器不做的事**：不替 Agent 选方法、不替 Agent 写话术、不替 Agent 决定互动时机。仲裁器只在 Agent 输出不达标或跨 Agent 需要综合判断时介入。
 
 ---
 
@@ -832,6 +885,226 @@ Agent 执行中自主判断"需要用户参与"
 - ❌ 不硬编码互动触发条件（流程强制互动除外）
 
 看板只保证**该谁上场了**和**何时该暂停**，上场后怎么打是 Agent 的事。
+"---
+
+### Scribe（记录员）— 后台的隐形引擎
+
+> Scribe 不是 Agent，不和用户对话，不被用户看见。它是确定性逻辑引擎，零 LLM 调用、零 token 消耗。
+
+**四个职责**：
+
+| 职责 | 说明 | 实现方式 |
+|------|------|---------|
+| ① 流程守护 | 看板状态管理、任务依赖、block/unblock、heartbeat | `kanban.py` 的原子操作 |
+| ② 知识调度 | Agent 启动前检索并注入知识（三层知识自动匹配） | 读取 knowledge.yaml + kb/_registry.yaml → 组装注入包 → 填入 prompt |
+| ③ 经验记录 | Agent 完成后捕获关键决策和结果，更新 knowledge.yaml | use_count++ / success_count++ / fail_count++ |
+| ④ 经验提炼 | 同一场景签名出现 3+ 次成功时，自动生成新条目；LLM 自由发挥成功时也自动提炼 | 场景签名匹配 + 异步写入 |
+
+**Scribe 知识调度流程**（Agent 启动前自动执行）：
+
+1. Scribe 收到任务（看板 ready → Agent claim）
+2. Scribe 读取当前 DataContext（数据特征：样本量、变量类型、缺失情况）
+3. Scribe 读取 agent/knowledge.yaml，匹配场景签名
+4. Scribe 读取 kb/_registry.yaml，匹配 applicable_when
+5. Scribe 组装"知识注入包"：
+   - 匹配到的方法经验："上次遇到类似场景，用了XX方法，成功6次/失败1次"
+   - 相关领域文章摘要："t检验选择指南：独立样本 vs 配对样本的选择逻辑"
+   - 失败教训："注意：两组对比不要用Kruskal-Wallis"
+6. Scribe 注入到 Agent 的 prompt 中
+7. Agent 开始执行，prompt 里已包含相关知识
+8. Agent 自主决策：可以采纳经验，也可以不采纳（自主判断是否适用）
+9. 执行结束后，Scribe 记录结果，更新 knowledge.yaml
+
+**为什么是 Scribe 注入而不是 Agent 自己查？**
+- Agent 自己查意味着每次都要调 LLM 决定"要不要查" → 额外 token 消耗
+- Scribe 注入是确定性的：匹配到了就注入，零额外 LLM 调用
+- 类比：不要让实习生自己去翻笔记本，而是前辈在开工前把相关笔记递给他
+
+---
+
+### 三层知识架构 — 统一入口
+
+```
+┌─────────────────────────────────────────────┐
+│           Scribe（知识调度员）                │
+│  在 Agent 执行前，自动注入相关知识             │
+├──────────┬──────────────┬───────────────────┤
+│ 领域知识库 │  方法经验库    │  LLM 自由发挥    │
+│ (kb/)    │ (agent/)     │  (runtime)       │
+│          │              │                  │
+│ 静态     │  动态         │  即时             │
+│ 人工维护  │  自动积累      │  LLM 自主        │
+│ 教科书   │  笔记本       │  创造力           │
+├──────────┼──────────────┼───────────────────┤
+│ 统计方法  │  场景→方法    │  任何白名单内的   │
+│ 业务框架  │  置信度+次数  │  方法，但需声明   │
+│ 行业指标  │  失败教训     │  理由+受护栏约束  │
+└──────────┴──────────────┴───────────────────┘
+```
+
+**第一层：领域知识库 (kb/)**
+
+- 保持现有结构，继续手写维护
+- **新增 `applicable_when` 和 `inject_to` 字段**：
+
+```yaml
+# kb/_registry.yaml 里的条目
+- title: "t 检验选择指南"
+  category: stats
+  tags: [t检验, 假设检验]
+  summary: "..."
+  filename: stats/ttest.md
+  applicable_when:      # ← 新增：何时该读这篇
+    - "分析师需要做两组对比"
+    - "用户问到差异/对比/比较"
+  inject_to: [analyst]  # ← 新增：注入给哪个 Agent
+```
+
+**第二层：方法经验库 (agent/knowledge.yaml)**
+
+重构为"场景签名 + 方法 + 效果记录"结构，**去重 + 新增失败记录**：
+
+```yaml
+knowledge:
+- id: "分组对比_非正态_小样本"
+  scenario_signature: "分组对比 + 非正态 + 小样本"
+  method: "Mann-Whitney U 检验"
+  method_code: "scipy.stats.mannwhitneyu"
+  confidence: 0.9
+  use_count: 7
+  success_count: 6       # ← 新增
+  fail_count: 1          # ← 新增
+  last_used: "2026-05-06"
+  notes: "非正态时优于t检验，但效应量需手动计算rank-biserial correlation"
+
+- id: "分组对比_非正态_小样本_failed"
+  scenario_signature: "分组对比 + 非正态 + 小样本"
+  method: "Kruskal-Wallis"
+  fail_reason: "只有两组时Kruskal-Wallis等价于Mann-Whitney U但输出不如后者直观"
+  notes: "两组对比不要用Kruskal-Wallis"
+```
+
+**第三层：LLM 自由发挥**
+
+不持久化，运行时存在。但 **Scribe 在分析结束后，如果 LLM 自由发挥产生了好的结果，自动提炼并写入第二层**。
+
+---
+
+### 双记忆系统
+
+```
+项目记忆（项目文件夹内）          Agent 记忆（Agent 文件夹内）
+─────────────────────────        ─────────────────────────
+记录"这个项目发生了什么"          记录"这个 Agent 学到了什么"
+
+projects/sales_analysis/          agents/analyst/
+├── schema.yaml    ← 字段语义     ├── memory.md    ← 方法运用经验
+├── progress.yaml  ← 项目进度     └── knowledge.yaml ← 场景-方法映射
+├── results/       ← 分析结果
+└── notes.yaml     ← 用户反馈
+
+生命周期：跟随项目                生命周期：跨项目积累
+更新者：Scribe                    更新者：Scribe
+消费者：Orchestrator、UI          消费者：Scribe（注入prompt）
+```
+
+**项目记忆 (progress.yaml)**：
+
+```yaml
+project: sales_analysis
+created_at: 2026-05-01
+
+milestones:
+  - date: 2026-05-01
+    event: "首次分析"
+    query: "广告投入对销售有没有影响"
+    result: "3个显著发现，R²=0.87"
+    run_id: "20260501_143052"
+
+user_preferences:
+  - key: "preferred_regression_method"
+    value: "robust"
+    reason: "数据非正态时用户选择稳健回归"
+    since: "2026-05-01"
+
+field_decisions:
+  - column: "revenue"
+    semantic: "target"
+    unit: "万元"
+    confirmed_by: "user"
+    confirmed_at: "2026-05-01"
+```
+
+**Agent 记忆 (memory.md)**：
+
+```
+# Analyst 方法运用经验
+
+## 已验证的方法选择
+- 分组对比 + 非正态 + 小样本 → Mann-Whitney U（成功7次）
+- 回归 + 非正态 → 稳健回归（成功4次）
+- 多组对比 + 正态 → ANOVA + Tukey HSD（成功3次）
+
+## 失败教训
+- 两组对比不要用 Kruskal-Wallis（等价于 Mann-Whitney U 但输出不直观）
+- 小样本(n<15)不要做多元回归（自由度不够）
+
+## 用户偏好
+- 用户偏好稳健回归（2026-05-01 确认）
+- 用户喜欢看到效应量的实际意义解读
+```
+
+**怎么保证 Agent 记忆被调用？** 三层保障：
+
+1. **Scribe 主动注入**（最可靠）：Agent 启动前，Scribe 读取 knowledge.yaml，匹配场景签名，注入 prompt。Agent 不需要主动去查。
+2. **Prompt 内置提醒**：在 Agent 的 prompt.md 里写一条流程约束——"在决定分析方法前，回顾你的经验记录。如果有匹配的场景签名，优先参考。但每次都要验证当前数据是否满足条件。"
+3. **结果校验**：Agent 完成后，Scribe 检查——Agent 用了方法 X，knowledge.yaml 里有没有对应的场景签名？如果有，use_count+1；如果没有且分析成功，Scribe 提炼新条目写入。
+
+**记忆写入规则**：
+- ✅ 写入：用户偏好、用户纠正过的字段含义、用户选择的输出风格
+- ❌ 不写入：数据特征（每次数据不同）、统计分析结果（存在 SQLite 里了）、临时状态
+- 生命周期：项目记忆跟随项目，Agent 记忆跨项目积累
+
+**知识库更新机制**：MVP 阶段领域知识库 (kb/) 纯手写维护，不自动写入。方法经验库 (agent/knowledge.yaml) 由 Scribe 自动维护（use_count/success_count/fail_count 自动更新，新条目需同一场景签名出现 3+ 次成功才写入）。V2 考虑"经验提炼"——从多次分析中自动提取高频模式，但需人工审核后才写入领域知识库。
+
+---
+
+### 降级策略表
+
+| Agent | 失败场景 | 降级方案 | 用户体验 |
+|-------|---------|---------|---------|
+| Analyst | 回归失败 | 只做描述性统计+效应量估计，标注"未能建立模型" | 报告中说明 |
+| Analyst | 假设检验失败 | 报告原始统计量，标注"假设不满足，结论需谨慎" | 报告中标注⚠️ |
+| Analyst | LLM 自由发挥失败 | 降级到工具集的保守方法 | 无感知 |
+| Cleaner | 填补失败 | 保留缺失值，在报告中标注"缺失值未处理" | 报告中说明 |
+| Cleaner | 异常检测失败 | 不处理异常值，标注"未做异常检测" | 报告中说明 |
+| Scout | 语义推断失败 | 标记 UNKNOWN | 普通模式 block 等用户确认；快速模式标注"待确认" |
+| Manager | LLM 超时 | 用规则引擎兜底计划 | 无感知 |
+| Reporter | 模板渲染失败 | 降级到 Markdown 纯文本输出 | 格式简化 |
+
+---
+
+### 用户互动兜底规则
+
+**通用兜底**：任何 Agent 暂停等待用户输入时，必须提供至少一个"交给你决定"的选项。用户选择后，Agent 自主判断并继续。
+
+**快速模式猜错信号检测**：
+- 分析完成后，如果 R² 极低（<0.1）或所有 p 值都不显著，Reporter 应在报告末尾提示："本次分析未发现显著规律，这可能是因为字段理解有误。建议用普通模式重新分析：`hagokyu run ... --query '...'`"
+- 快速模式的报告应在开头标注："字段含义为自动推断，未经确认。如有疑问请用普通模式。"
+
+**互动预算**：
+- 快速模式：0 次互动（严格）
+- 普通模式：流程强制 3-4 次 + 参与式最多 2 次 = 总计不超过 6 次
+- 资深模式：无限制，但每个都可跳过
+- Agent 内部应有计数器，超出预算后不再主动暂停
+
+**模式切换状态管理**：
+- 模式切换只影响**后续**决策
+- 已经执行的步骤不回滚，但资深模式下用户可以"重做"某个步骤
+
+**用户反馈闭环**：
+- 报告末尾增加快速反馈入口："换个方法重做" / "深入分析" / "调整报告"
+- 用户反馈写入项目记忆 (progress.yaml)，下次分析时参考"
 
 ---
 

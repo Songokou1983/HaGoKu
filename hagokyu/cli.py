@@ -113,8 +113,8 @@ def cli() -> None:
               type=click.Choice(["default", "academic", "brief", "business_analysis", "ab_test", "executive_brief", "data_audit"]),
               help="报告模板")
 @click.option("--resume", is_flag=True, help="从上次断点继续分析")
-@click.option("--schema", "schema_path", default=None, type=click.Path(exists=True),
-              help="外部 schema.yaml 路径")
+@click.option("--progress", "progress_path", default=None, type=click.Path(exists=True),
+              help="外部 progress.yaml 路径")
 @click.option("--verbosity", "-v", default="normal",
               type=click.Choice(["quiet", "normal", "verbose"]),
               help="终端输出详细度")
@@ -130,7 +130,7 @@ def run(
     formats: tuple[str, ...],
     template: str | None,
     resume: bool,
-    schema_path: str | None,
+    progress_path: str | None,
     verbosity: str,
     interactive: bool = False,
 ) -> None:
@@ -188,7 +188,7 @@ def run(
             formats=format_list,
             template=template,
             resume=resume,
-            schema_path=schema_path,
+            progress_path=progress_path,
         )
     except FileNotFoundError:
         click.echo("\n❌ 数据文件未找到", err=True)
@@ -927,9 +927,9 @@ def project_run(
               help="删除记忆: --delete <category> <key>")
 @click.option("--global", "is_global", is_flag=True, help="操作全局记忆（非项目级）")
 @click.option("--export", "export_path", default=None, type=click.Path(),
-              help="导出 schema.yaml 到指定路径")
+              help="导出 progress.yaml 到指定路径")
 @click.option("--import", "import_path", default=None, type=click.Path(exists=True),
-              help="从 schema.yaml 导入记忆")
+              help="从 progress.yaml 导入记忆")
 def memory(project_name: str | None, category: str | None, set_item: tuple | None,
            delete_item: tuple | None, is_global: bool,
            export_path: str | None, import_path: str | None) -> None:
@@ -942,24 +942,24 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
 
     pid = None if is_global else project_name
 
-    # 创建 MemoryManager（不绑定 schema_path，CLI 级别操作不自动读写 YAML）
+    # 创建 MemoryManager（不绑定 progress_path，CLI 级别操作不自动读写 YAML）
     mm = MemoryManager(db)
 
-    # 导入 schema.yaml
+    # 导入 progress.yaml
     if import_path:
         target_pid = pid or project_name or "_imported"
-        n = mm.import_schema_yaml(target_pid, Path(import_path))
+        n = mm.import_progress_yaml(target_pid, Path(import_path))
         click.echo(f"📄 从 {import_path} 导入了 {n} 条记忆到项目 '{target_pid}'")
         return
 
-    # 导出 schema.yaml
+    # 导出 progress.yaml
     if export_path:
         target_pid = pid or project_name
         if not target_pid:
             click.echo("❌ 导出需要指定项目名或 --global")
             return
-        out_path = mm.export_schema_yaml(target_pid, Path(export_path))
-        click.echo(f"📄 已导出 schema.yaml 到 {out_path}")
+        out_path = mm.export_progress_yaml(target_pid, Path(export_path))
+        click.echo(f"📄 已导出 progress.yaml 到 {out_path}")
         return
 
     # 设置记忆

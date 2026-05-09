@@ -21,6 +21,7 @@ from ..agents.analyst import AnalystAgent, AnalysisResult
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
 from ..agents.scout import DataContext, ScoutAgent
+from ..llm.client import create_structured_llm_client, create_deep_client, create_quick_client
 from ..tools.data_io import save_data
 from .query_parser import QueryParser, parse_query
 
@@ -99,12 +100,28 @@ class Orchestrator:
 
         # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
         self._llm_client: Any | None = None
+        self._llm_deep: Any | None = None  # 深度推理客户端（懒初始化）
+        self._llm_quick: Any | None = None  # 快速客户端（懒初始化）
 
         # 设置模块级配置
         from ..tools.analysis import set_analysis_config
         from ..tools.cleaning import set_cleaning_config
         set_analysis_config(self.config.analysis)
         set_cleaning_config(self.config.cleaning)
+
+    @property
+    def llm_deep(self) -> Any:
+        """深度推理客户端（懒初始化）"""
+        if self._llm_deep is None:
+            self._llm_deep = create_deep_client(self.config)
+        return self._llm_deep
+
+    @property
+    def llm_quick(self) -> Any:
+        """快速客户端（懒初始化）"""
+        if self._llm_quick is None:
+            self._llm_quick = create_quick_client(self.config)
+        return self._llm_quick
 
     def run(
         self,
@@ -117,7 +134,7 @@ class Orchestrator:
         formats: list[str] | None = None,
         template: str | None = None,
         resume: bool = False,
-        schema_path: str | None = None,
+        progress_path: str | None = None,
         phase: str = "full",
         scout_context: "DataContext | None" = None,
         cleaning_operations: list[dict[str, Any]] | None = None,
@@ -134,7 +151,7 @@ class Orchestrator:
             formats: 报告输出格式
             template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             resume: 是否从上次断点继续
-            schema_path: 外部 schema.yaml 路径
+            progress_path: 外部 progress.yaml 路径
             phase: 运行阶段
                 - "scout_first": 只跑 Scout，返回字段信息
                 - "cleaning_first": Scout（缓存）+ Cleaner（strategy_only），返回清洗策略
@@ -159,19 +176,19 @@ class Orchestrator:
         })
 
         self.output_mgr = OutputManager(self.config.output, project_name)
-        schema_file = self.output_mgr.project_dir / "schema.yaml"
-        self.memory = MemoryManager(self.db, schema_path=schema_file)
+        schema_file = self.output_mgr.project_dir / "progress.yaml"
+        self.memory = MemoryManager(self.db, progress_path=schema_file)
 
         # 初始化 Scribe Agent（看板驱动）
         self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
         self.scribe.init_pipeline()
 
-        # 处理 --schema 参数
-        if schema_path:
-            n = self.memory.import_schema_yaml(project_name, Path(schema_path))
+        # 处理 --progress 参数
+        if progress_path:
+            n = self.memory.import_progress_yaml(project_name, Path(progress_path))
             if n > 0:
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
-                    "thought": f"📄 导入了 {n} 条 schema 定义",
+                    "thought": f"📄 导入了 {n} 条进度定义",
                 })
 
         run_dir = self.output_mgr.create_run_dir()
@@ -191,10 +208,11 @@ class Orchestrator:
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
         # 初始化 Agent（传入 scribe 用于看板 block/unblock）
-        scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, scribe=self.scribe)
-        analyst = AnalystAgent(self.config.llm, self.event_bus, scribe=self.scribe)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+        # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
+        scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
+        analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep, scribe=self.scribe)
+        reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
 
         # Resume 支持
         context: DataContext | None = None
@@ -224,7 +242,7 @@ class Orchestrator:
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "🔍 正在识别数据字段，请稍候...",
             })
-            scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
             ir = scout.begin(data_path=data_path, query=query, project_id=project_name)
             # begin() 已触发 AGENT_STARTED（由 Scribe claim 任务），并在需要确认时 block 了看板
             # 返回 InteractionResult 给 UI 显示确认项
@@ -251,14 +269,14 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                     "thought": "🔍 Scout 缓存未命中，重新识别字段...",
                 })
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus)
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
                 context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner：只检测+计划，不执行清洗
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "🧹 检测数据质量，生成清洗策略...",
             })
-            cleaner = CleanerAgent(self.config.llm, self.event_bus)
+            cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
             strategy_result = cleaner.get_strategy_summary(data_path, context)
             operations = strategy_result.get("operations", [])
             quality = strategy_result.get("data_quality", "unknown")
@@ -307,14 +325,14 @@ class Orchestrator:
                     "thought": f"🔍 使用缓存的字段信息（{context.n_cols} 个字段）",
                 })
             else:
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus)
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
                 context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "🧹 数据清洗（已确认策略）...",
             })
-            cleaner = CleanerAgent(self.config.llm, self.event_bus)
+            cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
             if cleaning_operations is not None:
                 # 用户已确认策略 → 执行清洗
                 df_clean, cleaning_report = cleaner.run(
@@ -348,7 +366,7 @@ class Orchestrator:
             self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
                 "thought": "📊 初步分析，发现数据中的规律..." if analyst_phase == "preliminary" else "📊 完整分析中...",
             })
-            analyst = AnalystAgent(self.config.llm, self.event_bus)
+            analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
             analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
             if isinstance(analyst_result, dict):
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "Analyst", {
@@ -518,7 +536,7 @@ class Orchestrator:
                     "significance": result.significance,
                 })
 
-            # 10. 学习 + 导出 schema.yaml
+            # 10. 学习 + 导出 progress.yaml
             learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
             if learned > 0:
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
@@ -959,7 +977,7 @@ class Orchestrator:
 
         if agent_name == "scout" and phase == "confirm_fields":
             # 恢复 Scout 状态
-            scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe)
+            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
             # 从 user_input 恢复 Scout 内部状态
             scout._phase = "confirm_fields"
             scout._data_path = user_input.get("data_path", "")
@@ -1027,13 +1045,13 @@ class Orchestrator:
         project_name: str,
         corrections: dict[str, dict[str, str]],
     ) -> None:
-        """保存用户确认的字段描述到 memory/schema.yaml"""
+        """保存用户确认的字段描述到 memory/progress.yaml"""
         if not corrections:
             return
 
         try:
             # 构建 schema 更新
-            schema_file = self.output_mgr.project_dir / "schema.yaml"
+            schema_file = self.output_mgr.project_dir / "progress.yaml"
             import yaml
 
             # 读取现有 schema
@@ -1051,7 +1069,7 @@ class Orchestrator:
                     schema_data["columns"][col] = {}
                 schema_data["columns"][col]["description"] = f"{info['chinese_name']}（{info['business_meaning']}）"
 
-            # 写回 schema.yaml
+            # 写回 progress.yaml
             schema_file.parent.mkdir(parents=True, exist_ok=True)
             with open(schema_file, "w", encoding="utf-8") as f:
                 yaml.dump(schema_data, f, allow_unicode=True, default_flow_style=False)

@@ -24,15 +24,14 @@ class TestLLMConfig:
 class TestManagerModeConfig:
     def test_defaults(self):
         config = ManagerModeConfig()
-        assert config.mode == "balanced"
-        assert config.llm_plan_enabled is True
+        assert config.cleaning_impact_warning == 0.3
 
 
 class TestHaGoKuConfig:
     def test_defaults(self):
         config = HaGoKuConfig()
         assert config.llm.model == "Qwen3.6-35B-A3B"
-        assert config.manager.mode == "balanced"
+        assert config.manager.cleaning_impact_warning == 0.3
         assert config.user_mode.default_mode == "standard"
 
     def test_from_yaml(self, tmp_path):
@@ -42,12 +41,12 @@ llm:
   model: test-model
   temperature: 0.5
 manager:
-  mode: ai
+  cleaning_impact_warning: 0.5
 """)
         config = HaGoKuConfig.from_yaml(yaml_path)
         assert config.llm.model == "test-model"
         assert config.llm.temperature == 0.5
-        assert config.manager.mode == "ai"
+        assert config.manager.cleaning_impact_warning == 0.5
 
     def test_from_yaml_nonexistent(self):
         config = HaGoKuConfig.from_yaml(Path("/nonexistent/config.yaml"))
@@ -56,14 +55,12 @@ manager:
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("HAGOKYU_LLM_BASE_URL", "http://env:7000/v1")
         monkeypatch.setenv("HAGOKYU_LLM_MODEL", "env-model")
-        monkeypatch.setenv("HAGOKYU_MANAGER_MODE", "rule")
 
         config = HaGoKuConfig()
         config = HaGoKuConfig._merge_env(config)
 
         assert config.llm.base_url == "http://env:7000/v1"
         assert config.llm.model == "env-model"
-        assert config.manager.mode == "rule"
 
     def test_ensure_work_dir(self, tmp_path, monkeypatch):
         work_dir = tmp_path / "test_hagokyu"

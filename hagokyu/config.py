@@ -33,6 +33,8 @@ class LLMConfig(BaseModel):
         )
     temperature: float = 0.6  # 生成温度
     max_tokens: int = 8192  # 最大 token 数
+    model_deep: Optional[str] = None  # 深度推理模型（Analyst、仲裁器），不设则复用 model
+    model_quick: Optional[str] = None  # 快速模型（Scout、Reporter、Scribe 反思），不设则复用 model
 
 
 class ManagerModeConfig(BaseModel):
@@ -133,6 +135,10 @@ class HaGoKuConfig(BaseModel):
             config.embedding.api_key = v
         if v := os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
+        if v := os.getenv("HAGOKYU_LLM_MODEL_DEEP"):
+            config.llm.model_deep = v
+        if v := os.getenv("HAGOKYU_LLM_MODEL_QUICK"):
+            config.llm.model_quick = v
         return config
 
     def ensure_work_dir(self) -> None:

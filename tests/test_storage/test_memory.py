@@ -14,7 +14,7 @@ from hagokyu.storage.memory import (
     CleaningPrefDef,
     ColumnSemanticDef,
     MemoryManager,
-    SchemaYaml,
+    ProgressYaml,
 )
 from hagokyu.storage.memory_backends import (
     MemoryBackend,
@@ -37,15 +37,15 @@ def db(tmp_path):
 
 
 @pytest.fixture
-def schema_path(tmp_path):
-    """返回临时 schema.yaml 路径"""
-    return tmp_path / "schema.yaml"
+def progress_path(tmp_path):
+    """返回临时 progress.yaml 路径"""
+    return tmp_path / "progress.yaml"
 
 
 @pytest.fixture
-def mm(db, schema_path):
+def mm(db, progress_path):
     """创建带 YAML 后端的 MemoryManager"""
-    return MemoryManager(db, schema_path=schema_path)
+    return MemoryManager(db, progress_path=progress_path)
 
 
 @pytest.fixture
@@ -235,7 +235,7 @@ class TestMemoryManagerBasic:
         found = [e for e in entries if e["key"] == "age"]
         assert len(found) >= 1
 
-    def test_save_writes_both_backends(self, mm, schema_path):
+    def test_save_writes_both_backends(self, mm, progress_path):
         mm.save("p1", "column_semantic", "age", {"semantic": "numeric"}, source="auto", confidence=0.9)
 
         # SQLite 应该有
@@ -243,12 +243,12 @@ class TestMemoryManagerBasic:
         assert any(e["key"] == "age" for e in sqlite_entries)
 
         # YAML 应该有
-        assert schema_path.exists()
-        with open(schema_path) as f:
+        assert progress_path.exists()
+        with open(progress_path) as f:
             data = yaml.safe_load(f)
         assert "age" in data.get("columns", {})
 
-    def test_load_merges_yaml_priority(self, mm, db, schema_path):
+    def test_load_merges_yaml_priority(self, mm, db, progress_path):
         # 先写 SQLite
         mm._sqlite.save("p1", "column_semantic", "age",
                          json.dumps({"semantic": "numeric", "role": "feature"}), "auto", 0.7)
@@ -323,16 +323,16 @@ class TestMemoryManagerStructured:
         assert mm.get_target("nonexistent") is None
 
 
-# ── Schema YAML I/O ─────────────────────────────────────────
+# ── Progress YAML I/O ──────────────────────────────────────
 
 
-class TestSchemaYamlIO:
-    def test_export_schema_yaml(self, mm, schema_path):
+class TestProgressYamlIO:
+    def test_export_progress_yaml(self, mm, progress_path):
         sem = ColumnSemanticDef(semantic="numeric", role="feature", confidence=0.9, source="auto")
         mm.save_column_semantic("p1", "age", sem)
         mm.save_target("p1", "revenue", source="auto")
 
-        out_path = mm.export_schema_yaml("p1")
+        out_path = mm.export_progress_yaml("p1")
         assert out_path.exists()
 
         with open(out_path) as f:
@@ -342,8 +342,8 @@ class TestSchemaYamlIO:
         assert "age" in data["columns"]
         assert data["target"] == "revenue"
 
-    def test_import_schema_yaml(self, mm, tmp_path):
-        # 创建外部 schema.yaml
+    def test_import_progress_yaml(self, mm, tmp_path):
+        # 创建外部 progress.yaml
         schema = {
             "columns": {
                 "age": {"semantic": "numeric", "role": "feature"},
@@ -357,11 +357,11 @@ class TestSchemaYamlIO:
                 },
             },
         }
-        ext_path = tmp_path / "external_schema.yaml"
+        ext_path = tmp_path / "external_progress.yaml"
         with open(ext_path, "w") as f:
             yaml.dump(schema, f, allow_unicode=True, default_flow_style=False)
 
-        n = mm.import_schema_yaml("p1", ext_path)
+        n = mm.import_progress_yaml("p1", ext_path)
         assert n >= 2  # 至少 2 columns + 1 target + 1 memory entry
 
         # 验证导入到了 SQLite
@@ -372,7 +372,7 @@ class TestSchemaYamlIO:
         assert "age" in cols
         assert "region" in cols
 
-    def test_yaml_round_trip(self, mm, schema_path):
+    def test_yaml_round_trip(self, mm, progress_path):
         """写入 → 导出 → 重新导入 → 验证一致"""
         sem1 = ColumnSemanticDef(semantic="numeric", role="feature", confidence=0.9, source="auto")
         sem2 = ColumnSemanticDef(semantic="categorical", role="group", confidence=0.8, source="auto")
@@ -381,13 +381,13 @@ class TestSchemaYamlIO:
         mm.save_target("p1", "revenue", source="user")
 
         # 导出
-        exported_path = mm.export_schema_yaml("p1")
+        exported_path = mm.export_progress_yaml("p1")
 
         # 用新 MemoryManager 导入
-        db2 = HaGoKuDB(schema_path.parent / "test2.db")
+        db2 = HaGoKuDB(progress_path.parent / "test2.db")
         try:
             mm2 = MemoryManager(db2)
-            n = mm2.import_schema_yaml("p1", exported_path)
+            n = mm2.import_progress_yaml("p1", exported_path)
             assert n >= 2
 
             target = mm2.get_target("p1")
@@ -396,15 +396,15 @@ class TestSchemaYamlIO:
             db2.close()
 
     def test_import_nonexistent_file(self, mm):
-        n = mm.import_schema_yaml("p1", Path("/nonexistent/path.yaml"))
+        n = mm.import_progress_yaml("p1", Path("/nonexistent/path.yaml"))
         assert n == 0
 
-    def test_export_with_cleaning_prefs(self, mm, schema_path):
+    def test_export_with_cleaning_prefs(self, mm, progress_path):
         sem = ColumnSemanticDef(semantic="numeric", role="feature", confidence=0.9, source="auto")
         mm.save_column_semantic("p1", "age", sem)
         mm.save_cleaning_pref("p1", "age", "median", reason="skewed")
 
-        out_path = mm.export_schema_yaml("p1")
+        out_path = mm.export_progress_yaml("p1")
         with open(out_path) as f:
             data = yaml.safe_load(f)
 
@@ -578,15 +578,15 @@ class TestLearnFromRun:
         assert len(patterns) >= 1
         assert patterns[0].analysis_type == "regression"
 
-    def test_auto_exports_schema_yaml(self, mm, schema_path):
+    def test_auto_exports_progress_yaml(self, mm, progress_path):
         ctx = self._make_context()
         cleaning_report = MagicMock()
         cleaning_report.operations = []
 
         mm.learn_from_run("p1", ctx, [], cleaning_report)
 
-        # 应该自动导出了 schema.yaml
-        assert schema_path.exists()
+        # 应该自动导出了 progress.yaml
+        assert progress_path.exists()
 
 
 # ── Resume 支持 ──────────────────────────────────────────────
@@ -624,17 +624,17 @@ class TestResumeState:
 class TestYamlAutoSync:
     def test_auto_sync_on_init(self, db, tmp_path):
         """YAML 存在但 SQLite 空时，init 应自动导入"""
-        schema_path = tmp_path / "schema.yaml"
+        progress_path = tmp_path / "progress.yaml"
         schema = {
             "columns": {
                 "age": {"semantic": "numeric", "role": "feature"},
             },
             "target": "revenue",
         }
-        with open(schema_path, "w") as f:
+        with open(progress_path, "w") as f:
             yaml.dump(schema, f, allow_unicode=True, default_flow_style=False)
 
-        mm = MemoryManager(db, schema_path=schema_path)
+        mm = MemoryManager(db, progress_path=progress_path)
 
         # 应该已自动导入到 SQLite
         target = mm.get_target("p1")  # 注意 YAML 没指定 project_id，可能不会按 p1 查
@@ -660,12 +660,12 @@ class TestNoYamlFallback:
         assert target == "revenue"
 
     def test_export_without_yaml(self, mm_no_yaml, tmp_path):
-        """无 YAML 后端时，export_schema_yaml 应指定路径"""
+        """无 YAML 后端时，export_progress_yaml 应指定路径"""
         sem = ColumnSemanticDef(semantic="numeric", role="feature", confidence=0.9, source="auto")
         mm_no_yaml.save_column_semantic("p1", "age", sem)
 
         out_path = tmp_path / "export.yaml"
-        result_path = mm_no_yaml.export_schema_yaml("p1", out_path)
+        result_path = mm_no_yaml.export_progress_yaml("p1", out_path)
         assert result_path.exists()
 
     def test_delete_without_yaml(self, mm_no_yaml):
@@ -699,8 +699,8 @@ class TestPydanticModels:
         pat = AnalysisPatternDef(analysis_type="regression", question="trend?", significance="significant")
         assert pat.analysis_type == "regression"
 
-    def test_schema_yaml(self):
-        s = SchemaYaml(
+    def test_progress_yaml(self):
+        s = ProgressYaml(
             columns={"age": ColumnSemanticDef(semantic="numeric")},
             target="revenue",
         )

@@ -85,6 +85,8 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
         self,
         llm_config: LLMConfig,
         event_bus: EventBus,
+        *,
+        llm_client: Any | None = None,
         scribe: "ScribeAgent | None" = None,
     ) -> None:
         super().__init__(
@@ -125,6 +127,7 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
             ),
             llm_config=llm_config,
             event_bus=event_bus,
+            llm_client=llm_client,
         )
         self.guardrails = StatisticalGuardrails()
         self.scribe = scribe

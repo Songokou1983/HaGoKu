@@ -34,29 +34,20 @@ from hagokyu.manager.orchestrator import Orchestrator
 
 @pytest.fixture
 def config_rule() -> HaGoKuConfig:
-    """纯规则模式配置"""
-    cfg = HaGoKuConfig()
-    cfg.manager.mode = "rule"
-    cfg.manager.llm_plan_enabled = False
-    return cfg
+    """配置（mode 属性已移除，使用默认 HaGoKuConfig）"""
+    return HaGoKuConfig()
 
 
 @pytest.fixture
 def config_balanced() -> HaGoKuConfig:
     """平衡模式配置（默认）"""
-    cfg = HaGoKuConfig()
-    cfg.manager.mode = "balanced"
-    cfg.manager.llm_plan_enabled = True
-    return cfg
+    return HaGoKuConfig()
 
 
 @pytest.fixture
 def config_ai() -> HaGoKuConfig:
     """AI 优先模式配置"""
-    cfg = HaGoKuConfig()
-    cfg.manager.mode = "ai"
-    cfg.manager.llm_plan_enabled = True
-    return cfg
+    return HaGoKuConfig()
 
 
 def _make_llm_response(
@@ -167,22 +158,21 @@ class TestTier1RulePath:
 
     def test_rule_with_match(self, config_rule):
         orch = Orchestrator(config=config_rule)
-        plan = orch._create_plan("销量趋势如何变化", "rule")
+        plan = orch._create_plan("销量趋势如何变化")
         assert plan["plan_name"] == "趋势分析"
         assert plan.get("rule_match") is True
         assert "trend" in plan["analyst_focus"]
 
     def test_rule_no_match(self, config_rule):
         orch = Orchestrator(config=config_rule)
-        plan = orch._create_plan("这个数据有什么特点", "rule")
+        plan = orch._create_plan("这个数据有什么特点")
         assert plan["plan_name"] == "通用分析"
         assert plan["rule_match"] is False
 
     def test_llm_plan_enabled_false(self, config_balanced):
-        """llm_plan_enabled=False → 纯规则行为"""
-        config_balanced.manager.llm_plan_enabled = False
+        """配置存在即使用（mode 属性已移除）"""
         orch = Orchestrator(config=config_balanced)
-        plan = orch._create_plan("销量趋势", "balanced")
+        plan = orch._create_plan("销量趋势")
         # 规则匹配 → 直接返回
         assert plan["plan_name"] == "趋势分析"
 
@@ -195,7 +185,7 @@ class TestTier2HybridMode:
 
     @patch.object(Orchestrator, "_call_llm_for_plan")
     def test_balanced_llm_adjusts(self, mock_llm, config_balanced):
-        """balanced + 规则匹配 → LLM 调整"""
+        """规则匹配 → LLM 调整"""
         mock_llm.return_value = {
             "plan_name": "销量趋势分析",
             "agents": ["scout", "cleaner", "analyst", "reporter"],
@@ -205,7 +195,7 @@ class TestTier2HybridMode:
             "reasoning": "用户关注销量变化趋势",
         }
         orch = Orchestrator(config=config_balanced)
-        plan = orch._create_plan("销量趋势", "balanced")
+        plan = orch._create_plan("销量趋势")
         assert plan["plan_name"] == "销量趋势分析"
         assert plan["rule_match"] is True
         assert plan["llm_adjusted"] is True
@@ -223,7 +213,7 @@ class TestTier2HybridMode:
         """LLM 失败 → 降级到规则计划"""
         mock_llm.return_value = None
         orch = Orchestrator(config=config_balanced)
-        plan = orch._create_plan("销量趋势", "balanced")
+        plan = orch._create_plan("销量趋势")
         assert plan["plan_name"] == "趋势分析"
         assert plan["rule_match"] is True
 
@@ -232,11 +222,11 @@ class TestTier2HybridMode:
 
 
 class TestTier3LLMGeneration:
-    """ai 模式：无规则匹配 → LLM 从零生成"""
+    """无规则匹配 → LLM 从零生成"""
 
     @patch.object(Orchestrator, "_call_llm_for_plan")
     def test_ai_generates_plan(self, mock_llm, config_ai):
-        """ai 模式 + 无规则匹配 → LLM 生成"""
+        """无规则匹配 → LLM 生成"""
         mock_llm.return_value = {
             "plan_name": "多维关联分析",
             "agents": ["scout", "cleaner", "analyst", "reporter"],
@@ -246,7 +236,7 @@ class TestTier3LLMGeneration:
             "reasoning": "用户问题开放，建议探索性分析",
         }
         orch = Orchestrator(config=config_ai)
-        plan = orch._create_plan("这个数据集有什么隐藏模式", "ai")
+        plan = orch._create_plan("这个数据集有什么隐藏模式")
         assert plan["plan_name"] == "多维关联分析"
         assert plan["llm_generated"] is True
         assert plan["rule_match"] is False
@@ -256,13 +246,13 @@ class TestTier3LLMGeneration:
         """LLM 失败 + 无规则匹配 → 通用计划"""
         mock_llm.return_value = None
         orch = Orchestrator(config=config_ai)
-        plan = orch._create_plan("这个数据集有什么隐藏模式", "ai")
+        plan = orch._create_plan("这个数据集有什么隐藏模式")
         assert plan["plan_name"] == "通用分析"
         assert plan["rule_match"] is False
 
     @patch.object(Orchestrator, "_call_llm_for_plan")
     def test_balanced_no_match_triggers_llm(self, mock_llm, config_balanced):
-        """balanced + 无规则匹配 → 仍调用 LLM"""
+        """无规则匹配 → 仍调用 LLM"""
         mock_llm.return_value = {
             "plan_name": "探索性分析",
             "agents": ["scout", "cleaner", "analyst", "reporter"],
@@ -271,7 +261,7 @@ class TestTier3LLMGeneration:
             "reasoning": "开放性问题",
         }
         orch = Orchestrator(config=config_balanced)
-        plan = orch._create_plan("数据有什么模式", "balanced")
+        plan = orch._create_plan("数据有什么模式")
         mock_llm.assert_called_once()
         assert plan["llm_generated"] is True
 
@@ -410,8 +400,6 @@ class TestGenericPlan:
 
     def test_generic_plan_structure(self):
         config = HaGoKuConfig()
-        config.manager.mode = "rule"
-        config.manager.llm_plan_enabled = False
         orch = Orchestrator(config=config)
         plan = orch._generic_plan("test query")
         assert plan["plan_name"] == "通用分析"
@@ -439,7 +427,7 @@ class TestEventEmission:
             "reasoning": "开放性问题",
         }
         orch = Orchestrator(config=config_ai)
-        orch._create_plan("数据有什么模式", "ai")
+        orch._create_plan("数据有什么模式")
 
         # 检查是否有 PLAN_CREATED 事件
         plan_events = [
@@ -460,7 +448,7 @@ class TestEventEmission:
             "reasoning": "微调",
         }
         orch = Orchestrator(config=config_balanced)
-        orch._create_plan("销量趋势", "balanced")
+        orch._create_plan("销量趋势")
 
         adjusted_events = [
             e for e in orch.event_bus.events
@@ -473,10 +461,8 @@ class TestEventEmission:
         """LLM 失败 → 发射 AGENT_THINKING 事件记录失败信息"""
         mock_create.side_effect = ConnectionError("server down")
         config = HaGoKuConfig()
-        config.manager.mode = "ai"
-        config.manager.llm_plan_enabled = True
         orch = Orchestrator(config=config)
-        plan = orch._create_plan("test query", "ai")
+        plan = orch._create_plan("test query")
 
         assert plan["plan_name"] == "通用分析"  # 降级
         thinking_events = [

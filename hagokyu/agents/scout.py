@@ -31,7 +31,7 @@ COMMON_COLUMN_ALIASES: dict[str, list[str]] = {
 class ScoutAgent(DataAgentBase):
     """数据侦察员：理解数据上下文，不猜，问"""
 
-    def __init__(self, llm_config: LLMConfig, event_bus: EventBus) -> None:
+    def __init__(self, llm_config: LLMConfig, event_bus: EventBus, *, llm_client: Any | None = None) -> None:
         super().__init__(
             role="Scout",
             goal="让你快速搞懂这份数据：有哪些列、各列什么意思、数据质量怎样",
@@ -64,6 +64,7 @@ class ScoutAgent(DataAgentBase):
             ),
             llm_config=llm_config,
             event_bus=event_bus,
+            llm_client=llm_client,
         )
 
     def classify_query(self, query: str, data_path: str = "", columns_info: str = "") -> tuple[str, str]:
@@ -364,7 +365,7 @@ class ScoutAgent(DataAgentBase):
             ).strip()
 
             # 解析 LLM 输出，填充 column_descriptions
-            # 注意：不要覆盖已经从 memory/schema.yaml 加载的描述（更准确）
+            # 注意：不要覆盖已经从 memory/progress.yaml 加载的描述（更准确）
             for line in batch_desc.split("\n"):
                 line = line.strip()
                 if not line or not line[0].isalpha():

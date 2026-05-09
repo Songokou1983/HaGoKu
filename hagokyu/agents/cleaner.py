@@ -26,7 +26,7 @@ from .scout import DataContext
 class CleanerAgent(DataAgentBase):
     """数据清洗员：统计感知，保守清洗，影响可追溯"""
 
-    def __init__(self, llm_config: LLMConfig, event_bus: EventBus) -> None:
+    def __init__(self, llm_config: LLMConfig, event_bus: EventBus, *, llm_client: Any | None = None) -> None:
         super().__init__(
             role="Cleaner",
             goal="帮你清洗数据，去掉明显错误，同时告诉你哪些数据可能被改动了",
@@ -59,6 +59,7 @@ class CleanerAgent(DataAgentBase):
             ),
             llm_config=llm_config,
             event_bus=event_bus,
+            llm_client=llm_client,
         )
 
     def run(

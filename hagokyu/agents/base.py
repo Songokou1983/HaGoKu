@@ -29,6 +29,7 @@ class DataAgentBase:
         event_bus: EventBus,
         *,
         tools: list[Any] | None = None,
+        llm_client: Any | None = None,
     ) -> None:
         self.role = role
         self.goal = goal
@@ -38,6 +39,7 @@ class DataAgentBase:
         self.tools = tools or []
         self._start_time: datetime | None = None
         self._crewai_agent: Any | None = None
+        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
     def emit_event(self, event_type: EventType, data: dict[str, Any] | None = None) -> Event:
         """发射事件"""
@@ -142,7 +144,8 @@ class DataAgentBase:
         Returns:
             LLM 回复文本
         """
-        client = self.create_llm_client()
+        # 优先使用外部传入的客户端，否则创建新的
+        client = self._llm_client if self._llm_client else self.create_llm_client()
 
         messages = []
         if system:

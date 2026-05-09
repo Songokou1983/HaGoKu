@@ -69,6 +69,8 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
         self,
         llm_config: LLMConfig,
         event_bus: EventBus,
+        *,
+        llm_client: Any | None = None,
         scribe: "ScribeAgent | None" = None,
     ) -> None:
         super().__init__(
@@ -97,6 +99,7 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
             ),
             llm_config=llm_config,
             event_bus=event_bus,
+            llm_client=llm_client,
         )
         self.scribe = scribe
 
@@ -700,6 +703,16 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
             findings.append(finding)
 
         return findings
+
+    def _check_analyst_completeness(self, text: str) -> dict[str, bool]:
+        """验证 Analyst 输出是否包含必要的统计结论"""
+        from ...guardrails.parsers import validate_analysis_output
+
+        result = validate_analysis_output(text)
+        missing = [k for k, v in result.items() if not v]
+        if missing:
+            self.emit_thinking(f"⚠️ Analyst 输出缺少: {', '.join(missing)}")
+        return result
 
     def _summarize_key_findings(self, findings: list[dict[str, Any]]) -> str:
         """总结核心发现"""

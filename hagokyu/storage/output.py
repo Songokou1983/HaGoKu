@@ -224,7 +224,7 @@ class OutputManager:
 
     def get_schema_path(self) -> Path:
         """获取字段语义定义文件路径（已迁移到 MemoryManager，保留兼容）"""
-        return self._project_dir / "schema.yaml"
+        return self._project_dir / "progress.yaml"
 
     def get_project_output_path(
         self,

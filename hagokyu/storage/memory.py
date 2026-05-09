@@ -42,7 +42,7 @@ class MemorySource(str, Enum):
 
 
 class ColumnSemanticDef(BaseModel):
-    """列语义定义，对应 schema.yaml 的 columns 条目"""
+    """列语义定义，对应 progress.yaml 的 columns 条目"""
     semantic: str = "unknown"
     ignore: bool = False
     ordinal: bool | None = None
@@ -67,8 +67,8 @@ class AnalysisPatternDef(BaseModel):
     significance: str = ""
 
 
-class SchemaYaml(BaseModel):
-    """schema.yaml 结构"""
+class ProgressYaml(BaseModel):
+    """progress.yaml 结构"""
     columns: dict[str, ColumnSemanticDef] = Field(default_factory=dict)
     target: str | None = None
     confounders: list[str] = Field(default_factory=list)
@@ -92,10 +92,10 @@ class MemoryManager:
     def __init__(
         self,
         db: HaGoKuDB,
-        schema_path: Path | None = None,
+        progress_path: Path | None = None,
     ) -> None:
         self._sqlite = SqliteMemoryBackend(db)
-        self._yaml = YamlMemoryBackend(schema_path) if schema_path else None
+        self._yaml = YamlMemoryBackend(progress_path) if progress_path else None
         self._db = db
 
         # 启动时：如果 YAML 比 SQLite 新，自动同步
@@ -330,16 +330,16 @@ class MemoryManager:
 
     # ── Schema YAML I/O ─────────────────────────────────────
 
-    def export_schema_yaml(self, project_id: str, path: Path | None = None) -> Path:
+    def export_progress_yaml(self, project_id: str, path: Path | None = None) -> Path:
         """
-        导出项目记忆为 schema.yaml
+        导出项目记忆为 progress.yaml
 
         合并记忆中的 column_semantic、target、confounders 等为完整 YAML
         """
         if path is None and self._yaml:
             path = self._yaml.path
         elif path is None:
-            path = Path.home() / ".hagokyu" / "projects" / (project_id or "_global") / "schema.yaml"
+            path = Path.home() / ".hagokyu" / "projects" / (project_id or "_global") / "progress.yaml"
 
         # 收集数据
         columns = self.get_column_semantics(project_id)
@@ -400,9 +400,9 @@ class MemoryManager:
 
         return path
 
-    def import_schema_yaml(self, project_id: str, path: Path | None = None) -> int:
+    def import_progress_yaml(self, project_id: str, path: Path | None = None) -> int:
         """
-        导入 schema.yaml 到记忆系统
+        导入 progress.yaml 到记忆系统
 
         YAML 值写入 SQLite（双后端同步），YAML 文件保持不变
         返回导入的记忆条数
@@ -595,8 +595,8 @@ class MemoryManager:
             )
             count += 1
 
-        # 5. 自动导出 schema.yaml
-        self.export_schema_yaml(project_id)
+        # 5. 自动导出 progress.yaml
+        self.export_progress_yaml(project_id)
 
         return count
 

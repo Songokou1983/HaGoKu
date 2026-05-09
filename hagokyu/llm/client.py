@@ -44,3 +44,35 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
             base_url=llm_config.base_url,
             api_key=llm_config.api_key,
         )
+
+
+def create_deep_client(config: Any) -> Any:
+    """
+    创建深度推理客户端（Analyst、仲裁器用）
+
+    模型选择: config.llm.model_deep or config.llm.model
+    """
+    deep_config = LLMConfig(
+        model=config.llm.model_deep or config.llm.model,
+        base_url=config.llm.base_url,
+        api_key=config.llm.api_key,
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+    )
+    return create_structured_llm_client(deep_config)
+
+
+def create_quick_client(config: Any) -> Any:
+    """
+    创建快速客户端（Scout、Reporter、Scribe 反思用）
+
+    模型选择: config.llm.model_quick or config.llm.model
+    """
+    quick_config = LLMConfig(
+        model=config.llm.model_quick or config.llm.model,
+        base_url=config.llm.base_url,
+        api_key=config.llm.api_key,
+        temperature=config.llm.temperature,
+        max_tokens=4096,  # 快速模型用较短上下文
+    )
+    return create_structured_llm_client(quick_config)

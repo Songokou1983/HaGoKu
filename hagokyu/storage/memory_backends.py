@@ -178,9 +178,9 @@ class SqliteMemoryBackend(MemoryBackend):
 
 
 class YamlMemoryBackend(MemoryBackend):
-    """YAML 存储后端，读写 schema.yaml
+    """YAML 存储后端，读写 progress.yaml
 
-    schema.yaml 结构：
+    progress.yaml 结构：
         columns:
           col_name: {semantic: "xxx", role: "xxx", ...}
         target: col_name
@@ -194,8 +194,8 @@ class YamlMemoryBackend(MemoryBackend):
           user_note: {...}
     """
 
-    def __init__(self, schema_path: Path) -> None:
-        self._path = schema_path
+    def __init__(self, progress_path: Path) -> None:
+        self._path = progress_path
 
     def _read(self) -> dict[str, Any]:
         if not self._path.exists():

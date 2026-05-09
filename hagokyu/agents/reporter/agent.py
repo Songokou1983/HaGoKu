@@ -9,7 +9,10 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .._scribe.agent import ScribeAgent
 
 import pandas as pd
 import yaml
@@ -19,7 +22,7 @@ from ...guardrails.parsers import validate_analysis_output
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.reporting import ReportData, ReportGenerator, ReportSection
-from ...tools.visualization import generate_data_overview_charts, generate_insight_charts
+from ...tools.visualization import generate_data_overview_charts
 from .._interactive import InteractionMixin
 from ..types import InteractionResult
 
@@ -113,9 +116,6 @@ class ReporterAgent(InteractionMixin):
             ReportData
         """
         self._emit(EventType.AGENT_STARTED, {"goal": "让分析结果说话"})
-
-        # 查历史
-        history = self._get_project_history(project_name or project_id)
 
         try:
             # 1. 提取关键发现

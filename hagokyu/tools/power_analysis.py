@@ -33,7 +33,7 @@ def _require_power_deps() -> dict[str, Any]:
 # ── 效应量参考标准（Cohen's conventions）────────────────────
 
 
-EFFECT_SIZE_REFERENCES = {
+EFFECT_SIZE_REFERENCES: dict[str, dict[str, Any]] = {
     # t 检验 / 相关
     "cohen_d": {
         "small": 0.2,

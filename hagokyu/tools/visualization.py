@@ -313,6 +313,8 @@ def generate_insight_charts(
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = None
 
     charts: list[dict[str, Any]] = []
 
@@ -362,7 +364,7 @@ def _chart_regression(
     interactive: bool,
 ) -> list[dict[str, Any]]:
     """回归分析图表：拟合图 + 残差图"""
-    charts = []
+    charts: list[dict[str, Any]] = []
     coeffs = raw.get("coefficients", {})
     # 找最显著的预测变量
     p_values = raw.get("p_values", {})
@@ -430,7 +432,7 @@ def _chart_hypothesis_test(
     interactive: bool,
 ) -> list[dict[str, Any]]:
     """假设检验图表：分组对比 violin/box"""
-    charts = []
+    charts: list[dict[str, Any]] = []
 
     # 元数据优先（由 AnalystAgent 注入）
     target = raw.get("target")
@@ -438,7 +440,6 @@ def _chart_hypothesis_test(
 
     # 降级：从 question 解析
     if not target or not group_col:
-        test_type = raw.get("test", "")
         q = raw.get("question", "") or ""
         if "的" in q and "组" in q:
             parts = q.split("组")
@@ -500,7 +501,7 @@ def _chart_correlation(
     interactive: bool,
 ) -> list[dict[str, Any]]:
     """相关性图表：散点图"""
-    charts = []
+    charts: list[dict[str, Any]] = []
 
     # 元数据优先
     col1 = raw.get("col1")
@@ -563,7 +564,7 @@ def _chart_trend(
     interactive: bool,
 ) -> list[dict[str, Any]]:
     """趋势分析图表：时间线图"""
-    charts = []
+    charts: list[dict[str, Any]] = []
 
     # 元数据优先
     time_col = raw.get("time_col")
@@ -630,7 +631,7 @@ def _chart_interaction(
     interactive: bool,
 ) -> list[dict[str, Any]]:
     """交互效应图表：双变量交互可视化"""
-    charts = []
+    charts: list[dict[str, Any]] = []
     feat1 = raw.get("feature1")
     feat2 = raw.get("feature2")
 
@@ -663,7 +664,6 @@ def _chart_interaction(
 
     if interactive:
         import plotly.express as px
-        import plotly.graph_objects as go
 
         # 分组交互图：将 feat2 分成 high/low 两组
         median_val = df[feat2].median()
@@ -753,6 +753,8 @@ def generate_data_overview_charts(
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = None
 
     charts: list[dict[str, Any]] = []
 

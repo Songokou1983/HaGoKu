@@ -173,17 +173,17 @@ def calc_ltv(
 
         # 每期收益（跨客户汇总）
         period_revenue = df.groupby(df.index)[revenue_col].sum()
-        n_alive = per_customer.count()  # 活跃客户数
 
         # 简单 LTV（无留存率）
         simple_ltv = avg_ltv
 
         # 折扣 LTV（折现）
+        discounted_ltv: float
         if discount_rate > 0:
             discount_factor = 1 / (1 + discount_rate) ** np.arange(periods)
-            discounted_ltv = avg_ltv * np.sum(discount_factor[:len(period_revenue)])
+            discounted_ltv = float(avg_ltv * np.sum(discount_factor[:len(period_revenue)]))
         else:
-            discounted_ltv = simple_ltv
+            discounted_ltv = float(simple_ltv)
 
         # 分位数
         p25 = float(per_customer.quantile(0.25))
@@ -247,7 +247,7 @@ def calc_cac(
     """
     try:
         if customer_col not in df.columns or cost_col not in df.columns:
-            return _insufficient_data(f"列不存在")
+            return _insufficient_data("列不存在")
 
         n_new_customers = df[customer_col].nunique()
         if n_new_customers == 0:
@@ -387,12 +387,12 @@ def calc_payback_period(
             }
 
         # 插值估算精确回本期（如果恰好在期间内）
+        exact_period: float
         if payback_idx > 0 and period_df["cumsum_net"].iloc[payback_idx - 1] < 0:
             prev_cumsum = period_df["cumsum_net"].iloc[payback_idx - 1]
-            curr_cumsum = period_df["cumsum_net"].iloc[payback_idx]
             prev_net = period_df["net"].iloc[payback_idx]
-            fraction = abs(prev_cumsum) / abs(prev_net) if prev_net != 0 else 0
-            exact_period = payback_idx - 1 + fraction
+            fraction = abs(prev_cumsum) / abs(prev_net) if prev_net != 0 else 0.0
+            exact_period = float(payback_idx - 1) + fraction
         else:
             exact_period = float(payback_idx)
 
@@ -719,7 +719,7 @@ def attribution_analysis(
     """
     try:
         if channel_col not in df.columns or conversions_col not in df.columns:
-            return _insufficient_data(f"列不存在")
+            return _insufficient_data("列不存在")
 
         if method == "last_touch":
             # 最后触达：转化归功于最后一次接触渠道
@@ -833,13 +833,12 @@ def funnel_analysis(
             # 按频数降序排列（假设上面的漏斗量更大）
             stage_order = df[stage_col].value_counts().index.tolist()
 
-        funnel = []
-        prev_count = None
-        prev_value = None
+        funnel: list[dict[str, Any]] = []
+        prev_count: float | None = None
 
         for stage in stage_order:
             stage_df = df[df[stage_col] == stage]
-            count = stage_df.shape[0] if count_col is None else float(stage_df[count_col].sum())
+            count: float = float(stage_df.shape[0] if count_col is None else stage_df[count_col].sum())
             value = float(stage_df[value_col].sum()) if value_col and value_col in stage_df.columns else None
 
             if prev_count is not None and prev_count > 0:
@@ -847,42 +846,63 @@ def funnel_analysis(
                 step_drop = prev_count - count
             else:
                 stage_conv_rate = 1.0
-                step_drop = 0
+                step_drop = 0.0
 
             funnel.append({
                 "stage": stage,
-                "count": int(count),
+                "count": count,
                 "value": value,
                 "from_previous_rate": round(stage_conv_rate, 4) if stage_conv_rate else 0,
-                "step_drop": int(step_drop),
+                "step_drop": step_drop,
             })
 
             prev_count = count
-            prev_value = value
 
         # 计算总体转化率
-        if funnel and funnel[0]["count"] > 0:
-            total_conv = funnel[-1]["count"] / funnel[0]["count"]
-        else:
-            total_conv = 0
+        total_conv: float = 0.0
+        if funnel:
+            fc = funnel[0]["count"]
+            lc = funnel[-1]["count"]
+            if isinstance(fc, (int, float)) and isinstance(lc, (int, float)) and fc > 0:
+                total_conv = float(lc) / float(fc)
 
         # 最大流失点
-        max_drop_idx = max(range(len(funnel)), key=lambda i: funnel[i]["from_previous_rate"] < 1.0 and funnel[i]["from_previous_rate"] > 0)
+        max_drop_idx: int = max(
+            range(len(funnel)),
+            key=lambda i: (
+                isinstance(funnel[i].get("from_previous_rate"), (int, float))
+                and funnel[i]["from_previous_rate"] < 1.0
+                and funnel[i]["from_previous_rate"] > 0
+            ),
+        ) if funnel else 0
+
+        interp_drop: str = ""
+        if funnel and max_drop_idx < len(funnel):
+            drop_data = funnel[max_drop_idx]
+            stage_name = str(drop_data.get("stage", ""))
+            drop_rate = drop_data.get("from_previous_rate", 0)
+            if isinstance(drop_rate, (int, float)):
+                interp_drop = (
+                    f"最大流失在「{stage_name}」"
+                    f"（仅 {drop_rate*100:.1f}% 从上一步流入）。"
+                )
+
+        big_stage: str | None = str(funnel[max_drop_idx].get("stage")) if (funnel and max_drop_idx < len(funnel)) else None
+        big_rate_val = funnel[max_drop_idx].get("from_previous_rate") if (funnel and max_drop_idx < len(funnel)) else None
+        big_rate: float | None = float(big_rate_val) if isinstance(big_rate_val, (int, float)) else None
 
         return {
             "metric": "Funnel",
             "funnel": funnel,
             "total_conversion": round(total_conv, 4),
             "total_conversion_percent": f"{total_conv*100:.2f}%",
-            "biggest_drop_stage": funnel[max_drop_idx]["stage"] if funnel else None,
-            "biggest_drop_rate": funnel[max_drop_idx]["from_previous_rate"] if funnel else None,
+            "biggest_drop_stage": big_stage,
+            "biggest_drop_rate": big_rate,
             "n_stages": len(funnel),
             "interpretation": (
                 f"共 {len(funnel)} 个阶段，"
                 f"总体转化率 {total_conv*100:.1f}%。"
-                + (f"最大流失在「{funnel[max_drop_idx]['stage']}」"
-                   f"（仅 {funnel[max_drop_idx]['from_previous_rate']*100:.1f}% 从上一步流入）。"
-                   if funnel else "")
+                + interp_drop
             ),
         }
     except Exception as e:

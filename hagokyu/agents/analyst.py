@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ._scribe.agent import ScribeAgent
 from uuid import uuid4
 
 import pandas as pd
@@ -24,18 +27,14 @@ from ..tools.analysis import (
     regression,
     ttest,
 )
-from ..tools.analysis_registry import analysis_registry, load_plugins
+from ..tools.analysis_registry import analysis_registry
 from ..tools.power_analysis import (
-    assess_power_for_data,
     interpret_nonsignificant_result,
     power_ttest,
-    power_anova,
-    power_correlation,
-    power_regression,
 )
+from ._interactive import InteractionMixin
 from .base import DataAgentBase
 from .scout import DataContext, SemanticType
-from ._interactive import InteractionMixin
 from .types import InteractionResult
 
 
@@ -549,7 +548,6 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
             # 构建结论
             r_sq = reg_result.get("r_squared", 0)
             f_p = reg_result.get("f_pvalue", 1)
-            coeffs = reg_result.get("coefficients", {})
             p_values = reg_result.get("p_values", {})
 
             # 找显著的自变量
@@ -585,8 +583,8 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
                 raw_result=reg_result,
             )
 
-        except Exception as e:
-            self.emit_tool_error(f"回归分析遇到问题，可能需要检查数据质量或样本量")
+        except Exception:
+            self.emit_tool_error("回归分析遇到问题，可能需要检查数据质量或样本量")
             return None
 
     def _do_hypothesis_test(
@@ -675,7 +673,7 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
                 if test_type == "mann_whitney":
                     test_result = mann_whitney_u(g1, g2)
                     if "error" in test_result:
-                        self.emit_tool_error(f"非参数检验失败（适用于非正态数据），可能需要检查数据分布")
+                        self.emit_tool_error("非参数检验失败（适用于非正态数据），可能需要检查数据分布")
                         return None
                     self.emit_tool_result(f"p={test_result['p_value']:.4f}, r={test_result['effect_size']:.3f}")
                     sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
@@ -704,7 +702,7 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
 
                 test_result = ttest(g1, g2)
                 if "error" in test_result:
-                    self.emit_tool_error(f"两组均值比较检验失败，可能需要检查数据正态性或样本量")
+                    self.emit_tool_error("两组均值比较检验失败，可能需要检查数据正态性或样本量")
                     return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, d={test_result['effect_size']:.3f}")
 
@@ -722,7 +720,7 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
                 if test_type == "kruskal_wallis":
                     test_result = kruskal_wallis(df, dv=target_col, between=group_col)
                     if "error" in test_result:
-                        self.emit_tool_error(f"多组均值比较检验失败，可能需要检查数据分布或样本量")
+                        self.emit_tool_error("多组均值比较检验失败，可能需要检查数据分布或样本量")
                         return None
                     self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²_H={test_result['effect_size']:.3f}")
                     sig = "significant" if test_result["p_value"] < 0.05 else "not_significant"
@@ -749,7 +747,7 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
 
                 test_result = anova(df, dv=target_col, between=group_col)
                 if "error" in test_result:
-                    self.emit_tool_error(f"多组均值比较（方差分析）失败，可能需要检查数据正态性和方差齐性")
+                    self.emit_tool_error("多组均值比较（方差分析）失败，可能需要检查数据正态性和方差齐性")
                     return None
                 self.emit_tool_result(f"p={test_result['p_value']:.4f}, η²={test_result['effect_size']:.3f}")
 
@@ -1207,7 +1205,6 @@ class AnalystAgent(DataAgentBase, InteractionMixin):
             return None
 
         verdict = interp.get("verdict", "")
-        suggestion = interp.get("suggestion", "")
 
         if verdict == "likely_no_effect":
             return (

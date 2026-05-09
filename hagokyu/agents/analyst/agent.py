@@ -10,7 +10,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .._scribe.agent import ScribeAgent
 from uuid import uuid4
 
 import pandas as pd
@@ -20,22 +23,20 @@ from ...config import LLMConfig
 from ...guardrails.statistical import StatisticalGuardrails
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
-from . import knowledge as analyst_knowledge
 from ...tools.analysis import (
-    anova,
     check_test_assumptions,
     correlation,
     cross_validate,
-    interaction_analysis,
     kruskal_wallis,
     mann_whitney_u,
     multiple_comparison_correction,
     regression,
     ttest,
 )
-from ...tools.power_analysis import interpret_nonsignificant_result, power_ttest
+from ...tools.power_analysis import power_ttest
 from .._interactive import InteractionMixin
 from ..types import InteractionResult
+from . import knowledge as analyst_knowledge
 
 
 @dataclass
@@ -776,7 +777,6 @@ class AnalystAgent(InteractionMixin):
             significance = result.get("significance", "")
             # 构建场景描述
             target_col = context.get("target", "")
-            feature_count = len(context.get("features", []))
             # 简单场景描述
             scenario = f"{','.join(focus)} n={n} target={target_col}"
             # 检查是否已有相似条目

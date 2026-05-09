@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .._scribe.agent import ScribeAgent
 
 import pandas as pd
 import yaml
@@ -16,19 +19,18 @@ import yaml
 from ...config import LLMConfig
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
-from ..types import InteractionResult
-from .._interactive import InteractionMixin
-from . import knowledge as cleaner_knowledge
 from ...tools.cleaning import (
     CleaningReport,
     clean_data,
     detect_missing_mechanism,
     detect_outliers_iqr,
-    detect_outliers_isolation_forest,
     littles_mcar_test,
     suggest_cleaning_strategy,
 )
 from ...tools.data_io import load_data
+from .._interactive import InteractionMixin
+from ..types import InteractionResult
+from . import knowledge as cleaner_knowledge
 
 
 class CleanerAgent(InteractionMixin):

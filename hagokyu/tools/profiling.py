@@ -83,7 +83,6 @@ def generate_full_profile(df: pd.DataFrame) -> dict[str, Any]:
             "或使用轻量级画像: generate_profile(df)"
         )
 
-    report = ProfileReport(df, minimal=True, explorative=False)
     # 提取关键信息
     return {
         "n_rows": len(df),
@@ -273,7 +272,7 @@ def _compute_quality_score(profile: dict[str, Any]) -> float:
 
     # 综合得分 (权重: 完整性 60%, 唯一性 40%)
     score = completeness * 0.6 + uniqueness * 0.4
-    return round(score, 4)
+    return float(round(score, 4))
 
 
 def suggest_column_roles(df: pd.DataFrame, profile: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:

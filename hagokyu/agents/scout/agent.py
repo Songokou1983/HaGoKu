@@ -7,22 +7,23 @@ Scout Agent — 数据侦察员
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .._scribe.agent import ScribeAgent
 
 import pandas as pd
 import yaml
-
-from . import knowledge as scout_knowledge
 
 from ...config import LLMConfig
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.data_io import load_data
 from ...tools.profiling import generate_profile
-from ..types import InteractionResult
 from .._interactive import InteractionMixin
+from ..types import InteractionResult
+from . import knowledge as scout_knowledge
 
 
 class ScoutAgent(InteractionMixin):
@@ -370,7 +371,6 @@ class ScoutAgent(InteractionMixin):
         """单列语义推断"""
         n_unique = series.nunique()
         n_total = len(series)
-        null_rate = series.isnull().mean()
 
         # 100% 唯一 → ID
         if n_unique == n_total and n_total > 10:
@@ -673,7 +673,7 @@ class ScoutAgent(InteractionMixin):
             result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
 
             return result.strip() if result.strip() else "（字段理解生成失败）"
-        except Exception as e:
+        except Exception:
             # LLM 失败时回退到简单消息
             return f"""数据包含 {len(column_semantics)} 个字段，请确认以下理解是否正确：
 

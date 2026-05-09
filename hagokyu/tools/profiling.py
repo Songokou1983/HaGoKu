@@ -201,7 +201,7 @@ def _infer_type(series: pd.Series) -> str:
             return "categorical"
         return "numeric"
     # 字符串列
-    if series.dtype == object:
+    if pd.api.types.is_string_dtype(series) or series.dtype == object:
         n_unique = series.nunique()
         # 唯一值比例很高，可能是 ID
         if n_unique > len(series) * 0.8:

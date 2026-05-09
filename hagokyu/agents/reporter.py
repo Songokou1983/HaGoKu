@@ -652,6 +652,10 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
                 for gr in result.guardrail_results
             )
 
+            # 验证 Analyst 输出的结构完整性
+            validation_text = result.conclusion_statistical or result.conclusion_plain or ""
+            completeness_check = self._check_analyst_completeness(validation_text)
+
             # 吸引力层：一句话 headline
             headline = result.conclusion_plain.split("。")[0] if result.conclusion_plain else ""
             if len(headline) > 60:
@@ -672,6 +676,11 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
                 limitations.append("结果未达统计显著，可能是样本量不足或效应确实不存在")
             if result.p_value is not None and result.p_value is not None and 0.05 < result.p_value < 0.10:
                 limitations.append("p 值在 0.05-0.10 之间，为边缘显著，需更大样本验证")
+
+            # 如果解析器检查发现缺少统计项，添加到局限性
+            missing_items = [k for k, v in completeness_check.items() if not v]
+            if missing_items:
+                limitations.append(f"解析验证缺少: {', '.join(missing_items)}")
 
             # 核心价值层：证据追溯
             evidence_trace = ""

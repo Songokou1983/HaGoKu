@@ -8,7 +8,6 @@ from typing import Any
 
 import pandas as pd
 
-
 # ── 支持的文件格式 ────────────────────────────────────────────
 
 SUPPORTED_FORMATS = {

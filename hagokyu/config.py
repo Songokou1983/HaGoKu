@@ -50,12 +50,6 @@ class OutputConfig(BaseModel):
     formats: list[str] = Field(default_factory=lambda: ["html"])
 
 
-class UserModeConfig(BaseModel):
-    """用户模式配置"""
-
-    default_mode: str = "standard"  # quick / standard / expert
-
-
 class AnalysisConfig(BaseModel):
     """统计分析配置"""
 
@@ -89,7 +83,6 @@ class HaGoKuConfig(BaseModel):
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
-    user_mode: UserModeConfig = Field(default_factory=UserModeConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
     work_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu")

@@ -7,8 +7,8 @@ from typing import Any
 import pandas as pd
 
 from ..config import LLMConfig
-from ..observability.events import EventType
 from ..observability.event_bus import EventBus
+from ..observability.events import EventType
 from ..tools.cleaning import (
     CleaningReport,
     clean_data,

@@ -628,7 +628,6 @@ def multiple_comparison_correction(
     Returns:
         校正结果
     """
-    from scipy import stats
 
     n = len(p_values)
     if n == 0:
@@ -1144,8 +1143,8 @@ def _regression_diagnostics(
     features: list[str],
 ) -> dict[str, Any]:
     """回归诊断"""
-    from scipy import stats
     import statsmodels.api as sm
+    from scipy import stats
 
     diagnostics: dict[str, Any] = {}
 

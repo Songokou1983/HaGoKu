@@ -521,10 +521,10 @@ def suggest_cleaning_strategy(
 
     # MAR → 需要更谨慎
     if missing_mechanism == "mar":
-        return CleaningStrategy.MULTIPLE_IMPUTATION, f"MAR 缺失，建议多重插补以减少偏差"
+        return CleaningStrategy.MULTIPLE_IMPUTATION, "MAR 缺失，建议多重插补以减少偏差"
 
     # MNAR → 最谨慎
-    return CleaningStrategy.FLAG_AND_KEEP, f"MNAR 缺失，建议标记缺失而非删除，避免引入偏差"
+    return CleaningStrategy.FLAG_AND_KEEP, "MNAR 缺失，建议标记缺失而非删除，避免引入偏差"
 
 
 # ── 清洗前后对比 ──────────────────────────────────────────────

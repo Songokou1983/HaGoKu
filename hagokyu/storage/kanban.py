@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-
 # 有效状态
 VALID_STATUSES = frozenset({"triage", "todo", "ready", "running", "blocked", "done", "archived"})
 

@@ -634,8 +634,8 @@ class StatisticalGuardrails:
                 lines.append(f"  • {v.message}")
 
         if self.can_output(results):
-            lines.append(f"\n✅ 报告可正常输出（问题已标注，供你参考）")
+            lines.append("\n✅ 报告可正常输出（问题已标注，供你参考）")
         else:
-            lines.append(f"\n⚠️ 存在严重问题，报告将标注但不阻止输出")
+            lines.append("\n⚠️ 存在严重问题，报告将标注但不阻止输出")
 
         return "\n".join(lines)

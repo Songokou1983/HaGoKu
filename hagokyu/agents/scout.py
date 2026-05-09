@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from ..config import LLMConfig
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
-from ..tools.data_io import get_data_info, load_data
-from ..tools.profiling import generate_profile, suggest_column_roles
+from ..tools.data_io import load_data
+from ..tools.profiling import generate_profile
 from .base import DataAgentBase
-from .types import DataContext, ColumnSemantic, SemanticType
+from .types import ColumnSemantic, DataContext, SemanticType
 
 # 常见业务术语 → 列名映射（兜底用）
 COMMON_COLUMN_ALIASES: dict[str, list[str]] = {
@@ -399,7 +397,7 @@ class ScoutAgent(DataAgentBase):
             self.complete({"n_columns": len(df.columns), "uncertain": len(uncertain)})
             return context
 
-        except Exception as e:
+        except Exception:
             # 推断/构建失败 → 返回最基本 context
             self.fail("数据侦察遇到问题")
             self.emit_event(EventType.AGENT_THINKING, {
@@ -438,7 +436,6 @@ class ScoutAgent(DataAgentBase):
         target_keywords = target_keywords or []
         n_unique = series.nunique()
         n_total = len(series)
-        null_rate = series.isnull().mean()
 
         # 100% 唯一 → ID
         if n_unique == n_total and n_total > 10:
@@ -494,7 +491,7 @@ class ScoutAgent(DataAgentBase):
                     column_name=name,
                     inferred_type=SemanticType.TARGET,
                     confidence=0.50,
-                    evidence=f"列名含目标关键词",
+                    evidence="列名含目标关键词",
                     needs_user_input=True,
                     suggested_role="target",
                 )
@@ -564,7 +561,7 @@ class ScoutAgent(DataAgentBase):
                     column_name=name,
                     inferred_type=SemanticType.TARGET,
                     confidence=0.50,
-                    evidence=f"列名含目标关键词",
+                    evidence="列名含目标关键词",
                     needs_user_input=True,
                     suggested_role="target",
                 )

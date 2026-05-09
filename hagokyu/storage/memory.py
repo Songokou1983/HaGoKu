@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 from .database import HaGoKuDB
 from .memory_backends import SqliteMemoryBackend, YamlMemoryBackend
 
-
 # ── 数据模型 ──────────────────────────────────────────────────
 
 

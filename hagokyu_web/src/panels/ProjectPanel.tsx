@@ -1,0 +1,87 @@
+import { FolderOpen } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
+import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWorkspaceStore } from "../stores/workspace";
+import { PanelHeader } from "../components/PanelHeader";
+import { EmptyState } from "../components/EmptyState";
+import type { AgentId, AgentStatus } from "../types/events";
+
+const agentDef: Record<AgentId, { emoji: string; label: string }> = {
+  scout: { emoji: "🔍", label: "Scout" },
+  cleaner: { emoji: "🧹", label: "Cleaner" },
+  analyst: { emoji: "📊", label: "Analyst" },
+  reporter: { emoji: "📝", label: "Reporter" },
+};
+
+function StatusBadge({ status }: { status: AgentStatus }) {
+  const def = {
+    idle: "bg-[#333] text-[#666]",
+    running: "bg-[#1a3a5c] text-[#569cd6]",
+    done: "bg-[#1a3a1a] text-[#6a9955]",
+    error: "bg-[#3a1a1a] text-[#f44747]",
+    waiting_input: "bg-[#3a3a1a] text-[#dcdcaa]",
+  }[status];
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded ${def}`}>
+      {status}
+    </span>
+  );
+}
+
+export default function ProjectPanel() {
+  const agents = useWorkspaceStore((s) => s.agents);
+  const [summary, setSummary] = useState("");
+
+  useAgentStatusSync();
+
+  const batch = useBatchEvents();
+
+  useEffect(() => {
+    if (batch.length === 0) return;
+    // Listen for run_started to show analysis target
+    for (const msg of batch) {
+      if (msg.type === "event" && msg.data) {
+        const d = msg.data;
+        if (d.event_type === "run_started" && typeof d.data?.query === "string") {
+          setSummary(`📋 ${d.data.query}`);
+        }
+      }
+    }
+  }, [batch]);
+
+  const agentList = Object.entries(agentDef) as [AgentId, { emoji: string; label: string }][];
+
+  return (
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc]">
+      <PanelHeader title="Project" />
+      <div className="flex-1 overflow-auto p-3 space-y-4">
+        {summary ? (
+          <div className="p-2 bg-[#252525] border border-[#333] rounded text-[13px] text-[#d4d4d4] whitespace-pre-wrap">
+            {summary}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<FolderOpen size={32} />}
+            message="Start a query in Analyze"
+          />
+        )}
+        <div className="space-y-2">
+          {agentList.map(([id, { emoji, label }]) => {
+            const st = agents[id] ?? "idle";
+            return (
+              <div
+                key={id}
+                className="flex items-center gap-2 p-1.5 bg-[#252525] border border-[#333] rounded"
+              >
+                <span className="text-sm">{emoji}</span>
+                <span className="text-[13px] text-[#d4d4d4] flex-1">{label}</span>
+                <StatusBadge status={st} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

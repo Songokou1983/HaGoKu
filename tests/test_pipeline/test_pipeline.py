@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hagokyu.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConfig, UserModeConfig
+from hagokyu.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConfig
 
 
 class TestLLMConfig:
@@ -32,7 +32,6 @@ class TestHaGoKuConfig:
         config = HaGoKuConfig()
         assert config.llm.model == "Qwen3.6-35B-A3B"
         assert config.manager.cleaning_impact_warning == 0.3
-        assert config.user_mode.default_mode == "standard"
 
     def test_from_yaml(self, tmp_path):
         yaml_path = tmp_path / "config.yaml"

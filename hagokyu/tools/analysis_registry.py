@@ -517,7 +517,6 @@ def load_plugins(registry: AnalysisRegistry | None = None) -> AnalysisRegistry:
         return {"metric": "marketing_mix", ...}
     ```
     """
-    import os
     import importlib.util
     from pathlib import Path
 

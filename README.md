@@ -43,8 +43,11 @@ pip install -e .
 
 # 4. 启动 LLM 服务（如本地部署 Qwen 等模型）
 
-# 5. 启动 HaGoKu
-hagokyu-ui        # Web UI（Streamlit）：浏览器打开 http://localhost:8501
+# 5. 启动后端 API
+hagokyu-api       # FastAPI 服务：http://localhost:8000
+
+# 6. 启动前端（新终端）
+cd hagokyu_web && npm run dev   # React 开发服务器：http://localhost:5173
 ```
 
 > ⚠️ **代码更新后**：执行 `pip install -e . --force-reinstall` 强制重装，使最新代码生效。
@@ -56,11 +59,16 @@ hagokyu-ui        # Web UI（Streamlit）：浏览器打开 http://localhost:850
 ### Web UI（推荐）
 
 ```bash
-hagokyu-ui
-# 浏览器打开 http://localhost:8501
+# 终端 1：启动后端
+hagokyu-api
+# FastAPI 服务运行在 http://localhost:8000
+
+# 终端 2：启动前端
+cd hagokyu_web && npm run dev
+# React 开发服务器运行在 http://localhost:5173
 ```
 
-**UI 功能：** 项目管理（创建/编辑/删除）→ 互动分析（Claude 风格三段式）→ 报告输出 → 系统设置
+**UI 功能：** 可拖拽面板布局 → 项目管理 → 分析（WebSocket 实时事件流）→ 报告查看 → 知识库导航 → 事件监控
 
 ### CLI
 
@@ -144,7 +152,8 @@ hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu-ui` | 启动 Web UI（http://localhost:8501） |
+| `hagokyu-api` | 启动后端 API（http://localhost:8000） |
+| `cd hagokyu_web && npm run dev` | 启动前端开发服务器（http://localhost:5173） |
 
 ---
 
@@ -250,7 +259,7 @@ manager:
 - **清洗**: PyOD, cleanlab, Great Expectations, ydata-profiling
 - **报告**: Jinja2, Plotly, Matplotlib
 - **Agent**: CrewAI, Instructor, Pydantic
-- **编排**: Click（CLI）+ Streamlit（V2 Web UI）
+- **编排**: Click（CLI）+ FastAPI + React（dockview 面板布局）
 
 ---
 
@@ -264,14 +273,14 @@ pytest tests/ -q
 
 ## 常见问题
 
-**Q: UI 启动报错 `AttributeError` 或显示异常功能？**
-A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagokyu-ui`。
+**Q: API 启动报错 `AttributeError` 或显示异常功能？**
+A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagokyu-api`。
 
 **Q: LLM 连接失败？**
 A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查 `~/.hagokyu/config.yaml` 中的 `base_url` 和 `model` 是否正确。
 
 **Q: 项目文件存放在哪里？**
-A: 默认 `~/.hagokyu/projects/`，可在 UI「系统设置」页面修改「项目文件夹」路径。
+A: 默认 `~/.hagokyu/projects/`，可在 Settings 面板修改「项目文件夹」路径。
 
 ---
 

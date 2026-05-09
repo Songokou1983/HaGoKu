@@ -399,11 +399,12 @@ hagokyu/
 │   ├── observability/            # 终端实时显示
 │   │   ├── event_bus.py, events.py, display.py
 │   │
-│   └── ui/                       # Streamlit Web UI
-│       ├── app.py, launcher.py
-│       ├── _pages/               # 分析/项目/报告/知识/设置
-│       ├── components/           # 可复用组件
-│       └── static/               # logo
+│   ├── api/                      # FastAPI + WebSocket 后端
+│   │   ├── server.py             # FastAPI app + 静态文件挂载
+│   │   ├── ws_handler.py         # WebSocket 事件广播 + 心跳
+│   │   └── __init__.py
+│   │
+│   └── ui/                       # (已废弃，替换为 hagokyu_web/)
 │
 ├── docs/
 │   ├── DEVELOPMENT.md
@@ -433,7 +434,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | 🛡 免疫 | **Great Expectations** | 数据验证 | Cleaner |
 | 🏃 脚 | **subprocess + 白名单** | 安全代码执行 | Analyst |
 | 📊 数据 | **Pandas** + **DuckDB** + **PyArrow** | 数据处理 + SQL 查询 + Parquet | 全体 |
-| 🖥 界面 | **Click** + **Streamlit** (V2) | CLI + Web UI | 用户交互 |
+| 🖥 界面 | **Click** + **FastAPI** + **React** | CLI + Web UI（dockview 面板布局） | 用户交互 |
 
 **12 组选型，HaGoKu 自己只写编排逻辑。**
 
@@ -457,7 +458,8 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 ### V2 — 洞察可见，分析可持续
 
-- [ ] Streamlit Web UI
+- [x] FastAPI + WebSocket API（hagokyu/api/）
+- [x] React Web UI（hagokyu_web/，dockview 面板布局）
 - [ ] 每个检验配诊断图
 - [ ] 执行回放 (replay)
 - [ ] 报告导出 HTML/PDF
@@ -473,7 +475,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 - [ ] 因果推断：工具变量、DID、断点回归
 - [ ] 时间序列深度分析
 - [ ] 自定义 Agent 扩展接口
-- [ ] REST API
+- [x] REST API（FastAPI，已完成）
 - [ ] 多用户支持
 - [ ] Analyst 辩论模式：同问题 2 方法并行分析 → Scribe 仲裁
 - [ ] 辩论式协作（从 TradingAgents 借鉴）—— 多方视角降低偏差

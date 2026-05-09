@@ -9,7 +9,6 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-
 # ── 报告数据结构 ─────────────────────────────────────────────
 
 class ReportSection:

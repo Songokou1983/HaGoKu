@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from typing import Any
-from uuid import uuid4
 
 from ..config import LLMConfig
 from ..observability.event_bus import EventBus

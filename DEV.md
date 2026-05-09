@@ -46,8 +46,11 @@ result = orch.run('data.csv', '分析问题', phase='scout_first')
 print(result['status'])
 "
 
-# 启动 UI 手动验证
-hagokyu-ui   # http://localhost:8501
+# 启动后端 API（FastAPI + WebSocket）
+hagokyu-api   # http://localhost:8000
+
+# 启动前端开发服务器（React + Vite）
+cd hagokyu_web && npm run dev   # http://localhost:5173
 ```
 
 ## 环境变量

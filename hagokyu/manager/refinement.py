@@ -20,9 +20,8 @@ HaGoKu 的定位：调仪表盘，不是换引擎
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
-
 
 # ── Refinement 类型 ───────────────────────────────────────────
 

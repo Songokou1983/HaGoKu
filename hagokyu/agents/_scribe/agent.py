@@ -240,7 +240,7 @@ class ScribeAgent:
         )
 
         # Reporter 是叶子节点
-        reporter_id = self.kanban.create_task(
+        self.kanban.create_task(
             agent="reporter",
             title="Reporter: 生成报告",
             description="生成分析报告",
@@ -331,7 +331,7 @@ class ScribeAgent:
             # 找不到就只更新 completed
             pattern2 = rf"({phase} 产出\n\n```yaml\n)completed: (true|false)"
             if re.search(pattern2, content):
-                content = re.sub(pattern2, rf"\1completed: true", content)
+                content = re.sub(pattern2, r"\1completed: true", content)
 
         # 更新 current_phase
         content = re.sub(r"(current_phase: )\w+", rf"\1{phase}", content)

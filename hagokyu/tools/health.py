@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -89,7 +88,7 @@ def check_llm(config: Any) -> HealthCheckResult:
             "检查 LLM 服务是否正在运行",
             "确认 base_url 配置正确（默认: http://localhost:8000/v1）",
             "如果是本地模型（如 vLLM/llama.cpp），确认服务已启动",
-            f"使用 `hagokyu config` 查看当前配置，或设置 HAGOKYU_LLM_BASE_URL 环境变量",
+            "使用 `hagokyu config` 查看当前配置，或设置 HAGOKYU_LLM_BASE_URL 环境变量",
         ],
     )
 

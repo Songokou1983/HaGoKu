@@ -7,8 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..agents._scribe.agent import ScribeAgent
+from ..agents.analyst import AnalystAgent
+from ..agents.cleaner import CleanerAgent
+from ..agents.reporter import ReporterAgent
+from ..agents.scout import DataContext, ScoutAgent
 from ..config import HaGoKuConfig
 from ..guardrails.statistical import StatisticalGuardrails
+from ..llm.client import create_deep_client, create_quick_client, create_structured_llm_client
 from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
@@ -16,15 +22,7 @@ from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
 from ..storage.project_manager import ProjectManager
-from ..agents._scribe.agent import ScribeAgent
-from ..agents.analyst import AnalystAgent, AnalysisResult
-from ..agents.cleaner import CleanerAgent
-from ..agents.reporter import ReporterAgent
-from ..agents.scout import DataContext, ScoutAgent
-from ..llm.client import create_structured_llm_client, create_deep_client, create_quick_client
 from ..tools.data_io import save_data
-from .query_parser import QueryParser, parse_query
-
 
 # ── 规则引擎 ──────────────────────────────────────────────────
 
@@ -129,7 +127,6 @@ class Orchestrator:
         query: str = "",
         *,
         project_name: str | None = None,
-        user_mode: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
         template: str | None = None,
@@ -146,7 +143,6 @@ class Orchestrator:
             data_path: 数据文件路径
             query: 用户的分析问题
             project_name: 项目名（默认从文件名推断）
-            user_mode: 用户模式 (quick / standard / expert)
             output_dir: 自定义输出目录
             formats: 报告输出格式
             template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
@@ -164,7 +160,6 @@ class Orchestrator:
             运行结果摘要
         """
         run_start = datetime.now()
-        user_mode = user_mode or self.config.user_mode.default_mode
 
         # 1. 创建项目
         if project_name is None:
@@ -490,7 +485,7 @@ class Orchestrator:
 
             # 7. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
-            report = reporter.run(
+            reporter.run(
                 results=results,
                 context=context,
                 cleaning_summary=cleaning_report.to_dict() if cleaning_report else {},
@@ -499,7 +494,6 @@ class Orchestrator:
                 output_path=output_path,
                 formats=formats or self.config.output.formats,
                 template=template,
-                user_mode=user_mode,
                 df=df_clean,
                 business_metrics=business_metrics,
             )
@@ -696,9 +690,12 @@ class Orchestrator:
         Returns:
             计划 dict，LLM 失败时返回 None
         """
-        from ..llm.client import create_structured_llm_client
-        from ..llm.plan_schema import VALID_ANALYST_FOCUS, DEFAULT_EXPLORATORY_FOCUS, LLMPlanResponse
-        from ..llm.prompts import PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER, PLAN_ADJUSTMENT_USER
+        from ..llm.plan_schema import (
+            DEFAULT_EXPLORATORY_FOCUS,
+            VALID_ANALYST_FOCUS,
+            LLMPlanResponse,
+        )
+        from ..llm.prompts import PLAN_ADJUSTMENT_USER, PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER
 
         try:
             # 懒初始化 LLM 客户端

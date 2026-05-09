@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-
 # ── 意图类型 ────────────────────────────────────────────────
 
 
@@ -202,7 +201,6 @@ COLLOQUIAL_MAP: dict[str, str] = {
     "效果": "效果/转化率/销售额",
     "表现": "效果/销售额",
     "最好": "最高",
-    "最好": "最高",
     "好不好": "是否有差异",
     "有没有用": "是否有显著效果",
     "有没有效": "是否有显著效果",
@@ -266,8 +264,6 @@ class QueryParser:
 
     def _detect_intent(self, query: str) -> tuple[str, str]:
         """识别用户意图"""
-        query_lower = query.lower()
-
         # 遍历意图模式，找第一个匹配的
         for intent_type, pattern_str, _ in INTENT_PATTERNS:
             patterns = pattern_str.split("|")
@@ -338,7 +334,6 @@ class QueryParser:
 
     def _extract_group_by(self, query: str, context_hints: dict[str, Any] | None) -> list[str]:
         """提取分组维度"""
-        group_keywords = ["按", "分", "组", "维度"]
         groups = []
 
         # 从 query 中找

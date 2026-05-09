@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from ..config import LLMConfig
-from ..guardrails.statistical import GuardrailResult, Severity, StatisticalGuardrails
 from ..observability.event_bus import EventBus
+from ..observability.events import EventType
 from ..tools.reporting import ReportData, ReportGenerator, ReportSection
 from ..tools.visualization import generate_data_overview_charts, generate_insight_charts
+from ._interactive import InteractionMixin
 from .analyst import AnalysisResult
 from .base import DataAgentBase
 from .scout import DataContext
-from ._interactive import InteractionMixin
 from .types import InteractionResult
 
+if TYPE_CHECKING:
+    from ._scribe.agent import ScribeAgent
 
 # ── 效应量大小判断 ──────────────────────────────────────────
 
@@ -30,20 +32,28 @@ def _effect_size_magnitude(effect_size: float | None, effect_type: str = "") -> 
     if es == float("inf"):
         return "perfect"
     if "cohen" in effect_type.lower() or "d" in effect_type.lower():
-        if es >= 0.8: return "large"
-        if es >= 0.5: return "medium"
+        if es >= 0.8:
+            return "large"
+        if es >= 0.5:
+            return "medium"
         return "small"
     if "eta" in effect_type.lower() or "f_sq" in effect_type.lower():
-        if es >= 0.14: return "large"
-        if es >= 0.06: return "medium"
+        if es >= 0.14:
+            return "large"
+        if es >= 0.06:
+            return "medium"
         return "small"
     if "cramer" in effect_type.lower() or "v" in effect_type.lower():
-        if es >= 0.16: return "large"
-        if es >= 0.07: return "medium"
+        if es >= 0.16:
+            return "large"
+        if es >= 0.07:
+            return "medium"
         return "small"
     # 通用
-    if es >= 0.5: return "large"
-    if es >= 0.2: return "medium"
+    if es >= 0.5:
+        return "large"
+    if es >= 0.2:
+        return "medium"
     return "small"
 
 
@@ -109,6 +119,8 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
         self._context: DataContext | None = None
         self._cleaning_summary: dict[str, Any] = {}
         self._report_data: dict[str, Any] = {}
+
+    def run(
         self,
         results: list[AnalysisResult],
         context: DataContext,

@@ -103,9 +103,6 @@ def cli() -> None:
               type=click.Choice(list(DEMO_DATASETS.keys())),
               help="使用内置演示数据集（可简写为 -D ad_campaign）")
 @click.option("--project", "-p", default=None, help="项目名")
-@click.option("--mode", "-m", default=None,
-              type=click.Choice(["quick", "standard", "expert"]),
-              help="用户模式 (quick/standard/expert)")
 @click.option("--output-dir", "-o", default=None, help="输出目录")
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),
@@ -126,7 +123,6 @@ def run(
     query: str,
     demo: str | None,
     project: str | None,
-    mode: str | None,
     output_dir: str | None,
     formats: tuple[str, ...],
     template: str | None,
@@ -144,7 +140,6 @@ def run(
     """
     from .manager.orchestrator import Orchestrator
     from .observability.display import TerminalDisplay
-    from .observability.event_bus import EventBus
 
     # --demo 优先：从内置数据集解析路径
     if demo:
@@ -184,7 +179,6 @@ def run(
             data_path=data_path,
             query=query,
             project_name=project,
-            user_mode=mode,
             output_dir=output_dir,
             formats=format_list,
             template=template,
@@ -277,7 +271,6 @@ def quick_run(data_path: str | None, demo: str | None, query: str) -> None:
         result = orch.run(
             data_path=data_path,
             query=query,
-            user_mode="quick",
         )
     except FileNotFoundError:
         click.echo("❌ 数据文件未找到", err=True)
@@ -341,7 +334,6 @@ def demo_cmd(dataset: str | None, query: str | None) -> None:
         result = orch.run(
             data_path=str(resolved),
             query=effective_query,
-            user_mode="standard",
         )
     except Exception:
         click.echo("❌ 分析过程中出现意外错误", err=True)
@@ -459,7 +451,6 @@ def config_cmd(reset: bool) -> None:
     config = HaGoKuConfig.load()
     click.echo("⚙️ HaGoKu 配置:")
     click.echo(f"   LLM: {config.llm.model} @ {config.llm.base_url}")
-    click.echo(f"   用户模式: {config.user_mode.default_mode}")
     click.echo(f"   工作目录: {config.work_dir}")
     click.echo(f"   输出格式: {', '.join(config.output.formats)}")
 
@@ -479,7 +470,7 @@ def list_methods(tag: str | None) -> None:
 
     新增方法：放入 ~/.hagokyu/plugins/*_plugin.py，HaGoKu 自动加载
     """
-    from .tools import analysis_registry, load_plugins
+    from .tools import load_plugins
 
     reg = load_plugins()
 
@@ -586,6 +577,7 @@ def guardrails() -> None:
 def replay(run_id: str, agent: str | None, verbose: bool) -> None:
     """回放分析过程"""
     import json
+
     from .config import HaGoKuConfig
 
     config = HaGoKuConfig.load()
@@ -722,7 +714,7 @@ def project_create(name: str, desc: str) -> None:
         info = pm.create(name, description=desc)
         click.echo(f"✅ 项目创建成功: {info.name}")
         click.echo(f"   目录: {info.project_dir}")
-        click.echo(f"   结构: input/  process/  output/")
+        click.echo("   结构: input/  process/  output/")
         if desc:
             click.echo(f"   描述: {desc}")
     except FileExistsError as e:
@@ -856,9 +848,6 @@ def project_delete(project: str, force: bool) -> None:
 @click.argument("project")
 @click.option("--data", "-d", default=None, help="指定输入文件（留空则用最新添加的文件）")
 @click.option("--query", "-q", "query", default="", help="分析问题")
-@click.option("--mode", "-m", default=None,
-              type=click.Choice(["quick", "standard", "expert"]),
-              help="用户模式")
 @click.option("--format", "-f", "formats", multiple=True,
               type=click.Choice(["html", "md", "json"]),
               help="输出格式")
@@ -866,14 +855,11 @@ def project_run(
     project: str,
     data: str | None,
     query: str,
-    mode: str | None,
     formats: tuple[str, ...],
 ) -> None:
     """在项目上下文中运行分析（自动使用项目的 input/ 数据）"""
     from .config import HaGoKuConfig
     from .manager.orchestrator import Orchestrator
-    from .observability.display import TerminalDisplay
-    from .observability.event_bus import EventBus
     from .storage.project_manager import ProjectManager
 
     config = HaGoKuConfig.load()
@@ -902,7 +888,6 @@ def project_run(
             data_path=str(data_path),
             query=query,
             project_name=project,
-            user_mode=mode,
             formats=format_list,
         )
     except FileNotFoundError:
@@ -1118,7 +1103,6 @@ def _run_refinement_loop(
                 data_path=data_path,
                 query=new_query or result.get("query", ""),
                 project_name=project_name,
-                user_mode="standard",
                 resume=True,
             )
 
@@ -1129,8 +1113,8 @@ def _run_refinement_loop(
             else:
                 click.echo("\n⚠️ 调整失败，报告保持不变")
 
-        except Exception as e:
-            click.echo(f"\n⚠️ 调整出错，请重试或输入「退出」保存报告")
+        except Exception:
+            click.echo("\n⚠️ 调整出错，请重试或输入「退出」保存报告")
 
         # 最后一轮，给出提示
         if turn == MAX_REFINEMENT_TURNS:
@@ -1184,7 +1168,6 @@ def _build_refinement_query(original_result: dict, intent: Any) -> str:
 
 def main() -> None:
     """入口点"""
-    import sys
     # 无参数时显示欢迎画面（--help / --version 走正常流程）
     if len(sys.argv) == 1:
         click.echo(WELCOME_SCREEN)

@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-import struct
 import sqlite3
+import struct
 import threading
 import uuid
 from pathlib import Path

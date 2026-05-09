@@ -34,8 +34,8 @@ def diagnose_regression(
     Returns:
         诊断结果字典
     """
-    from scipy import stats
     import statsmodels.api as sm
+    from scipy import stats
 
     diagnostics: dict[str, Any] = {}
     residuals = model.resid

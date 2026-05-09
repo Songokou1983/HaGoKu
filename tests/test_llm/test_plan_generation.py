@@ -272,7 +272,7 @@ class TestTier3LLMGeneration:
 class TestCallLlmForPlan:
     """_call_llm_for_plan 核心调用逻辑测试"""
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_successful_call(self, mock_create_client):
         """成功调用 LLM 返回计划"""
         mock_client = MagicMock()
@@ -295,7 +295,7 @@ class TestCallLlmForPlan:
         assert "scout" in result["agents"]
         assert "reporter" in result["agents"]
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_invalid_focus_filtered(self, mock_create_client):
         """LLM 返回无效 analyst_focus → 过滤为默认值"""
         mock_client = MagicMock()
@@ -319,7 +319,7 @@ class TestCallLlmForPlan:
         # 无效值被过滤，降级到默认探索性焦点
         assert result["analyst_focus"] == DEFAULT_EXPLORATORY_FOCUS
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_missing_scout_reporter_added(self, mock_create_client):
         """LLM 返回的 agents 缺少 scout/reporter → 自动补充"""
         mock_client = MagicMock()
@@ -343,7 +343,7 @@ class TestCallLlmForPlan:
         assert "reporter" in result["agents"]
         assert "analyst" in result["agents"]
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_llm_exception_returns_none(self, mock_create_client):
         """LLM 异常 → 返回 None"""
         mock_create_client.side_effect = ConnectionError("llama-server down")
@@ -354,7 +354,7 @@ class TestCallLlmForPlan:
 
         assert result is None
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_llm_timeout_returns_none(self, mock_create_client):
         """LLM 超时 → 返回 None"""
         mock_client = MagicMock()
@@ -367,7 +367,7 @@ class TestCallLlmForPlan:
 
         assert result is None
 
-    @patch("hagokyu.llm.client.create_structured_llm_client")
+    @patch("hagokyu.manager.orchestrator.create_structured_llm_client")
     def test_lazy_client_initialization(self, mock_create_client):
         """LLM 客户端懒初始化：第一次调用才创建"""
         mock_client = MagicMock()

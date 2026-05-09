@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from datetime import datetime
-
 from .events import Event, EventType
 
 # Agent 显示名和颜色
@@ -64,7 +61,7 @@ class TerminalDisplay:
         elif event.event_type == EventType.AGENT_FAILED:
             print(f"  ❌ {event.agent} 失败: {event.data.get('error', '')}")
         elif event.event_type == EventType.RUN_COMPLETED:
-            print(f"\n🎉 分析完成！")
+            print("\n🎉 分析完成！")
             if path := event.data.get("output_path"):
                 print(f"📄 报告: {path}")
 
@@ -119,8 +116,6 @@ class TerminalDisplay:
 
     def _handle_verbose(self, event: Event) -> None:
         """详细模式：打印所有事件，包括 AI 思考过程"""
-        prefix = self._get_agent_prefix(event.agent)
-
         if event.event_type == EventType.AGENT_THINKING:
             thought = event.data.get("thought", "")
             print(f"   │  💭 {thought}")

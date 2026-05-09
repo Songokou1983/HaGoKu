@@ -1,130 +1,98 @@
-<!-- TODO: 以 PROJECT.md 为基准全面对齐，产品完成后最终更新 -->
+# HaGoKu — 开发快速上手
 
-# HaGoKu — 开发文档
+> 详细设计文档见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+> 排错指南见 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
+> 项目规范见 [PROJECT.md](PROJECT.md)。
 
-## 概述
-
-本文档是 HaGoKu 项目的开发指南，从 PROJECT.md 的设计规格出发，拆解为可执行的开发任务、技术实现细节和开发规范。
-
-项目愿景详见 [PROJECT.md](PROJECT.md)
-
----
-
-## 开发环境
-
-### 前置条件
-
-- Python 3.10+
-- Git
-- 本地 LLM 服务（llama.cpp / Ollama / vLLM，OpenAI 兼容 API）
-
-### 环境搭建
+## 环境搭建
 
 ```bash
-# 克隆项目
-git clone https://github.com/yourname/hagokyu.git
-cd hagokyu
+git clone <repo-url> && cd hagokyu
 
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate
+# 虚拟环境
+python3 -m venv .venv && source .venv/bin/activate
 
-# 安装开发依赖
+# 安装
 pip install -e ".[dev]"
 
-# 复制配置模板
+# 配置 LLM
 cp .env.example .env
+# 编辑 .env 填入 API 地址和密钥（MiniMax 云端，`~/.hagokyu/.env`）
 
-# 运行测试
+# 验证
 pytest tests/ -q
 ```
 
-### 依赖分组
+> **前置条件**: Python 3.10+
 
-```toml
-# pyproject.toml [project.dependencies]
-# 核心
-crewai >= 0.100.0
-pydantic >= 2.0
-click >= 8.0
-instructor >= 1.0
+## 日常命令
 
-# 数据
-pandas >= 2.0
-duckdb >= 1.0
-pyarrow >= 14.0
-openpyxl              # Excel 读取
-pypdf                 # PDF 读取
-python-docx           # Word 读取
+```bash
+# 测试
+pytest tests/ -q                    # 全部测试
+pytest tests/test_agents/ -q       # 单模块
 
-# 统计
-pingouin >= 0.5
-statsmodels >= 0.14
-scipy >= 1.12
+# 代码质量
+ruff check hagokyu/                 # lint
+mypy hagokyu/                       # 类型检查
 
-# 机器学习
-scikit-learn >= 1.4
-flaml >= 2.0
+# 直接调试后端（不经过 UI）
+.venv/bin/python -c "
+from hagokyu.config import HaGoKuConfig
+from hagokyu.manager.orchestrator import Orchestrator
+config = HaGoKuConfig.load()
+orch = Orchestrator(config)
+result = orch.run('data.csv', '分析问题', phase='scout_first')
+print(result['status'])
+"
 
-# 清洗与验证
-pyod >= 1.1
-cleanlab >= 2.0
-great-expectations >= 1.0
-
-# 画像
-ydata-profiling >= 4.0
-missingno >= 0.5
-
-# 可视化
-plotly >= 5.0
-matplotlib >= 3.8
-
-# 报告
-jinja2 >= 3.1
-
-# [project.optional-dependencies.dev]
-pytest >= 8.0
-pytest-cov
-ruff
-mypy
+# 启动 UI 手动验证
+hagokyu-ui   # http://localhost:8501
 ```
+
+## 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `HAGOKYU_LLM_BASE_URL` | LLM API 地址 | `http://localhost:8000/v1` |
+| `HAGOKYU_LLM_API_KEY` | LLM API 密钥 | — |
+| `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | `Qwen3.6-35B-A3B` |
+| `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
+| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
+| `HAGOKYU_MANAGER_MODE` | 编排模式 | `balanced` |
+| `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagokyu` |
+| `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
+| `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
+| `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |
+
+## 提交规范
+
+```bash
+git add <files>
+git commit -m "$(cat <<'EOF'
+fix: <具体描述>
+
+<改动1>
+<改动2>
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+每次提交只做一件事，commit message 要写清楚具体改了什么。
+
+## 文件索引
+
+| 文档 | 用途 | 受众 |
+|------|------|------|
+| [PROJECT.md](PROJECT.md) | 项目灵魂、架构原则、唯一真相源 | 所有人 |
+| [README.md](README.md) | 用户手册（安装、命令、快速开始） | 用户 |
+| [CLAUDE.md](CLAUDE.md) | AI 编码助手上下文 | Claude Code |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 详细设计手册（架构/看板/向量/审查） | 开发者 |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见问题排查 | 开发者 |
+| **DEV.md**（本文件） | 快速上手 | 新贡献者 |
 
 ---
 
-## 架构总览
-
-```
-┌──────────────────────────────────────────────────────┐
-│  CLI (Click) / Web UI (Streamlit V2)                 │
-├──────────────────────────────────────────────────────┤
-│  Orchestrator                                        │
-│  ┌────────────┐  ┌──────────┐  ┌─────────────────┐  │
-│  │  仲裁器     │  │  看板    │  │  QueryParser    │  │
-│  │ (规则+LLM) │  │ (Kanban) │  │ (意图解析)      │  │
-│  └─────┬──────┘  └────┬─────┘  └────────┬────────┘  │
-│        │              │                  │           │
-│        ▼              ▼                  ▼           │
-│  ┌──────────────────────────────────────────────┐   │
-│  │  Scribe (后台隐形引擎，零 LLM 开销)           │   │
-│  │  看板状态 | 知识调度 | 经验记录 | 经验提炼     │   │
-│  └──────────────────────────────────────────────┘   │
-│        │              │                  │           │
-│        ▼              ▼                  ▼           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
-│  │  Scout   │  │ Cleaner  │  │ Analyst │ Reporter│  │
-│  └──────────┘  └──────────┘  └──────────────────┘  │
-│  Agent 四件套: prompt.md + memory.md + knowledge.yaml + LLM自由通道  │
-├──────────────────────────────────────────────────────┤
-│  Tools Layer (12 组借力组件)                           │
-│  Pingouin | Statsmodels | PyOD | ydata-profiling     │
-│  sklearn | FLAML | Jinja2 | Great Expectations       │
-├──────────────────────────────────────────────────────┤
-│  Infrastructure                                      │
-│  EventBus | DataStore | Guardrails | LLM Adapter     │
-│  SQLite DB | Kanban | Output | Lineage | Knowledge   │
-└──────────────────────────────────────────────────────┘
-```
-
-> **设计变更**：原"Manager 总管"已拆解。意图解析归 QueryParser+Scout，计划制定归规则引擎+LLM 微调，调度归 Scribe+看板，质量把关归 Guardrails，跨 Agent 仲裁归 Orchestrator 内仲裁逻辑。
-
----
+> **禁止事项速查**：不动 `~/.llama-proxy/`、不用 `pm2` 操作 Hermes 服务、UI 代码用绝对导入 `from hagokyu.*`、不在 commit message 写 "various fixes"。完整清单见 [docs/DEVELOPMENT.md §不要做的清单](docs/DEVELOPMENT.md#不要做的清单)。

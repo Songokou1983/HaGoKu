@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hagokyu"
 version = "0.1.0"
-description = "用数学的力量，挖出数据背后真正的信息"
+description = "让每个小模型，都能做专业级商业分析"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

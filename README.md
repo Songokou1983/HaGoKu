@@ -1,8 +1,12 @@
 # HaGoKu
 
-**用数学的力量，挖出数据背后真正的信息**
+> **让每个小模型，都能做专业级商业分析。**
 
-HaGoKu 是一个多 Agent 协作的数据分析平台。CLI + Web UI 双入口，将数据分析全流程拆分为专业角色——侦察、清洗、分析、报告——由 AI 驱动自动完成，同时确保统计严谨性：每个结论都附带 p 值 + 效应量 + 置信区间。
+用数学的力量，挖出数据背后真正的信息。
+
+HaGoKu 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（Scout、Cleaner、Analyst、Reporter）和 Scribe 确定性引擎构成。每个结论必须附带 p 值 + 效应量 + 置信区间，受三级 Statistical Guardrails 规则兜底，由仲裁器（Arbitrator）统一编排调度。
+
+---
 
 ## 核心能力
 
@@ -13,6 +17,9 @@ HaGoKu 是一个多 Agent 协作的数据分析平台。CLI + Web UI 双入口�
 | ⚡ 功效分析 | 样本量评估、效应量解读 |
 | 🛡️ 统计护栏 | 三级规则（强制/警告/提示），每个结论都有保障 |
 | 🔌 插件架构 | 新增分析方法无需改核心代码 |
+| 🧠 三层知识 | kb/领域知识 → 方法经验 → LLM 自由发挥，Agent 启动前自动注入 |
+
+---
 
 ## 安装要求
 
@@ -37,13 +44,12 @@ pip install -e .
 # 4. 启动 LLM 服务（如本地部署 Qwen 等模型）
 
 # 5. 启动 HaGoKu
-hagokyu-desktop   # 桌面版（推荐）：原生窗口，自动打开浏览器
-hagokyu-ui        # 命令行版：终端里运行
-# 浏览器打开 http://localhost:8501
+hagokyu-ui        # Web UI（Streamlit）：浏览器打开 http://localhost:8501
 ```
 
-> ⚠️ **代码更新后**：执行 `pip install -e .` 重新安装，使最新代码生效。
-> 如果 UI 显示异常，执行 `pip install -e . --force-reinstall` 强制重装。
+> ⚠️ **代码更新后**：执行 `pip install -e . --force-reinstall` 强制重装，使最新代码生效。
+
+---
 
 ## 快速开始
 
@@ -59,14 +65,14 @@ hagokyu-ui
 ### CLI
 
 ```bash
-# 数据画像
-hagokyu profile examples/ad_campaign.csv
+# ⚡ 快速模式：扔数据，拿结果
+hagokyu quick data.csv
 
-# 完整分析
-hagokyu run examples/ad_campaign.csv -q "哪个广告渠道效果最好"
+# 📋 普通模式：说清楚你要分析什么
+hagokyu run data.csv --query "哪个广告渠道效果最好"
 
-# 零交互快速模式
-hagokyu quick examples/ad_campaign.csv -q "分析转化率趋势"
+# 🔬 资深模式：全程可控
+hagokyu run data.csv --query "广告对销售的因果效应" --mode expert
 
 # 项目管理
 hagokyu project create "Q1销售分析" -d "分析Q1各渠道ROI"
@@ -74,75 +80,150 @@ hagokyu project add "Q1销售分析" ~/data/sales.csv
 hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
 ```
 
+---
+
 ## 主要命令
+
+### 核心命令
 
 | 命令 | 用途 |
 |------|------|
+| `hagokyu run <file> -q "问题"` | 完整分析流程（支持 --mode quick/standard/expert） |
+| `hagokyu quick <file>` | 快速模式（零交互，自动探索） |
+| `hagokyu demo` | 列出所有内置演示数据集 |
+| `hagokyu demo ad_campaign -q "问题"` | 用演示数据直接运行分析 |
 | `hagokyu profile <file>` | 生成数据画像 |
-| `hagokyu run <file> -q "问题"` | 完整分析流程 |
-| `hagokyu quick <file> -q "问题"` | 快速模式（零交互） |
-| `hagokyu project create <名称>` | 立项（创建项目） |
+
+### 项目管理 (`hagokyu project`)
+
+| 命令 | 用途 |
+|------|------|
+| `hagokyu project create <名称> -d "描述"` | 创建新项目 |
 | `hagokyu project add <项目> <文件>` | 添加数据文件到项目 |
-| `hagokyu project run <项目> -q "问题"` | 在项目中运行分析 |
+| `hagokyu project run <项目> -q "问题"` | 在项目上下文中运行分析 |
 | `hagokyu project list` | 列出所有项目 |
 | `hagokyu project info <项目>` | 查看项目详情 |
+| `hagokyu project delete <项目>` | 删除项目（需确认） |
+
+### 诊断与工具
+
+| 命令 | 用途 |
+|------|------|
+| `hagokyu doctor` | 检查系统健康状态（LLM 连接、依赖库） |
+| `hagokyu methods` | 查看所有可用的分析方法 |
+| `hagokyu methods --tag statistical` | 按标签过滤分析方法 |
+| `hagokyu guardrails` | 查看统计护栏规则 |
+| `hagokyu config` | 查看当前配置 |
+| `hagokyu config --reset` | 重置配置为默认值 |
+
+### 记忆与历史
+
+| 命令 | 用途 |
+|------|------|
+| `hagokyu memory` | 查看所有项目记忆概览 |
+| `hagokyu memory <项目>` | 查看指定项目的记忆 |
 | `hagokyu memory --export schema.yaml` | 导出记忆/列语义 |
+| `hagokyu memory --import schema.yaml` | 从 schema.yaml 导入记忆 |
+| `hagokyu history <项目>` | 查看项目运行历史 |
 | `hagokyu replay <run_id>` | 回放分析过程 |
-| `hagokyu-ui` | 启动 Web UI |
 
-## 项目管理
+### 高级选项 (`hagokyu run`)
 
-每个项目是独立的工作区（可通过设置页面配置存放路径）：
+| 选项 | 说明 |
+|------|------|
+| `--mode expert` | 资深模式：完整统计证据链 |
+| `--demo ad_campaign` | 使用内置演示数据集 |
+| `--format html --format md` | 输出格式（可多选） |
+| `--template academic` | 报告模板（business_analysis/academic/ab_test/executive_brief/data_audit） |
+| `--interactive` | 交互模式：分析完后继续调整 |
+| `--resume` | 从上次断点继续分析 |
+| `--schema schema.yaml` | 外部 schema 文件路径 |
+| `--verbosity verbose` | 详细终端输出 |
+
+### Web UI
+
+| 命令 | 用途 |
+|------|------|
+| `hagokyu-ui` | 启动 Web UI（http://localhost:8501） |
+
+---
+
+## 系统架构
+
+### 4 个 Agent + 1 个确定性引擎
+
+| 角色 | 类型 | 职责 |
+|------|------|------|
+| 🔍 **Scout** | Agent | 加载数据、推断字段语义（SemanticType）、评估质量 |
+| 🧹 **Cleaner** | Agent | MCAR/MNAR 检验、异常值区分、清洗影响评估 |
+| 📊 **Analyst** | Agent | 回归/假设检验/ANOVA/相关，强制效应量+CI，自动非参数切换 |
+| 📝 **Reporter** | Agent | 双轨输出（吸引力层+核心价值层），3 种用户模式，图表生成 |
+| 📋 **Scribe** | 确定性引擎 | 零 LLM 调用。看板管理、记忆维护、知识注入、字段仲裁、经验更新 |
+| ⚖️ **仲裁器** | 编排 | 规则引擎（80%场景）+ LLM 决策（新场景），计划生成、调度、降级 |
+
+> **Scribe 不是 Agent**，它是确定性逻辑引擎，作为 Agent 的"外骨骼"——Agent 负责分析决策，Scribe 负责装备知识、记录决策、仲裁分歧。Agent 不主动查知识库，Scribe 在启动前完成检索和注入。
+
+### 三层知识架构
 
 ```
-~/.hagokyu/projects/<项目名>/
-├── project.yaml      # 元数据（描述、运行次数、数据文件列表）
-├── input/           # 原始数据文件
-├── process/         # 清洗后数据、中间结果
-├── output/          # 报告、可视化
-└── memory/          # 项目记忆笔记（notes.md）
+kb/ 领域知识（手写）→ knowledge.yaml 方法经验（自动积累）→ LLM 自由发挥（兜底）
 ```
 
-## 四个专业 Agent
+Scribe 在 Agent 启动前检索匹配 kb/ 和 knowledge.yaml，将相关知识注入 Agent 的 system prompt。无匹配时 LLM 自行判断。
 
-| Agent | 角色 | 职责 |
-|-------|------|------|
-| **Scout** | 侦察员 | 加载数据、推断字段语义（SemanticType）、评估质量 |
-| **Cleaner** | 清洁工 | MCAR/MNAR 检验、异常值 Winsorize、MICE 填补、影响率评估 |
-| **Analyst** | 分析师 | 回归/假设检验/ANOVA/相关，强制效应量+CI，自动非参数切换 |
-| **Reporter** | 报告员 | 双轨输出（吸引力层+核心价值层），3 种用户模式，图表生成 |
+### 看板协作
 
-**Manager 编排**：规则引擎覆盖 80% 常见场景，LLM 处理复杂决策。
+Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban.db`（消息队列）和 `context.md`（共享上下文）。
 
-## 统计护栏
+---
 
-HaGoKu 内置三级统计护栏，防止常见统计错误：
+## 统计护栏 — 三级安全网
 
-- **强制级** — 没有统计检验不许下结论；观测数据不能声称因果；必须报告效应量
-- **警告级** — 样本量过小；假设检验前提未满足；多重比较未校正
-- **提示级** — 效应量小但显著；建议补充分析
+| 级别 | 规则示例 | 后果 |
+|------|---------|------|
+| **强制级** | 无检验不下结论、必须报告效应量+CI、观测数据不得声称因果、必须做模型诊断 | 阻止输出 |
+| **警告级** | 假设不满足、样本量不足、共线性超标、清洗影响>10% | 标注但允许输出 |
+| **提示级** | 建议非线性模型、建议交互效应、建议功效分析 | 不阻断 |
+
+---
+
+## 用户模式
+
+| 模式 | 互动程度 | 互动机制 |
+|------|---------|---------|
+| ⚡ **快速** | 完全自主 | 零交互，猜错时自动提示 |
+| 🔄 **普通**（默认） | 关键点确认 | 字段语义确认 + 方法选择参与 |
+| 🎓 **资深** | 全程可控 | 每个环节可介入、可跳过、可重做 |
+
+---
 
 ## 报告模板
 
+5 个预设模板：
+
 | 模板 | 风格 | 适用场景 |
 |------|------|----------|
-| `default` | 彩色现代风 | 日常分析（默认） |
+| `business_analysis` | 商业分析 | 含建议行动区（默认） |
 | `academic` | APA 风格、表格化 | 学术论文 / 正式报告 |
-| `brief` | 单页精简 | 快速汇报 / 邮件摘要 |
-| `business_analysis` | 商业分析 | 含建议行动区 |
 | `ab_test` | A/B 测试 | 含 verdict 判定 |
 | `executive_brief` | 高管简报 | 极简关键信息 |
 | `data_audit` | 数据审计 | 详细清洗操作表 |
 
-## 用户模式
+---
 
-Reporter 支持三种输出详细度：
+## 项目结构
 
-| 模式 | 输出 | 适用人群 |
-|------|------|----------|
-| `quick` | 纯人话摘要 | 快速浏览 |
-| `standard` | 人话 + 数学细节 | 大多数用户 |
-| `expert` | 完整统计证据链 | 数据分析师 |
+```
+~/.hagokyu/projects/<项目名>/
+├── progress.yaml       # 项目记忆（字段决策、用户偏好、分析历史）
+├── context.md          # 看板上下文（所有 Agent 共享）
+├── kanban.db           # Agent 看板（SQLite 消息队列）
+├── data/               # 数据制品（raw/cleaned .parquet）
+├── runs/               # 分析运行记录
+└── reports/            # 最终报告
+```
+
+---
 
 ## 配置
 
@@ -157,7 +238,9 @@ manager:
   mode: "balanced"   # balanced(规则+AI) / rule(纯规则) / ai(AI优先)
 ```
 
-环境变量：`HAGOKYU_LLM_BASE_URL`、`HAGOKYU_LLM_API_KEY`、`HAGOKYU_LLM_MODEL`、`HAGOKYU_MANAGER_MODE`
+环境变量：`HAGOKYU_LLM_BASE_URL`、`HAGOKYU_LLM_API_KEY`、`HAGOKYU_LLM_MODEL`、`HAGOKYU_MANAGER_MODE`、`HAGOKYU_EMBEDDING_BASE_URL`、`HAGOKYU_EMBEDDING_API_KEY`、`HAGOKYU_EMBEDDING_MODEL`
+
+---
 
 ## 技术栈
 
@@ -167,14 +250,17 @@ manager:
 - **清洗**: PyOD, cleanlab, Great Expectations, ydata-profiling
 - **报告**: Jinja2, Plotly, Matplotlib
 - **Agent**: CrewAI, Instructor, Pydantic
-- **CLI**: Click
-- **UI**: Streamlit
+- **编排**: Click（CLI）+ Streamlit（V2 Web UI）
+
+---
 
 ## 测试
 
 ```bash
-pytest tests/ -q          # 255 测试，全部通过
+pytest tests/ -q
 ```
+
+---
 
 ## 常见问题
 
@@ -186,6 +272,18 @@ A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查
 
 **Q: 项目文件存放在哪里？**
 A: 默认 `~/.hagokyu/projects/`，可在 UI「系统设置」页面修改「项目文件夹」路径。
+
+---
+
+## 项目文档
+
+| 文档 | 用途 | 受众 |
+|------|------|------|
+| [PROJECT.md](PROJECT.md) | 项目灵魂、架构原则、唯一真相源 | 所有人 |
+| [DEV.md](DEV.md) | 开发快速上手 | 新贡献者 |
+| [CLAUDE.md](CLAUDE.md) | AI 编码助手上下文 | Claude Code |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 详细设计手册（架构/看板/向量/审查） | 开发者 |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见问题排查 | 开发者 |
 
 ## License
 

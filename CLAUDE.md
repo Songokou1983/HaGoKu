@@ -2,102 +2,51 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository Structure
+## Repository Context
 
-This is a home directory containing multiple projects:
+This repository contains **one primary project**: `hagokyu/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
 
-- **hermes-agent-self-evolution/** — Primary project: evolutionary self-improvement for Hermes Agent using DSPy + GEPA
-- **feishu-bot/** — Feishu (Lark) messaging bot (Node.js/Express)
-- **.hermes/** — Symlinked to Windows path containing hermes-agent repo
+## hagokyu/ — HaGoKu 多 Agent 数据分析平台
 
-## hermes-agent-self-evolution
+> 项目灵魂、Agent 表、架构原则、命令参考、技术栈 → 见 **[PROJECT.md](PROJECT.md)**（唯一真相源）。
+> UI 设计原则、全局工作原则、Karpathy 编码原则 → 见下文。
 
-Evolutionary optimization pipeline that evolves Hermes Agent's skills, prompts, tool descriptions, and code using DSPy + GEPA (Genetic-Pareto Prompt Evolution).
+### 项目文档索引
 
-### Commands
+| 文档 | 用途 | 何时读 |
+|------|------|--------|
+| | [PROJECT.md](PROJECT.md) | 项目灵魂、模块全景、架构原则、反模式 | 每次对话开始 |
+| | [DEV.md](DEV.md) | 快速上手（环境搭建→测试→提交） | 新环境搭建 |
+| | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册（架构/看板/向量/审查） | 涉及架构变更时 |
+| | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 已知 bug 及修复 | 遇到问题时 |
+| | [README.md](README.md) | 用户手册（安装、命令参考） | 回答用户问题 |
 
-```bash
-# Install
-cd hermes-agent-self-evolution
-pip install -e ".[dev]"
+### Agent 角色速查
 
-# Run tests
-pytest tests/ -q
+| Agent | 职责 | LLM 层级 |
+|-------|------|----------|
+| 🔍 **Scout** | 数据理解：类型推断、语义分析、缺失/分布报告 | `quick` |
+| 🧹 **Cleaner** | 数据清洗：缺失机制检验、异常区分、清洗影响评估 | `quick` |
+| 📊 **Analyst** | 统计分析核心：假设检验、回归、效应量、模型诊断 | `deep` |
+| 📝 **Reporter** | 双轨报告渲染：吸引力层 + 核心价值层 | `quick` |
+| 📋 **Scribe** | **确定性逻辑引擎（非 Agent，零 LLM 调用）**：看板管理、记忆维护、知识库检索与注入、字段仲裁 | 无 |
 
-# Evolve a skill
-python -m evolution.skills.evolve_skill --skill github-code-review --iterations 10 --eval-source synthetic
+### 当前架构关键点（已实施的 P0 项）
 
-# Dry run (validate setup)
-python -m evolution.skills.evolve_skill --skill github-code-review --dry-run
-```
+**双层 LLM（P0.3）**：通过 `HAGOKYU_LLM_MODEL_DEEP` / `HAGOKYU_LLM_MODEL_QUICK` 环境变量区分。
+- `llm_deep`：Analyst（假设检验/回归推理）、仲裁器（计划决策）
+- `llm_quick`：Scout（类型推断）、Cleaner（清洗决策）、Reporter（格式化渲染）
+- 工厂函数在 `hagokyu/llm/client.py`：`create_deep_client()` / `create_quick_client()`
+- 回退逻辑：未设置 deep/quick 时复用 `HAGOKYU_LLM_MODEL`
 
-### Architecture
+**结构化输出解析器（P1.2）**：`hagokyu/guardrails/parsers.py`
+- `parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`、`parse_confidence_interval()`
+- `validate_analysis_output()` 综合 4 项检查
+- Reporter 需调用解析器验证 Analyst 输出结构完整性
 
-```
-evolution/
-├── core/           # Shared infrastructure
-│   ├── config.py           # EvolutionConfig, HERMES_AGENT_REPO env var
-│   ├── dataset_builder.py  # SyntheticDatasetBuilder, EvalDataset (train/val/holdout splits)
-│   ├── fitness.py          # skill_fitness_metric, LLMJudge (LLM-as-judge scoring)
-│   └── constraints.py      # ConstraintValidator (size limits, caching compat)
-├── skills/         # Phase 1: Skill evolution
-│   ├── evolve_skill.py     # Main CLI entry point
-│   └── skill_module.py     # SkillModule (wraps SKILL.md as DSPy module)
-├── tools/          # Phase 2: Tool description evolution (planned)
-├── prompts/        # Phase 3: System prompt evolution (planned)
-├── code/           # Phase 4: Code evolution via Darwinian Evolver (planned)
-└── monitor/        # Phase 5: Continuous loop (planned)
-```
+**Scribe 身份**：不是 Agent，是确定性逻辑引擎。不调用 LLM，不做分析决策。负责：知识注入、记忆写入、字段仲裁、看板管理。详见 PROJECT.md L36-38。
 
-### Key Concepts
-
-- **DSPy + GEPA**: Reflective prompt evolution that reads execution traces to understand failures
-- **EvalDataset**: Train/val/holdout splits for evaluating evolved variants
-- **SkillModule**: Wraps SKILL.md as a DSPy module for optimization
-- **ConstraintValidator**: Enforces size limits (skills ≤15KB), caching compatibility, semantic preservation
-- **Fitness metric**: LLM-as-judge scoring on rubrics, not exact text matching
-
-### Configuration
-
-Set `HERMES_AGENT_REPO` env var to point at the hermes-agent repository:
-```bash
-export HERMES_AGENT_REPO=~/.hermes/hermes-agent
-```
-
-## feishu-bot
-
-Simple Feishu (Lark) messaging bot using Express.js. Listens on `/webhook` endpoint.
-
-### Commands
-
-```bash
-cd feishu-bot
-npm install
-node server.js
-```
-
-### Notes
-
-- Webhook URL: `http://localhost:3000/webhook`
-- Supports simple commands: hi, hello, 你好, 时间, 帮助, 状态
-
-## hagokyu/
-
-Multi-agent data analysis platform. Fully documented in `hagokyu-project.md` (记忆目录).
-
-```bash
-cd hagokyu
-hagokyu doctor          # LLM 健康检查
-hagokyu run data.csv -q "哪个渠道ROI最高"   # CLI 分析
-hagokyu-ui              # 启动 Web UI（Streamlit，端口 8501）
-```
-
-- **架构**: Manager → Scout → Cleaner → Analyst → Reporter
-- **LLM**: MiniMax 云端（`~/.hagokyu/.env` 配置），**不要动 Hermes 的本地 35B**
-- **代码量**: 18,607 行 Python，223 pytest 100% 通过
-- **UI**: Streamlit，terminal/sci-fi 深色主题（JetBrains Mono + Inter 字体）
-- **包布局**: flat（`hagokyu/` 在项目根，不用 `src/hagokyu/`）
-- **导入注意**: UI 包内禁止相对导入，全用 `from hagokyu.*` 绝对导入
+---
 
 ## HaGoKu UI 设计原则（每一条改动都必须遵守）
 
@@ -116,31 +65,11 @@ hagokyu-ui              # 启动 Web UI（Streamlit，端口 8501）
 10. **最小改动原则**：每次只改用户要求的那一个地方，不做额外的改动，不改变未要求的元素
 11. **每次改动前必须备份**：使用 `cp file UI_CHANGELOG_backup_YYYYMMDDHHMMSS.py` 备份，每一步改动都要记录到 UI_CHANGELOG.md
 
-## 全局工作原则（所有项目适用）
+---
 
-### 不要让我重复说同一件事
-用户说过的问题 → 立即记录到项目文档 + 代码注释。修完 bug → 写测试防止 regression。每次开始工作前先读项目文档再动手。
+## 全局工作原则 → 见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
-### 不要重新发明轮子
-已有配置/服务 → 直接用，不要新建。
-- **Hermes**：运行着本地 35B 模型，`~/.llama-proxy/` 配置（**不要动**）
-- PM2 管理服务 → 不要 stop/restart 不认识的服务
-- 如果需要调用已有 LLM → 找它的配置，不要自己新建
-
-### 开发流程
-1. 先读项目文档（`docs/DEVELOPMENT.md` 或 `*.md`）
-2. 边做边记录，不等人提醒
-3. 学到新东西 → 写进项目文档，不是记在脑子里
-4. 提交前确认测试通过
-
-### 测试方法
-- 优先用 Python 直接测后端逻辑（不依赖 UI 自动化）
-- UI 测试 → 手动在浏览器测
-- 不要花大量时间搞 UI 自动化测试框架
-
-### 提交规范
-- commit message 写清楚改了什么，不要写"fix: update"或"various fixes"
-- 每次提交只做一件事
+开发流程、测试方法、提交规范、编码约束（不重复造轮子、不重复犯错）统一维护在设计手册中。此处不再重复。
 
 ---
 
@@ -158,7 +87,7 @@ hagokyu-ui              # 启动 Web UI（Streamlit，端口 8501）
 - 不做没要求的功能
 - 单次使用的代码不抽象
 - 不做没被要求的"灵活性"
-- 200行能解决就不要写2000行
+- 200 行能解决就不要写 2000 行
 
 ### 3. Surgical Changes
 **只改需要改的，不顺手优化。**
@@ -169,6 +98,6 @@ hagokyu-ui              # 启动 Web UI（Streamlit，端口 8501）
 
 ### 4. Goal-Driven Execution
 **给可验证的成功标准。**
-- "修bug" → 先写测试复现，再修
+- "修 bug" → 先写测试复现，再修
 - "加功能" → 先说清楚怎么算完成
 - 多步任务 → 先列计划，每步有验证点

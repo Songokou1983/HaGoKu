@@ -43,13 +43,14 @@ class InteractionMixin:
         confirmation_prompt: str = "",
         pending_items: list[dict[str, Any]] | None = None,
         data: dict[str, Any] | None = None,
+        actions: list[str] | None = None,
     ) -> InteractionResult:
         """Agent 主动暂停，等用户响应"""
         return InteractionResult(
             phase=phase,
             message=message,
             data=data or {},
-            actions=[],
+            actions=actions if actions is not None else [],
             final=False,
             needs_confirmation=needs_confirmation,
             confirmation_prompt=confirmation_prompt,

@@ -150,12 +150,21 @@ class AnalystAgent(InteractionMixin):
         context: dict,
         plan: dict,
         project_id: str | None = None,
+        phase: str = "full",
     ) -> tuple[list[dict], list[dict]]:
         """
         执行统计分析
 
+        Args:
+            df: 清洗后的数据
+            context: 数据上下文
+            plan: 分析计划
+            project_id: 项目 ID
+            phase: "full"=完整分析, "preliminary"=初步发现
+
         Returns:
-            (分析结果列表, 商业指标列表)
+            phase="full": (分析结果列表, 商业指标列表)
+            phase="preliminary": 初步发现字典
         """
         self._emit(EventType.AGENT_STARTED, {"goal": "用统计方法挖出数据真相"})
 
@@ -206,6 +215,26 @@ class AnalystAgent(InteractionMixin):
         # 兜底
         if not results:
             results = self._auto_analyze(df, context, target_col, query)
+
+        # phase="preliminary"：只返回初步发现，不做增强诊断
+        if phase == "preliminary":
+            self._emit(EventType.AGENT_COMPLETED, {
+                "result_summary": f"初步发现 {len(results)} 个，待确认"
+            })
+            suggested = ""
+            if results:
+                top = results[0]
+                if top.get("significance") == "significant":
+                    suggested = f"初步发现「{top.get('question', '')}」具有统计显著性，建议重点分析"
+                else:
+                    suggested = "初步结果均不显著，建议扩大样本或调整分析维度"
+            return {
+                "status": "analyst_preliminary",
+                "power_warnings": power_warnings,
+                "business_metrics": business_metrics,
+                "preliminary_findings": results,
+                "suggested_focus": suggested,
+            }
 
         # 交叉验证
         for result in results:

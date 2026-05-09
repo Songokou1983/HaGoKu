@@ -100,6 +100,11 @@ class ReporterAgent(InteractionMixin):
         output_path: str = None,
         df: pd.DataFrame = None,
         business_metrics: list[dict] = None,
+        project_name: str = "分析项目",
+        formats: list[str] | None = None,
+        template: str | None = None,
+        template_dir: str | None = None,
+        user_mode: str = "standard",
     ) -> ReportData:
         """
         生成分析报告
@@ -110,7 +115,7 @@ class ReporterAgent(InteractionMixin):
         self._emit(EventType.AGENT_STARTED, {"goal": "让分析结果说话"})
 
         # 查历史
-        history = self._get_project_history(project_id)
+        history = self._get_project_history(project_name or project_id)
 
         try:
             # 1. 提取关键发现
@@ -163,8 +168,9 @@ class ReporterAgent(InteractionMixin):
                 sections.append(section)
 
             # 报告数据
+            effective_project_name = project_name or project_id
             report = ReportData(
-                project_name=project_id,
+                project_name=effective_project_name,
                 query=query,
                 sections=sections,
                 data_summary={
@@ -176,19 +182,19 @@ class ReporterAgent(InteractionMixin):
                 findings_summary=key_findings,
                 headline=headline,
                 metric_cards=metric_cards,
-                user_mode="standard",
+                user_mode=user_mode or "standard",
             )
 
             # 生成文件
             if output_path:
                 generator = ReportGenerator()
                 if output_path.endswith(".html") or ".html" in str(output_path):
-                    generator.generate_html(report, output_path=output_path)
+                    generator.generate_html(report, output_path=output_path, template_name=template)
                 elif output_path.endswith(".md"):
                     generator.generate_markdown(report, output_path=output_path)
 
             # 更新记忆
-            self._update_own_memory(project_id, headline, len(key_findings), results)
+            self._update_own_memory(effective_project_name, headline, len(key_findings), results)
 
             self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"生成 {len(sections)} 个章节"})
 
@@ -196,15 +202,16 @@ class ReporterAgent(InteractionMixin):
 
         except Exception as e:
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
+            effective_project_name = project_name or project_id
             return ReportData(
-                project_name=project_id,
+                project_name=effective_project_name,
                 query=query,
                 sections=[ReportSection(title="⚠️ 报告生成失败", content=str(e), level=1)],
                 data_summary={},
                 findings_summary=[],
                 headline="报告生成失败",
                 metric_cards=[],
-                user_mode="standard",
+                user_mode=user_mode or "standard",
             )
 
     # ── 交互式接口 ────────────────────────────────────────

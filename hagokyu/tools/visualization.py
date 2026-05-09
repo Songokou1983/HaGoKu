@@ -237,7 +237,7 @@ def _matplotlib_plot(
         elif plot_type == "box":
             if color:
                 groups = data.groupby(color)[y]
-                ax.boxplot([g.values for _, g in groups], labels=[g for g, _ in groups])
+                ax.boxplot([g.values for _, g in groups], label=[g for g, _ in groups])
             else:
                 ax.boxplot(data[y])
         elif plot_type == "heatmap":

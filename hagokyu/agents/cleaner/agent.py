@@ -104,6 +104,9 @@ class CleanerAgent(InteractionMixin):
         data_path: str,
         context: dict,
         project_id: str | None = None,
+        user_operations: list[dict[str, Any]] | None = None,
+        impact_warning: float = 0.10,
+        phase: str = "full",
     ) -> tuple[pd.DataFrame, CleaningReport, dict]:
         """
         执行数据清洗
@@ -111,11 +114,17 @@ class CleanerAgent(InteractionMixin):
         Args:
             data_path: 原始数据路径
             context: Scout 传来的 DataContext
+            project_id: 项目 ID
+            user_operations: 用户指定的清洗操作（覆盖自动策略）
+            impact_warning: 影响率阈值
+            phase: "full"=完整执行, "strategy_only"=只检测+计划
 
         Returns:
             (清洗后的 DataFrame, 清洗报告, 清洗摘要)
         """
         self._emit(EventType.AGENT_STARTED, {"goal": "清洗数据，去掉明显错误"})
+
+        report: CleaningReport | None = None
 
         # 加载数据
         try:
@@ -171,7 +180,30 @@ class CleanerAgent(InteractionMixin):
             if recalled:
                 hint = "参考经验：" + " | ".join(f"{r['metadata'].get('action','?')}({r['similarity']:.0%})" for r in recalled)
                 self._emit(EventType.AGENT_THINKING, {"thought": hint})
-            operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
+            # 用户指定操作优先，否则用规划的操作
+            if user_operations:
+                operations = user_operations
+                self._emit(EventType.AGENT_THINKING, {"thought": "使用用户指定的清洗操作"})
+            else:
+                operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
+
+            # phase="strategy_only"：只检测+计划，返回策略供用户确认
+            if phase == "strategy_only":
+                strategy_report = CleaningReport(
+                    total_rows_original=len(df),
+                    total_rows_after=len(df),
+                    operations=[],
+                    missing_mechanism=mechanisms,
+                    impact_rate=0.0,
+                    warnings=[],
+                    distribution_shift={},
+                    bias_risk="low",
+                    bias_risk_reason="仅检测，未执行清洗",
+                )
+                self._emit(EventType.AGENT_COMPLETED, {
+                    "result_summary": f"策略生成完成：{len(operations)} 个计划操作"
+                })
+                return df, strategy_report, {"operations": operations}
 
             # 4. 执行清洗
             self._emit(EventType.AGENT_THINKING, {"thought": f"执行 {len(operations)} 个清洗操作..."})
@@ -179,7 +211,7 @@ class CleanerAgent(InteractionMixin):
                 df,
                 operations=operations if operations else None,
                 auto_strategy=not bool(operations),
-                impact_warning=0.10,
+                impact_warning=impact_warning,
             )
 
             self._emit(EventType.TOOL_RESULT, {

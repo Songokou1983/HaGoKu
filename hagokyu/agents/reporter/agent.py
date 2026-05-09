@@ -14,6 +14,7 @@ import pandas as pd
 import yaml
 
 from ...config import LLMConfig
+from ...guardrails.parsers import validate_analysis_output
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.reporting import ReportData, ReportGenerator, ReportSection
@@ -347,6 +348,16 @@ class ReporterAgent(InteractionMixin):
 
         return cards
 
+    def _check_analyst_completeness(self, text: str) -> dict[str, bool]:
+        """验证 Analyst 输出是否包含必要的统计结论"""
+        result = validate_analysis_output(text)
+        missing = [k for k, v in result.items() if not v]
+        if missing:
+            self._emit(EventType.AGENT_THINKING, {
+                "thought": f"⚠️ Analyst 输出缺少: {', '.join(missing)}"
+            })
+        return result
+
     def _extract_key_findings(self, results: list[dict]) -> list[dict]:
         """提取关键发现"""
         findings = []
@@ -356,6 +367,15 @@ class ReporterAgent(InteractionMixin):
             headline = result.get("conclusion_plain", "").split("。")[0]
             if len(headline) > 60:
                 headline = headline[:57] + "..."
+
+            # 验证 Analyst 输出的结构完整性
+            validation_text = result.get("conclusion_statistical") or result.get("conclusion_plain") or ""
+            completeness_check = self._check_analyst_completeness(validation_text)
+
+            limitations = []
+            missing_items = [k for k, v in completeness_check.items() if not v]
+            if missing_items:
+                limitations.append(f"解析验证缺少: {', '.join(missing_items)}")
 
             finding = {
                 "analysis_type": result.get("analysis_type"),
@@ -367,6 +387,7 @@ class ReporterAgent(InteractionMixin):
                 "significance": significance,
                 "headline": headline,
                 "plain_explanation": result.get("conclusion_plain"),
+                "limitations": limitations,
             }
 
             findings.append(finding)

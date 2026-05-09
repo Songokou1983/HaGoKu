@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
@@ -32,11 +33,13 @@ class ScoutAgent(InteractionMixin):
         llm_config: LLMConfig,
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
+        llm_client: Any | None = None,
     ) -> None:
         self.role = "scout"
         self.llm_config = llm_config
         self.event_bus = event_bus
         self.scribe = scribe  # 可选，用于看板 block/unblock
+        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
         # 加载 prompt.md
         self.prompt = self._load_prompt()
@@ -559,6 +562,12 @@ class ScoutAgent(InteractionMixin):
         else:
             knowledge_hint = ""
 
+        system_prompt = (
+            "你是专业数据分析师，为每个字段生成一句中文自然语言描述（20字以内）。"
+            + (f"\n\n{knowledge_hint}" if knowledge_hint else "")
+            + "\n\n输出格式：字段名：描述"
+        )
+
         client = self._create_llm_client()
         result = ""
         try:
@@ -719,6 +728,8 @@ class ScoutAgent(InteractionMixin):
 
     def _create_llm_client(self):
         """创建 LLM 客户端（原始 OpenAI，不走 instructor）"""
+        if self._llm_client is not None:
+            return self._llm_client
         from openai import OpenAI
         return OpenAI(
             base_url=self.llm_config.base_url,

@@ -84,11 +84,13 @@ class AnalystAgent(InteractionMixin):
         llm_config: LLMConfig,
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
+        llm_client: Any | None = None,
     ) -> None:
         self.role = "analyst"
         self.llm_config = llm_config
         self.event_bus = event_bus
         self.scribe = scribe
+        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
         self.prompt = self._load_prompt()
         self.memory = self._load_memory()

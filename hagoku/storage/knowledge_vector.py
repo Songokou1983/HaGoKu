@@ -21,7 +21,7 @@ try:
 except ImportError:
     sqlite_vec = None
 
-from hagokyu.config import HaGoKuConfig
+from hagoku.config import HaGoKuConfig
 
 # 全局配置（从 .env 加载）
 _ha_config: HaGoKuConfig | None = None

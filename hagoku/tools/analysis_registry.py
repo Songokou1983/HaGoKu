@@ -7,7 +7,7 @@
 
 用法：
 ```python
-from hagokyu.tools.analysis_registry import analysis_registry, AnalysisMethod
+from hagoku.tools.analysis_registry import analysis_registry, AnalysisMethod
 
 @analysis_registry.register
 def my_new_analysis(df, context, params):
@@ -497,15 +497,15 @@ def load_plugins(registry: AnalysisRegistry | None = None) -> AnalysisRegistry:
     """
     加载用户自定义分析方法插件
 
-    扩展点：用户可在 ~/.hagokyu/plugins/ 目录下放置 Python 文件，
+    扩展点：用户可在 ~/.hagoku/plugins/ 目录下放置 Python 文件，
     HaGoKu 会自动扫描并注册其中的分析方法。
 
     插件文件命名规范：*_plugin.py
     插件中每个分析函数名为 do_xxx
 
-    示例：~/.hagokyu/plugins/marketing_plugin.py
+    示例：~/.hagoku/plugins/marketing_plugin.py
     ```python
-    from hagokyu.tools.analysis_registry import analysis_registry
+    from hagoku.tools.analysis_registry import analysis_registry
 
     @analysis_registry.register(
         name="marketing_mix",
@@ -521,7 +521,7 @@ def load_plugins(registry: AnalysisRegistry | None = None) -> AnalysisRegistry:
     from pathlib import Path
 
     reg = registry or analysis_registry
-    plugin_dir = Path.home() / ".hagokyu" / "plugins"
+    plugin_dir = Path.home() / ".hagoku" / "plugins"
 
     if not plugin_dir.exists():
         return reg

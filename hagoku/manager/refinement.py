@@ -160,7 +160,7 @@ class RefinementParser:
             ),
             "regenerate": (
                 "💡 重新生成请输入「退出」后重新 run，\n"
-                "   或直接运行：hagokyu run <数据文件> -q <新问题>"
+                "   或直接运行：hagoku run <数据文件> -q <新问题>"
             ),
             "speculate": (
                 "💡 HaGoKu 只呈现数据告诉你的事实，不推测原因。\n"

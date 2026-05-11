@@ -33,7 +33,7 @@ coverage.xml
 .mypy_cache/
 
 # HaGoKu runtime
-.hagokyu/
+.hagoku/
 *.db
 
 # Ruff

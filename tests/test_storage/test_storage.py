@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 import pandas as pd
 
-from hagokyu.storage.database import HaGoKuDB
-from hagokyu.storage.artifact import ArtifactManager
-from hagokyu.storage.output import OutputManager
-from hagokyu.config import OutputConfig
+from hagoku.storage.database import HaGoKuDB
+from hagoku.storage.artifact import ArtifactManager
+from hagoku.storage.output import OutputManager
+from hagoku.config import OutputConfig
 
 
 class TestHaGoKuDB:

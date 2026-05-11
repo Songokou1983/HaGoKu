@@ -10,8 +10,8 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-# 加载 ~/.hagokyu/.env 中的环境变量
-_load_env_path = Path.home() / ".hagokyu" / ".env"
+# 加载 ~/.hagoku/.env 中的环境变量
+_load_env_path = Path.home() / ".hagoku" / ".env"
 if _load_env_path.exists():
     load_dotenv(_load_env_path)
 
@@ -46,7 +46,7 @@ class ManagerModeConfig(BaseModel):
 class OutputConfig(BaseModel):
     """输出配置"""
 
-    project_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu" / "projects")
+    project_dir: Path = Field(default_factory=lambda: Path.home() / ".hagoku" / "projects")
     formats: list[str] = Field(default_factory=lambda: ["html"])
     date_format: str = "%Y%m%d_%H%M%S"
     naming: str = "{project}_{date}"
@@ -87,7 +87,7 @@ class HaGoKuConfig(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
-    work_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu")
+    work_dir: Path = Field(default_factory=lambda: Path.home() / ".hagoku")
 
     @classmethod
     def from_yaml(cls, path: Path) -> "HaGoKuConfig":
@@ -106,7 +106,7 @@ class HaGoKuConfig(BaseModel):
     def load(cls, config_path: Optional[Path] = None) -> "HaGoKuConfig":
         """加载配置：YAML + 环境变量覆盖"""
         if config_path is None:
-            config_path = Path.home() / ".hagokyu" / "config.yaml"
+            config_path = Path.home() / ".hagoku" / "config.yaml"
         config = cls.from_yaml(config_path)
         config = cls._merge_env(config)
         return config
@@ -144,14 +144,14 @@ class HaGoKuConfig(BaseModel):
         except PermissionError:
             # 权限不足 → 回退到临时目录
             import tempfile
-            self.work_dir = Path(tempfile.gettempdir()) / ".hagokyu"
+            self.work_dir = Path(tempfile.gettempdir()) / ".hagoku"
             self.work_dir.mkdir(exist_ok=True)
             (self.work_dir / "projects").mkdir(exist_ok=True)
 
     def save(self, config_path: Path | None = None) -> None:
         """保存配置到 YAML 文件"""
         if config_path is None:
-            config_path = Path.home() / ".hagokyu" / "config.yaml"
+            config_path = Path.home() / ".hagoku" / "config.yaml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
         # 排除 work_dir（这些由系统决定，不写入用户配置）
         data = self.model_dump(mode="json", exclude={"work_dir"})

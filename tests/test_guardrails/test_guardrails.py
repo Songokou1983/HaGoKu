@@ -2,7 +2,7 @@
 
 import pytest
 
-from hagokyu.guardrails.statistical import (
+from hagoku.guardrails.statistical import (
     NoConclusionWithoutTest,
     MustReportEffectSize,
     MustReportCI,

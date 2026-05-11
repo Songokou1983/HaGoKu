@@ -8,7 +8,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from hagokyu.api.ws_handler import ws_handler
+from hagoku.api.ws_handler import ws_handler
 
 app = FastAPI(title="HaGoKu API", version="0.1.0")
 
@@ -36,7 +36,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 # ── 静态文件服务（生产环境下前端 dist） ──────────────────────
-_web_dist = Path(__file__).resolve().parent.parent.parent / "hagokyu_web" / "dist"
+_web_dist = Path(__file__).resolve().parent.parent.parent / "hagoku_web" / "dist"
 if _web_dist.exists():
     app.mount("/", StaticFiles(directory=str(_web_dist), html=True), name="static")
 else:
@@ -45,17 +45,17 @@ else:
         return {
             "message": "HaGoKu API running",
             "docs": "/docs",
-            "hint": "Frontend not built. Run `cd hagokyu_web && npm run build` then restart server."
+            "hint": "Frontend not built. Run `cd hagoku_web && npm run build` then restart server."
         }
 
 
 def main():
-    """Entry point: hagokyu-api"""
+    """Entry point: hagoku-api"""
     import uvicorn
 
-    from hagokyu.api.ws_handler import set_orchestrator
-    from hagokyu.config import HaGoKuConfig
-    from hagokyu.manager.orchestrator import Orchestrator
+    from hagoku.api.ws_handler import set_orchestrator
+    from hagoku.config import HaGoKuConfig
+    from hagoku.manager.orchestrator import Orchestrator
 
     # 预初始化 Orchestrator（注册 EventBus 到 WS Handler）
     # 确保前端连接时已订阅事件总线
@@ -63,7 +63,7 @@ def main():
     orchestrator = Orchestrator(config)
     set_orchestrator(orchestrator)
 
-    uvicorn.run("hagokyu.api.server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("hagoku.api.server:app", host="0.0.0.0", port=8000, reload=True)
 
 
 if __name__ == "__main__":

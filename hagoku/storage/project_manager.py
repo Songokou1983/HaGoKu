@@ -182,7 +182,7 @@ class ProjectManager:
         └── notes.md
 
     用法：
-    pm = ProjectManager(Path("~/.hagokyu/projects"))
+    pm = ProjectManager(Path("~/.hagoku/projects"))
     pm.create("Q1销售分析", "分析Q1各渠道ROI")
     pm.add_data("Q1销售分析", Path("/tmp/sales.csv"))
     pm.list()
@@ -222,7 +222,7 @@ class ProjectManager:
         Args:
             name: 项目名称
             description: 项目描述
-            parent_dir: 项目目录的父目录（留空则使用默认的 ~/.hagokyu/projects/）
+            parent_dir: 项目目录的父目录（留空则使用默认的 ~/.hagoku/projects/）
 
         Returns:
             ProjectInfo 对象

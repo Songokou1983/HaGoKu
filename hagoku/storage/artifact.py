@@ -67,7 +67,7 @@ class ArtifactManager:
     def __init__(self, base_dir: Path) -> None:
         """
         Args:
-            base_dir: 项目数据目录，如 ~/.hagokyu/projects/sales_analysis/data/
+            base_dir: 项目数据目录，如 ~/.hagoku/projects/sales_analysis/data/
         """
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)

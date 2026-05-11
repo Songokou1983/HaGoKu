@@ -3,7 +3,7 @@
 
 import pytest
 
-from hagokyu.api.server import app
+from hagoku.api.server import app
 
 
 class TestHealthEndpoint:
@@ -25,5 +25,5 @@ class TestServerMain:
 
     def test_main_imports_without_error(self):
         """测试 main 函数可以正常导入"""
-        from hagokyu.api.server import main
+        from hagoku.api.server import main
         assert callable(main)

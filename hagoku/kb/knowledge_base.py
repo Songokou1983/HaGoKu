@@ -160,7 +160,7 @@ def retrieve_knowledge(
     """快捷函数：检索知识条目
 
     Agent 调用示例：
-        from hagokyu.kb import retrieve_knowledge
+        from hagoku.kb import retrieve_knowledge
         kb_results = retrieve_knowledge(context="用户留存分析怎么做", limit=2)
         # 返回 [{"title": "...", "content": "...", "tags": [...], ...}, ...]
     """

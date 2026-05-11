@@ -8,20 +8,20 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from hagokyu.storage.database import HaGoKuDB
-from hagokyu.storage.memory import (
+from hagoku.storage.database import HaGoKuDB
+from hagoku.storage.memory import (
     AnalysisPatternDef,
     CleaningPrefDef,
     ColumnSemanticDef,
     MemoryManager,
     ProgressYaml,
 )
-from hagokyu.storage.memory_backends import (
+from hagoku.storage.memory_backends import (
     MemoryBackend,
     SqliteMemoryBackend,
     YamlMemoryBackend,
 )
-from hagokyu.agents.scout import ColumnSemantic, DataContext, SemanticType
+from hagoku.agents.scout import ColumnSemantic, DataContext, SemanticType
 
 
 # ── Fixtures ──────────────────────────────────────────────────

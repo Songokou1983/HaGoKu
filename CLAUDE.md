@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Context
 
-This repository contains **one primary project**: `hagokyu/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
+This repository contains **one primary project**: `hagoku/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
 
-## hagokyu/ — HaGoKu 多 Agent 数据分析平台
+## hagoku/ — HaGoKu 多 Agent 数据分析平台
 
 > 项目灵魂、Agent 表、架构原则、命令参考、技术栈 → 见 **[PROJECT.md](PROJECT.md)**（唯一真相源）。
 > UI 设计原则、全局工作原则、Karpathy 编码原则 → 见下文。
@@ -36,10 +36,10 @@ This repository contains **one primary project**: `hagokyu/`（主项目）。�
 **双层 LLM（P0.3）**：通过 `HAGOKYU_LLM_MODEL_DEEP` / `HAGOKYU_LLM_MODEL_QUICK` 环境变量区分。
 - `llm_deep`：Analyst（假设检验/回归推理）、仲裁器（计划决策）
 - `llm_quick`：Scout（类型推断）、Cleaner（清洗决策）、Reporter（格式化渲染）
-- 工厂函数在 `hagokyu/llm/client.py`：`create_deep_client()` / `create_quick_client()`
+- 工厂函数在 `hagoku/llm/client.py`：`create_deep_client()` / `create_quick_client()`
 - 回退逻辑：未设置 deep/quick 时复用 `HAGOKYU_LLM_MODEL`
 
-**结构化输出解析器（P1.2）**：`hagokyu/guardrails/parsers.py`
+**结构化输出解析器（P1.2）**：`hagoku/guardrails/parsers.py`
 - `parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`、`parse_confidence_interval()`
 - `validate_analysis_output()` 综合 4 项检查
 - Reporter 需调用解析器验证 Analyst 输出结构完整性

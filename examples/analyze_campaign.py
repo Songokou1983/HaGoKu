@@ -39,12 +39,12 @@ def main() -> None:
 
     # 1. 数据画像
     print("\n### 1. 数据画像 — 快速了解数据全貌 ###\n")
-    run_cmd(["hagokyu", "profile", str(EXAMPLE_DATA)])
+    run_cmd(["hagoku", "profile", str(EXAMPLE_DATA)])
 
     # 2. 完整分析
     print("\n### 2. 完整分析 — 提问，拿报告 ###\n")
     run_cmd([
-        "hagokyu", "run", str(EXAMPLE_DATA),
+        "hagoku", "run", str(EXAMPLE_DATA),
         "-q", "哪个广告渠道的转化率和ROI最好？",
         "-f", "html", "-f", "md",
     ])
@@ -52,16 +52,16 @@ def main() -> None:
     # 3. 快速模式
     print("\n### 3. 快速模式 — 零交互出结果 ###\n")
     run_cmd([
-        "hagokyu", "quick", str(EXAMPLE_DATA),
+        "hagoku", "quick", str(EXAMPLE_DATA),
         "-q", "分析不同渠道的花费和收入关系",
     ])
 
     # 4. 查看项目历史
     print("\n### 4. 查看项目历史 ###\n")
-    run_cmd(["hagokyu", "projects"])
+    run_cmd(["hagoku", "projects"])
 
     print("\n示例运行完毕。")
-    print("报告保存在 ~/.hagokyu/projects/ 目录下。")
+    print("报告保存在 ~/.hagoku/projects/ 目录下。")
 
 
 if __name__ == "__main__":

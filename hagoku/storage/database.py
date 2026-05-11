@@ -151,7 +151,7 @@ class HaGoKuDB:
         """获取全局单例"""
         if cls._instance is None:
             if db_path is None:
-                db_path = Path.home() / ".hagokyu" / "hagokyu.db"
+                db_path = Path.home() / ".hagoku" / "hagoku.db"
             cls._instance = cls(db_path)
         return cls._instance
 
@@ -578,7 +578,7 @@ class HaGoKuDB:
         self.conn.execute(
             "INSERT OR IGNORE INTO project_state "
             "(project_id, goal, data_path, data_hash, stage, next_action, updated_at) "
-            "VALUES (?, ?, ?, ?, 'created', 'run hagokyu profile to start', ?)",
+            "VALUES (?, ?, ?, ?, 'created', 'run hagoku profile to start', ?)",
             (project_id, goal, data_path, data_hash, now),
         )
         self.conn.commit()

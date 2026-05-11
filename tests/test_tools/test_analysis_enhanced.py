@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hagokyu.tools.analysis import (
+from hagoku.tools.analysis import (
     check_test_assumptions,
     cross_validate,
     interaction_analysis,

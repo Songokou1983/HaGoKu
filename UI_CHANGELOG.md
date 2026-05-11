@@ -38,7 +38,7 @@
 
 ### 动机
 
-旧 Streamlit WebUI（`hagokyu/ui/`）存在以下问题：
+旧 Streamlit WebUI（`hagoku/ui/`）存在以下问题：
 - 页面/组件耦合度高，不支持面板拖拽布局
 - Python 单页应用，无法利用现代前端生态
 - 无实时 WebSocket 事件流，分析进度不可见
@@ -47,8 +47,8 @@
 ### 新架构
 
 ```
-hagokyu_web/ (React + TypeScript + Vite)  ← 前端
-hagokyu/api/  (FastAPI + WebSocket)       ← 后端
+hagoku_web/ (React + TypeScript + Vite)  ← 前端
+hagoku/api/  (FastAPI + WebSocket)       ← 后端
 ```
 
 | 组件 | 旧（Streamlit） | 新（React + FastAPI） |
@@ -76,34 +76,34 @@ hagokyu/api/  (FastAPI + WebSocket)       ← 后端
 
 | 文件 | 职责 |
 |------|------|
-| `hagokyu/api/server.py` | FastAPI app + CORS + 静态文件挂载（Vite dist） |
-| `hagokyu/api/ws_handler.py` | WebSocket `/ws` 端点：事件广播、心跳、分析命令处理 |
-| `hagokyu/api/__init__.py` | 模块导出 |
+| `hagoku/api/server.py` | FastAPI app + CORS + 静态文件挂载（Vite dist） |
+| `hagoku/api/ws_handler.py` | WebSocket `/ws` 端点：事件广播、心跳、分析命令处理 |
+| `hagoku/api/__init__.py` | 模块导出 |
 
 ### 启动方式变更
 
-**旧：** `hagokyu-ui` → http://localhost:8501（Streamlit）
+**旧：** `hagoku-ui` → http://localhost:8501（Streamlit）
 
 **新：**
 ```bash
 # 终端 1：后端
-hagokyu-api          # http://localhost:8000
+hagoku-api          # http://localhost:8000
 
 # 终端 2：前端
-cd hagokyu_web && npm run dev   # http://localhost:5173
+cd hagoku_web && npm run dev   # http://localhost:5173
 ```
 
 ### 删除的文件
 
-- `hagokyu/ui/` 整个目录（已废弃）
+- `hagoku/ui/` 整个目录（已废弃）
 - 旧 Streamlit 组件：`event_log.py`, `file_uploader.py`, `folder_picker.py`, `project_sidebar.py`, `report_viewer.py`
-- `hagokyu/ui/components/folder_picker_component/`
+- `hagoku/ui/components/folder_picker_component/`
 
 ### pyproject.toml 变更
 
 - **删除依赖：** `streamlit`
 - **新增依赖：** `fastapi>=0.115.0`, `uvicorn[standard]>=0.30.0`
-- **新增脚本：** `hagokyu-api = "hagokyu.api.server:main"`
+- **新增脚本：** `hagoku-api = "hagoku.api.server:main"`
 
 ### 验证状态
 

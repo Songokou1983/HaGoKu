@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hagokyu.tools.visualization import (
+from hagoku.tools.visualization import (
     create_plot,
     generate_data_overview_charts,
     generate_insight_charts,

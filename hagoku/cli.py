@@ -40,7 +40,7 @@ def _get_demo_path(name: str) -> Path | None:
     filename = DEMO_DATASETS[name]["file"]
 
     # 尝试从源码路径加载（开发模式）
-    # __file__ = hagokyu/cli.py → 项目根 = 上2级
+    # __file__ = hagoku/cli.py → 项目根 = 上2级
     this_file = Path(__file__)
     project_root = this_file.parent.parent
     local_demo = project_root / "examples" / filename
@@ -49,9 +49,9 @@ def _get_demo_path(name: str) -> Path | None:
 
     # 尝试从包内路径加载（wheel 安装后）
     try:
-        import hagokyu
-        # hagokyu.__file__ = hagokyu/__init__.py
-        pkg_proj = Path(hagokyu.__file__).parent.parent  # = 项目根/
+        import hagoku
+        # hagoku.__file__ = hagoku/__init__.py
+        pkg_proj = Path(hagoku.__file__).parent.parent  # = 项目根/
         pkg_demo = pkg_proj / "examples" / filename
         if pkg_demo.exists():
             return pkg_demo
@@ -69,28 +69,28 @@ WELCOME_SCREEN = """
 ╚══════════════════════════════════════════════════════════╝
 
 🚀 快速开始：
-   hagokyu demo                            # 查看示例数据
-   hagokyu run --demo ad_campaign -q "哪个渠道roi最高"
-   hagokyu quick --demo conversion
+   hagoku demo                            # 查看示例数据
+   hagoku run --demo ad_campaign -q "哪个渠道roi最高"
+   hagoku quick --demo conversion
 
 📂 完整命令：
-   hagokyu run <file> -q "问题"          # 运行分析
-   hagokyu profile <file>               # 数据画像
-   hagokyu project create <名称>         # 创建项目
-   hagokyu doctor                         # 检查系统状态
-   hagokyu-ui                            # 启动 Web UI
+   hagoku run <file> -q "问题"          # 运行分析
+   hagoku profile <file>               # 数据画像
+   hagoku project create <名称>         # 创建项目
+   hagoku doctor                         # 检查系统状态
+   hagoku-ui                            # 启动 Web UI
 
 💡 示例数据（无需准备，直接体验）：
    ad_campaign   广告投放数据（百度/抖音/微信）
    conversion   转化漏斗数据
    user_cohort  用户队列数据
 
-文档：https://github.com/hagokyu/hagokyu
+文档：https://github.com/hagoku/hagoku
 """
 
 
 @click.group()
-@click.version_option(package_name="hagokyu")
+@click.version_option(package_name="hagoku")
 def cli() -> None:
     """HaGoKu — 用数学的力量，挖出数据背后真正的信息"""
     pass
@@ -134,9 +134,9 @@ def run(
     """运行完整分析流程
 
     示例：
-        hagokyu run data.csv -q "哪个渠道效果最好"
-        hagokyu run --demo ad_campaign -q "哪个渠道roi最高"
-        hagokyu run -D conversion -q "分析转化漏斗"
+        hagoku run data.csv -q "哪个渠道效果最好"
+        hagoku run --demo ad_campaign -q "哪个渠道roi最高"
+        hagoku run -D conversion -q "分析转化漏斗"
     """
     from .manager.orchestrator import Orchestrator
     from .observability.display import TerminalDisplay
@@ -146,7 +146,7 @@ def run(
         resolved = _get_demo_path(demo)
         if resolved is None:
             click.echo(f"❌ 找不到演示数据集: {demo}", err=True)
-            click.echo("   使用 `hagokyu demo` 查看可用的演示数据集")
+            click.echo("   使用 `hagoku demo` 查看可用的演示数据集")
             raise SystemExit(1)
         data_path = str(resolved)
         ds_info = DEMO_DATASETS[demo]
@@ -158,7 +158,7 @@ def run(
     elif not data_path:
         click.echo("❌ 请提供数据文件路径，或使用 --demo <数据集> 选择演示数据", err=True)
         click.echo("   可用演示数据: " + " ".join(DEMO_DATASETS.keys()))
-        click.echo("   示例: hagokyu run --demo ad_campaign -q \"哪个渠道roi最高\"")
+        click.echo("   示例: hagoku run --demo ad_campaign -q \"哪个渠道roi最高\"")
         raise SystemExit(1)
 
     # 加载配置
@@ -233,10 +233,10 @@ def quick_run(data_path: str | None, demo: str | None, query: str) -> None:
     """快速模式：零交互，自动分析
 
     示例：
-        hagokyu quick data.csv                          # 自动探索
-        hagokyu quick data.csv -q "哪个渠道效果最好"     # 指定问题
-        hagokyu quick --demo ad_campaign               # 用演示数据自动探索
-        hagokyu quick -D conversion                    # 用转化漏斗数据
+        hagoku quick data.csv                          # 自动探索
+        hagoku quick data.csv -q "哪个渠道效果最好"     # 指定问题
+        hagoku quick --demo ad_campaign               # 用演示数据自动探索
+        hagoku quick -D conversion                    # 用转化漏斗数据
     """
     # --demo 优先
     if demo:
@@ -296,9 +296,9 @@ def demo_cmd(dataset: str | None, query: str | None) -> None:
     """查看或运行内置演示数据集
 
     示例：
-        hagokyu demo                           # 列出所有演示数据集
-        hagokyu demo ad_campaign               # 查看广告投放数据集详情
-        hagokyu demo ad_campaign -q "哪个渠道roi最高"  # 直接运行分析
+        hagoku demo                           # 列出所有演示数据集
+        hagoku demo ad_campaign               # 查看广告投放数据集详情
+        hagoku demo ad_campaign -q "哪个渠道roi最高"  # 直接运行分析
     """
     if dataset is None or dataset == "list":
         _list_demos()
@@ -360,9 +360,9 @@ def _list_demos() -> None:
         click.echo()
 
     click.echo("用法:")
-    click.echo("  hagokyu demo ad_campaign              # 查看数据详情")
-    click.echo("  hagokyu demo ad_campaign -q \"哪个渠道效果最好\"  # 运行分析")
-    click.echo("  hagokyu run --demo ad_campaign -q \"哪个渠道效果最好\"  # 同上")
+    click.echo("  hagoku demo ad_campaign              # 查看数据详情")
+    click.echo("  hagoku demo ad_campaign -q \"哪个渠道效果最好\"  # 运行分析")
+    click.echo("  hagoku run --demo ad_campaign -q \"哪个渠道效果最好\"  # 同上")
 
 
 @cli.command()
@@ -401,11 +401,11 @@ def projects() -> None:
     from .storage.database import HaGoKuDB
 
     config = HaGoKuConfig.load()
-    db = HaGoKuDB.get_instance(config.work_dir / "hagokyu.db")
+    db = HaGoKuDB.get_instance(config.work_dir / "hagoku.db")
     projs = db.list_projects()
 
     if not projs:
-        click.echo("暂无项目。使用 `hagokyu run` 开始第一个分析。")
+        click.echo("暂无项目。使用 `hagoku run` 开始第一个分析。")
         return
 
     for p in projs:
@@ -421,7 +421,7 @@ def history(project_name: str) -> None:
     from .storage.database import HaGoKuDB
 
     config = HaGoKuConfig.load()
-    db = HaGoKuDB.get_instance(config.work_dir / "hagokyu.db")
+    db = HaGoKuDB.get_instance(config.work_dir / "hagoku.db")
     runs = db.get_run_history(project_name)
 
     if not runs:
@@ -440,7 +440,7 @@ def history(project_name: str) -> None:
 def config_cmd(reset: bool) -> None:
     """查看/管理配置"""
     if reset:
-        config_path = Path.home() / ".hagokyu" / "config.yaml"
+        config_path = Path.home() / ".hagoku" / "config.yaml"
         if config_path.exists():
             config_path.unlink()
             click.echo("✅ 配置已重置为默认值")
@@ -468,7 +468,7 @@ def list_methods(tag: str | None) -> None:
     商业方法 — 回答业务问题
       ROI/ROAS、LTV/CAC、回本周期、NPV/IRR、归因、漏斗
 
-    新增方法：放入 ~/.hagokyu/plugins/*_plugin.py，HaGoKu 自动加载
+    新增方法：放入 ~/.hagoku/plugins/*_plugin.py，HaGoKu 自动加载
     """
     from .tools import load_plugins
 
@@ -476,7 +476,7 @@ def list_methods(tag: str | None) -> None:
 
     click.echo("📊 HaGoKu 分析方法")
     click.echo(f"   共 {reg.summary()['total_methods']} 个内置方法")
-    click.echo("   插件目录: ~/.hagokyu/plugins/*_plugin.py")
+    click.echo("   插件目录: ~/.hagoku/plugins/*_plugin.py")
     click.echo()
 
     if tag:
@@ -519,7 +519,7 @@ def list_methods(tag: str | None) -> None:
             click.echo(f"     {desc}")
 
     click.echo()
-    click.echo("  💡 新增方法：在 ~/.hagokyu/plugins/ 放入 *_plugin.py 文件")
+    click.echo("  💡 新增方法：在 ~/.hagoku/plugins/ 放入 *_plugin.py 文件")
 
 
 @cli.command(name="doctor")
@@ -527,8 +527,8 @@ def doctor_cmd() -> None:
     """检查系统健康状态（LLM 连接、依赖库）
 
     示例：
-        hagokyu doctor              # 完整检查
-        hagokyu doctor --llm-only    # 只检查 LLM
+        hagoku doctor              # 完整检查
+        hagoku doctor --llm-only    # 只检查 LLM
     """
     from .tools.health import check_system, format_health_report
 
@@ -541,7 +541,7 @@ def doctor_cmd() -> None:
     if llm_result and not llm_result.ok:
         click.echo()
         click.echo("💡 快速配置 LLM:")
-        click.echo("   hagokyu config                    # 查看当前配置")
+        click.echo("   hagoku config                    # 查看当前配置")
         click.echo("   # 或设置环境变量:")
         click.echo("   export HAGOKYU_LLM_BASE_URL=http://localhost:8000/v1")
 
@@ -692,9 +692,9 @@ def project_cmd() -> None:
       - output/ 报告、可视化
 
     工作流：
-      hagokyu project create "Q1销售分析"
-      hagokyu project add "Q1销售分析" ~/data/sales.csv
-      hagokyu project run "Q1销售分析" -q "哪个渠道效果最好"
+      hagoku project create "Q1销售分析"
+      hagoku project add "Q1销售分析" ~/data/sales.csv
+      hagoku project run "Q1销售分析" -q "哪个渠道效果最好"
     """
     pass
 
@@ -758,7 +758,7 @@ def project_list() -> None:
 
     if not projects:
         click.echo("暂无项目。")
-        click.echo("  创建: hagokyu project create <项目名>")
+        click.echo("  创建: hagoku project create <项目名>")
         return
 
     click.echo(f"📁 共 {len(projects)} 个项目:\n")
@@ -803,7 +803,7 @@ def project_info(project: str) -> None:
             added = f.added_at.strftime("%m-%d %H:%M")
             click.echo(f"    • {f.name}  {f.size_kb:.1f} KB  添加于 {added}")
     else:
-        click.echo("  📄 输入文件: （暂无，添加: hagokyu project add）")
+        click.echo("  📄 输入文件: （暂无，添加: hagoku project add）")
 
     click.echo()
 
@@ -876,7 +876,7 @@ def project_run(
         data_path = pm.get_latest_data(project)
         if data_path is None:
             click.echo(f"❌ 项目 '{project}' 暂无输入文件", err=True)
-            click.echo(f"   添加数据: hagokyu project add {project} <文件路径>")
+            click.echo(f"   添加数据: hagoku project add {project} <文件路径>")
             raise SystemExit(1)
         click.echo(f"📄 使用: {data_path.name}")
 
@@ -925,7 +925,7 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
     from .storage.memory import MemoryManager
 
     config = HaGoKuConfig.load()
-    db = HaGoKuDB.get_instance(config.work_dir / "hagokyu.db")
+    db = HaGoKuDB.get_instance(config.work_dir / "hagoku.db")
 
     pid = None if is_global else project_name
 
@@ -972,7 +972,7 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
         click.echo("🧠 记忆概览:")
         projs = db.list_projects()
         if not projs:
-            click.echo("   暂无项目记忆。运行 `hagokyu run` 后自动积累。")
+            click.echo("   暂无项目记忆。运行 `hagoku run` 后自动积累。")
             return
         for p in projs:
             mems = mm.load(p["id"])
@@ -1123,7 +1123,7 @@ def _run_refinement_loop(
             click.echo("─" * 50)
             click.echo("🎉 本轮交互已达上限！")
             click.echo("   报告已保存，你可以：")
-            click.echo("   • 用新问题重新运行 hagokyu run（基于已有记忆）")
+            click.echo("   • 用新问题重新运行 hagoku run（基于已有记忆）")
             click.echo("   • 修改数据后重新分析")
             click.echo("   • 输入「退出」直接结束")
             try:

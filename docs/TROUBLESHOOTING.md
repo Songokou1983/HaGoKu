@@ -14,10 +14,10 @@
 
 **验证**：
 ```bash
-cd /home/son_goku/hagokyu
+cd /home/son_goku/hagoku
 .venv/bin/python -c "
-from hagokyu.manager.orchestrator import Orchestrator
-from hagokyu.config import HaGoKuConfig
+from hagoku.manager.orchestrator import Orchestrator
+from hagoku.config import HaGoKuConfig
 config = HaGoKuConfig.load()
 orch = Orchestrator(config)
 result = orch.run('data.csv', '分析问题', project_name='test', phase='scout_first')
@@ -35,17 +35,17 @@ print(result['status'])
 
 **根因**：`.env` 文件没有被 `config.py` 正确加载。
 
-**修复** (`hagokyu/config.py`)：
+**修复** (`hagoku/config.py`)：
 ```python
 from dotenv import load_dotenv
-_load_env_path = Path.home() / ".hagokyu" / ".env"
+_load_env_path = Path.home() / ".hagoku" / ".env"
 if _load_env_path.exists():
     load_dotenv(_load_env_path)
 ```
 
 **注意**：不要修改 `.env` 路径，不要删除这个逻辑。
 
-**验证**：运行 `hagokyu doctor` 检查 LLM 连接。
+**验证**：运行 `hagoku doctor` 检查 LLM 连接。
 
 ---
 
@@ -53,7 +53,7 @@ if _load_env_path.exists():
 
 **根因**：worker 线程访问 SQLite 时报 `SQLite objects created in a thread can only be used in that same thread`。
 
-**修复** (`hagokyu/storage/database.py`)：
+**修复** (`hagoku/storage/database.py`)：
 ```python
 self.conn = sqlite3.connect(str(db_path), timeout=30, check_same_thread=False)
 self._lock = threading.RLock()
@@ -83,7 +83,7 @@ def transaction(self):
 
 **验证**：
 ```bash
-grep -n "emit_event(" hagokyu/agents/*.py
+grep -n "emit_event(" hagoku/agents/*.py
 # 确保都是 emit_event(EventType, {data})，没有 3 参数形式
 ```
 
@@ -101,8 +101,8 @@ grep -n "emit_event(" hagokyu/agents/*.py
 
 **验证**：
 ```bash
-grep -n "column_semantics" hagokyu/manager/orchestrator.py
-grep -n "scout_data.get" hagokyu/ui/_pages/app_analyze.py
+grep -n "column_semantics" hagoku/manager/orchestrator.py
+grep -n "scout_data.get" hagoku/ui/_pages/app_analyze.py
 ```
 
 ---

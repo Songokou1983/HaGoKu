@@ -1,4 +1,4 @@
-/** Event types mirrored from hagokyu.observability.events.EventType */
+/** Event types mirrored from hagoku.observability.events.EventType */
 export type EventType =
   | "plan_created"
   | "task_assigned"

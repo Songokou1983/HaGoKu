@@ -59,7 +59,7 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 | 🔄 **普通模式**（默认） | 关键决策点寻求确认 | 流程强制互动（字段语义确认）+ 参与式互动（方法选择等） | ≤ 6 次 |
 | 🎓 **资深模式** | 用户参与每个决策 | 每个环节可介入、可跳过、可重做 | 无限制 |
 
-**模式切换机制**：`hagokyu mode <fast|normal|expert>`。切换只影响后续决策，已执行步骤不回滚（资深模式可手动重做）。
+**模式切换机制**：`hagoku mode <fast|normal|expert>`。切换只影响后续决策，已执行步骤不回滚（资深模式可手动重做）。
 
 ---
 
@@ -113,7 +113,7 @@ Layer 3: LLM 自由发挥（兜底）               无匹配时自行判断
 **项目记忆** (progress.yaml)：字段决策、用户偏好、分析历史。跟随项目生命周期，Scribe 维护。
 
 ```yaml
-# ~/.hagokyu/projects/{name}/progress.yaml
+# ~/.hagoku/projects/{name}/progress.yaml
 project: sales_analysis
 created_at: 2026-05-01
 milestones:
@@ -157,7 +157,7 @@ field_decisions:
 HaGoKu 的 Agent 之间不直接对话，通过**看板**交换信息：
 
 ```
-~/.hagokyu/projects/{project}/
+~/.hagoku/projects/{project}/
 ├── kanban.db       ← SQLite 看板数据库（Agent 间消息队列）
 ├── context.md      ← 项目上下文摘要（所有 Agent 共享）
 ├── data/           ← 数据制品
@@ -253,9 +253,9 @@ HaGoKu 的 Agent 之间不直接对话，通过**看板**交换信息：
 ### 存储架构
 
 ```
-~/.hagokyu/
+~/.hagoku/
 ├── config.yaml
-├── hagokyu.db                      # SQLite 元数据库
+├── hagoku.db                      # SQLite 元数据库
 └── projects/{name}/
     ├── progress.yaml               # 项目记忆
     ├── context.md                  # 看板上下文
@@ -282,9 +282,9 @@ HaGoKu 的 Agent 之间不直接对话，通过**看板**交换信息：
 **持续性分析能力**：
 
 ```bash
-hagokyu history --project sales_analysis    # 查看历史分析
-hagokyu run --project X --resume --query "..."  # 复用已清洗数据（V2）
-hagokyu query "所有 p<0.01 的发现"          # 查询历史发现（V2）
+hagoku history --project sales_analysis    # 查看历史分析
+hagoku run --project X --resume --query "..."  # 复用已清洗数据（V2）
+hagoku query "所有 p<0.01 的发现"          # 查询历史发现（V2）
 ```
 
 > **V2** 计划支持 `diff` 对比两次分析结果、外部数据库直连（PostgreSQL/MySQL）。MVP 阶段聚焦本地文件。
@@ -324,10 +324,10 @@ HaGoKu 全程透明，用户坐副驾驶位，可视化工作流进度：
 
 ## 项目结构
 
-使用 flat 布局（`hagokyu/` 在项目根，不是 `src/` 布局）。
+使用 flat 布局（`hagoku/` 在项目根，不是 `src/` 布局）。
 
 ```
-hagokyu/
+hagoku/
 ├── pyproject.toml
 ├── README.md
 ├── PROJECT.md                    # 本文件 — 唯一真相源
@@ -335,7 +335,7 @@ hagokyu/
 ├── CLAUDE.md                     # AI 编码助手上下文
 ├── .env.example
 │
-├── hagokyu/                      # flat 布局，全部代码
+├── hagoku/                      # flat 布局，全部代码
 │   ├── cli.py                    # CLI 入口 (Click)
 │   ├── config.py                 # 全局配置
 │   ├── log.py                    # 结构化日志
@@ -404,7 +404,7 @@ hagokyu/
 │   │   ├── ws_handler.py         # WebSocket 事件广播 + 心跳
 │   │   └── __init__.py
 │   │
-│   └── ui/                       # (已废弃，替换为 hagokyu_web/)
+│   └── ui/                       # (已废弃，替换为 hagoku_web/)
 │
 ├── docs/
 │   ├── DEVELOPMENT.md
@@ -458,8 +458,8 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 ### V2 — 洞察可见，分析可持续
 
-- [x] FastAPI + WebSocket API（hagokyu/api/）
-- [x] React Web UI（hagokyu_web/，dockview 面板布局）
+- [x] FastAPI + WebSocket API（hagoku/api/）
+- [x] React Web UI（hagoku_web/，dockview 面板布局）
 - [ ] 每个检验配诊断图
 - [ ] 执行回放 (replay)
 - [ ] 报告导出 HTML/PDF
@@ -521,7 +521,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
    - 预期收益：降低 ~40% token 消耗 + 响应延迟
 
 2. **结构化输出解析器**（从模式 3 借鉴）：
-   - 新增 `hagokyu/guardrails/parsers.py`：`parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`
+   - 新增 `hagoku/guardrails/parsers.py`：`parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`
    - 护栏从"检查 LLM 是否输出"升级为"解析 + 校验"
    - Reporter 用解析器验证 Analyst 输出的结构完整性
 
@@ -565,7 +565,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding 服务地址 | 同 `HAGOKYU_LLM_BASE_URL` |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | 同 `HAGOKYU_LLM_API_KEY` |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
-| `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagokyu` |
+| `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 | `HAGOKYU_MANAGER_MODE` | 仲裁器模式 | `balanced` |
 
 > `.env.example` 提供模板，复制为 `.env` 后修改。环境变量优先于配置文件。
@@ -591,38 +591,38 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu run <file> -q "问题"` | 完整分析（`--mode quick/standard/expert`） |
-| `hagokyu quick <file>` | 快速模式（零交互） |
-| `hagokyu demo` | 列出内置演示数据集 |
-| `hagokyu profile <file>` | 数据画像 |
+| `hagoku run <file> -q "问题"` | 完整分析（`--mode quick/standard/expert`） |
+| `hagoku quick <file>` | 快速模式（零交互） |
+| `hagoku demo` | 列出内置演示数据集 |
+| `hagoku profile <file>` | 数据画像 |
 
 ### 项目管理
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu project create <名> -d "描述"` | 创建项目 |
-| `hagokyu project add <项目> <文件>` | 添加数据 |
-| `hagokyu project run <项目> -q "问题"` | 项目分析 |
-| `hagokyu project list` | 列出项目 |
-| `hagokyu project info <项目>` | 项目详情 |
-| `hagokyu project delete <项目>` | 删除项目 |
+| `hagoku project create <名> -d "描述"` | 创建项目 |
+| `hagoku project add <项目> <文件>` | 添加数据 |
+| `hagoku project run <项目> -q "问题"` | 项目分析 |
+| `hagoku project list` | 列出项目 |
+| `hagoku project info <项目>` | 项目详情 |
+| `hagoku project delete <项目>` | 删除项目 |
 
 ### 诊断 & 工具
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu doctor` | 系统健康检查 |
-| `hagokyu methods` | 可用分析方法 |
-| `hagokyu guardrails` | 护栏规则 |
-| `hagokyu config` | 查看/重置配置 |
+| `hagoku doctor` | 系统健康检查 |
+| `hagoku methods` | 可用分析方法 |
+| `hagoku guardrails` | 护栏规则 |
+| `hagoku config` | 查看/重置配置 |
 
 ### 记忆 & 历史
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu memory <项目>` | 查看项目记忆 |
-| `hagokyu history <项目>` | 运行历史 |
-| `hagokyu replay <run_id>` | 回放分析 |
+| `hagoku memory <项目>` | 查看项目记忆 |
+| `hagoku history <项目>` | 运行历史 |
+| `hagoku replay <run_id>` | 回放分析 |
 
 ---
 

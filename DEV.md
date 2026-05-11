@@ -7,7 +7,7 @@
 ## 环境搭建
 
 ```bash
-git clone <repo-url> && cd hagokyu
+git clone <repo-url> && cd hagoku
 
 # 虚拟环境
 python3 -m venv .venv && source .venv/bin/activate
@@ -17,7 +17,7 @@ pip install -e ".[dev]"
 
 # 配置 LLM
 cp .env.example .env
-# 编辑 .env 填入 API 地址和密钥（MiniMax 云端，`~/.hagokyu/.env`）
+# 编辑 .env 填入 API 地址和密钥（MiniMax 云端，`~/.hagoku/.env`）
 
 # 验证
 pytest tests/ -q
@@ -33,13 +33,13 @@ pytest tests/ -q                    # 全部测试
 pytest tests/test_agents/ -q       # 单模块
 
 # 代码质量
-ruff check hagokyu/                 # lint
-mypy hagokyu/                       # 类型检查
+ruff check hagoku/                 # lint
+mypy hagoku/                       # 类型检查
 
 # 直接调试后端（不经过 UI）
 .venv/bin/python -c "
-from hagokyu.config import HaGoKuConfig
-from hagokyu.manager.orchestrator import Orchestrator
+from hagoku.config import HaGoKuConfig
+from hagoku.manager.orchestrator import Orchestrator
 config = HaGoKuConfig.load()
 orch = Orchestrator(config)
 result = orch.run('data.csv', '分析问题', phase='scout_first')
@@ -47,10 +47,10 @@ print(result['status'])
 "
 
 # 启动后端 API（FastAPI + WebSocket）
-hagokyu-api   # http://localhost:8000
+hagoku-api   # http://localhost:8000
 
 # 启动前端开发服务器（React + Vite）
-cd hagokyu_web && npm run dev   # http://localhost:5173
+cd hagoku_web && npm run dev   # http://localhost:5173
 ```
 
 ## 环境变量
@@ -63,7 +63,7 @@ cd hagokyu_web && npm run dev   # http://localhost:5173
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_MANAGER_MODE` | 编排模式 | `balanced` |
-| `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagokyu` |
+| `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |
@@ -98,4 +98,4 @@ EOF
 
 ---
 
-> **禁止事项速查**：不动 `~/.llama-proxy/`、不用 `pm2` 操作 Hermes 服务、UI 代码用绝对导入 `from hagokyu.*`、不在 commit message 写 "various fixes"。完整清单见 [docs/DEVELOPMENT.md §不要做的清单](docs/DEVELOPMENT.md#不要做的清单)。
+> **禁止事项速查**：不动 `~/.llama-proxy/`、不用 `pm2` 操作 Hermes 服务、UI 代码用绝对导入 `from hagoku.*`、不在 commit message 写 "various fixes"。完整清单见 [docs/DEVELOPMENT.md §不要做的清单](docs/DEVELOPMENT.md#不要做的清单)。

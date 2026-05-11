@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hagokyu.api.ws_handler import (
+from hagoku.api.ws_handler import (
     WSBridge,
     _event_to_message,
     get_bus,
@@ -14,8 +14,8 @@ from hagokyu.api.ws_handler import (
     set_orchestrator,
     ws_handler,
 )
-from hagokyu.observability.event_bus import EventBus
-from hagokyu.observability.events import Event, EventType
+from hagoku.observability.event_bus import EventBus
+from hagoku.observability.events import Event, EventType
 
 
 class TestEventBusRegistry:
@@ -130,7 +130,7 @@ class TestAnalyzeCommand:
             ]
         )
 
-        with patch("hagokyu.api.ws_handler.get_bus", return_value=None):
+        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
             try:
                 await ws_handler(mock_ws)
             except Exception:
@@ -160,7 +160,7 @@ class TestAnalyzeCommand:
             ]
         )
 
-        with patch("hagokyu.api.ws_handler.get_bus", return_value=None):
+        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
             try:
                 await ws_handler(mock_ws)
             except Exception:
@@ -186,7 +186,7 @@ class TestPingCommand:
             ]
         )
 
-        with patch("hagokyu.api.ws_handler.get_bus", return_value=None):
+        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
             try:
                 await ws_handler(mock_ws)
             except Exception:
@@ -212,7 +212,7 @@ class TestUnknownCommand:
             ]
         )
 
-        with patch("hagokyu.api.ws_handler.get_bus", return_value=None):
+        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
             try:
                 await ws_handler(mock_ws)
             except Exception:

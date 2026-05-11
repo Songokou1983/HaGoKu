@@ -4,11 +4,11 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from hagokyu.agents.scout import ScoutAgent, ColumnSemantic, SemanticType, DataContext
-from hagokyu.agents.analyst import AnalystAgent, AnalysisResult
-from hagokyu.config import LLMConfig
-from hagokyu.observability.event_bus import EventBus
-from hagokyu.observability.events import EventType
+from hagoku.agents.scout import ScoutAgent, ColumnSemantic, SemanticType, DataContext
+from hagoku.agents.analyst import AnalystAgent, AnalysisResult
+from hagoku.config import LLMConfig
+from hagoku.observability.event_bus import EventBus
+from hagoku.observability.events import EventType
 
 
 class TestScoutAgent:

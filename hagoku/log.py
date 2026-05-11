@@ -15,7 +15,7 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         配置好的 Logger 实例
     """
-    logger = logging.getLogger(f"hagokyu.{name}")
+    logger = logging.getLogger(f"hagoku.{name}")
     if not logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(

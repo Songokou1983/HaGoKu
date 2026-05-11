@@ -7,18 +7,18 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from hagokyu.tools.data_io import load_data, save_data, get_data_info, compute_data_hash
-from hagokyu.tools.profiling import generate_profile, suggest_column_roles
-from hagokyu.tools.cleaning import (
+from hagoku.tools.data_io import load_data, save_data, get_data_info, compute_data_hash
+from hagoku.tools.profiling import generate_profile, suggest_column_roles
+from hagoku.tools.cleaning import (
     clean_data,
     detect_outliers_iqr,
     detect_outliers_zscore,
     suggest_cleaning_strategy,
     CleaningStrategy,
 )
-from hagokyu.tools.analysis import ttest, correlation, chi_square, regression, anova
-from hagokyu.tools.diagnostics import diagnose_regression
-from hagokyu.tools.reporting import ReportData, ReportSection, ReportGenerator
+from hagoku.tools.analysis import ttest, correlation, chi_square, regression, anova
+from hagoku.tools.diagnostics import diagnose_regression
+from hagoku.tools.reporting import ReportData, ReportSection, ReportGenerator
 
 
 class TestDataIO:

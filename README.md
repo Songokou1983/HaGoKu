@@ -31,7 +31,7 @@ HaGoKu 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（
 ```bash
 # 1. 克隆项目
 git clone <repo-url>
-cd hagokyu
+cd hagoku
 
 # 2. 创建虚拟环境（推荐）
 python3 -m venv .venv
@@ -44,10 +44,10 @@ pip install -e .
 # 4. 启动 LLM 服务（如本地部署 Qwen 等模型）
 
 # 5. 启动后端 API
-hagokyu-api       # FastAPI 服务：http://localhost:8000
+hagoku-api       # FastAPI 服务：http://localhost:8000
 
 # 6. 启动前端（新终端）
-cd hagokyu_web && npm run dev   # React 开发服务器：http://localhost:5173
+cd hagoku_web && npm run dev   # React 开发服务器：http://localhost:5173
 ```
 
 > ⚠️ **代码更新后**：执行 `pip install -e . --force-reinstall` 强制重装，使最新代码生效。
@@ -60,11 +60,11 @@ cd hagokyu_web && npm run dev   # React 开发服务器：http://localhost:5173
 
 ```bash
 # 终端 1：启动后端
-hagokyu-api
+hagoku-api
 # FastAPI 服务运行在 http://localhost:8000
 
 # 终端 2：启动前端
-cd hagokyu_web && npm run dev
+cd hagoku_web && npm run dev
 # React 开发服务器运行在 http://localhost:5173
 ```
 
@@ -74,18 +74,18 @@ cd hagokyu_web && npm run dev
 
 ```bash
 # ⚡ 快速模式：扔数据，拿结果
-hagokyu quick data.csv
+hagoku quick data.csv
 
 # 📋 普通模式：说清楚你要分析什么
-hagokyu run data.csv --query "哪个广告渠道效果最好"
+hagoku run data.csv --query "哪个广告渠道效果最好"
 
 # 🔬 资深模式：全程可控
-hagokyu run data.csv --query "广告对销售的因果效应" --mode expert
+hagoku run data.csv --query "广告对销售的因果效应" --mode expert
 
 # 项目管理
-hagokyu project create "Q1销售分析" -d "分析Q1各渠道ROI"
-hagokyu project add "Q1销售分析" ~/data/sales.csv
-hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
+hagoku project create "Q1销售分析" -d "分析Q1各渠道ROI"
+hagoku project add "Q1销售分析" ~/data/sales.csv
+hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 ```
 
 ---
@@ -96,46 +96,46 @@ hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu run <file> -q "问题"` | 完整分析流程（支持 --mode quick/standard/expert） |
-| `hagokyu quick <file>` | 快速模式（零交互，自动探索） |
-| `hagokyu demo` | 列出所有内置演示数据集 |
-| `hagokyu demo ad_campaign -q "问题"` | 用演示数据直接运行分析 |
-| `hagokyu profile <file>` | 生成数据画像 |
+| `hagoku run <file> -q "问题"` | 完整分析流程（支持 --mode quick/standard/expert） |
+| `hagoku quick <file>` | 快速模式（零交互，自动探索） |
+| `hagoku demo` | 列出所有内置演示数据集 |
+| `hagoku demo ad_campaign -q "问题"` | 用演示数据直接运行分析 |
+| `hagoku profile <file>` | 生成数据画像 |
 
-### 项目管理 (`hagokyu project`)
+### 项目管理 (`hagoku project`)
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu project create <名称> -d "描述"` | 创建新项目 |
-| `hagokyu project add <项目> <文件>` | 添加数据文件到项目 |
-| `hagokyu project run <项目> -q "问题"` | 在项目上下文中运行分析 |
-| `hagokyu project list` | 列出所有项目 |
-| `hagokyu project info <项目>` | 查看项目详情 |
-| `hagokyu project delete <项目>` | 删除项目（需确认） |
+| `hagoku project create <名称> -d "描述"` | 创建新项目 |
+| `hagoku project add <项目> <文件>` | 添加数据文件到项目 |
+| `hagoku project run <项目> -q "问题"` | 在项目上下文中运行分析 |
+| `hagoku project list` | 列出所有项目 |
+| `hagoku project info <项目>` | 查看项目详情 |
+| `hagoku project delete <项目>` | 删除项目（需确认） |
 
 ### 诊断与工具
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu doctor` | 检查系统健康状态（LLM 连接、依赖库） |
-| `hagokyu methods` | 查看所有可用的分析方法 |
-| `hagokyu methods --tag statistical` | 按标签过滤分析方法 |
-| `hagokyu guardrails` | 查看统计护栏规则 |
-| `hagokyu config` | 查看当前配置 |
-| `hagokyu config --reset` | 重置配置为默认值 |
+| `hagoku doctor` | 检查系统健康状态（LLM 连接、依赖库） |
+| `hagoku methods` | 查看所有可用的分析方法 |
+| `hagoku methods --tag statistical` | 按标签过滤分析方法 |
+| `hagoku guardrails` | 查看统计护栏规则 |
+| `hagoku config` | 查看当前配置 |
+| `hagoku config --reset` | 重置配置为默认值 |
 
 ### 记忆与历史
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu memory` | 查看所有项目记忆概览 |
-| `hagokyu memory <项目>` | 查看指定项目的记忆 |
-| `hagokyu memory --export schema.yaml` | 导出记忆/列语义 |
-| `hagokyu memory --import schema.yaml` | 从 schema.yaml 导入记忆 |
-| `hagokyu history <项目>` | 查看项目运行历史 |
-| `hagokyu replay <run_id>` | 回放分析过程 |
+| `hagoku memory` | 查看所有项目记忆概览 |
+| `hagoku memory <项目>` | 查看指定项目的记忆 |
+| `hagoku memory --export schema.yaml` | 导出记忆/列语义 |
+| `hagoku memory --import schema.yaml` | 从 schema.yaml 导入记忆 |
+| `hagoku history <项目>` | 查看项目运行历史 |
+| `hagoku replay <run_id>` | 回放分析过程 |
 
-### 高级选项 (`hagokyu run`)
+### 高级选项 (`hagoku run`)
 
 | 选项 | 说明 |
 |------|------|
@@ -152,8 +152,8 @@ hagokyu project run "Q1销售分析" -q "哪个渠道roi最高"
 
 | 命令 | 用途 |
 |------|------|
-| `hagokyu-api` | 启动后端 API（http://localhost:8000） |
-| `cd hagokyu_web && npm run dev` | 启动前端开发服务器（http://localhost:5173） |
+| `hagoku-api` | 启动后端 API（http://localhost:8000） |
+| `cd hagoku_web && npm run dev` | 启动前端开发服务器（http://localhost:5173） |
 
 ---
 
@@ -223,7 +223,7 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 ## 项目结构
 
 ```
-~/.hagokyu/projects/<项目名>/
+~/.hagoku/projects/<项目名>/
 ├── progress.yaml       # 项目记忆（字段决策、用户偏好、分析历史）
 ├── context.md          # 看板上下文（所有 Agent 共享）
 ├── kanban.db           # Agent 看板（SQLite 消息队列）
@@ -236,7 +236,7 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 
 ## 配置
 
-首次运行自动创建 `~/.hagokyu/config.yaml`，也支持环境变量覆盖：
+首次运行自动创建 `~/.hagoku/config.yaml`，也支持环境变量覆盖：
 
 ```yaml
 llm:
@@ -274,13 +274,13 @@ pytest tests/ -q
 ## 常见问题
 
 **Q: API 启动报错 `AttributeError` 或显示异常功能？**
-A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagokyu-api`。
+A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagoku-api`。
 
 **Q: LLM 连接失败？**
-A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查 `~/.hagokyu/config.yaml` 中的 `base_url` 和 `model` 是否正确。
+A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查 `~/.hagoku/config.yaml` 中的 `base_url` 和 `model` 是否正确。
 
 **Q: 项目文件存放在哪里？**
-A: 默认 `~/.hagokyu/projects/`，可在 Settings 面板修改「项目文件夹」路径。
+A: 默认 `~/.hagoku/projects/`，可在 Settings 面板修改「项目文件夹」路径。
 
 ---
 

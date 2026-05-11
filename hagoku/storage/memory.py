@@ -338,7 +338,7 @@ class MemoryManager:
         if path is None and self._yaml:
             path = self._yaml.path
         elif path is None:
-            path = Path.home() / ".hagokyu" / "projects" / (project_id or "_global") / "progress.yaml"
+            path = Path.home() / ".hagoku" / "projects" / (project_id or "_global") / "progress.yaml"
 
         # 收集数据
         columns = self.get_column_semantics(project_id)

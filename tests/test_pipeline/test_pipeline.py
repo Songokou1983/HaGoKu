@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hagokyu.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConfig
+from hagoku.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConfig
 
 
 class TestLLMConfig:
@@ -62,7 +62,7 @@ manager:
         assert config.llm.model == "env-model"
 
     def test_ensure_work_dir(self, tmp_path, monkeypatch):
-        work_dir = tmp_path / "test_hagokyu"
+        work_dir = tmp_path / "test_hagoku"
         config = HaGoKuConfig(work_dir=work_dir)
         config.ensure_work_dir()
         assert work_dir.exists()

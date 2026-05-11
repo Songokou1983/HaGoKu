@@ -55,19 +55,19 @@
 
 ### Python 后端测试（主要依赖这个）
 ```bash
-cd /home/son_goku/hagokyu
+cd /home/son_goku/hagoku
 
 # 3 阶段流程测试
 .venv/bin/python -c "
 import sys, time
 sys.path.insert(0, '.')
 from pathlib import Path
-from hagokyu.config import HaGoKuConfig
-from hagokyu.manager.orchestrator import Orchestrator
-from hagokyu.agents.scout import DataContext
+from hagoku.config import HaGoKuConfig
+from hagoku.manager.orchestrator import Orchestrator
+from hagoku.agents.scout import DataContext
 
 config = HaGoKuConfig.load()
-data_path = str(Path.home() / '.hagokyu/projects/Playwright测试/input/ad_campaign_1.csv')
+data_path = str(Path.home() / '.hagoku/projects/Playwright测试/input/ad_campaign_1.csv')
 
 # Phase 1
 orch1 = Orchestrator(config)
@@ -140,14 +140,14 @@ with sync_playwright() as p:
 
 1. `emit_event` 调用是否有遗漏的 3 参数形式？
    ```bash
-   grep -n "emit_event(" hagokyu/agents/*.py
+   grep -n "emit_event(" hagoku/agents/*.py
    # 确保都是 emit_event(EventType, {data})
    ```
 
 2. `column_semantics` 是否正确传递？
    ```bash
-   grep -n "column_semantics" hagokyu/manager/orchestrator.py
-   grep -n "scout_data.get" hagokyu/ui/_pages/app_analyze.py
+   grep -n "column_semantics" hagoku/manager/orchestrator.py
+   grep -n "scout_data.get" hagoku/ui/_pages/app_analyze.py
    ```
 
 3. SQLite 线程安全是否完整？
@@ -173,7 +173,7 @@ with sync_playwright() as p:
 - ❌ 不要自己新建 llama.cpp 模型服务
 - ❌ 不要把 `.env` 路径改成其他位置
 - ❌ 不要在 UI 代码里用 `time.sleep` 阻塞
-- ❌ 不要在 UI 代码里用相对导入（用 `from hagokyu.xxx`）
+- ❌ 不要在 UI 代码里用相对导入（用 `from hagoku.xxx`）
 - ❌ 不要在 Playwright 里尝试完美模拟 Streamlit 按钮点击（不可能）
 - ❌ 不要在 commit message 里写 "various fixes" 或 "update"
 
@@ -191,7 +191,7 @@ with sync_playwright() as p:
 
 **文件布局（每个项目独立）**：
 ```
-~/.hagokyu/projects/<project>/
+~/.hagoku/projects/<project>/
   kanban.db        ← SQLite 看板数据库
   context.md       ← 接力棒（各 Agent 交接数据）
   progress.yaml    ← 项目记忆（字段决策、用户偏好、分析历史）
@@ -305,8 +305,8 @@ scout_id = scribe.init_pipeline()  # 创建 Scout→Cleaner→Analyst→Reporter
 
 | 功能 | 文件 |
 |------|------|
-| SQLite 操作 | `hagokyu/storage/kanban.py` |
-| Scribe Agent | `hagokyu/agents/_scribe/agent.py` |
+| SQLite 操作 | `hagoku/storage/kanban.py` |
+| Scribe Agent | `hagoku/agents/_scribe/agent.py` |
 | context.md | 项目根目录 |
 | kanban.db | 项目根目录 |
 
@@ -333,7 +333,7 @@ scout_id = scribe.init_pipeline()  # 创建 Scout→Cleaner→Analyst→Reporter
 ### 文件布局
 
 ```
-hagokyu/agents/<agent>/
+hagoku/agents/<agent>/
   knowledge.yaml   ← 人可读知识条目（YAML）
   knowledge.db     ← sqlite_vec 向量数据库
   knowledge.py     ← recall/learn 封装函数
@@ -342,7 +342,7 @@ hagokyu/agents/<agent>/
 ### KnowledgeVectorStore API
 
 ```python
-from hagokyu.storage.knowledge_vector import KnowledgeVectorStore
+from hagoku.storage.knowledge_vector import KnowledgeVectorStore
 
 store = KnowledgeVectorStore("path/to/knowledge.yaml", dimension=1536)
 

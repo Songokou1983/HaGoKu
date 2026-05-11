@@ -10,7 +10,7 @@
 > ### 🚫 任何情况都不得修改项目文件！
 > 
 > 本提示词仅为**分析参考文档**，用于指导后续编码任务的规划与规格定义。
-> **严禁直接修改 `hagokyu/`、`tests/`、`pyproject.toml` 等所有项目源文件。**
+> **严禁直接修改 `hagoku/`、`tests/`、`pyproject.toml` 等所有项目源文件。**
 > 所有代码变更必须由用户显式确认后，在单独的任务会话中执行。
 
 ---
@@ -39,7 +39,7 @@
 
 ### 1.1 配置层
 
-**文件：`hagokyu/config.py`**
+**文件：`hagoku/config.py`**
 
 在 `LLMConfig` 类中新增两个可选字段：
 
@@ -49,7 +49,7 @@ model_deep: Optional[str] = None   # 深度推理模型（Analyst、仲裁器）
 model_quick: Optional[str] = None  # 快速模型（Scout、Reporter、Scribe 反思），不设则复用 model
 ```
 
-**文件：`hagokyu/config.py`**，在 `HaGoKuConfig` 类的 `from_env()` 方法中：
+**文件：`hagoku/config.py`**，在 `HaGoKuConfig` 类的 `from_env()` 方法中：
 
 从环境变量读取新字段：
 ```python
@@ -60,7 +60,7 @@ llm_model_quick = os.getenv("HAGOKYU_LLM_MODEL_QUICK")
 
 ### 1.2 LLM 客户端层
 
-**文件：`hagokyu/llm/client.py`**
+**文件：`hagoku/llm/client.py`**
 
 当前 `create_structured_llm_client()` 只接收单一的 `LLMConfig`。需要新增两个轻量工厂函数，不破坏现有接口：
 
@@ -99,7 +99,7 @@ def create_quick_client(config: "HaGoKuConfig") -> Any:
 
 ### 1.3 编排器接入
 
-**文件：`hagokyu/manager/orchestrator.py`**
+**文件：`hagoku/manager/orchestrator.py`**
 
 在 `Orchestrator.__init__()` 中，分别创建 deep 和 quick 客户端：
 
@@ -132,7 +132,7 @@ self.llm_quick = create_quick_client(config)  # 新增
 
 ## 任务 2：结构化输出解析器（P0-2）
 
-### 2.1 新建 `hagokyu/guardrails/parsers.py`
+### 2.1 新建 `hagoku/guardrails/parsers.py`
 
 ```python
 """HaGoKu 结构化输出解析器 — 从 LLM 自由文本中提取统计结论"""
@@ -257,7 +257,7 @@ def validate_analysis_output(text: str) -> dict[str, bool]:
 
 ### 2.2 Reporter 接入
 
-**文件：`hagokyu/agents/reporter/agent.py`**
+**文件：`hagoku/agents/reporter/agent.py`**
 
 在 Reporter 生成报告前（或生成后验证时），使用解析器验证 Analyst 输出的结构完整性：
 
@@ -274,7 +274,7 @@ def _check_analyst_completeness(self, text: str) -> dict[str, bool]:
     return result
 ```
 
-> ⚠️ 注意：阅读 `hagokyu/agents/reporter/agent.py` 的实际代码结构，找到合适的位置挂载解析验证逻辑。不要破坏现有报告生成流程。
+> ⚠️ 注意：阅读 `hagoku/agents/reporter/agent.py` 的实际代码结构，找到合适的位置挂载解析验证逻辑。不要破坏现有报告生成流程。
 
 ---
 
@@ -284,10 +284,10 @@ def _check_analyst_completeness(self, text: str) -> dict[str, bool]:
 
 ```bash
 # 1. Lint 检查
-ruff check hagokyu/
+ruff check hagoku/
 
 # 2. 类型检查
-mypy hagokyu/ --ignore-missing-imports
+mypy hagoku/ --ignore-missing-imports
 
 # 3. 单元测试
 pytest tests/ -q
@@ -303,7 +303,7 @@ pytest tests/test_pipeline/ -q
 ## 编码规范（来自 CLAUDE.md）
 
 - 使用 `from __future__ import annotations`
-- 所有导入使用绝对导入（`from hagokyu.xxx import yyy`，非相对导入 `from .xxx`）
+- 所有导入使用绝对导入（`from hagoku.xxx import yyy`，非相对导入 `from .xxx`）
 - 类型注解必须完整（mypy 会检查）
 - 新函数/类必须有 docstring（Google 风格）
 - 不修改 `~/.llama-proxy/` 下的任何文件
@@ -322,7 +322,7 @@ pytest tests/test_pipeline/ -q
 | P0 任务 | 状态 | 说明 |
 |---------|------|------|
 | 双层 LLM（config + client） | ✅ | `config.py:36-37` 新增 `model_deep`/`model_quick`；`client.py:49,65` 新增 `create_deep_client()`/`create_quick_client()` |
-| 结构化解析器（parsers.py） | ✅ | `hagokyu/guardrails/parsers.py` 已创建，含 5 个函数 |
+| 结构化解析器（parsers.py） | ✅ | `hagoku/guardrails/parsers.py` 已创建，含 5 个函数 |
 | Reporter 接入解析器 | ✅ | `reporter/agent.py:351-373` 已集成 `_check_analyst_completeness()` + `_check_analyst_output()` |
 
 ---
@@ -435,7 +435,7 @@ ModuleNotFoundError: No module named 'sklearn'（非代码 bug）
 
 ## 五、第九轮：完整性 & 可行性全面审核（2026-05-10）
 
-> **审核范围：** 全部 52 个源文件（hagokyu/ 36 + hagokyu_web/ 16），覆盖后端 Agent 链、工具层、API 层、存储层、前端 UI 面板、类型定义、状态管理、WebSocket 通信。
+> **审核范围：** 全部 52 个源文件（hagoku/ 36 + hagoku_web/ 16），覆盖后端 Agent 链、工具层、API 层、存储层、前端 UI 面板、类型定义、状态管理、WebSocket 通信。
 
 ### 5.1 代码质量基线（第八轮数据复验）
 
@@ -455,97 +455,97 @@ ModuleNotFoundError: No module named 'sklearn'（非代码 bug）
 
 | 组件 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| ScoutAgent | `hagokyu/agents/scout/agent.py` (746行) | ✅ 完整 | 数据侦察、类型推断、字段语义分析 |
-| CleanerAgent | `hagokyu/agents/cleaner/agent.py` | ✅ 完整 | 清洗策略 + 执行 |
-| AnalystAgent | `hagokyu/agents/analyst/agent.py` (793行) | ✅ 完整 | ttest, regression, correlation, power_analysis 等 |
-| ReporterAgent | `hagokyu/agents/reporter/agent.py` | ✅ 完整 | 报告生成 + parsers 集成 |
-| ScribeAgent | `hagokyu/agents/_scribe/agent.py` | ✅ 完整 | 看板管理、任务追踪 |
-| InteractionMixin | `hagokyu/agents/_interactive.py` | ✅ 完整 | 用户交互确认流程 |
-| AnalysisResult | `hagokyu/agents/analyst/agent.py:42-77` | ✅ 完整 | 结构化分析结果 dataclass |
+| ScoutAgent | `hagoku/agents/scout/agent.py` (746行) | ✅ 完整 | 数据侦察、类型推断、字段语义分析 |
+| CleanerAgent | `hagoku/agents/cleaner/agent.py` | ✅ 完整 | 清洗策略 + 执行 |
+| AnalystAgent | `hagoku/agents/analyst/agent.py` (793行) | ✅ 完整 | ttest, regression, correlation, power_analysis 等 |
+| ReporterAgent | `hagoku/agents/reporter/agent.py` | ✅ 完整 | 报告生成 + parsers 集成 |
+| ScribeAgent | `hagoku/agents/_scribe/agent.py` | ✅ 完整 | 看板管理、任务追踪 |
+| InteractionMixin | `hagoku/agents/_interactive.py` | ✅ 完整 | 用户交互确认流程 |
+| AnalysisResult | `hagoku/agents/analyst/agent.py:42-77` | ✅ 完整 | 结构化分析结果 dataclass |
 
 #### 5.2.2 后端工具层 — 完整 ✅
 
 | 工具模块 | 文件 | 状态 | 备注 |
 |---------|------|------|------|
-| analysis | `hagokyu/tools/analysis.py` | ✅ 完整 | ttest, regression, correlation, cross_validate, kruskal_wallis, mann_whitney_u |
-| business | `hagokyu/tools/business.py` | ✅ 完整 | ROI, LTV, cohort, funnel 等商业指标 |
-| cleaning | `hagokyu/tools/cleaning.py` | ✅ 完整 | 数据清洗操作 |
-| data_io | `hagokyu/tools/data_io.py` | ✅ 完整 | CSV/Parquet 读写 |
-| diagnostics | `hagokyu/tools/diagnostics.py` | ✅ 完整 | 分析诊断 |
-| health | `hagokyu/tools/health.py` | ✅ 完整 | 系统健康检查 |
-| power_analysis | `hagokyu/tools/power_analysis.py` | ✅ 完整 | 统计功效分析 |
-| profiling | `hagokyu/tools/profiling.py` | ✅ 完整 | 数据画像生成 |
-| reporting | `hagokyu/tools/reporting.py` | ✅ 完整 | 报告输出 |
-| visualization | `hagokyu/tools/visualization.py` | ✅ 完整 | 图表生成 |
-| analysis_registry | `hagokyu/tools/analysis_registry.py` | ✅ 完整 | 分析类型注册 |
+| analysis | `hagoku/tools/analysis.py` | ✅ 完整 | ttest, regression, correlation, cross_validate, kruskal_wallis, mann_whitney_u |
+| business | `hagoku/tools/business.py` | ✅ 完整 | ROI, LTV, cohort, funnel 等商业指标 |
+| cleaning | `hagoku/tools/cleaning.py` | ✅ 完整 | 数据清洗操作 |
+| data_io | `hagoku/tools/data_io.py` | ✅ 完整 | CSV/Parquet 读写 |
+| diagnostics | `hagoku/tools/diagnostics.py` | ✅ 完整 | 分析诊断 |
+| health | `hagoku/tools/health.py` | ✅ 完整 | 系统健康检查 |
+| power_analysis | `hagoku/tools/power_analysis.py` | ✅ 完整 | 统计功效分析 |
+| profiling | `hagoku/tools/profiling.py` | ✅ 完整 | 数据画像生成 |
+| reporting | `hagoku/tools/reporting.py` | ✅ 完整 | 报告输出 |
+| visualization | `hagoku/tools/visualization.py` | ✅ 完整 | 图表生成 |
+| analysis_registry | `hagoku/tools/analysis_registry.py` | ✅ 完整 | 分析类型注册 |
 
 #### 5.2.3 后端 Guardrails 层 — 完整 ✅
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| StatisticalGuardrails | `hagokyu/guardrails/statistical.py` | ✅ 完整 | 统计检验假设验证、效应量计算 |
-| Parsers | `hagokyu/guardrails/parsers.py` | ✅ 完整 | pvalue, effect_size, CI 提取（P0-2） |
+| StatisticalGuardrails | `hagoku/guardrails/statistical.py` | ✅ 完整 | 统计检验假设验证、效应量计算 |
+| Parsers | `hagoku/guardrails/parsers.py` | ✅ 完整 | pvalue, effect_size, CI 提取（P0-2） |
 
 #### 5.2.4 后端 LLM 层 — 完整 ✅
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| client | `hagokyu/llm/client.py` | ✅ 完整 | deep/quick 双层客户端（P0-1） |
-| prompts | `hagokyu/llm/prompts.py` | ✅ 完整 | Prompt 模板 |
-| plan_schema | `hagokyu/llm/plan_schema.py` | ✅ 完整 | 分析计划 schema |
+| client | `hagoku/llm/client.py` | ✅ 完整 | deep/quick 双层客户端（P0-1） |
+| prompts | `hagoku/llm/prompts.py` | ✅ 完整 | Prompt 模板 |
+| plan_schema | `hagoku/llm/plan_schema.py` | ✅ 完整 | 分析计划 schema |
 
 #### 5.2.5 后端 Manager 层 — 完整 ✅
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| Orchestrator | `hagokyu/manager/orchestrator.py` (1076行) | ✅ 完整 | 主编排器，含 scout_first/cleaning_first/resume 等策略 |
-| QueryParser | `hagokyu/manager/query_parser.py` (385行) | ✅ 完整 | 自然语言 → 分析意图映射 |
-| Refinement | `hagokyu/manager/refinement.py` | ✅ 完整 | 分析计划精炼 |
+| Orchestrator | `hagoku/manager/orchestrator.py` (1076行) | ✅ 完整 | 主编排器，含 scout_first/cleaning_first/resume 等策略 |
+| QueryParser | `hagoku/manager/query_parser.py` (385行) | ✅ 完整 | 自然语言 → 分析意图映射 |
+| Refinement | `hagoku/manager/refinement.py` | ✅ 完整 | 分析计划精炼 |
 
 #### 5.2.6 后端 API 层 — ⚠️ 存在功能缺口
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| FastAPI Server | `hagokyu/api/server.py` (62行) | ✅ 结构完整 | REST /health + WebSocket /ws + 静态文件 |
-| WS Handler | `hagokyu/api/ws_handler.py` (127行) | ⚠️ **有缺口** | 见 §5.3.1 |
+| FastAPI Server | `hagoku/api/server.py` (62行) | ✅ 结构完整 | REST /health + WebSocket /ws + 静态文件 |
+| WS Handler | `hagoku/api/ws_handler.py` (127行) | ⚠️ **有缺口** | 见 §5.3.1 |
 
 #### 5.2.7 后端存储层 — 完整 ✅
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| database | `hagokyu/storage/database.py` | ✅ 完整 | SQLite run 存储 |
-| memory | `hagokyu/storage/memory.py` | ✅ 完整 | Resume 状态管理 |
-| artifact | `hagokyu/storage/artifact.py` | ✅ 完整 | 产物管理 |
-| kanban | `hagokyu/storage/kanban.py` | ✅ 完整 | 看板持久化 |
-| knowledge_vector | `hagokyu/storage/knowledge_vector.py` | ✅ 完整 | 知识向量化 |
-| output | `hagokyu/storage/output.py` | ✅ 完整 | 报告输出 |
-| project_manager | `hagokyu/storage/project_manager.py` | ✅ 完整 | 项目管理 |
-| memory_backends | `hagokyu/storage/memory_backends.py` | ✅ 完整 | 内存后端 |
+| database | `hagoku/storage/database.py` | ✅ 完整 | SQLite run 存储 |
+| memory | `hagoku/storage/memory.py` | ✅ 完整 | Resume 状态管理 |
+| artifact | `hagoku/storage/artifact.py` | ✅ 完整 | 产物管理 |
+| kanban | `hagoku/storage/kanban.py` | ✅ 完整 | 看板持久化 |
+| knowledge_vector | `hagoku/storage/knowledge_vector.py` | ✅ 完整 | 知识向量化 |
+| output | `hagoku/storage/output.py` | ✅ 完整 | 报告输出 |
+| project_manager | `hagoku/storage/project_manager.py` | ✅ 完整 | 项目管理 |
+| memory_backends | `hagoku/storage/memory_backends.py` | ✅ 完整 | 内存后端 |
 
 #### 5.2.8 前端层 — 组件齐全但有功能缺口
 
 | 组件 | 文件 | 状态 | 备注 |
 |------|------|------|------|
-| App | `hagokyu_web/src/App.tsx` (154行) | ✅ 完整 | dockview 面板布局 + 状态栏 |
-| AnalyzePanel | `hagokyu_web/src/panels/AnalyzePanel.tsx` | ✅ 存在 | 分析面板 |
-| ProjectPanel | `hagokyu_web/src/panels/ProjectPanel.tsx` | ✅ 存在 | 项目面板 |
-| ReportPanel | `hagokyu_web/src/panels/ReportPanel.tsx` | ✅ 存在 | 报告面板 |
-| KnowledgePanel | `hagokyu_web/src/panels/KnowledgePanel.tsx` | ✅ 存在 | 知识库面板 |
-| SettingsPanel | `hagokyu_web/src/panels/SettingsPanel.tsx` | ✅ 存在 | 设置面板 |
-| EventPanel | `hagokyu_web/src/panels/EventPanel.tsx` | ✅ 存在 | 事件日志面板 |
-| ConnectionIndicator | `hagokyu_web/src/components/ConnectionIndicator.tsx` | ✅ 存在 | 连接状态指示器 |
-| EmptyState | `hagokyu_web/src/components/EmptyState.tsx` | ✅ 存在 | 空状态 |
-| ErrorBoundary | `hagokyu_web/src/components/ErrorBoundary.tsx` | ✅ 存在 | 错误边界 |
-| EventTable | `hagokyu_web/src/components/EventTable.tsx` | ✅ 存在 | 事件表格 |
-| FormField | `hagokyu_web/src/components/FormField.tsx` | ✅ 存在 | 表单字段 |
-| InputBar | `hagokyu_web/src/components/InputBar.tsx` | ✅ 存在 | 输入栏 |
-| LogView | `hagokyu_web/src/components/LogView.tsx` | ✅ 存在 | 日志视图 |
-| PanelHeader | `hagokyu_web/src/components/PanelHeader.tsx` | ✅ 存在 | 面板标题 |
-| useWebSocket | `hagokyu_web/src/hooks/useWebSocket.ts` | ✅ 存在 | WebSocket hook |
-| useBatchEvents | `hagokyu_web/src/hooks/useBatchEvents.ts` | ✅ 存在 | 批量事件 hook |
-| useAgentStatusSync | `hagokyu_web/src/hooks/useAgentStatusSync.ts` | ✅ 存在 | Agent 状态同步 hook |
-| workspace store | `hagokyu_web/src/stores/workspace.ts` (56行) | ✅ 完整 | Zustand 状态管理 |
-| types/events | `hagokyu_web/src/types/` | ✅ 存在 | 事件类型定义 |
+| App | `hagoku_web/src/App.tsx` (154行) | ✅ 完整 | dockview 面板布局 + 状态栏 |
+| AnalyzePanel | `hagoku_web/src/panels/AnalyzePanel.tsx` | ✅ 存在 | 分析面板 |
+| ProjectPanel | `hagoku_web/src/panels/ProjectPanel.tsx` | ✅ 存在 | 项目面板 |
+| ReportPanel | `hagoku_web/src/panels/ReportPanel.tsx` | ✅ 存在 | 报告面板 |
+| KnowledgePanel | `hagoku_web/src/panels/KnowledgePanel.tsx` | ✅ 存在 | 知识库面板 |
+| SettingsPanel | `hagoku_web/src/panels/SettingsPanel.tsx` | ✅ 存在 | 设置面板 |
+| EventPanel | `hagoku_web/src/panels/EventPanel.tsx` | ✅ 存在 | 事件日志面板 |
+| ConnectionIndicator | `hagoku_web/src/components/ConnectionIndicator.tsx` | ✅ 存在 | 连接状态指示器 |
+| EmptyState | `hagoku_web/src/components/EmptyState.tsx` | ✅ 存在 | 空状态 |
+| ErrorBoundary | `hagoku_web/src/components/ErrorBoundary.tsx` | ✅ 存在 | 错误边界 |
+| EventTable | `hagoku_web/src/components/EventTable.tsx` | ✅ 存在 | 事件表格 |
+| FormField | `hagoku_web/src/components/FormField.tsx` | ✅ 存在 | 表单字段 |
+| InputBar | `hagoku_web/src/components/InputBar.tsx` | ✅ 存在 | 输入栏 |
+| LogView | `hagoku_web/src/components/LogView.tsx` | ✅ 存在 | 日志视图 |
+| PanelHeader | `hagoku_web/src/components/PanelHeader.tsx` | ✅ 存在 | 面板标题 |
+| useWebSocket | `hagoku_web/src/hooks/useWebSocket.ts` | ✅ 存在 | WebSocket hook |
+| useBatchEvents | `hagoku_web/src/hooks/useBatchEvents.ts` | ✅ 存在 | 批量事件 hook |
+| useAgentStatusSync | `hagoku_web/src/hooks/useAgentStatusSync.ts` | ✅ 存在 | Agent 状态同步 hook |
+| workspace store | `hagoku_web/src/stores/workspace.ts` (56行) | ✅ 完整 | Zustand 状态管理 |
+| types/events | `hagoku_web/src/types/` | ✅ 存在 | 事件类型定义 |
 
 #### 5.2.9 测试覆盖
 
@@ -575,7 +575,7 @@ ModuleNotFoundError: No module named 'sklearn'（非代码 bug）
 
 #### 5.3.1 【P0-严重】WebSocket `analyze` 命令是占位符 → ✅ 已修复（第十轮）
 
-**位置：** `hagokyu/api/ws_handler.py:150-181`
+**位置：** `hagoku/api/ws_handler.py:150-181`
 
 **修复内容：**
 ```python
@@ -609,14 +609,14 @@ elif cmd == "analyze":
 **现状：** 第九轮审查中误报为缺失，实际 `[project.scripts]` 已声明：
 ```toml
 [project.scripts]
-hagokyu = "hagokyu.cli:main"
-hagokyu-api = "hagokyu.api.server:main"
+hagoku = "hagoku.cli:main"
+hagoku-api = "hagoku.api.server:main"
 ```
-用户安装 `pip install hagokyu` 后可直接运行 `hagokyu` 和 `hagokyu-api` 命令。
+用户安装 `pip install hagoku` 后可直接运行 `hagoku` 和 `hagoku-api` 命令。
 
 #### 5.3.3 【P0-严重】EventBus 未注册到 WS Handler → ✅ 已修复（第十轮）
 
-**位置：** `hagokyu/api/ws_handler.py:40-44, 58-80`
+**位置：** `hagoku/api/ws_handler.py:40-44, 58-80`
 
 **修复内容：** 新增 `set_orchestrator()` 函数：
 ```python
@@ -630,14 +630,14 @@ def set_orchestrator(orchestrator: "Orchestrator") -> None:
 
 #### 5.3.4 【P1-重要】Analysis Server 启动时 Orchestrator 初始化 → ⚠️ 待验证
 
-**位置：** `hagokyu/api/server.py`
+**位置：** `hagoku/api/server.py`
 
 **现状：** `_run_analysis()` 在首次 analyze 时懒加载 Orchestrator。但如果 server 启动时有 `set_orchestrator()` 主动调用，可以更早注册 EventBus，让前端一连接就能收到 EventBus 事件。
 
 **修复方向：** 在 `server.py` 的 `main()` 中添加：
 ```python
-from hagokyu.api.ws_handler import set_orchestrator
-from hagokyu.manager.orchestrator import Orchestrator
+from hagoku.api.ws_handler import set_orchestrator
+from hagoku.manager.orchestrator import Orchestrator
 config = HaGoKuConfig.load()
 orchestrator = Orchestrator(config)
 set_orchestrator(orchestrator)
@@ -645,7 +645,7 @@ set_orchestrator(orchestrator)
 
 #### 5.3.5 【P1-重要】前端 AnalyzePanel 到 WebSocket 的调用链 → ✅ 已修复（第十轮）
 
-**位置：** `hagokyu_web/src/panels/AnalyzePanel.tsx:34-103`
+**位置：** `hagoku_web/src/panels/AnalyzePanel.tsx:34-103`
 
 **修复内容：** 
 - 新增 `dataPath` state（第 34 行）
@@ -657,15 +657,15 @@ set_orchestrator(orchestrator)
 
 #### 5.3.6 【P1-重要】前端事件订阅链路 → ⚠️ 待端到端验证
 
-**位置：** `hagokyu_web/src/hooks/useAgentStatusSync.ts` → `workspace.ts` store
+**位置：** `hagoku_web/src/hooks/useAgentStatusSync.ts` → `workspace.ts` store
 
 **现状：** `useAgentStatusSync.ts` 应监听 WebSocket 接收的 event 消息并更新 Zustand store。`workspace.ts` store 提供 `setAgentStatus()` / `setStatus()` 方法。App.tsx 中的 `SystemStatus` 组件读取 store 渲染状态灯。
 
-**确认项：** 审查 `useBatchEvents.ts` 和 `useAgentStatusSync.ts` 是否已正确连接到 WebSocket hook。需要一次端到端运行（启动 hagokyu-api → 打开 Web UI → 输入 data_path → 发送分析）来验证完整链路。
+**确认项：** 审查 `useBatchEvents.ts` 和 `useAgentStatusSync.ts` 是否已正确连接到 WebSocket hook。需要一次端到端运行（启动 hagoku-api → 打开 Web UI → 输入 data_path → 发送分析）来验证完整链路。
 
 #### 5.3.7 【P2-中等】错误处理吞没 → ✅ 已修复（第十轮）
 
-**位置：** `hagokyu/observability/event_bus.py:37-39` + `hagokyu/api/ws_handler.py:186`
+**位置：** `hagoku/observability/event_bus.py:37-39` + `hagoku/api/ws_handler.py:186`
 
 **修复内容：**
 - `event_bus.py:38-39`：静默 `except Exception: pass` → `except Exception as e: logger.warning(...)`
@@ -673,7 +673,7 @@ set_orchestrator(orchestrator)
 
 #### 5.3.8 【P2-中等】Orchestrator 中存在多个 Agent 重复实例化
 
-**位置：** `hagokyu/manager/orchestrator.py:207-210, 240, 267, 274`
+**位置：** `hagoku/manager/orchestrator.py:207-210, 240, 267, 274`
 
 **现状：** `run()` 方法中 Agent 被创建了多次：
 - `scout` 在 207 行创建
@@ -685,7 +685,7 @@ set_orchestrator(orchestrator)
 
 #### 5.3.9 【P2-低】前端 Panel 类型导入可能缺少声明文件
 
-**位置：** `hagokyu_web/src/App.tsx:1`
+**位置：** `hagoku_web/src/App.tsx:1`
 ```typescript
 import { DockviewReact, type DockviewApi } from "dockview";
 ```
@@ -694,7 +694,7 @@ import { DockviewReact, type DockviewApi } from "dockview";
 
 #### 5.3.10 【P2-低】知识库内容丰富但未被有效联调验证
 
-**位置：** `hagokyu/kb/` (12 个 .md 文件) + `hagokyu/kb/_registry.yaml`
+**位置：** `hagoku/kb/` (12 个 .md 文件) + `hagoku/kb/_registry.yaml`
 
 **现状：** 知识库覆盖了 stats (anova, regression, ttest, multiple-testing, power-analysis)、business (ab-test, cohort-analysis, funnel)、financial (attribution, ltv-cac, roi)。但需确认：
 - `knowledge_base.py` 是否正确加载 `_registry.yaml` 并索引所有 md 文件
@@ -716,7 +716,7 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 
 #### 5.4.3 命令行可用性：可行 ✅
 
-`pyproject.toml` 第 80-82 行已有 `[project.scripts]` 声明，第九轮审查误报为缺失。`hagokyu` 和 `hagokyu-api` CLI 入口点已配置正确。
+`pyproject.toml` 第 80-82 行已有 `[project.scripts]` 声明，第九轮审查误报为缺失。`hagoku` 和 `hagoku-api` CLI 入口点已配置正确。
 
 #### 5.4.4 整体评分
 
@@ -736,26 +736,26 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 
 | # | 优先级 | 问题 | 状态 | 文件 | 修复难度 |
 |---|--------|------|------|------|---------|
-| 1 | 🔴 P0 | WS analyze 命令是占位符 | ✅ 已修复（第十轮） | `hagokyu/api/ws_handler.py:150-181` | 中等 |
+| 1 | 🔴 P0 | WS analyze 命令是占位符 | ✅ 已修复（第十轮） | `hagoku/api/ws_handler.py:150-181` | 中等 |
 | 2 | 🔴 P0 | 缺少 `[project.scripts]` 入口点 | ✅ 已确认已修复 | `pyproject.toml:80-82`（第九轮误报） | 简单 |
-| 3 | 🔴 P0 | EventBus 未注册到 WS Handler | ✅ 已修复（第十轮） | `hagokyu/api/ws_handler.py:40-44` | 中等 |
-| 4 | 🔴 P0 | 前端 AnalyzePanel→WS 调用链 | ✅ 已修复（第十轮） | `hagokyu_web/src/panels/AnalyzePanel.tsx:34-103` | 简单-中等 |
-| 5 | 🟡 P1 | 前端事件订阅链路验证 | ⚠️ 待端到端验证 | `hagokyu_web/src/hooks/useAgentStatusSync.ts` | 简单 |
-| 6 | 🟡 P1 | Server 启动时 Orchestrator 初始化 | ⚠️ 待验证 | `hagokyu/api/server.py` | 简单 |
+| 3 | 🔴 P0 | EventBus 未注册到 WS Handler | ✅ 已修复（第十轮） | `hagoku/api/ws_handler.py:40-44` | 中等 |
+| 4 | 🔴 P0 | 前端 AnalyzePanel→WS 调用链 | ✅ 已修复（第十轮） | `hagoku_web/src/panels/AnalyzePanel.tsx:34-103` | 简单-中等 |
+| 5 | 🟡 P1 | 前端事件订阅链路验证 | ⚠️ 待端到端验证 | `hagoku_web/src/hooks/useAgentStatusSync.ts` | 简单 |
+| 6 | 🟡 P1 | Server 启动时 Orchestrator 初始化 | ⚠️ 待验证 | `hagoku/api/server.py` | 简单 |
 | 7 | 🟡 P1 | API/WS 集成测试缺失 | 🔴 **未修复** | `tests/test_api/`（新建） | 中等 |
-| 8 | 🟡 P1 | 前端组件测试缺失 | 🟡 **未修复** | `hagokyu_web/src/__tests__/`（新建） | 中等 |
+| 8 | 🟡 P1 | 前端组件测试缺失 | 🟡 **未修复** | `hagoku_web/src/__tests__/`（新建） | 中等 |
 | 9 | 🟡 P1 | mypy 138 个错误修复 | 🟡 **未修复** | 多个文件（§4.3） | 中等（含类型缩窄） |
-| 10 | 🟢 P2 | EventBus 错误吞没加日志 | ✅ 已修复（第十轮） | `hagokyu/observability/event_bus.py:37-39` | 简单 |
-| 11 | 🟢 P2 | Orchestrator Agent 重复实例化 | 🟢 **未修复** | `hagokyu/manager/orchestrator.py` | 简单 |
+| 10 | 🟢 P2 | EventBus 错误吞没加日志 | ✅ 已修复（第十轮） | `hagoku/observability/event_bus.py:37-39` | 简单 |
+| 11 | 🟢 P2 | Orchestrator Agent 重复实例化 | 🟢 **未修复** | `hagoku/manager/orchestrator.py` | 简单 |
 | 12 | 🟢 P2 | RUFF auto-fix 460+ 风格问题 | 🟢 **未修复** | 全项目 | `ruff check --fix` 一键修复 |
-| 13 | 🟢 P2 | Logger 级别调整 | ✅ 已修复（第十轮） | `hagokyu/api/ws_handler.py:186` | 简单 |
-| 14 | 🟢 P3 | 知识库联调验证 | 🟢 **未修复** | `hagokyu/kb/` + `knowledge_base.py` | 验证性工作 |
+| 13 | 🟢 P2 | Logger 级别调整 | ✅ 已修复（第十轮） | `hagoku/api/ws_handler.py:186` | 简单 |
+| 14 | 🟢 P3 | 知识库联调验证 | 🟢 **未修复** | `hagoku/kb/` + `knowledge_base.py` | 验证性工作 |
 
 ### 5.6 建议修复步骤（更新后）
 
 #### 第一步：端到端验证 Web UI 分析功能（1-2 小时）— 当前最高优先级
-1. 安装项目依赖 `pip install -e .` && `cd hagokyu_web && npm install`
-2. 启动 API Server：`hagokyu-api`（需先配好 `.env` 中的 LLM 密钥）
+1. 安装项目依赖 `pip install -e .` && `cd hagoku_web && npm install`
+2. 启动 API Server：`hagoku-api`（需先配好 `.env` 中的 LLM 密钥）
 3. 打开 Web UI，输入数据文件路径 + 分析查询，发送
 4. 观察 LogView 是否显示 Agent 事件（AGENT_STARTED/TOOL_CALLED/AGENT_DONE）
 5. 观察 SystemStatus 状态灯是否正确更新
@@ -781,9 +781,9 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 ## 六、开发建议（更新后）
 
 ### 6.1 当前可立即执行的操作
-- ✅ 运行 `ruff check --fix hagokyu/` 自动修复 ~400 个风格问题
+- ✅ 运行 `ruff check --fix hagoku/` 自动修复 ~400 个风格问题
 - ✅ 运行 `pytest tests/ -q --ignore=tests/test_tools/test_analysis_enhanced.py` 验证 234+ 测试全通过
-- ✅ 端到端验证 Web UI 分析功能（启动 hagokyu-api → 打开 Web UI → 输入 data_path → 发送分析）
+- ✅ 端到端验证 Web UI 分析功能（启动 hagoku-api → 打开 Web UI → 输入 data_path → 发送分析）
 
 ### 6.2 短期优先事项（本周）
 - ⚠️ 端到端验证 §5.3.6（前端事件订阅链路）和 §5.3.4（Server Orchestrator 初始化）
@@ -803,11 +803,11 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 
 | 修复项 | 文件 | 变更类型 |
 |--------|------|---------|
-| WS analyze 占位符 → 真实 orchestration | `hagokyu/api/ws_handler.py:58-181` | 新增 `_run_analysis()` + `set_orchestrator()` + analyze 分支实现 |
-| EventBus 桥接到 WS Handler | `hagokyu/api/ws_handler.py:40-44` | 新增 `set_orchestrator()` 全局注册 |
-| 前端 dataPath 输入 + 正确消息格式 | `hagokyu_web/src/panels/AnalyzePanel.tsx:34-103` | 新增 dataPath state + 文件路径输入框 + 完整消息 payload |
-| EventBus 错误吞没 → 日志记录 | `hagokyu/observability/event_bus.py:37-39` | `except Exception: pass` → `except Exception as e: logger.warning(...)` |
-| Logger 级别调整 | `hagokyu/api/ws_handler.py:186` | `logger.debug` → `logger.info` |
+| WS analyze 占位符 → 真实 orchestration | `hagoku/api/ws_handler.py:58-181` | 新增 `_run_analysis()` + `set_orchestrator()` + analyze 分支实现 |
+| EventBus 桥接到 WS Handler | `hagoku/api/ws_handler.py:40-44` | 新增 `set_orchestrator()` 全局注册 |
+| 前端 dataPath 输入 + 正确消息格式 | `hagoku_web/src/panels/AnalyzePanel.tsx:34-103` | 新增 dataPath state + 文件路径输入框 + 完整消息 payload |
+| EventBus 错误吞没 → 日志记录 | `hagoku/observability/event_bus.py:37-39` | `except Exception: pass` → `except Exception as e: logger.warning(...)` |
+| Logger 级别调整 | `hagoku/api/ws_handler.py:186` | `logger.debug` → `logger.info` |
 | Console Scripts 入口点 | `pyproject.toml:80-82` | 第九轮误报，实际已存在 ✅ |
 
 **修复后状态：** 4 个 P0 全部解决，2 个 P2 已修复。核心阻塞项已清零。剩余工作为验证 + 测试补齐 + 代码风格。
@@ -818,11 +818,11 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 
 | 文件 | 变更 | 描述 |
 |------|------|------|
-| `hagokyu/api/ws_handler.py` | 导入优化 | 使用 `TYPE_CHECKING` 解决循环导入 → `Orchestrator` 类型注解不再报 F821 |
-| `hagokyu/api/ws_handler.py` | 删除未使用变量 | 移除 `loop` 绑定，`run_in_executor(None, ...)` 不再捕获返回值 |
-| `hagokyu/api/server.py` | 无新增变更（已正确） | 确认 `server.py` 结构干净 |
-| `hagokyu/tools/profiling.py` | 延迟导入修复 | 使用 `importlib.util.find_spec` 替代硬导入 `ydata_profiling`（避免未安装时的 ImportError） |
-| `hagokyu/tools/cleaning.py` | 导入归位 | `numpy`/`pandas` 导入从函数体内移至文件顶部 |
+| `hagoku/api/ws_handler.py` | 导入优化 | 使用 `TYPE_CHECKING` 解决循环导入 → `Orchestrator` 类型注解不再报 F821 |
+| `hagoku/api/ws_handler.py` | 删除未使用变量 | 移除 `loop` 绑定，`run_in_executor(None, ...)` 不再捕获返回值 |
+| `hagoku/api/server.py` | 无新增变更（已正确） | 确认 `server.py` 结构干净 |
+| `hagoku/tools/profiling.py` | 延迟导入修复 | 使用 `importlib.util.find_spec` 替代硬导入 `ydata_profiling`（避免未安装时的 ImportError） |
+| `hagoku/tools/cleaning.py` | 导入归位 | `numpy`/`pandas` 导入从函数体内移至文件顶部 |
 
 **剩余 RUFF 概况：254 E501（行 >120 字符）**
 
@@ -974,14 +974,14 @@ ignore = ["E501"]
 | `list` 方法名与内置类型冲突 | 1 | `# type: ignore[valid-type]` | `project_manager.py` |
 | 其他类型杂项 | 6 | 个别注解修复 | analyst/reporter/ws_handler |
 
-**最终验证：** `mypy hagokyu/ --ignore-missing-imports` → **Success: no issues found in 63 source files** ✅
+**最终验证：** `mypy hagoku/ --ignore-missing-imports` → **Success: no issues found in 63 source files** ✅
 
 **错误消除路径：** 83 → 0（完整归零，无遗漏、无抑制报警）
 
-**备份文件清理：** 已确认 `hagokyu/agents/reporter/agent.py.bak_20260509123941` 等备份文件不存在，项目干净 ✅
+**备份文件清理：** 已确认 `hagoku/agents/reporter/agent.py.bak_20260509123941` 等备份文件不存在，项目干净 ✅
 
 **架构设计决策记录：** 9 个 `type: ignore[override]` 注释是**刻意的设计选择**，非偷懒绕过。根因是 `InteractionMixin` 基类使用 `**kwargs: Any` 为多态提供灵活性，而 mypy 的静态 Liskov 检查无法理解这种 duck typing 模式。这是 mypy 对动态多态的已知限制，不影响运行时行为或代码正确性。
 
 ---
 
-*本报告基于 13 轮累计审查，覆盖全部 52 个源文件（hagokyu/ 36 + hagokyu_web/ 16）+ 新增 3 测试文件，mypy 0 错误，于 2026-05-11 10:31 更新。*
+*本报告基于 13 轮累计审查，覆盖全部 52 个源文件（hagoku/ 36 + hagoku_web/ 16）+ 新增 3 测试文件，mypy 0 错误，于 2026-05-11 10:31 更新。*

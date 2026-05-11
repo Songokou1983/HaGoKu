@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hagokyu"
+name = "hagoku"
 version = "0.1.0"
 description = "让每个小模型，都能做专业级商业分析"
 readme = "README.md"
@@ -78,16 +78,16 @@ pdf = [
 ]
 
 [project.scripts]
-hagokyu = "hagokyu.cli:main"
-hagokyu-api = "hagokyu.api.server:main"
+hagoku = "hagoku.cli:main"
+hagoku-api = "hagoku.api.server:main"
 
-# wheel / sdist 打包：hagokyu 包 + examples 目录
+# wheel / sdist 打包：hagoku 包 + examples 目录
 [tool.hatch.build.targets.wheel]
-packages = ["hagokyu", "examples"]
+packages = ["hagoku", "examples"]
 
 # sdist 打包：同上
 [tool.hatch.build.targets.sdist]
-packages = ["hagokyu", "examples"]
+packages = ["hagoku", "examples"]
 
 [tool.ruff]
 line-length = 120

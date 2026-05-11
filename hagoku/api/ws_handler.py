@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
 
-from hagokyu.observability.event_bus import EventBus
-from hagokyu.observability.events import Event
+from hagoku.observability.event_bus import EventBus
+from hagoku.observability.events import Event
 
 if TYPE_CHECKING:
-    from hagokyu.manager.orchestrator import Orchestrator
+    from hagoku.manager.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +63,8 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> 
     在后台线程运行 Orchestrator.run()。
     Orchestrator 会自动通过其 event_bus → WSBridge → WebSocket 推送事件到前端。
     """
-    from hagokyu.config import HaGoKuConfig
-    from hagokyu.manager.orchestrator import Orchestrator
+    from hagoku.config import HaGoKuConfig
+    from hagoku.manager.orchestrator import Orchestrator
 
     global _shared_orchestrator
 

@@ -81,7 +81,7 @@ class Orchestrator:
 
         # 核心组件
         self.event_bus = EventBus()
-        self.db = HaGoKuDB.get_instance(self.config.work_dir / "hagokyu.db")
+        self.db = HaGoKuDB.get_instance(self.config.work_dir / "hagoku.db")
         self.display = TerminalDisplay(verbosity="normal")
         self.output_mgr: OutputManager | None = None  # 按项目初始化
         self.memory: MemoryManager | None = None  # 按项目初始化

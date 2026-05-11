@@ -181,88 +181,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
             --warning: #fbbc04;
             --error: #ea4335;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: var(--text); background: var(--bg); line-height: 1.6;
-            max-width: 960px; margin: 0 auto; padding: 2rem;
-        }
-        header { border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem; }
-        h1 { font-size: 1.8rem; color: var(--primary); }
-        .meta { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem; }
-        .query { font-size: 1.1rem; margin: 1rem 0; padding: 0.75rem 1rem;
-                 background: var(--surface); border-left: 4px solid var(--primary); border-radius: 4px; }
-
-        /* 吸引力层 — 一眼抓住 */
-        .headline-box {
-            background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
-            color: #fff; border-radius: 12px; padding: 1.5rem 2rem;
-            margin: 1.5rem 0; font-size: 1.2rem; font-weight: 600;
-        }
-        .metric-cards {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 1rem; margin: 1.5rem 0;
-        }
-        .metric-card {
-            background: var(--surface); border-radius: 10px; padding: 1.25rem;
-            text-align: center; border: 1px solid var(--border);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .metric-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .metric-card .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
-        .metric-card .label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
-        .metric-card .trend-up { color: var(--success); }
-        .metric-card .trend-down { color: var(--error); }
-
-        .section { margin: 2rem 0; }
-        .section h2 { font-size: 1.4rem; color: var(--primary); border-bottom: 1px solid var(--border);
-                      padding-bottom: 0.5rem; margin-bottom: 1rem; }
-        .section h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
-
-        /* 双轨发现卡片 */
-        .finding { background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem;
-                   margin: 0.75rem 0; border-left: 4px solid var(--success); }
-        .finding.warning { border-left-color: var(--warning); }
-        .finding.error { border-left-color: var(--error); }
-        .finding .headline { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.35rem; color: var(--text); }
-        .finding .conclusion { font-weight: 500; margin-bottom: 0.25rem; }
-        .finding .detail { font-size: 0.9rem; color: var(--text-secondary); }
-
-        /* 核心价值层 — 展开查看 */
-        .finding .core-value { margin-top: 0.75rem; }
-        .finding .plain-explanation { font-size: 0.95rem; line-height: 1.7; margin-bottom: 0.5rem; }
-        .finding .stats {
-            font-family: 'Courier New', monospace; font-size: 0.85rem;
-            background: #fff; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;
-        }
-        .finding .limitations {
-            font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;
-            padding-left: 1rem; border-left: 2px solid var(--border);
-        }
-        .finding .limitations li { margin: 0.2rem 0; }
-        .finding .evidence-trace {
-            font-size: 0.8rem; color: #80868b; margin-top: 0.5rem;
-            font-family: 'Courier New', monospace;
-        }
-
-        .chart { margin: 1rem 0; text-align: center; }
-        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
-        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
-                font-size: 0.75rem; font-weight: 600; }
-        .badge-pass { background: #e6f4ea; color: #137333; }
-        .badge-warn { background: #fef7e0; color: #b06000; }
-        .badge-fail { background: #fce8e6; color: #c5221f; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                        gap: 1rem; margin: 1rem 0; }
-        .summary-card { background: var(--surface); border-radius: 8px; padding: 1rem; text-align: center; }
-        .summary-card .value { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-        .summary-card .label { font-size: 0.85rem; color: var(--text-secondary); }
-        .guardrail { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 0.9rem; }
-        .guardrail-pass { background: #e6f4ea; }
-        .guardrail-warn { background: #fef7e0; }
-        .guardrail-fail { background: #fce8e6; }
-        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
-                color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -451,31 +370,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
             --text-secondary: #666666;
             --border: #cccccc;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Times New Roman', 'Songti SC', 'SimSun', serif;
-            color: var(--text); background: var(--bg); line-height: 1.8;
-            max-width: 800px; margin: 0 auto; padding: 2.5rem;
-            font-size: 12pt;
-        }
-        header { border-bottom: 1px solid var(--text); padding-bottom: 1rem; margin-bottom: 2rem; }
-        h1 { font-size: 16pt; text-align: center; margin-bottom: 0.5rem; }
-        .meta { font-size: 10pt; color: var(--text-secondary); text-align: center; }
-        .query { font-style: italic; text-align: center; margin: 1rem 0; font-size: 11pt; }
-        .section { margin: 2rem 0; }
-        h2 { font-size: 13pt; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; margin-bottom: 0.8rem; }
-        h3 { font-size: 12pt; margin: 1rem 0 0.5rem; }
-        p { text-indent: 2em; margin: 0.5rem 0; }
-        table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 10pt; }
-        th, td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
-        th { background: var(--surface); font-weight: bold; }
-        .finding { margin: 1rem 0; padding: 0.5rem 0; }
-        .finding p { text-indent: 0; }
-        .stats-table { margin: 0.5rem 0 0.5rem 2em; }
-        .stats-table td { font-family: 'Courier New', monospace; font-size: 9pt; }
-        .guardrail { font-size: 10pt; color: #c0392b; margin: 0.3rem 0; }
-        footer { margin-top: 3rem; border-top: 1px solid var(--text); padding-top: 0.5rem;
-                font-size: 9pt; color: var(--text-secondary); text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -555,32 +450,7 @@ BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — Summary</title>
     <style>
         :root { --primary: #1a73e8; --bg: #fff; --surface: #f8f9fa; --text: #202124; --border: #dadce0; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            color: var(--text); background: var(--bg); line-height: 1.5;
-            max-width: 640px; margin: 0 auto; padding: 2rem;
-        }
-        header { border-left: 4px solid var(--primary); padding-left: 1rem; margin-bottom: 2rem; }
-        h1 { font-size: 1.3rem; color: var(--primary); }
-        .meta { font-size: 0.8rem; color: #80868b; margin-top: 0.3rem; }
-        .query { font-size: 0.95rem; margin: 0.5rem 0; color: var(--text); }
-        .key-number { display: flex; gap: 1.5rem; margin: 1.5rem 0; flex-wrap: wrap; }
-        .key-number .item { text-align: center; }
-        .key-number .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
-        .key-number .label { font-size: 0.75rem; color: #80868b; }
-        .findings { margin: 1.5rem 0; }
-        .finding-item {
-            background: var(--surface); border-radius: 6px; padding: 0.75rem 1rem;
-            margin: 0.5rem 0; border-left: 3px solid var(--primary);
-        }
-        .finding-item .question { font-weight: 600; font-size: 0.9rem; }
-        .finding-item .conclusion { font-size: 0.85rem; margin-top: 0.25rem; }
-        .finding-item .stats { font-size: 0.8rem; color: #5f6368; margin-top: 0.25rem;
-                              font-family: 'Courier New', monospace; }
-        .finding-item.warning { border-left-color: #fbbc04; }
-        .finding-item.negative { border-left-color: #ea4335; }
-        footer { margin-top: 2rem; font-size: 0.75rem; color: #80868b; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -657,64 +527,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
             --warning: #f57f17;
             --error: #c62828;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: var(--text); background: var(--bg); line-height: 1.6;
-            max-width: 960px; margin: 0 auto; padding: 2rem;
-        }
-        header {
-            background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%);
-            color: #fff; padding: 2rem; border-radius: 12px; margin-bottom: 2rem;
-        }
-        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
-        .meta { opacity: 0.85; font-size: 0.9rem; }
-        .query { font-size: 1.1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.3); }
-
-        .headline-box {
-            background: var(--accent); color: #fff; border-radius: 8px;
-            padding: 1.25rem 1.5rem; margin: 1.5rem 0;
-            font-size: 1.15rem; font-weight: 600;
-        }
-        .metric-cards {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 1rem; margin: 1.5rem 0;
-        }
-        .metric-card {
-            background: var(--surface); border-radius: 8px; padding: 1.25rem;
-            text-align: center; border-bottom: 3px solid var(--primary);
-        }
-        .metric-card .value { font-size: 2rem; font-weight: 700; color: var(--primary); }
-        .metric-card .label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
-
-        .section { margin: 2rem 0; }
-        .section h2 { font-size: 1.3rem; color: var(--primary); padding-bottom: 0.5rem;
-                      border-bottom: 2px solid var(--primary); margin-bottom: 1rem; }
-
-        .finding {
-            background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem;
-            margin: 0.75rem 0; border-left: 4px solid var(--success);
-        }
-        .finding.warning { border-left-color: var(--warning); }
-        .finding.error { border-left-color: var(--error); }
-        .finding .headline { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.35rem; }
-        .finding .conclusion { font-weight: 500; }
-        .finding .detail { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem; }
-        .finding .stats { font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
-
-        .action-box {
-            background: #e3f2fd; border-radius: 8px; padding: 1rem 1.25rem;
-            margin: 1rem 0; border-left: 4px solid var(--primary);
-        }
-        .action-box h3 { color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem; }
-        .action-box ul { padding-left: 1.5rem; }
-        .action-box li { margin: 0.3rem 0; }
-
-        .chart { margin: 1rem 0; text-align: center; }
-        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
-
-        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
-                color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -800,36 +613,7 @@ AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — A/B 测试报告</title>
     <style>
         :root { --primary: #1b5e20; --bg: #fff; --surface: #f1f8e9; --text: #212121; --border: #c8e6c9; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; }
-        header { background: var(--primary); color: #fff; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
-        h1 { font-size: 1.5rem; }
-        .meta { opacity: 0.85; font-size: 0.85rem; margin-top: 0.5rem; }
-
-        .verdict-box {
-            border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
-            text-align: center; font-size: 1.2rem; font-weight: 600;
-        }
-        .verdict-significant { background: #e8f5e9; color: var(--success); border: 2px solid var(--success); }
-        .verdict-not-significant { background: #fff3e0; color: var(--warning); border: 2px solid var(--warning); }
-
-        .metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-        .metric-card { background: var(--surface); border-radius: 8px; padding: 1rem; text-align: center; }
-        .metric-card .value { font-size: 1.6rem; font-weight: 700; color: var(--primary); }
-        .metric-card .label { font-size: 0.8rem; color: #757575; }
-
-        .section { margin: 2rem 0; }
-        .section h2 { font-size: 1.2rem; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
-        .result-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        .result-table th, .result-table td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
-        .result-table th { background: var(--surface); font-weight: 600; }
-
-        .finding { background: var(--surface); border-radius: 8px; padding: 1rem; margin: 0.5rem 0; }
-        .finding .stats { font-family: monospace; font-size: 0.85rem; color: #616161; }
-
-        .chart { margin: 1rem 0; text-align: center; }
-        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; }
-        footer { margin-top: 3rem; font-size: 0.8rem; color: #9e9e9e; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -902,35 +686,7 @@ EXECUTIVE_BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 高管简报</title>
     <style>
         :root { --primary: #1565c0; --bg: #fff; --surface: #f5f5f5; --text: #212121; --border: #e0e0e0; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.5; max-width: 680px; margin: 0 auto; padding: 2rem; }
-
-        header { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 3px solid var(--primary); }
-        h1 { font-size: 1.4rem; color: var(--primary); }
-        .meta { font-size: 0.8rem; color: #9e9e9e; margin-top: 0.25rem; }
-
-        .key-message {
-            background: var(--primary); color: #fff; border-radius: 8px;
-            padding: 1.25rem; margin: 1rem 0; font-size: 1.1rem; font-weight: 500;
-        }
-
-        .numbers { display: flex; gap: 2rem; margin: 1.5rem 0; flex-wrap: wrap; }
-        .numbers .item { text-align: center; min-width: 100px; }
-        .numbers .value { font-size: 2rem; font-weight: 700; color: var(--primary); }
-        .numbers .label { font-size: 0.75rem; color: #757575; text-transform: uppercase; }
-
-        .insight { margin: 1rem 0; padding: 0.75rem 1rem; border-left: 3px solid var(--primary); background: var(--surface); border-radius: 0 6px 6px 0; }
-        .insight .q { font-weight: 600; font-size: 0.95rem; }
-        .insight .a { font-size: 0.9rem; margin-top: 0.25rem; color: #424242; }
-
-        .recommendation { background: #e3f2fd; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
-        .recommendation h3 { font-size: 0.95rem; color: var(--primary); margin-bottom: 0.5rem; }
-        .recommendation ol { padding-left: 1.5rem; }
-        .recommendation li { font-size: 0.9rem; margin: 0.3rem 0; }
-
-        .caveat { font-size: 0.8rem; color: #9e9e9e; margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
-
-        footer { margin-top: 2rem; font-size: 0.7rem; color: #bdbdbd; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>
@@ -997,37 +753,7 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 数据审计报告</title>
     <style>
         :root { --primary: #37474f; --bg: #fff; --surface: #eceff1; --text: #212121; --text-secondary: #607d8b; --border: #cfd8dc; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem; }
-        header { border-bottom: 3px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem; }
-        h1 { font-size: 1.5rem; color: var(--primary); }
-        .meta { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; }
-
-        .audit-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-        .audit-card { background: var(--surface); border-radius: 8px; padding: 1rem; border-left: 4px solid var(--primary); }
-        .audit-card .label { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; }
-        .audit-card .value { font-size: 1.4rem; font-weight: 700; color: var(--primary); margin-top: 0.25rem; }
-        .audit-card.warn { border-left-color: var(--warning); }
-        .audit-card.error { border-left-color: var(--error); }
-
-        .section { margin: 2rem 0; }
-        .section h2 { font-size: 1.2rem; color: var(--primary); margin-bottom: 1rem; }
-
-        .audit-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
-        .audit-table th, .audit-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
-        .audit-table th { background: var(--surface); font-weight: 600; color: var(--primary); }
-        .audit-table tr:hover { background: #fafafa; }
-
-        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
-        .badge-pass { background: #e8f5e9; color: var(--success); }
-        .badge-warn { background: #fff3e0; color: var(--warning); }
-        .badge-fail { background: #ffebee; color: var(--error); }
-
-        .finding { background: var(--surface); border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
-        .chart { margin: 1rem 0; text-align: center; }
-        .chart img, .chart iframe { max-width: 100%; border-radius: 8px; }
-
-        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+ + _BASE_REPORT_CSS +
     </style>
 </head>
 <body>

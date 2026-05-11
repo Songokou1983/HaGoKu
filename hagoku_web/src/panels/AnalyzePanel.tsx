@@ -45,6 +45,7 @@ export default function AnalyzePanel() {
   // Process each batch
   useEffect(() => {
     if (batch.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- batch events from external WS, functional update is correct
     setLogs((prev) => {
       let next = prev;
       for (const msg of batch) {

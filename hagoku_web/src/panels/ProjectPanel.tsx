@@ -39,14 +39,19 @@ export default function ProjectPanel() {
 
   useEffect(() => {
     if (batch.length === 0) return;
-    // Listen for run_started to show analysis target
+    // Listen for run_started to show analysis target — accumulate then set once
+    let found = "";
     for (const msg of batch) {
       if (msg.type === "event" && msg.data) {
         const d = msg.data;
         if (d.event_type === "run_started" && typeof d.data?.query === "string") {
-          setSummary(`📋 ${d.data.query}`);
+          found = `📋 ${d.data.query}`;
         }
       }
+    }
+    if (found) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- external event sync, functional update ensures correct merge
+      setSummary((prev) => (prev !== found ? found : prev));
     }
   }, [batch]);
 

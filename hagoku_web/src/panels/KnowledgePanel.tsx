@@ -20,7 +20,8 @@ export default function KnowledgePanel() {
 
   useEffect(() => {
     if (batch.length === 0) return;
-    // Merge knowledge-load events
+    // Merge knowledge-load events — accumulate, then set once
+    const newKeys = new Set<string>();
     for (const msg of batch) {
       if (msg.type === "event" && msg.data) {
         const d = msg.data;
@@ -30,20 +31,21 @@ export default function KnowledgePanel() {
             | undefined;
           if (tool?.startsWith("load_knowledge")) {
             const name = ((d.data as Record<string, unknown>)?.name as string) ?? "unknown";
-            setEntries((prev) => {
-              if (prev.some((e) => e.key === name)) return prev;
-              return [
-                ...prev,
-                {
-                  key: name,
-                  title: name,
-                  tags: [],
-                },
-              ];
-            });
+            newKeys.add(name);
           }
         }
       }
+    }
+    if (newKeys.size > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- batch events from external WS, functional update is correct
+      setEntries((prev) => {
+        const filtered = [...newKeys].filter((k) => !prev.some((e) => e.key === k));
+        if (filtered.length === 0) return prev;
+        return [
+          ...prev,
+          ...filtered.map((key) => ({ key, title: key, tags: [] as string[] })),
+        ];
+      });
     }
   }, [batch]);
 

@@ -53,7 +53,7 @@ export default function ProjectPanel() {
   const agentList = Object.entries(agentDef) as [AgentId, { emoji: string; label: string }][];
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc]">
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
       <PanelHeader title="Project" />
       <div className="flex-1 overflow-auto p-3 space-y-4">
         {summary ? (

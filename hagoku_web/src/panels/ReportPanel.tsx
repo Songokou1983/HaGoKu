@@ -37,7 +37,7 @@ export default function ReportPanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc]">
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
       <PanelHeader title="Reports" />
       <div className="flex-1 overflow-auto p-3">
         {content.length === 0 ? (

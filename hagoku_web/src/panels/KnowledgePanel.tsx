@@ -48,7 +48,7 @@ export default function KnowledgePanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc]">
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
       <PanelHeader title="Knowledge" />
       <div className="flex-1 overflow-auto p-3">
         {entries.length === 0 ? (

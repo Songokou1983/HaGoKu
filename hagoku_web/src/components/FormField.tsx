@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-interface FieldProps {
+export interface FieldProps {
   label: string;
   icon: ReactNode;
   children: ReactNode;
@@ -18,7 +18,7 @@ export function Field({ label, icon, children }: FieldProps) {
   );
 }
 
-interface SelectProps {
+export interface SelectProps {
   options: string[];
   value: string;
   onChange?: (value: string) => void;

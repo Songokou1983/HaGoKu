@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { EventTable, type EventEntry } from "../components/EventTable";
 import type { EventType } from "../types/events";
@@ -20,6 +21,7 @@ function detailSnippet(data: Record<string, unknown>): string {
 
 export default function EventPanel() {
   const [entries, setEntries] = useState<EventEntry[]>([]);
+  const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
 
   useAgentStatusSync();
 
@@ -47,15 +49,22 @@ export default function EventPanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc]">
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
       <PanelHeader
         title="Event Log"
         badge={
           <span className="text-[#555] font-normal">({entries.length})</span>
         }
       />
-      <div className="flex-1 overflow-auto font-mono text-[12px]">
+      <div className="flex-1 overflow-auto font-mono text-[12px] relative">
         <EventTable entries={entries} />
+        {connectionStatus === "disconnected" && (
+          <div className="absolute inset-0 bg-[#1e1e1e]/90 flex flex-col items-center justify-center gap-2 z-10">
+            <span className="text-2xl">📡</span>
+            <span className="text-[13px] text-[#f44747]">Connection lost</span>
+            <span className="text-[11px] text-[#666]">Reconnecting…</span>
+          </div>
+        )}
       </div>
     </div>
   );

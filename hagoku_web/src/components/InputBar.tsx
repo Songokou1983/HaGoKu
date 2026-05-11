@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { Send, Zap, Loader2 } from "lucide-react";
 
-interface InputBarProps {
+export interface InputBarProps {
   placeholder?: string;
   onSend: (text: string) => void;
   disabled?: boolean;
@@ -50,7 +50,7 @@ export function InputBar({
       <Zap size={14} className="text-[#569cd6] shrink-0 mt-1.5" />
       <textarea
         ref={textareaRef}
-        className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#d4d4d4] placeholder-[#555] resize-none leading-relaxed max-h-[120px]"
+        className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#d4d4d4] placeholder-[#555] resize-none leading-relaxed max-h-[120px] focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none"
         placeholder={placeholder}
         rows={1}
         value={value}
@@ -63,7 +63,7 @@ export function InputBar({
       />
       <button
         onClick={handleSend}
-        className="p-1 text-[#569cd6] hover:text-[#9cdcfe] disabled:text-[#444] shrink-0 transition-colors duration-150"
+        className="p-1 text-[#569cd6] hover:text-[#9cdcfe] disabled:text-[#444] shrink-0 transition-colors duration-150 active:scale-95"
         disabled={isDisabled}
         aria-label={disabled ? "Sending..." : "Send"}
       >

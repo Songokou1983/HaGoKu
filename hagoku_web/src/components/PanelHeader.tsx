@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-interface PanelHeaderProps {
+export interface PanelHeaderProps {
   title: string;
   /** Optional badge shown next to the title (e.g. count) */
   badge?: ReactNode;

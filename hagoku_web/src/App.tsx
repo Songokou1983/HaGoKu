@@ -130,7 +130,7 @@ export default function App() {
             <button
               key={cfg.id}
               onClick={() => togglePanel(cfg.id)}
-              className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded transition-colors active:scale-95 ${
                 visible
                   ? "bg-[#3a3a3a] text-[#d4d4d4]"
                   : "text-[#555] hover:text-[#888] hover:bg-[#2a2a2a]"

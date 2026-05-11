@@ -181,7 +181,8 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
             --warning: #fbbc04;
             --error: #ea4335;
         }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -370,7 +371,8 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
             --text-secondary: #666666;
             --border: #cccccc;
         }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -450,7 +452,8 @@ BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — Summary</title>
     <style>
         :root { --primary: #1a73e8; --bg: #fff; --surface: #f8f9fa; --text: #202124; --border: #dadce0; }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -527,7 +530,8 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
             --warning: #f57f17;
             --error: #c62828;
         }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -613,7 +617,8 @@ AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — A/B 测试报告</title>
     <style>
         :root { --primary: #1b5e20; --bg: #fff; --surface: #f1f8e9; --text: #212121; --border: #c8e6c9; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -686,7 +691,8 @@ EXECUTIVE_BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 高管简报</title>
     <style>
         :root { --primary: #1565c0; --bg: #fff; --surface: #f5f5f5; --text: #212121; --border: #e0e0e0; }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>
@@ -753,7 +759,8 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 数据审计报告</title>
     <style>
         :root { --primary: #37474f; --bg: #fff; --surface: #eceff1; --text: #212121; --text-secondary: #607d8b; --border: #cfd8dc; --success: #2e7d32; --warning: #f57f17; --error: #c62828; }
- + _BASE_REPORT_CSS +
+        </style>
+        <style>""" + _BASE_REPORT_CSS + """
     </style>
 </head>
 <body>

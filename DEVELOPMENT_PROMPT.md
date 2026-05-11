@@ -1743,4 +1743,27 @@ pytest tests/test_tools/ -q
 
 ---
 
+**§8.10 完成记录（2026-05-11）：**
+
+| 验证项 | 期望 | 实际 | 状态 |
+|--------|------|------|------|
+| CSS 正确嵌入 | True | `CSS 正确嵌入: True` | ✅ |
+| 残留字面文本 | 0 | `0` | ✅ |
+| pytest tests/test_tools/ | PASS | `93 passed` | ✅ |
+
+**验证 2 结果详情：**
+```
+CSS embedding verified: True
+Buggy literal patterns remaining: 0
+```
+
+**验证 3 结果详情：**
+```
+................................ [100%]
+93 passed, 0 failed
+```
+
+---
+
 *第十六轮 UI 视觉升级任务：6/7 完成，任务六待修（2026-05-11）。*
+*§8.10 Round 17 CSS 嵌入修复：✅ 完成（2026-05-11）。*

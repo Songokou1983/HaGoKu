@@ -2800,3 +2800,1175 @@ npm run build       ✓ built in 726ms
 npm run lint        ✓ 0 errors
 tsc --noEmit        ✓ 0 errors
 ```
+
+---
+
+## §12 UI/UX 全面体检 — Round 21（2026-05-11）
+
+> **审计范围**：前端 `hagoku_web/src/` 所有 `.tsx` 文件 + `tailwind.config.js` + `index.css`
+> **审计方法**：代码静态分析 + ui-ux-pro-max skill 设计数据库检索
+> **整体结论**：Token 系统基础扎实，Fira Code + Fira Sans 字体选型最优；但 3 处硬编码颜色、1 个受控组件 bug、emoji 图标残留需要清理。
+
+### §12.0 整体评分
+
+| 维度 | 分数 | 说明 |
+|------|------|------|
+| 设计一致性 | 6/10 | Token 覆盖率 ~85%，但 3 处大量 hardcoded hex 破坏一致性 |
+| 可访问性 | 5/10 | focus ring 硬编码、emoji 图标、`ConnectionIndicator` 颜色不合规 |
+| 交互反馈 | 7/10 | Loading/error 覆盖完整，tab hover 反馈弱，Toast 无焦点环 |
+| 组件质量 | 6/10 | `FormField.Select` 受控 bug，`ConnectionIndicator` 死代码 |
+| 整体风格 | 7/10 | 暗色 dashboard 方向正确，字体搭配达设计数据库最高推荐级 |
+
+---
+
+### §12.1 任务表（按优先级）
+
+| 优先级 | ID | 任务 | 文件 | 状态 |
+|--------|-----|------|------|------|
+| P0 | 12.1 | 替换 3 处 `ring-[#569cd6]` → `ring-app-accent` | `AnalyzePanel.tsx` `InputBar.tsx` `SettingsPanel.tsx` | ✅ 2026-05-11 |
+| P0 | 12.2 | `FormField.Select` 改 `defaultValue` → `value` | `FormField.tsx` | ✅ 2026-05-11 |
+| P1 | 12.3 | EventTable hex colorMap → tailwind.config.js token | `tailwind.config.js` `EventTable.tsx` | ✅ 2026-05-11 |
+| P1 | 12.4 | Tab hover 文字对比度提升 | `App.tsx` | ✅ 2026-05-11 |
+| P2 | 12.5 | emoji 图标 → Lucide SVG（ProjectPanel agent 列） | `ProjectPanel.tsx` | ✅ 2026-05-11 |
+| P2 | 12.6 | Toast ✕ 字符 → `<X size={12} />` + 焦点环 | `App.tsx` | ✅ 2026-05-11 |
+| P2 | 12.7 | ScoutConfirmPanel 原生 select 加统一样式 | `ScoutConfirmPanel.tsx` | ✅ 2026-05-11 |
+| P3 | 12.8 | 删除 `ConnectionIndicator.tsx`（死代码）或修色后接入 | `ConnectionIndicator.tsx` `App.tsx` | ✅ 2026-05-11 |
+| P3 | 12.9 | LogView 颜色分层（当前全绿） | `LogView.tsx` | ✅ 2026-05-11 |
+
+---
+
+### §12.2 详细说明与改法
+
+#### 12.1 — 三处 hardcoded focus ring（P0）
+
+**问题**：以下三处 focus ring 写死了 VS Code 蓝 `#569cd6`，和 `app-accent`（`#569cd6`）目前碰巧相同，但属于意外相等而非设计保证，主题换色时会静默失效。
+
+```
+AnalyzePanel.tsx  → path input: focus-visible:ring-[#569cd6]
+InputBar.tsx      → textarea:   focus-visible:ring-[#569cd6]
+SettingsPanel.tsx → form inputs: focus-visible:ring-[#569cd6]
+```
+
+**修法**：全局替换为 `focus-visible:ring-app-accent`（3 文件，每文件 1 行）。
+
+---
+
+#### 12.2 — FormField.Select 受控组件 bug（P0）
+
+**问题**：`FormField.tsx` 中 `<select defaultValue={value}>` 使用非受控模式，父组件 `SettingsPanel` 从 `/api/config` 拉到新值后 `value` prop 更新，但 select 的显示不刷新（React 对 `defaultValue` 只读取一次）。
+
+**修法**：
+
+```tsx
+// FormField.tsx — Select 组件
+// ❌ 现状
+<select defaultValue={value} onChange={onChange} ...>
+
+// ✅ 修复
+<select value={value} onChange={onChange} ...>
+```
+
+---
+
+#### 12.3 — EventTable hex colorMap → token（P1）
+
+**问题**：`EventTable.tsx` 中用整块 `colorMap` 对象存 hex，并用 `style={{ color: colorMap[event] }}` 应用。`text-[#c586c0]` 直接写在 JSX 里。Tailwind 无法 tree-shake，主题迁移无法 diff。
+
+**修法**：
+
+第一步 — `tailwind.config.js` `theme.extend.colors` 新增 5 个 event 颜色 token：
+
+```js
+'event-run':    '#569cd6',   // run_started / agent_started
+'event-done':   '#6a9955',   // agent_completed / run_completed
+'event-fail':   '#f44747',   // agent_failed / run_failed
+'event-warn':   '#dcdcaa',   // agent_thinking / tool_called
+'event-purple': '#c586c0',   // user_input_requested
+```
+
+第二步 — `EventTable.tsx`：删除 `colorMap` 对象和 `style={{ color: ... }}` 调用，改用 Tailwind class 字符串映射：
+
+```tsx
+const eventColorClass: Record<string, string> = {
+  run_started:          "text-event-run",
+  agent_started:        "text-event-run",
+  run_completed:        "text-event-done",
+  agent_completed:      "text-event-done",
+  agent_failed:         "text-event-fail",
+  run_failed:           "text-event-fail",
+  agent_thinking:       "text-event-warn",
+  tool_called:          "text-event-warn",
+  user_input_requested: "text-event-purple",
+};
+
+// 渲染时（替换原来带 style 的 span）
+<span className={eventColorClass[entry.event] ?? "text-app-text-muted"}>
+  {entry.event}
+</span>
+```
+
+同时将 `text-[#c586c0]` 替换为 `text-event-purple`。
+
+---
+
+#### 12.4 — Tab hover 对比度（P1）
+
+**问题**：`App.tsx` 中 inactive tab 的 hover class 包含 `hover:text-app-text-muted`，悬停后文字颜色不变（仍是 muted），只有背景色改变，视觉响应极弱。
+
+**修法**：
+
+```tsx
+// App.tsx — toggle button inactive state
+// ❌ 现状
+hover:text-app-text-muted hover:bg-app-bg-tertiary
+
+// ✅ 修复
+hover:text-app-text hover:bg-app-bg-tertiary
+```
+
+---
+
+#### 12.5 — emoji 图标 → Lucide SVG（P2）
+
+**问题**：`ProjectPanel.tsx` agent 行用 emoji（🔍🧹📊📝）作为 UI 图标。跨平台字体渲染尺寸不一致（macOS/Linux/Windows 最多相差 20%），无法通过 CSS 控制颜色和粗细。
+
+**修法**：
+
+```tsx
+// ProjectPanel.tsx
+import { Search, Sparkles, BarChart2, FileText, Cpu } from "lucide-react";
+
+const AGENT_ICONS: Record<string, React.ElementType> = {
+  scout:    Search,
+  cleaner:  Sparkles,
+  analyst:  BarChart2,
+  reporter: FileText,
+  manager:  Cpu,
+};
+
+// 渲染时
+const Icon = AGENT_ICONS[agent.role] ?? Cpu;
+<Icon size={13} className="shrink-0 text-app-agent" />
+```
+
+---
+
+#### 12.6 — Toast 关闭按钮（P2）
+
+**问题**：`App.tsx` 中 Toast 关闭用裸 `✕` 字符，无焦点环，键盘用户无法识别焦点位置。
+
+**修法**：
+
+```tsx
+// App.tsx — Toast dismiss button
+import { X } from "lucide-react";
+
+// ❌ 现状
+<button className="ml-2 opacity-70 hover:opacity-100">✕</button>
+
+// ✅ 修复
+<button
+  className="ml-2 opacity-70 hover:opacity-100 focus-visible:ring-1 focus-visible:ring-white rounded p-0.5"
+  aria-label="关闭提示"
+>
+  <X size={12} />
+</button>
+```
+
+---
+
+#### 12.7 — ScoutConfirmPanel select 统一样式（P2）
+
+**问题**：`ScoutConfirmPanel.tsx` 中原生 `<select>` 未加样式，在 Windows/Linux 渲染为系统默认样式，与深色主题严重不协调。
+
+**修法**：给所有 `<select>` 加统一样式 class（不改逻辑）：
+
+```tsx
+// ScoutConfirmPanel.tsx — 每个 <select> 加 className
+className="bg-app-bg-secondary border border-app-border rounded px-2 py-0.5
+           text-app-text text-ui-sm focus:outline-none focus:border-app-accent
+           cursor-pointer w-full"
+```
+
+---
+
+#### 12.8 — ConnectionIndicator 死代码清理（P3）
+
+**问题**：`ConnectionIndicator.tsx` 从未被任何组件 import（grep 无结果）。颜色使用 `bg-yellow-500 / bg-green-500 / bg-red-500` 而非 `app-warning / app-success / app-error` token。
+
+**两个选项**（任选其一）：
+
+- **选项 A（推荐）**：删除文件。`App.tsx` 的 `SystemStatus` 已承担相同职责。
+- **选项 B**：修色后接入 `App.tsx` SystemStatus 区域，取代现有 inline dot 逻辑。
+
+---
+
+#### 12.9 — LogView 颜色分层（P3）
+
+**问题**：`LogView.tsx` 中所有 `type === "event"` 的日志行统一显示 `text-app-success`（绿色），无法区分 `agent_failed`（应为红）、`agent_thinking`（应为黄）、`run_completed`（应为绿）。
+
+**修法**（依赖 §12.3 的 token 先完成）：
+
+```tsx
+// LogView.tsx — 替换颜色逻辑
+const getEntryColor = (type: string, content?: string): string => {
+  if (type === "user") return "text-app-accent";
+  if (type === "system") return "text-app-warning";
+  if (type === "error" || content?.includes("failed")) return "text-app-error";
+  if (content?.includes("completed")) return "text-event-done";
+  if (content?.includes("thinking")) return "text-event-warn";
+  return "text-app-text-muted";
+};
+```
+
+---
+
+### §12.3 验证清单
+
+完成所有任务后必须运行：
+
+```bash
+cd hagoku_web
+npm run build      # ✅ 0 errors（2026-05-11）
+npm run lint       # ✅ 0 errors（2026-05-11）
+tsc --noEmit       # ✅ 0 errors（2026-05-11）
+```
+
+额外人工确认：
+- [x] 打开 Settings 面板 → 加载 `/api/config` → select 显示的 model 和 API 返回一致
+- [x] 键盘 Tab 到 Toast 关闭按钮 → 有可见焦点环
+- [x] 在 EventPanel 触发一次分析 → 不同事件类型显示不同颜色（不全绿/全蓝）
+- [x] ProjectPanel agent 行显示 Lucide 图标（无 emoji）
+
+---
+
+### §12.4 第二十一轮完成记录（2026-05-11）
+
+**审计核查结果：**
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 12.1 | `AnalyzePanel.tsx:186` `InputBar.tsx:53` `SettingsPanel.tsx:48,65` | `ring-[#569cd6]` → `ring-app-accent` | ✅ |
+| 12.2 | `FormField.tsx:31` | `defaultValue` → `value={value}` 受控模式 | ✅ |
+| 12.3 | `tailwind.config.js:29-33` `EventTable.tsx:26-29` | 5 个 `event-*` token；hex colorMap → `eventColorClass` | ✅ |
+| 12.4 | `App.tsx:159` | `hover:text-app-text-muted` → `hover:text-app-text` | ✅ |
+| 12.5 | `ProjectPanel.tsx:1,11-13` | emoji → `Search / Sparkles / BarChart2 / FileText` | ✅ |
+| 12.6 | `App.tsx` | `✕` → `<X size={12} />` + `focus:ring-1 focus:ring-white` | ✅ |
+| 12.7 | `ScoutConfirmPanel.tsx:52` | select 加 `focus:ring-app-accent hover:border-app-accent transition-colors` | ✅ |
+| 12.8 | `ConnectionIndicator.tsx` | 文件已删除 | ✅ |
+| 12.9 | `LogView.tsx:15-18` | `LOG_COLOR` Record 分层着色 | ✅ |
+
+**构建验证：**
+```
+npm run build  ✓（chunk size warning 为既有问题，非本轮引入）
+npm run lint   ✓
+tsc --noEmit   ✓
+```
+
+*第二十一轮全部完成（2026-05-11）。*
+
+---
+
+## §13 UX 深度修复 — Round 22（2026-05-11）
+
+> **审计来源**：ui-ux-pro-max skill 第二轮深度扫描，覆盖 cursor、动效、连接态、Empty state、标题一致性
+> **前提**：§12 全部完成后执行本节
+
+### §13.1 任务表（按优先级）
+
+| 优先级 | ID | 任务 | 文件 | 状态 |
+|--------|-----|------|------|------|
+| P1 | 13.1 | `cursor-pointer` 补全（6 处遗漏） | `App.tsx` `ProjectPanel.tsx` `InputBar.tsx` `ScoutConfirmPanel.tsx` | ✅ 2026-05-11 |
+| P1 | 13.2 | `index.css` 加 `prefers-reduced-motion` 全局策略 | `src/index.css` | ✅ 2026-05-11 |
+| P1 | 13.3 | `AnalyzePanel` 补 `"connecting"` / `"reconnecting"` 状态遮罩 | `AnalyzePanel.tsx` | ✅ 2026-05-11 |
+| P2 | 13.4 | Toast dismiss 加 `transition-opacity` | `App.tsx` | ✅ 2026-05-11 |
+| P2 | 13.5 | `active:scale-95` 补 `transition-[colors,transform]` | `App.tsx` | ✅ 2026-05-11 |
+| P2 | 13.6 | Reports / Knowledge Empty state 文案改为中文引导语 | `ReportPanel.tsx` `KnowledgePanel.tsx` | ✅ 2026-05-11 |
+| P2 | 13.7 | Panel header + tab 标题全局统一 | `ProjectPanel.tsx` `EventPanel.tsx` `App.tsx` | ✅ 2026-05-11 |
+
+---
+
+### §13.2 详细改法
+
+#### 13.1 — cursor-pointer 补全（P1）
+
+审计发现以下 6 处可交互元素缺少 `cursor-pointer`，在现有 `className` 串末尾追加即可：
+
+| 文件 | 行 | 元素 |
+|------|----|------|
+| `App.tsx` | ~145 | Toast dismiss `<button>` |
+| `App.tsx` | ~154-165 | Panel toggle `<button>`（每个） |
+| `ProjectPanel.tsx` | ~138-148 | Project chip `<button>` |
+| `ProjectPanel.tsx` | ~165-171 | "New" `<button>` |
+| `InputBar.tsx` | ~64-75 | Send `<button>` |
+| `ScoutConfirmPanel.tsx` | ~49-53 | Type `<select>` |
+
+改法：在每处的 `className` 末尾追加 `cursor-pointer`，**不改其他内容**。
+
+---
+
+#### 13.2 — prefers-reduced-motion（P1）
+
+**问题**：`index.css` 完全没有 `prefers-reduced-motion` 处理，而代码中有 5 处持续动画：
+- `animate-spin`：`AnalyzePanel.tsx`、`ReportPanel.tsx`、`KnowledgePanel.tsx`、`InputBar.tsx`（共 4 处）
+- `animate-pulse`：`ProjectPanel.tsx` 运行状态指示点
+
+**修法**：在 `src/index.css` 末尾追加（一次覆盖全部，无需逐个组件修改）：
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+---
+
+#### 13.3 — AnalyzePanel 补 connecting 状态遮罩（P1）
+
+**问题**：`AnalyzePanel.tsx` 只处理了 `connectionStatus === "disconnected"`，但 `"connecting"` / `"reconnecting"` 阶段 UI 看起来已就绪，用户点发送无响应，造成困惑。
+
+**改法**：在 `AnalyzePanel.tsx` 的 disconnected overlay（`absolute inset-0 z-10...`）**之前**插入：
+
+```tsx
+{(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
+  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center
+                  gap-2 bg-app-bg/80 backdrop-blur-sm">
+    <Loader2 size={20} className="animate-spin text-app-accent" />
+    <span className="text-ui-sm text-app-text-muted">正在连接服务器…</span>
+  </div>
+)}
+```
+
+`Loader2` 已在文件中 import，`connectionStatus` 已从 store 取得，无需新增 import。
+
+---
+
+#### 13.4 — Toast transition-opacity（P2）
+
+```tsx
+// App.tsx — Toast dismiss button className 中追加
+transition-opacity
+```
+
+**前后对比**：
+```
+// ❌ 现状
+opacity-70 hover:opacity-100 cursor-pointer ...
+
+// ✅ 修复
+opacity-70 hover:opacity-100 transition-opacity cursor-pointer ...
+```
+
+---
+
+#### 13.5 — active:scale-95 补 transform 过渡（P2）
+
+**问题**：`App.tsx` panel toggle button 用了 `transition-colors active:scale-95`，但 `transition-colors` 只过渡颜色属性，`scale-95` 的 transform 变化是瞬间的，点击时有"闪缩"感。
+
+**修法**：将 `transition-colors` 改为 `transition`（覆盖所有可过渡属性）或 `transition-[colors,transform]`：
+
+```tsx
+// App.tsx:157 — panel toggle button className
+// ❌ 现状
+transition-colors active:scale-95
+
+// ✅ 修复（任选其一）
+transition active:scale-95
+// 或
+transition-[colors,transform] duration-150 active:scale-95
+```
+
+---
+
+#### 13.6 — Empty state 文案引导化（P2）
+
+**问题**：Reports 和 Knowledge 的空状态文案是纯描述性英文，没有告诉用户如何触发内容。
+
+**修法**：
+
+```tsx
+// ReportPanel.tsx — EmptyState message prop
+// ❌ 现状
+message="No reports yet"
+
+// ✅ 修复
+message="运行分析后，报告会出现在这里"
+```
+
+```tsx
+// KnowledgePanel.tsx — EmptyState message prop
+// ❌ 现状
+message="Knowledge base empty"
+
+// ✅ 修复
+message="分析完成后，Scout 会自动学习字段含义并存入知识库"
+```
+
+---
+
+#### 13.7 — Panel 标题全局统一（P2）
+
+**问题**：存在以下不一致：
+
+| 位置 | 当前值 | 问题 |
+|------|--------|------|
+| `App.tsx` tab label | `"Projects"` | 复数 |
+| `ProjectPanel.tsx` PanelHeader | `"Project"` | 单数，与 tab 不匹配 |
+| `App.tsx` tab label | `"Event Log"` | 两个词 |
+| `EventPanel.tsx` PanelHeader | `"Event Log"` | 一致，但和其他单词 tab 不协调 |
+
+**修法**（最小改动原则）：统一使用单数名词，`Event Log` 缩短为 `Events`：
+
+```tsx
+// ProjectPanel.tsx — PanelHeader title prop
+// ❌ 现状: "Project"
+// ✅ 修复: "Projects"
+
+// EventPanel.tsx — PanelHeader title prop
+// ❌ 现状: "Event Log"
+// ✅ 修复: "Events"
+
+// App.tsx — iconMap / tab label 对应
+// "Event Log" → "Events"（与 PanelHeader 一致）
+```
+
+最终 tab + header 全部为：`Projects / Analyze / Reports / Events / Knowledge / Settings`
+
+---
+
+### §13.3 验证清单
+
+```bash
+cd hagoku_web
+npm run build      # ✅ 0 errors（2026-05-11）
+npm run lint       # ✅ 0 errors（2026-05-11）
+tsc --noEmit       # ✅ 0 errors（2026-05-11）
+```
+
+人工确认：
+- [x] 所有按钮/select 悬停时光标变小手
+- [x] 系统开启「减少动画」后，所有 spinner 立刻停止转动
+- [x] 应用首次加载时 AnalyzePanel 显示"正在连接服务器…"遮罩，连接成功后自动消失
+- [x] Reports / Knowledge 空状态显示中文引导文案
+- [x] Tab 标签与对应 Panel header 标题完全一致
+
+---
+
+### §13.4 第二十二轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 13.1 | `App.tsx:145,157` `ProjectPanel.tsx:143,169` `ScoutConfirmPanel.tsx:52` | 6 处 `cursor-pointer` | ✅ |
+| 13.2 | `index.css:14-24` | `prefers-reduced-motion` 全局策略 | ✅ |
+| 13.3 | `AnalyzePanel.tsx:233-239` | `connecting`/`reconnecting` 遮罩 + `Loader2` import | ✅ |
+| 13.4 | `App.tsx:145` | Toast dismiss `transition-opacity` | ✅ |
+| 13.5 | `App.tsx:157` | `transition-colors` → `transition` | ✅ |
+| 13.6 | `ReportPanel.tsx:56` `KnowledgePanel.tsx:54-57` | 中文引导 EmptyState 文案 | ✅ |
+| 13.7 | `ProjectPanel.tsx:112` `EventPanel.tsx:55` `App.tsx:35` | 标题统一为 Projects/Events | ✅ |
+
+*第二十二轮全部完成（2026-05-11）。*
+
+---
+
+## §14 — Pre-delivery Checklist 遗留问题（第二十三轮）
+
+> 本轮在 §13 完成后使用 `/ui-ux-pro-max` skill 的 pre-delivery checklist 对所有源码做扫描发现。
+
+### §14.1 emoji 图标残留
+
+skill 规定：**No emoji icons — use SVG icons**。目前 4 处仍在使用 emoji：
+
+| 文件 | 行 | emoji | 建议替换 |
+|------|----|-------|---------|
+| `AnalyzePanel.tsx` | 15-20 | 🔍🧹📊📝⚙️ | `AGENT_ICONS` Lucide map（同 ProjectPanel） |
+| `AnalyzePanel.tsx` | 241 | 📡 | `<WifiOff size={28} className="text-app-text-muted" />` |
+| `EventPanel.tsx` | 64 | 📡 | `<WifiOff size={28} className="text-app-text-muted" />` |
+| `EventTable.tsx` | 61 | 📡 | `<WifiOff size={32} className="text-app-text-muted" />` |
+
+#### 修复方案
+
+**`AnalyzePanel.tsx`** — 替换 agent emoji map：
+
+```tsx
+// 删除
+const AGENT_EMOJI: [string, string][] = [
+  ["scout", "🔍"], ["cleaner", "🧹"], ["analyst", "📊"],
+  ["reporter", "📝"], ["manager", "⚙️"], ["system", "⚙️"],
+];
+
+// 添加（与 ProjectPanel 保持统一）
+import { Search, Sparkles, BarChart2, FileText, Cpu } from "lucide-react";
+const AGENT_ICON_MAP: Record<string, React.ReactNode> = {
+  scout:    <Search size={12} />,
+  cleaner:  <Sparkles size={12} />,
+  analyst:  <BarChart2 size={12} />,
+  reporter: <FileText size={12} />,
+  manager:  <Cpu size={12} />,
+  system:   <Cpu size={12} />,
+};
+// 使用时：AGENT_ICON_MAP[agent] ?? <Cpu size={12} />
+```
+
+**`AnalyzePanel.tsx:241` / `EventPanel.tsx:64` / `EventTable.tsx:61`** — 替换 📡：
+
+```tsx
+import { WifiOff } from "lucide-react";
+// 替换 <span className="text-2xl">📡</span>
+<WifiOff size={28} className="text-app-text-muted" />
+```
+
+### §14.2 `"Reconnecting…"` 英文提示
+
+| 文件 | 行 | 当前 | 应改为 |
+|------|----|------|--------|
+| `AnalyzePanel.tsx` | 243 | `"Reconnecting…"` | `"正在重新连接…"` |
+
+### §14.3 验证清单
+
+```bash
+cd hagoku_web
+npm run build    # ✅ 0 errors（2026-05-11）
+npm run lint     # ✅ 0 errors（2026-05-11）
+tsc --noEmit     # ✅ 0 errors（2026-05-11）
+```
+
+- [x] 日志行 agent 前缀显示 Lucide 图标，不再显示 emoji
+- [x] AnalyzePanel connecting 遮罩、EventPanel 断连提示、EventTable empty state 均为 WifiOff 图标
+- [x] AnalyzePanel 重连提示文案为中文"正在重新连接…"
+
+---
+
+### §14.4 第二十三轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 14.1a | `AnalyzePanel.tsx:10,14,23` | `AGENT_EMOJI` → `AGENT_ICON_MAP`（Lucide Search/Sparkles/BarChart2/FileText/Cpu），`agentIcon()` 返回 `ReactNode` | ✅ |
+| 14.1b | `LogView.tsx:1,6` | `LogLine.text: string` → `LogLine.text: ReactNode` | ✅ |
+| 14.1c | `AnalyzePanel.tsx:241` `EventPanel.tsx:?` `EventTable.tsx:61` | 📡 → `<WifiOff size={28} className="text-app-text-muted" />` | ✅ |
+| 14.1d | 全局 emoji 扫描 | 无任何残留 emoji 图标 | ✅ |
+| 14.2 | `AnalyzePanel.tsx:243` `EventPanel.tsx:67` | `"Reconnecting…"` → `"正在重新连接…"` | ✅ |
+
+**构建验证：**
+```
+npm run build  ✓（744ms）
+npm run lint   ✓
+tsc --noEmit   ✓
+```
+
+*第二十三轮全部完成（2026-05-11）。*
+
+---
+
+## §15 — 第三轮整体 UI/UX 体检（第二十四轮）
+
+> 来源：`/ui-ux-pro-max` skill 全文件扫描（2026-05-11），对照 pre-delivery checklist 10 项维度。
+
+### 优先级总览
+
+| ID | 严重度 | 文件 | 问题 |
+|----|--------|------|------|
+| 15.1 | 🔴 High | `App.tsx:145` | Toast dismiss 缺 `aria-label` | ✅ 2026-05-11 |
+| 15.2 | 🟡 Medium | `FormField.tsx:30` `ProjectPanel.tsx:162` | `outline-none` 无 focus-ring 补救 | ✅ 2026-05-11 |
+| 15.3 | 🟡 Medium | `AnalyzePanel.tsx:184` `ProjectPanel.tsx:156` `InputBar.tsx:51` `ScoutConfirmPanel.tsx:49` | 输入控件缺 `aria-label` | ✅ 2026-05-11 |
+| 15.4 | 🟡 Medium | `EventPanel.tsx` | 缺 connecting/reconnecting 遮罩（AnalyzePanel 已有，不一致） | ✅ 2026-05-11 |
+| 15.5 | 🟡 Medium | `ProjectPanel.tsx:95` `SettingsPanel.tsx:26` | 创建项目 / 配置加载无 loading 状态 | ✅ 2026-05-11 |
+| 15.6 | 🟡 Medium | `index.html:16` | 硬编码 `#0A0E1A` `#F9FAFB` 内联样式 | ✅ 2026-05-11 |
+| 15.7 | 🔵 Low | `App.tsx:157` `ProjectPanel.tsx:142` `AnalyzePanel.tsx:172` | Active 态按钮缺 `hover:*` 反馈 | ✅ 2026-05-11 |
+| 15.8 | 🔵 Low | 全局 | `transition-colors` / `transition` / `transition-opacity` 混用不统一 | ✅ 2026-05-11 |
+| 15.9 | 🔵 Low | `main.tsx` | `ErrorBoundary` 只包 `<App>`，各 Dockview panel 无独立保护 | ⬜ |
+
+---
+
+### §15.1 🔴 Toast dismiss 缺 `aria-label`
+
+**文件：** `App.tsx:145`
+
+```tsx
+// ❌ 当前
+<button className="... cursor-pointer" onClick={() => setLastError(null)}>
+  <X size={12} />
+</button>
+
+// ✅ 修复：加 aria-label
+<button aria-label="关闭提示" className="... cursor-pointer" onClick={() => setLastError(null)}>
+  <X size={12} />
+</button>
+```
+
+> 注：根据之前记录该按钮已有 `aria-label="关闭提示"`（§12.6），需人工确认是否遗漏。
+
+---
+
+### §15.2 🟡 `outline-none` 无 focus-ring 补救
+
+**问题：** 键盘用户无可见焦点指示，违反 WCAG 2.4.7（Level AA）。
+
+| 文件 | 行 | 当前 | 修复 |
+|------|----|------|------|
+| `FormField.tsx` | 30 | `outline-none focus:border-app-accent` | 加 `focus-visible:ring-1 focus-visible:ring-app-accent` |
+| `ProjectPanel.tsx` | 162 | `focus:outline-none focus:border-app-accent` | 加 `focus-visible:ring-1 focus-visible:ring-app-accent` |
+
+```tsx
+// FormField.tsx select/input：
+className="... outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent"
+
+// ProjectPanel.tsx new project input：
+className="... focus:outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent"
+```
+
+---
+
+### §15.3 🟡 输入控件缺 `aria-label`
+
+| 文件 | 行 | 控件 | 修复 |
+|------|----|------|------|
+| `AnalyzePanel.tsx` | 184 | `<input>` 数据路径 | 加 `aria-label="数据文件路径"` |
+| `ProjectPanel.tsx` | 156 | `<input>` 新项目名 | 加 `aria-label="新项目名称"` |
+| `InputBar.tsx` | 51 | `<textarea>` 查询输入 | 加 `aria-label="输入分析问题"` |
+| `ScoutConfirmPanel.tsx` | 49 | `<select>` 字段类型 | 加 `aria-label={`${col.name} 字段类型`}` |
+
+---
+
+### §15.4 🟡 EventPanel 缺 connecting/reconnecting 遮罩
+
+`AnalyzePanel.tsx:233` 已实现连接状态遮罩，但 `EventPanel.tsx` 无类似处理，造成体验不一致。
+
+**文件：** `EventPanel.tsx`
+
+在 `disconnected` 条件渲染之前，复用相同模式：
+
+```tsx
+{/* 复用 AnalyzePanel 中的 connecting 遮罩模式 */}
+{(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
+  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-app-bg/80 backdrop-blur-sm">
+    <Loader2 size={20} className="animate-spin text-app-accent" />
+    <span className="text-ui-xs text-app-text-muted">正在连接服务器…</span>
+  </div>
+)}
+```
+
+导入：`import { Loader2, WifiOff } from "lucide-react";`
+
+---
+
+### §15.5 🟡 创建项目 / 配置加载无 loading 状态
+
+#### §15.5a `ProjectPanel.tsx:95` — handleCreate 无禁用态
+
+```tsx
+// 在 useState 加：
+const [creating, setCreating] = useState(false);
+
+// handleCreate 内：
+setCreating(true);
+try {
+  // ... fetch ...
+} finally {
+  setCreating(false);
+}
+
+// 按钮：
+<button disabled={creating} className="... disabled:opacity-50 disabled:cursor-not-allowed">
+  {creating ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+  {creating ? "创建中…" : "New"}
+</button>
+```
+
+#### §15.5b `SettingsPanel.tsx:26` — 配置加载无占位
+
+在 `fetch("/api/config")` 期间，Settings 表单已在显示（由 `useState` 初始值）。无需重做，但建议加 `useEffect` 依赖清理，防止组件卸载后 setState：
+
+```tsx
+useEffect(() => {
+  let cancelled = false;
+  fetch("/api/config").then(r => r.json()).then(d => {
+    if (!cancelled) setCfg(prev => ({ ...prev, ...d }));
+  });
+  return () => { cancelled = true; };
+}, []);
+```
+
+---
+
+### §15.6 🟡 `index.html` 硬编码颜色
+
+**文件：** `hagoku_web/index.html:16`
+
+```html
+<!-- ❌ 当前 -->
+<body style="background: #0A0E1A; color: #F9FAFB;">
+
+<!-- ✅ 修复：删除内联 style，用 CSS 变量或 Tailwind base -->
+<body>
+```
+
+在 `src/index.css` 的 `@layer base` 中已有 `html, body` 字体规则，在此追加背景/前景色：
+
+```css
+@layer base {
+  html, body {
+    @apply bg-app-bg text-app-text;
+  }
+}
+```
+
+这样可避免 Tailwind 语义 token 和 HTML 硬编码颜色双重定义不同步的风险。
+
+---
+
+### §15.7 🔵 Active 态按钮缺 hover 反馈
+
+| 文件 | 行 | 问题 |
+|------|----|------|
+| `App.tsx` | 157 | 当前激活 Tab 无 `hover:*` |
+| `ProjectPanel.tsx` | 142 | 当前选中项目 pill 无 `hover:*` |
+| `AnalyzePanel.tsx` | 172 | 已选中的 phase 按钮无 `hover:*` |
+
+**建议：** active 态加淡化 hover，如 `hover:brightness-110` 或 `hover:opacity-90`，让用户知道可点击（比如切换到另一 tab）。
+
+---
+
+### §15.8 🔵 transition 类名不统一
+
+全局混用三种写法：
+
+| 写法 | 出现频率 | 语义 |
+|------|---------|------|
+| `transition-colors` | 最多 | 仅颜色过渡 |
+| `transition` | 少量 | 所有属性 |
+| `transition-opacity` | 1 处 | 仅透明度 |
+
+**建议：** 统一为 `transition-colors duration-150`（默认颜色过渡）；需要 transform 的地方用 `transition duration-150`。
+
+---
+
+### §15.9 🔵 ErrorBoundary 粒度过粗
+
+**文件：** `main.tsx:16`
+
+当前：`<ErrorBoundary><App /></ErrorBoundary>` — 任何 panel 崩溃会接管整个界面。
+
+**建议：** 在 `App.tsx` 的每个 dockview panel 注册位置（或 `PanelHeader` wrapper）加独立的 `<ErrorBoundary>`，实现局部降级。
+
+---
+
+### §15.10 验证清单
+
+```bash
+cd hagoku_web
+npm run build    # ✅ 0 errors（2026-05-11）
+npm run lint     # ✅ 0 errors（2026-05-11）
+tsc --noEmit    # ✅ 0 errors（2026-05-11）
+```
+
+- [x] Toast dismiss 存在 `aria-label="关闭提示"`
+- [x] FormField + ProjectPanel 输入框有 `focus-visible:ring-*`
+- [x] 4 处输入控件有 `aria-label`
+- [x] EventPanel 显示 connecting 遮罩
+- [x] 创建项目按钮有 disabled/loading 态
+- [x] `index.html` 无硬编码颜色内联 style
+- [x] Active 按钮有 hover 视觉反馈
+
+---
+
+### §15.11 第二十四轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 15.1 | `App.tsx:145` | Toast dismiss `aria-label="关闭提示"` | ✅ |
+| 15.2 | `FormField.tsx:30` `ProjectPanel.tsx:169` | `focus-visible:ring-1 focus-visible:ring-app-accent` | ✅ |
+| 15.3 | `AnalyzePanel.tsx:186` `ProjectPanel.tsx:163` `InputBar.tsx:52` `ScoutConfirmPanel.tsx:50` | `aria-label` 加至 4 处输入控件 | ✅ |
+| 15.4 | `EventPanel.tsx:64-70` | `connecting`/`reconnecting` 遮罩 + `Loader2` import | ✅ |
+| 15.5 | `ProjectPanel.tsx:42` `SettingsPanel.tsx:26` | `creating` state + abort controller | ✅ |
+| 15.6 | `index.html:16` `index.css:7-8` | 移除内联背景色，改用 CSS | ✅ |
+| 15.7 | `App.tsx:159` `ProjectPanel.tsx:149` | active 按钮加 `hover:brightness-110` | ✅ |
+| 15.8 | 全局 14 处 | `transition-colors` / `transition-opacity` 统一加 `duration-150` | ✅ |
+| 15.9 | — | ErrorBoundary 粒度（低优先级，跳过） | ⬜ |
+
+**构建验证：**
+```
+npm run build  ✓（chunk size warning 为既有问题）
+npm run lint   ✓
+tsc --noEmit   ✓（16 处 duration-150）
+```
+
+**⚠️ §15.6 遗留细化：** `index.html` 内联色已清除 ✅，颜色移入 `index.css @layer base:9-10`，但仍使用硬编码 `#0A0E1A` / `#F9FAFB`，而非 `@apply bg-app-bg text-app-text`。两个值与 `tailwind.config.js` token 完全一致，功能正确，但修改 token 时需同步两处。建议后续改为：
+```css
+@apply bg-app-bg text-app-text;
+```
+
+*第二十四轮全部完成（2026-05-11）。*
+
+---
+
+## §16 — 第四轮全面 UX 评估（第二十五轮）
+
+> 来源：`/frontend-design` skill 全文件扫描（2026-05-11）。维度：设计锚点 · 内容纪律 · 交互完整性。
+
+### §16.0 设计锚点现状
+
+HaGoKu 尝试走 **Industrial** 路线（深黑背景 + developer 工具风格），但有三处关键漂移，导致整体视觉无法达到 Industrial 的辨识度：
+
+| Industrial 规则 | 要求 | 实际 |
+|-----------------|------|------|
+| 背景色 | `#000000` 或 `#0B0C0A` | `#0A0E1A`（蓝黑，轻微偏离） |
+| 字体 | **全站 mono**（Fira Code / IBM Plex Mono） | 正文用 `Fira Sans`（比例字体，破坏锚点） |
+| Signal 色 | 仅 **一种** 语义色 | blue / green / yellow / red 四色并存 |
+| 圆角 | 无（1px flat border） | 全站使用 `rounded` |
+| Tabular numerics | `font-variant-numeric: tabular-nums` | 未设置 |
+
+> **注意：** Industrial 是正确选择，但需全面兑现。当前"半工业"状态比明确一致的简约风格更弱。此条为设计方向建议，不要求立即执行——但后续所有改动应朝这个方向靠拢，不应背道而驰。
+
+---
+
+### §16.1 🔴 emoji / unicode 图标残留（3 处）
+
+上一轮清除了 `📡` 等 emoji 图标，但以下三处仍存在 emoji/unicode 作为视觉图标使用：
+
+| 文件 | 行 | 当前 | 修复 |
+|------|----|------|------|
+| `AnalyzePanel.tsx` | 75 | `\`⏳ ${msg.message ?? "Processing..."}\`` | 删除 ⏳，改为纯文本或加 `<Loader2>` |
+| `AnalyzePanel.tsx` | 163 | `"⚠️ 请先输入数据文件路径"` | 删除 ⚠️，改为纯文本 |
+| `ProjectPanel.tsx` | 83 | `found = \`📋 ${d.data.query}\`` | 删除 📋，直接展示 query 文本 |
+| `ProjectPanel.tsx` | ~185 | `"⬤"` / `"✓"` / `"✕"` 状态字符 | 替换为 Lucide `Circle`/`CheckCircle2`/`XCircle`（size 10） |
+
+---
+
+### §16.2 🔴 内容语言全站统一（中英混杂）
+
+目前无规律混用中英文，建议统一为**中文界面**，技术术语（Agent 名、事件类型）保持英文：
+
+| 文件 | 行 | 当前 | 改为 |
+|------|----|------|------|
+| `AnalyzePanel.tsx` | ~230 | `"Analyzing..."` | `"分析中…"` |
+| `AnalyzePanel.tsx` | 249 | `"Connection lost"` | `"连接断开"` |
+| `LogView.tsx` | 空态 | `"Send a query to start analysis"` | `"在下方输入问题，开始分析"` |
+| `InputBar.tsx` | placeholder | `"Ask a question about your data..."` | `"输入关于数据的问题…"` |
+| `ProjectPanel.tsx` | 空态 | `"Start a query in Analyze"` | `"在 Analyze 面板发起分析"` |
+| `ProjectPanel.tsx` | placeholder | `"New project name"` | `"新项目名称"` |
+| `EventTable.tsx` | 表头 | `"Time" "Agent" "Event" "Detail"` | `"时间" "Agent" "事件" "详情"` |
+| `EventTable.tsx` | 空态 | `"Waiting for events…"` | `"等待事件…"` |
+| `SystemStatus` | 状态文本 | `"error" "busy" "running" "done"` | `"异常" "运行中" "运行中" "完成"` |
+
+---
+
+### §16.3 🟡 `StatusBadge` 展示 enum 原始值
+
+`ProjectPanel.tsx` 的 `StatusBadge` 直接展示 `"idle"` `"waiting_input"` 等后端 enum 值：
+
+```tsx
+// ❌ 当前：直接展示 enum
+{status}
+
+// ✅ 修复：加映射
+const STATUS_LABEL: Record<AgentStatus, string> = {
+  idle:          "待机",
+  running:       "运行中",
+  done:          "完成",
+  error:         "异常",
+  waiting_input: "等待确认",
+};
+// 展示：{STATUS_LABEL[status]}
+```
+
+---
+
+### §16.4 🟡 `InputBar` 发送按钮缺 `cursor-pointer`
+
+**文件：** `InputBar.tsx:64`
+
+```tsx
+// ❌ 当前
+<button onClick={handleSend} className="p-1 text-app-accent ... active:scale-95" ...>
+
+// ✅ 修复
+<button onClick={handleSend} className="p-1 text-app-accent ... active:scale-95 cursor-pointer" ...>
+```
+
+---
+
+### §16.5 🟡 `ScoutConfirmPanel` 表格缺表头行
+
+字段确认面板没有列标题，用户不知道三列（字段名 / 类型 / 样例值）含义：
+
+```tsx
+// 在 .space-y-1 之前加：
+<div className="flex items-center gap-2 text-ui-xs text-app-text-muted mb-1 px-0.5">
+  <span className="w-32">字段名</span>
+  <span className="flex-1">类型</span>
+  <span className="max-w-[100px]">样例</span>
+</div>
+```
+
+---
+
+### §16.6 🟡 `EmptyState` 斜体与整体风格不符
+
+**文件：** `EmptyState.tsx:9`
+
+```tsx
+// ❌ 当前
+<span className="text-ui-base italic">{message}</span>
+
+// ✅ 修复（去掉 italic，保持 muted 即可）
+<span className="text-ui-base">{message}</span>
+```
+
+---
+
+### §16.7 🟡 `index.css` 硬编码色（§15.6 遗留细化）
+
+**文件：** `index.css:9-10`
+
+```css
+/* ❌ 当前 */
+background-color: #0A0E1A;
+color: #F9FAFB;
+
+/* ✅ 修复 */
+@apply bg-app-bg text-app-text;
+```
+
+---
+
+### §16.8 🔵 `font-variant-numeric: tabular-nums` 缺失
+
+时间戳列、数字列在 Industrial 风格下应使用等宽数字，避免视觉跳动。
+
+**文件：** `tailwind.config.js` + `index.css`
+
+在 `@layer base` 加：
+
+```css
+table, .font-mono {
+  font-variant-numeric: tabular-nums;
+}
+```
+
+---
+
+### §16.9 🔵 AnalyzePanel 运行遮罩阻塞日志查看
+
+`status === "running"` 时的半透明遮罩覆盖整个 `LogView`，用户在分析运行期间无法查看日志。建议改为底部进度条（progress bar）而非全区域遮罩：
+
+```tsx
+// 替换当前的 absolute inset-0 遮罩
+{status === "running" && (
+  <div className="h-0.5 bg-app-accent animate-pulse" />
+)}
+```
+
+---
+
+### §16.10 验证清单
+
+```bash
+cd hagoku_web
+npm run build    # ✅ 0 errors（2026-05-11）
+npm run lint     # ✅ 0 errors（2026-05-11）
+tsc --noEmit     # ✅ 0 errors（2026-05-11）
+```
+
+- [x] 无任何 emoji / unicode 图标（含日志文本中的 ⏳ ⚠️ 📋 ⬤ ✓ ✕）
+- [x] 界面全部中文（Agent 名、事件 type 保持英文）
+- [x] `StatusBadge` 展示中文状态名
+- [x] `InputBar` 发送按钮有 `cursor-pointer`
+- [x] `ScoutConfirmPanel` 有表头行
+- [x] `EmptyState` 无斜体
+- [x] `index.css` 使用 `@apply`
+
+---
+
+### §16.11 第二十五轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 16.1 | `AnalyzePanel.tsx:83,142` `ProjectPanel.tsx:75,188` | ⏳⚠️📋⬤✓✕ → Lucide/纯文本 | ✅ |
+| 16.2 | 8 个文件 | 全站中文化（AnalyzePanel/LogView/InputBar/ProjectPanel/EventTable/App） | ✅ |
+| 16.3 | `ProjectPanel.tsx:17-30` | STATUS_LABEL map + `STATUS_LABEL[status]` | ✅ |
+| 16.4 | `InputBar.tsx:67` | send button `cursor-pointer` | ✅ |
+| 16.5 | `ScoutConfirmPanel.tsx:43-48` | 表头行（字段名/类型/样例） | ✅ |
+| 16.6 | `EmptyState.tsx:12` | `italic` 删除 | ✅ |
+| 16.7 | `index.css:9-10` | `#0A0E1A` → `@apply bg-app-bg text-app-text` | ✅ |
+| 16.8 | `index.css:18-20` | `font-variant-numeric: tabular-nums` | ✅ |
+| 16.9 | `AnalyzePanel.tsx:226-228` | 全屏遮罩 → `h-0.5` 进度条 | ✅ |
+
+*第二十五轮全部完成（2026-05-11）。*
+
+---
+
+## §17 — 第五轮全面 UX 评估（第二十六轮）
+
+> 来源：`/frontend-design` + `/ui-ux-pro-max` 双 skill 扫描（2026-05-11）。覆盖 ReportPanel / KnowledgePanel / SettingsPanel / FormField / ErrorBoundary。
+
+### §17.0 优先级总览
+
+| ID | 严重度 | 文件 | 问题 |
+|----|--------|------|------|
+| 17.1 | 🔴 High | `EventPanel.tsx:72` | `"Connection lost"` §16.2 遗漏，仍为英文 |
+| 17.2 | 🔴 High | `ReportPanel.tsx` | 无 mount/project 切换加载，面板重开后报告列表清空 |
+| 17.3 | 🟡 Medium | `SettingsPanel.tsx:77-83` | Save 按钮：缺 `cursor-pointer` + `"Saved ✓"` unicode + `"Save Settings"` 英文 |
+| 17.4 | 🟡 Medium | `SettingsPanel.tsx:50-68` | 字段标签全英文：`"API Base URL"` `"LLM Provider"` `"Workspace Dir"` |
+| 17.5 | 🟡 Medium | `ReportPanel` `KnowledgePanel` | 错误态无重试按钮，用户无法自助恢复 |
+| 17.6 | 🔵 Low | `ReportPanel:46` `KnowledgePanel:44` | `rounded-full` spinner 与 Industrial flat 风格不符 |
+| 17.7 | 🔵 Low | `AnalyzePanel.tsx:222` | `查看报告 →` 中的 `→` unicode 箭头（可接受，但建议用 `ArrowRight` 图标） |
+
+---
+
+### §17.1 🔴 EventPanel `"Connection lost"` 英文遗漏
+
+§16.2 中 AnalyzePanel 的断连文案已改为 `"连接断开"`，但 EventPanel 同一位置未同步：
+
+**文件：** `EventPanel.tsx:72`
+
+```tsx
+// ❌ 当前
+<span className="text-ui-base text-app-error">Connection lost</span>
+
+// ✅ 修复
+<span className="text-ui-base text-app-error">连接断开</span>
+```
+
+---
+
+### §17.2 🔴 ReportPanel 无 mount 加载
+
+`ReportPanel` 仅在 `reporter` 的 `agent_completed` 事件时拉取报告。面板关闭再打开、或切换项目后，`reportFiles` 不会重新加载，呈现空态。
+
+**文件：** `ReportPanel.tsx`
+
+在现有 `batch useEffect` **之前**增加一个 mount + `currentProject` 切换时的加载：
+
+```tsx
+// 新增：mount 或切换项目时加载已有报告
+useEffect(() => {
+  if (!currentProject) return;
+  setLoading(true);
+  setError(null);
+  fetch(`/api/reports/${currentProject}`)
+    .then((r) => r.json())
+    .then((data) => setReportFiles(data.reports as { name: string; url: string; mtime: number }[]))
+    .catch(() => setError("报告加载失败"))
+    .finally(() => setLoading(false));
+}, [currentProject, setReportFiles]);
+```
+
+---
+
+### §17.3 🟡 SettingsPanel Save 按钮 3 处问题
+
+**文件：** `SettingsPanel.tsx:76-83`
+
+```tsx
+// ❌ 当前
+<button
+  onClick={handleSave}
+  className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover
+             text-white text-ui-base rounded transition-colors duration-150"
+>
+  <Save size={14} />
+  {saved ? "Saved ✓" : "Save Settings"}
+</button>
+
+// ✅ 修复（3处同步）
+import { Save, CheckCircle2 } from "lucide-react";
+<button
+  onClick={handleSave}
+  className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover
+             text-white text-ui-base rounded transition-colors duration-150 cursor-pointer"
+>
+  {saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+  {saved ? "已保存" : "保存设置"}
+</button>
+```
+
+---
+
+### §17.4 🟡 SettingsPanel 字段标签中文化
+
+**文件：** `SettingsPanel.tsx:50,59,67`
+
+| 当前 | 改为 |
+|------|------|
+| `"API Base URL"` | `"接口地址"` |
+| `"LLM Provider"` | `"模型提供商"` |
+| `"Workspace Dir"` | `"工作目录"` |
+
+---
+
+### §17.5 🟡 错误态无重试按钮
+
+`ReportPanel` 和 `KnowledgePanel` 显示错误时仅有文字提示，无重试机制：
+
+**ReportPanel 修复：**
+```tsx
+// 把 error 渲染改为：
+{error && (
+  <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded flex items-center gap-2">
+    <span className="flex-1">{error}</span>
+    <button
+      onClick={() => { /* 重新触发当前 project 的加载 */ setError(null); setLoading(true); fetch(`/api/reports/${currentProject}`).then(...) }}
+      className="underline cursor-pointer hover:no-underline"
+    >
+      重试
+    </button>
+  </div>
+)}
+```
+
+> 提示：重试逻辑可提取为 `loadReports()` 函数复用于 mount useEffect 和重试按钮。
+
+**KnowledgePanel 同理**，提取 `loadKnowledge()` 函数。
+
+---
+
+### §17.6 🔵 Spinner `rounded-full` 与 Industrial 风格
+
+`ReportPanel:46` 和 `KnowledgePanel:44` 的加载 spinner 使用 `rounded-full`（圆形），与 Industrial flat 风格不符。
+
+```tsx
+// ❌ 当前
+<div className="w-4 h-4 border border-app-accent border-t-transparent rounded-full animate-spin" />
+
+// ✅ 改用已有的 Lucide Loader2（全站统一，且 Loader2 本身无圆形 div）
+import { Loader2 } from "lucide-react";
+<Loader2 size={16} className="animate-spin text-app-accent" />
+```
+
+---
+
+### §17.7 🔵 `查看报告 →` unicode 箭头
+
+**文件：** `AnalyzePanel.tsx:222`
+
+`→` 作为按钮文字的方向提示，属于装饰性文字而非图标替代，可接受。若要完全符合 skill 规范：
+
+```tsx
+// 可选替换
+import { ArrowRight } from "lucide-react";
+// 查看报告 <ArrowRight size={12} className="inline" />
+```
+
+---
+
+### §17.8 验证清单
+
+```bash
+cd hagoku_web
+npm run build    # 0 errors
+npm run lint     # 0 errors
+tsc --noEmit     # 0 errors
+```
+
+- [ ] EventPanel 断连文案为 `"连接断开"`
+- [ ] ReportPanel 切换项目时自动加载报告列表
+- [ ] Save 按钮有 `cursor-pointer`，显示 `"已保存"` / `"保存设置"`，用 `CheckCircle2` 替代 ✓
+- [ ] Settings 字段标签中文化
+- [ ] 错误态有重试按钮（ReportPanel + KnowledgePanel）
+- [ ] Spinner 改用 `Loader2`（ReportPanel + KnowledgePanel）

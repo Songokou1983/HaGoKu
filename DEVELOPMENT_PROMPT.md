@@ -3811,13 +3811,13 @@ tsc --noEmit     # ✅ 0 errors（2026-05-11）
 
 | ID | 严重度 | 文件 | 问题 |
 |----|--------|------|------|
-| 17.1 | 🔴 High | `EventPanel.tsx:72` | `"Connection lost"` §16.2 遗漏，仍为英文 |
-| 17.2 | 🔴 High | `ReportPanel.tsx` | 无 mount/project 切换加载，面板重开后报告列表清空 |
-| 17.3 | 🟡 Medium | `SettingsPanel.tsx:77-83` | Save 按钮：缺 `cursor-pointer` + `"Saved ✓"` unicode + `"Save Settings"` 英文 |
-| 17.4 | 🟡 Medium | `SettingsPanel.tsx:50-68` | 字段标签全英文：`"API Base URL"` `"LLM Provider"` `"Workspace Dir"` |
-| 17.5 | 🟡 Medium | `ReportPanel` `KnowledgePanel` | 错误态无重试按钮，用户无法自助恢复 |
-| 17.6 | 🔵 Low | `ReportPanel:46` `KnowledgePanel:44` | `rounded-full` spinner 与 Industrial flat 风格不符 |
-| 17.7 | 🔵 Low | `AnalyzePanel.tsx:222` | `查看报告 →` 中的 `→` unicode 箭头（可接受，但建议用 `ArrowRight` 图标） |
+| 17.1 | 🔴 High | `EventPanel.tsx:72` | `"Connection lost"` §16.2 遗漏，仍为英文 | ✅ 2026-05-11 |
+| 17.2 | 🔴 High | `ReportPanel.tsx` | 无 mount/project 切换加载，面板重开后报告列表清空 | ✅ 2026-05-11 |
+| 17.3 | 🟡 Medium | `SettingsPanel.tsx:77-83` | Save 按钮：缺 `cursor-pointer` + `"Saved ✓"` unicode + `"Save Settings"` 英文 | ✅ 2026-05-11 |
+| 17.4 | 🟡 Medium | `SettingsPanel.tsx:50-68` | 字段标签全英文：`"API Base URL"` `"LLM Provider"` `"Workspace Dir"` | ✅ 2026-05-11 |
+| 17.5 | 🟡 Medium | `ReportPanel` `KnowledgePanel` | 错误态无重试按钮，用户无法自助恢复 | ✅ 2026-05-11 |
+| 17.6 | 🔵 Low | `ReportPanel:46` `KnowledgePanel:44` | `rounded-full` spinner 与 Industrial flat 风格不符 | ✅ 2026-05-11 |
+| 17.7 | 🔵 Low | `AnalyzePanel.tsx:222` | `查看报告 →` 中的 `→` unicode 箭头（可接受，但建议用 `ArrowRight` 图标） | ✅ 2026-05-11 |
 
 ---
 
@@ -3961,14 +3961,175 @@ import { ArrowRight } from "lucide-react";
 
 ```bash
 cd hagoku_web
-npm run build    # 0 errors
-npm run lint     # 0 errors
-tsc --noEmit     # 0 errors
+npm run build    # ✅ 0 errors（2026-05-11）
+npm run lint     # ✅ 0 errors（2026-05-11）
+tsc --noEmit     # ✅ 0 errors（2026-05-11）
 ```
 
-- [ ] EventPanel 断连文案为 `"连接断开"`
-- [ ] ReportPanel 切换项目时自动加载报告列表
-- [ ] Save 按钮有 `cursor-pointer`，显示 `"已保存"` / `"保存设置"`，用 `CheckCircle2` 替代 ✓
-- [ ] Settings 字段标签中文化
-- [ ] 错误态有重试按钮（ReportPanel + KnowledgePanel）
-- [ ] Spinner 改用 `Loader2`（ReportPanel + KnowledgePanel）
+- [x] EventPanel 断连文案为 `"连接断开"`
+- [x] ReportPanel 切换项目时自动加载报告列表
+- [x] Save 按钮有 `cursor-pointer`，显示 `"已保存"` / `"保存设置"`，用 `CheckCircle2` 替代 ✓
+- [x] Settings 字段标签中文化
+- [x] 错误态有重试按钮（ReportPanel + KnowledgePanel）
+- [x] Spinner 改用 `Loader2`（ReportPanel + KnowledgePanel）
+
+---
+
+### §17.9 第二十六轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 17.1 | `EventPanel.tsx:72` | `"Connection lost"` → `"连接断开"` | ✅ |
+| 17.2 | `ReportPanel.tsx` | `loadReports` useCallback + mount useEffect | ✅ |
+| 17.3 | `SettingsPanel.tsx:76-83` | Save btn: cursor-pointer + CheckCircle2 + `"已保存"`/`"保存设置"` | ✅ |
+| 17.4 | `SettingsPanel.tsx:50,59,67` | 字段标签中文化（接口地址/模型提供商/工作目录） | ✅ |
+| 17.5 | `ReportPanel.tsx` `KnowledgePanel.tsx` | loadReports/loadKnowledge + retry button | ✅ |
+| 17.6 | `ReportPanel.tsx` `KnowledgePanel.tsx` | `rounded-full` div → `<Loader2>` | ✅ |
+| 17.7 | `AnalyzePanel.tsx:222` | `→` → `<ArrowRight size={12} className="inline" />` | ✅ |
+
+*第二十六轮全部完成（2026-05-11）。*
+
+---
+
+## §18 — 第六轮扫描：收尾清单（第二十七轮）
+
+> 来源：双 skill 全文件最终扫描（2026-05-11）。经过 §8→§17 十轮改造，本轮仅发现 6 项小问题，代码库已进入良好状态。
+
+### §18.0 现状总结（pre-delivery checklist 全项）
+
+| 维度 | 状态 |
+|------|------|
+| emoji/unicode 图标 | ✅ 全清 |
+| 中英混用 | ⚠️ 4 处残留（见下） |
+| cursor-pointer | ✅ 全覆盖 |
+| aria-label | ✅ 全覆盖 |
+| focus-visible ring | ✅ 全覆盖 |
+| prefers-reduced-motion | ✅ 全局覆盖 |
+| 错误态重试 | ✅ 全覆盖 |
+| hover transition | ✅ 全覆盖（base class 统一） |
+| tabular-nums | ✅ |
+| 硬编码颜色 | ✅ 全清 |
+
+---
+
+### §18.1 🟡 `SystemStatus` idle 状态英文
+
+**文件：** `App.tsx:81-84`
+
+```tsx
+// ❌ 当前：status === "idle" 时 fallback 显示原始值 "idle"
+} : status === "done" ? (
+  <span>完成</span>
+) : (
+  <span>{status}</span>   // ← 初始状态显示 "idle"
+)
+
+// ✅ 修复：加 idle 判断
+} : status === "done" ? (
+  <span>完成</span>
+) : status === "idle" ? (
+  <span>就绪</span>
+) : (
+  <span>{status}</span>
+)
+```
+
+---
+
+### §18.2 🟡 `AnalyzePanel` 模式切换英文标签
+
+**文件：** `AnalyzePanel.tsx:178`
+
+```tsx
+// ❌ 当前
+{p === "full" ? "Full Run" : "Step by Step"}
+
+// ✅ 修复
+{p === "full" ? "完整分析" : "分步执行"}
+```
+
+---
+
+### §18.3 🟡 `AnalyzePanel` ack 日志英文 fallback
+
+**文件：** `AnalyzePanel.tsx:83`
+
+```tsx
+// ❌ 当前
+text: msg.message ?? "Processing...",
+
+// ✅ 修复
+text: msg.message ?? "处理中…",
+```
+
+---
+
+### §18.4 🟡 `ProjectPanel` 新建按钮英文
+
+**文件：** `ProjectPanel.tsx:187`
+
+```tsx
+// ❌ 当前
+<span>{creating ? "创建中…" : "New"}</span>
+
+// ✅ 修复
+<span>{creating ? "创建中…" : "新建"}</span>
+```
+
+---
+
+### §18.5 🔵 日期/时间格式化无 locale
+
+`ReportPanel`、`EventTable`、`LogView` 的时间格式化均使用系统 locale，可能在英文系统上显示英文格式：
+
+| 文件 | 行 | 当前 | 改为 |
+|------|----|------|------|
+| `ReportPanel.tsx` | 88 | `toLocaleString()` | `toLocaleString('zh-CN')` |
+| `EventTable.tsx` | 43 | `toLocaleTimeString()` | `toLocaleTimeString('zh-CN')` |
+| `LogView.tsx` | 27 | `toLocaleTimeString()` | `toLocaleTimeString('zh-CN')` |
+
+---
+
+### §18.6 🔵 Panel header 英文标题（可选）
+
+"Analyze"、"Knowledge"、"Reports"、"Settings" 作为导航术语在技术工具中可保持英文，**无需强制中文化**。如需统一，参考：
+
+| 当前 | 可选改为 |
+|------|---------|
+| `"Analyze"` | `"分析"` |
+| `"Knowledge"` | `"知识库"` |
+| `"Reports"` | `"报告"` |
+| `"Settings"` | `"设置"` |
+
+> 建议：导航 tab 与 PanelHeader 保持一致，两者都改或都不改。
+
+---
+
+### §18.7 验证清单
+
+```bash
+cd hagoku_web
+npm run build    # ✅ 0 errors（2026-05-11）
+npm run lint     # ✅ 0 errors（2026-05-11）
+tsc --noEmit     # ✅ 0 errors（2026-05-11）
+```
+
+- [x] SystemStatus 初始状态显示 `"就绪"` 而非 `"idle"`
+- [x] AnalyzePanel 模式按钮显示 `"完整分析"` / `"分步执行"`
+- [x] AnalyzePanel ack 日志 fallback 为 `"处理中…"`
+- [x] ProjectPanel 新建按钮显示 `"新建"`
+- [x] 三处时间格式化加 `'zh-CN'` locale
+
+---
+
+### §18.8 第二十七轮完成记录（2026-05-11）
+
+| ID | 文件 | 核查点 | 结果 |
+|----|------|--------|------|
+| 18.1 | `App.tsx:81-84` | `idle` → `"就绪"` | ✅ |
+| 18.2 | `AnalyzePanel.tsx:178` | `"Full Run"` / `"Step by Step"` → `"完整分析"` / `"分步执行"` | ✅ |
+| 18.3 | `AnalyzePanel.tsx:83` | `"Processing..."` → `"处理中…"` | ✅ |
+| 18.4 | `ProjectPanel.tsx:187` | `"New"` → `"新建"` | ✅ |
+| 18.5 | `ReportPanel.tsx` `EventTable.tsx` `LogView.tsx` | `toLocaleString('zh-CN')` | ✅ |
+
+*第二十七轮全部完成（2026-05-11）。*

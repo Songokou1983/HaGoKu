@@ -1348,3 +1348,293 @@ cd hagoku_web && npm run build  # 期望: 无 TS 错误, bundle 生成成功
 
 ---
 *第十五轮 WebUI 审计完成，发现 5 项 P0 问题，于 2026-05-11 13:00 追加。*
+
+---
+
+## 八、UI 视觉升级任务（第十六轮 — 2026-05-11）
+
+> **背景**：经深度 UI/UX 审计，当前前端存在设计系统碎片化、字体缺失、颜色系统分裂等问题，导致整体"高级感"不足。以下任务按优先级排列，全部属于**低风险、高收益**的视觉整固工作，不涉及任何业务逻辑变更。
+
+---
+
+### 8.1 任务清单总览
+
+| # | 优先级 | 文件 | 问题 | 预计工时 |
+|---|--------|------|------|---------|
+| 1 | 🔴 P0 | `tailwind.config.js` + 所有 `.tsx` | 已定义的设计 token 从未被使用，全部用 hex 字面量 | 1-2h |
+| 2 | 🔴 P0 | `hagoku_web/src/index.css` | 无任何字体声明，完全依赖系统默认 | 30min |
+| 3 | 🟡 P1 | `App.tsx:63-70` + 全局 | 两套颜色系统共存（hex 字面量 vs Tailwind 语义色） | 30min |
+| 4 | 🟡 P1 | 全部 `.tsx` | 字号用任意值（`text-[10px]`..`text-[13px]`），无比例系统 | 1h |
+| 5 | 🟡 P1 | `ErrorBoundary.tsx:26-54` | 完全使用 inline style，脱离设计系统，无 focus ring | 30min |
+| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | 2h |
+| 7 | 🟢 P2 | 仓库根目录 | `.streamlit/config.toml` 残留（已删除 Streamlit，文件无用） | 5min |
+
+---
+
+### 8.2 任务一：激活 Tailwind 设计 Token（P0）
+
+**问题**：`tailwind.config.js` 已有 `app-bg`、`app-accent` 等语义色定义，但**全部 `.tsx` 文件均使用 hex 字面量**（如 `bg-[#1e1e1e]`、`text-[#d4d4d4]`），等于设计系统形同虚设。
+
+**第一步：补全 `tailwind.config.js` 中的颜色值**
+
+```js
+// hagoku_web/tailwind.config.js
+theme: {
+  extend: {
+    colors: {
+      'app-bg':            '#0A0E1A',   // 主背景（近 OLED 黑）
+      'app-bg-secondary':  '#111827',   // 卡片/面板背景
+      'app-bg-tertiary':   '#1F2937',   // 悬浮/选中背景
+      'app-text':          '#F9FAFB',   // 主文本
+      'app-text-muted':    '#9CA3AF',   // 次级文本
+      'app-accent':        '#3B82F6',   // 主色（蓝）
+      'app-accent-hover':  '#2563EB',   // 主色悬浮
+      'app-border':        '#374151',   // 边框
+      'app-error':         '#EF4444',   // 错误
+      'app-success':       '#10B981',   // 成功
+      'app-warning':       '#F59E0B',   // 警告
+    },
+    fontSize: {
+      'ui-xs':   ['11px', { lineHeight: '16px' }],
+      'ui-sm':   ['12px', { lineHeight: '18px' }],
+      'ui-base': ['13px', { lineHeight: '20px' }],
+      'ui-md':   ['14px', { lineHeight: '22px' }],
+    },
+  },
+},
+```
+
+**第二步：全局替换 hex 字面量**
+
+在 `hagoku_web/src/` 下执行以下替换（用编辑器批量替换，每次替换后用 `npm run build` 验证无编译错误）：
+
+| 替换前（hex 字面量） | 替换后（语义 token） |
+|---------------------|---------------------|
+| `bg-[#1e1e1e]`、`bg-[#0a0e1a]` | `bg-app-bg` |
+| `bg-[#252525]`、`bg-[#111827]`、`bg-[#1f2937]` | `bg-app-bg-secondary` |
+| `bg-[#2a2a2a]`、`bg-[#3a3a3a]` | `bg-app-bg-tertiary` |
+| `text-[#d4d4d4]`、`text-[#cccccc]`、`text-[#f9fafb]` | `text-app-text` |
+| `text-[#9ca3af]`、`text-[#6b7280]`、`text-[#888]` | `text-app-text-muted` |
+| `text-[#569cd6]`、`bg-[#569cd6]`、`border-[#569cd6]` | `text-app-accent` / `bg-app-accent` / `border-app-accent` |
+| `border-[#333]`、`border-[#444]`、`border-[#374151]` | `border-app-border` |
+| `text-[#f44747]`、`bg-[#f44747]` | `text-app-error` / `bg-app-error` |
+| `text-[10px]`、`text-[11px]` | `text-ui-xs` |
+| `text-[12px]` | `text-ui-sm` |
+| `text-[13px]` | `text-ui-base` |
+| `text-[14px]` | `text-ui-md` |
+
+**验证命令：**
+```bash
+cd hagoku_web
+# 验证无残留 hex 字面量（期望：0 行）
+grep -r "bg-\[#" src/ | wc -l
+grep -r "text-\[#" src/ | wc -l
+grep -r "text-\[1[0-9]px\]" src/ | wc -l
+npm run build   # 期望：无 TS 错误
+```
+
+---
+
+### 8.3 任务二：引入字体系统（P0）
+
+**问题**：`index.css` 只有3行 `@tailwind` 指令，无任何字体声明，UI 完全依赖用户系统默认字体，在不同操作系统下显示差异极大。
+
+**推荐字体组合（"Dashboard Data" 风格）**：
+- 代码/数据值/终端输出：**Fira Code**（等宽，数据工作台天然契合）
+- 标签/说明/正文：**Fira Sans**（无衬线，同族配合，视觉统一）
+
+**修改 `hagoku_web/index.html`**，在 `<head>` 内已有 `<meta>` 后添加：
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+```
+
+**修改 `hagoku_web/src/index.css`**，在 `@tailwind` 指令后追加：
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+  }
+
+  code, pre, kbd, .font-mono {
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+  }
+}
+```
+
+**修改 `hagoku_web/tailwind.config.js`**，在 `theme.extend` 中追加字体族：
+
+```js
+fontFamily: {
+  sans: ['Fira Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+  mono: ['Fira Code', 'Cascadia Code', 'JetBrains Mono', 'monospace'],
+},
+```
+
+**验证命令：**
+```bash
+cd hagoku_web && npm run build   # 期望：无错误
+# 启动后在浏览器 DevTools → Elements → Computed → font-family 确认为 Fira Sans
+```
+
+---
+
+### 8.4 任务三：统一颜色系统（P1）
+
+**问题**：`App.tsx:63-70` 的 `SystemStatus` 使用 Tailwind 默认语义色（`bg-red-500`、`bg-yellow-400`、`bg-green-500`），与其余所有组件使用的 hex 字面量系统完全割裂。
+
+**修改 `hagoku_web/src/App.tsx`**，将状态灯颜色替换为设计系统 token：
+
+```tsx
+// 修改前（App.tsx 约第 63-70 行）：
+const statusColor = {
+  connected:    'bg-green-500',
+  connecting:   'bg-yellow-400',
+  disconnected: 'bg-red-500',
+  error:        'bg-red-500',
+};
+
+// 修改后：
+const statusColor = {
+  connected:    'bg-app-success',
+  connecting:   'bg-app-warning',
+  disconnected: 'bg-app-error',
+  error:        'bg-app-error',
+};
+```
+
+同时，`index.html` 的 `body { color: #cccccc }` 与组件普遍使用的 `#d4d4d4` 不一致，统一改为 `app-text` 对应的 `#F9FAFB`：
+
+**修改 `hagoku_web/index.html`**，将 `<style>` 块内 `color: #cccccc` 改为 `color: #F9FAFB`。
+
+---
+
+### 8.5 任务四：修复 ErrorBoundary 视觉（P1）
+
+**问题**：`ErrorBoundary.tsx` 26-54行全部为 inline style 对象，不跟随设计系统更新，且"重试"按钮无 focus ring（键盘导航无反馈）。
+
+**修改 `hagoku_web/src/components/ErrorBoundary.tsx`**，将 inline style 替换为 Tailwind 类：
+
+```tsx
+// 修改前（inline style 写法）：
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', ... }}>
+
+// 修改后（Tailwind 类写法）：
+<div className="flex flex-col items-center justify-center h-full bg-app-bg text-app-text p-8">
+  <div className="text-app-error text-ui-md font-semibold mb-2">出现错误</div>
+  <pre className="font-mono text-ui-sm text-app-text-muted bg-app-bg-secondary rounded p-4 max-w-lg overflow-auto mb-4">
+    {this.state.error?.message}
+  </pre>
+  <button
+    onClick={() => this.setState({ hasError: false })}
+    className="px-4 py-2 bg-app-accent hover:bg-app-accent-hover text-white text-ui-sm rounded
+               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent
+               transition-colors duration-150 cursor-pointer"
+  >
+    重试
+  </button>
+</div>
+```
+
+---
+
+### 8.6 任务五：统一 HTML 报告 CSS（P2）
+
+**问题**：`hagoku/tools/reporting.py` 中有 **7 个独立 `<style>` 块**（第 122、395、506、597、751、853、948 行），每个模板各自定义相同的 reset CSS、字体、`max-width`、`metric-cards` 等，修改任何全局样式需要改 7 处。
+
+**修改步骤**：
+
+1. 在 `reporting.py` 文件顶部（所有模板函数之前）定义一个 `_BASE_REPORT_CSS` 常量：
+
+```python
+_BASE_REPORT_CSS = """
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'Fira Code', 'Cascadia Code', monospace;
+    --radius:   6px;
+    --shadow:   0 1px 4px rgba(0,0,0,.08);
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1e293b;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    background: #f8fafc;
+  }
+  h1, h2, h3 { font-weight: 600; line-height: 1.3; margin: 0 0 .75rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f1f5f9; text-align: center; padding: .5rem .75rem; border-bottom: 2px solid #e2e8f0; }
+  td { padding: .45rem .75rem; border-bottom: 1px solid #e2e8f0; }
+  .metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .metric-card  { background: #fff; border-radius: var(--radius); padding: 1rem 1.25rem; box-shadow: var(--shadow); }
+  .metric-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+  .metric-label { font-size: 12px; color: #64748b; margin-top: .25rem; }
+</style>
+"""
+```
+
+2. 每个模板函数中，将原有 `<style>...</style>` 块替换为 `{_BASE_REPORT_CSS}` + 仅保留该模板**差异化**的 `:root` 变量覆盖（约 5-10 行/模板）：
+
+```python
+# 每个模板的差异化部分（示例：business 模板）
+_BUSINESS_THEME_CSS = """
+<style>
+  :root { --primary: #0d47a1; --accent: #ff6f00; }
+  h2 { color: var(--primary); border-left: 4px solid var(--accent); padding-left: .5rem; }
+</style>
+"""
+```
+
+**验证**：修改后运行 `pytest tests/test_tools/ -q` 确认报告生成测试全部通过。
+
+---
+
+### 8.7 任务六：清理残留文件（P2）
+
+**删除 Streamlit 遗留配置**：
+
+```bash
+rm -rf /home/son_goku/HaGoKu/.streamlit/
+```
+
+**更新 `docs/DEVELOPMENT.md`**：
+- 搜索 `8501`，将 UI 测试说明从 `localhost:8501` 改为 `localhost:5173`（Vite dev server）
+- 删除对已不存在的 `hagoku/ui/_pages/app_analyze.py` 的引用（约第 149-151 行）
+
+---
+
+### 8.8 验证清单（全部任务完成后）
+
+```bash
+# 1. 前端构建无错误
+cd hagoku_web && npm run build
+
+# 2. 无残留 hex 字面量（期望输出为 0）
+grep -r "bg-\[#\|text-\[#\|border-\[#" hagoku_web/src/ | wc -l
+
+# 3. 无残留任意字号（期望输出为 0）
+grep -r "text-\[1[0-9]px\]" hagoku_web/src/ | wc -l
+
+# 4. 报告生成测试通过
+pytest tests/test_tools/ -q
+
+# 5. Lint 通过
+cd hagoku_web && npm run lint
+```
+
+---
+
+*第十六轮 UI 视觉升级任务，于 2026-05-11 追加，共 7 项任务（2 项 P0、3 项 P1、2 项 P2）。*

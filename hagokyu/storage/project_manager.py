@@ -569,7 +569,7 @@ class ProjectManager:
         project_dir = self._ensure_project(project)
         return project_dir / "output" / filename
 
-    def list_data_files(self, project: str) -> list[DataFileInfo]:
+    def list_data_files(self, project: str) -> list[DataFileInfo]:  # type: ignore[valid-type]
         """列出项目所有输入文件"""
         info = self.info(project)
         if info is None:

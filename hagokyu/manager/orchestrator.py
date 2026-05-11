@@ -11,7 +11,7 @@ from ..agents._scribe.agent import ScribeAgent
 from ..agents.analyst import AnalystAgent
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
-from ..agents.scout import DataContext, ScoutAgent
+from ..agents.scout import ScoutAgent
 from ..config import HaGoKuConfig
 from ..guardrails.statistical import StatisticalGuardrails
 from ..llm.client import create_deep_client, create_quick_client, create_structured_llm_client
@@ -133,7 +133,7 @@ class Orchestrator:
         resume: bool = False,
         progress_path: str | None = None,
         phase: str = "full",
-        scout_context: "DataContext | None" = None,
+        scout_context: dict | None = None,
         cleaning_operations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
@@ -210,7 +210,7 @@ class Orchestrator:
         reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
 
         # Resume 支持
-        context: DataContext | None = None
+        context: dict | None = None
         df_clean = None
         cleaning_report = None
         cleaned_path_str = ""
@@ -223,7 +223,7 @@ class Orchestrator:
                 })
                 # 恢复上下文
                 if state.get("context") and isinstance(state["context"], dict):
-                    context = DataContext.from_dict(state["context"])
+                    context = state["context"]
                 # 加载清洗后数据
                 if state.get("cleaned_path"):
                     import pandas as pd
@@ -258,7 +258,7 @@ class Orchestrator:
             if scout_context is not None:
                 context = scout_context
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
-                    "thought": f"🔍 使用缓存的字段信息（{context.n_cols} 个字段）",
+                    "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
@@ -295,11 +295,11 @@ class Orchestrator:
                     "status": "cleaner_strategy",
                     "message": llm_message,
                     "scout_data": {
-                        "n_cols": context.n_cols,
-                        "n_rows": context.n_rows,
-                        "columns": [s.column_name for s in context.column_semantics],
-                        "uncertain_columns": [s.column_name for s in context.get_uncertain_columns()],
-                        "column_descriptions": context.column_descriptions,
+                        "n_cols": context["n_cols"],
+                        "n_rows": context["n_rows"],
+                        "columns": [s["column_name"] for s in context["column_semantics"]],
+                        "uncertain_columns": [s["column_name"] for s in context["column_semantics"] if s.get("needs_user_input")],
+                        "column_descriptions": context["column_descriptions"],
                     },
                     "outliers": strategy_result.get("outliers", {}),
                     "missing_mechanisms": strategy_result.get("missing_mechanisms", {}),
@@ -317,7 +317,7 @@ class Orchestrator:
             if scout_context is not None:
                 context = scout_context
                 self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
-                    "thought": f"🔍 使用缓存的字段信息（{context.n_cols} 个字段）",
+                    "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
@@ -330,7 +330,7 @@ class Orchestrator:
             cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
             if cleaning_operations is not None:
                 # 用户已确认策略 → 执行清洗
-                df_clean, cleaning_report = cleaner.run(
+                df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     user_operations=cleaning_operations,
                     impact_warning=self.config.manager.cleaning_impact_warning,
@@ -338,23 +338,27 @@ class Orchestrator:
                 )
             else:
                 # 未确认 → 只返回策略供用户确认
-                strategy_result = cleaner.run(
+                cleaner_result: tuple[Any, Any, Any] = cleaner.run(
                     data_path, context,
                     user_operations=cleaning_operations,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                     phase="strategy_only",
                 )
-                if isinstance(strategy_result, dict):
-                    # 用户未确认操作，用自动规划的执行
-                    auto_ops = strategy_result.get("operations", [])
-                    df_clean, cleaning_report = cleaner.run(
-                        data_path, context,
-                        user_operations=auto_ops,
-                        impact_warning=self.config.manager.cleaning_impact_warning,
-                        phase="full",
-                    )
+                if isinstance(cleaner_result, tuple) and len(cleaner_result) == 3:
+                    _, _, strategy_dict = cleaner_result
+                    if isinstance(strategy_dict, dict):
+                        # 用户未确认操作，用自动规划的执行
+                        auto_ops = strategy_dict.get("operations", [])
+                        df_clean, cleaning_report, _ = cleaner.run(
+                            data_path, context,
+                            user_operations=auto_ops,
+                            impact_warning=self.config.manager.cleaning_impact_warning,
+                            phase="full",
+                        )
+                    else:
+                        df_clean, cleaning_report, _ = cleaner_result
                 else:
-                    df_clean, cleaning_report = strategy_result
+                    df_clean, cleaning_report, _ = cleaner_result  # type: ignore[assignment]
 
             # Analyst：初步发现或完整分析（取决于phase）
             analyst_phase = "full" if phase == "full" else "preliminary"
@@ -400,38 +404,13 @@ class Orchestrator:
             results, business_metrics = analyst_result
 
         try:
-            # ── LLM 门卫：分类用户问题 ────────────────────────────
-            if context is None and query:
-                classification, llm_response = scout.classify_query(query, data_path=data_path)
-                if classification == "not_relevant":
-                    self.event_bus.emit(EventType.AGENT_THINKING, "Scout", {
-                        "thought": f"🤖 {llm_response}",
-                    })
-                    return {
-                        "status": "skipped",
-                        "reason": "query_not_relevant_to_data",
-                        "llm_response": llm_response,
-                        "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
-                    }
-                elif classification == "ambiguous":
-                    self.event_bus.emit(EventType.AGENT_THINKING, "Scout", {
-                        "thought": f"❓ {llm_response}",
-                    })
-                    return {
-                        "status": "ambiguous",
-                        "reason": "query_needs_clarification",
-                        "llm_response": llm_response,
-                        "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
-                    }
-                # relevant → 继续跑分析 pipeline
-
             # Scout + Cleaner（如果不是 resume）
             if context is None:
                 # 3. Scout: 数据侦察（Scout 自己会和用户对话确认字段）
                 context = scout.run(data_path, query, project_id=project_name)
 
                 # 4. Cleaner: 数据清洗
-                df_clean, cleaning_report = cleaner.run(
+                df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                 )
@@ -465,17 +444,17 @@ class Orchestrator:
             # 6. Analyst: 统计分析
             if df_clean is None or context is None:
                 # 尝试加载原始数据继续
-                if context is not None and context.data_path:
+                if context is not None and context.get("data_path"):
                     try:
                         from ..tools.data_io import load_data
-                        df_clean = load_data(context.data_path)
+                        df_clean = load_data(context["data_path"])
                         self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
                             "verdict": "warning",
                             "detail": "使用原始数据继续分析",
                         })
                     except Exception:
                         raise RuntimeError(
-                            f"无法获取有效数据（context.data_path={context.data_path}），分析无法继续"
+                            f"无法获取有效数据（context.data_path={context['data_path']}），分析无法继续"
                         )
                 else:
                     raise RuntimeError(
@@ -517,17 +496,17 @@ class Orchestrator:
             # 保存 findings
             for result in results:
                 self.db.save_finding({
-                    "id": result.result_id,
+                    "id": result["result_id"],
                     "run_id": run_id,
-                    "analysis_type": result.analysis_type,
-                    "question": result.question,
-                    "conclusion_plain": result.conclusion_plain,
-                    "conclusion_statistical": result.conclusion_statistical,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "effect_type": result.effect_type,
-                    "confidence_interval": result.confidence_interval,
-                    "significance": result.significance,
+                    "analysis_type": result["analysis_type"],
+                    "question": result["question"],
+                    "conclusion_plain": result.get("conclusion_plain", ""),
+                    "conclusion_statistical": result.get("conclusion_statistical", ""),
+                    "p_value": result.get("p_value"),
+                    "effect_size": result.get("effect_size"),
+                    "effect_type": result.get("effect_type"),
+                    "confidence_interval": result.get("confidence_interval"),
+                    "significance": result.get("significance"),
                 })
 
             # 10. 学习 + 导出 progress.yaml
@@ -604,9 +583,9 @@ class Orchestrator:
             return rule_plan
 
         # 无匹配规则，AI 生成
-        llm_plan = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
-        if llm_plan is not None:
-            return llm_plan
+        new_plan: dict[str, Any] | None = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
+        if new_plan is not None:
+            return new_plan
         plan = self._generic_plan(query)
         if parsed_intent and parsed_intent.target:
             plan["target"] = parsed_intent.target
@@ -830,9 +809,9 @@ class Orchestrator:
 
     def _request_field_confirmation(
         self,
-        context: "DataContext",
+        context: dict,
         project_name: str,
-    ) -> "DataContext | None":
+    ) -> dict | None:
         """
         Scout 识别完字段后，和用户对话确认字段含义。
         Scout 展示理解，用户纠正，直到用户确认。
@@ -844,9 +823,9 @@ class Orchestrator:
 
         # 展示 Scout 识别出的所有字段
         print("\n我看到了这些字段：")
-        for sem in context.column_semantics:
-            col = sem.column_name
-            desc = context.column_descriptions.get(col, sem.inferred_type.value)
+        for sem in context["column_semantics"]:
+            col = sem["column_name"]
+            desc = context["column_descriptions"].get(col, sem["inferred_type"])
             print(f"  {col} → {desc}")
 
         print("\n有不对的，纠正我。直接说就行")
@@ -869,9 +848,9 @@ class Orchestrator:
             if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
                 # Scout 展示最终理解，建议进入数据清洗
                 print("\n📋 最终字段理解：")
-                for sem in context.column_semantics:
-                    col = sem.column_name
-                    desc = context.column_descriptions.get(col, sem.inferred_type.value)
+                for sem in context["column_semantics"]:
+                    col = sem["column_name"]
+                    desc = context["column_descriptions"].get(col, sem["inferred_type"])
                     print(f"  {col} = {desc}")
                 print("\n我准备进入数据清洗阶段，可以吗？")
                 confirm = input("➜ (回车确认，或继续纠正) ").strip()
@@ -890,10 +869,10 @@ class Orchestrator:
         if corrections:
             print(f"\n📝 保存 {len(corrections)} 个字段...")
             for col, info in corrections.items():
-                context.column_descriptions[col] = f"{info['chinese_name']}（{info['business_meaning']}）"
-                for s in context.column_semantics:
-                    if s.column_name == col:
-                        s.evidence = info['business_meaning']
+                context["column_descriptions"][col] = f"{info['chinese_name']}（{info['business_meaning']}）"
+                for s in context["column_semantics"]:
+                    if s["column_name"] == col:
+                        s["evidence"] = info['business_meaning']
                         break
             self._save_field_descriptions(project_name, corrections)
 
@@ -902,14 +881,14 @@ class Orchestrator:
 
     def _llm_understand_field_update(
         self,
-        context: "DataContext",
+        context: dict,
         user_input: str,
     ) -> dict[str, dict[str, str]] | None:
         """让 LLM 理解用户说的字段更新，返回更新的字段字典"""
         try:
             from openai import OpenAI
 
-            columns = [s.column_name for s in context.column_semantics]
+            columns = [s["column_name"] for s in context["column_semantics"]]
 
             client = OpenAI(
                 api_key=self.config.llm.api_key,
@@ -1046,13 +1025,16 @@ class Orchestrator:
         if not corrections:
             return
 
+        if self.output_mgr is None:
+            self.output_mgr = OutputManager(self.config.output, project_name)
+
         try:
             # 构建 schema 更新
             schema_file = self.output_mgr.project_dir / "progress.yaml"
             import yaml
 
             # 读取现有 schema
-            schema_data = {}
+            schema_data: dict[str, Any] = {}
             if schema_file.exists():
                 with open(schema_file, "r", encoding="utf-8") as f:
                     schema_data = yaml.safe_load(f) or {}

@@ -175,7 +175,7 @@ class ScoutAgent(InteractionMixin):
 
     # ── 交互式接口 ────────────────────────────────────────
 
-    def begin(
+    def begin(  # type: ignore[override]
         self,
         data_path: str,
         query: str = "",
@@ -283,7 +283,7 @@ class ScoutAgent(InteractionMixin):
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
             return self._done("done", f"Scout 失败: {e}", {"error": str(e)})
 
-    def respond(
+    def respond(  # type: ignore[override]
         self,
         user_input: dict,
         project_id: str | None = None,
@@ -333,9 +333,9 @@ class ScoutAgent(InteractionMixin):
         """写记忆后询问用户是否进入下一步"""
         self._phase = "next_step"
 
-        uncertain = [s for s in self._context["column_semantics"] if s.get("needs_user_input")]
+        uncertain = [s for s in self._context["column_semantics"] if s.get("needs_user_input")]  # type: ignore[index]
         summary = (
-            f"已理解 {len(self._context['column_semantics'])} 个字段，"
+            f"已理解 {len(self._context['column_semantics'])} 个字段，"  # type: ignore[index]
             f"{len(uncertain)} 个需后续关注"
         )
 
@@ -351,8 +351,8 @@ class ScoutAgent(InteractionMixin):
             pending_items=[],
             data={
                 "context": self._context,
-                "n_cols": self._context["n_cols"],
-                "n_rows": self._context["n_rows"],
+                "n_cols": self._context["n_cols"],  # type: ignore[index]
+                "n_rows": self._context["n_rows"],  # type: ignore[index]
             },
         )
 

@@ -51,7 +51,9 @@ def _get_embedding(text: str) -> list[float] | None:
             timeout=60,
         )
         resp.raise_for_status()
-        return resp.json()["data"][0]["embedding"]
+        data = resp.json()
+        embedding = data.get("data", [{}])[0].get("embedding")
+        return embedding if isinstance(embedding, list) else None
     except Exception:
         return None
 
@@ -337,7 +339,8 @@ class KnowledgeVectorStore:
     def list_all(self) -> list[dict[str, Any]]:
         """列出所有知识条目（不含 similarity）"""
         data = self._load_yaml()
-        return data.get("knowledge", [])
+        knowledge = data.get("knowledge", [])
+        return knowledge if isinstance(knowledge, list) else []
 
     def delete(self, entry_id: str) -> bool:
         """删除一条知识条目"""

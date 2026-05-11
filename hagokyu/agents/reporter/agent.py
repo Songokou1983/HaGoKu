@@ -216,15 +216,15 @@ class ReporterAgent(InteractionMixin):
 
     # ── 交互式接口 ────────────────────────────────────────
 
-    def begin(
+    def begin(  # type: ignore[override]
         self,
         results: list[dict],
         context: dict,
-        cleaning_summary: dict = None,
+        cleaning_summary: dict | None = None,
         project_id: str = "分析项目",
         query: str = "",
-        df: pd.DataFrame = None,
-        business_metrics: list[dict] = None,
+        df: pd.DataFrame | None = None,
+        business_metrics: list[dict] | None = None,
     ) -> InteractionResult:
         """
         开始 Reporter 交互。
@@ -261,10 +261,10 @@ class ReporterAgent(InteractionMixin):
             },
         )
 
-    def respond(
+    def respond(  # type: ignore[override]
         self,
         user_input: dict,
-        output_path: str = None,
+        output_path: str | None = None,
     ) -> InteractionResult:
         """
         处理用户确认，生成最终报告。
@@ -311,7 +311,7 @@ class ReporterAgent(InteractionMixin):
 
     def _get_project_history(self, project_id: str) -> list[dict]:
         """获取项目历史报告"""
-        return self.memory.get("reports", {}).get(project_id, [])
+        return self.memory.get("reports", {}).get(project_id, [])  # type: ignore[no-any-return]
 
     def _generate_headline(self, results: list[dict], context: dict) -> str:
         """生成一句话 headline"""
@@ -344,7 +344,7 @@ class ReporterAgent(InteractionMixin):
             cards.append({
                 "value": f"{n_sig}/{n_total}",
                 "label": "显著发现",
-                "trend": "up" if n_sig > n_total / 2 else None,
+                "trend": "up" if n_sig > n_total / 2 else None,  # type: ignore[dict-item]
             })
 
         # 最大效应量
@@ -352,7 +352,7 @@ class ReporterAgent(InteractionMixin):
         if sig_with_es:
             best = max(sig_with_es, key=lambda r: abs(r.get("effect_size") or 0))
             cards.append({
-                "value": f"{abs(best.get('effect_size')):.2f}",
+                "value": f"{abs(best.get('effect_size') or 0):.2f}",  # type: ignore[arg-type]
                 "label": f"最大效应量 ({best.get('effect_type', '')})",
             })
 

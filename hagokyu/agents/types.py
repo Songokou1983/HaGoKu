@@ -128,7 +128,7 @@ class DataContext:
         if not name:
             return None
 
-        COMMON_COLUMN_ALIASES = {
+        COMMON_COLUMN_ALIASES: dict[str, list[str]] = {
             "销售额": ["Inc1", "Inc2", "收入", "营收", "sales", "revenue"],
             "收入": ["Inc1", "Inc2", "revenue"],
             "利润": ["Bos1", "Bos2", "profit"],
@@ -139,21 +139,21 @@ class DataContext:
         if self.column_descriptions:
             for col, desc in self.column_descriptions.items():
                 if desc == name:
-                    return col
+                    return str(col)
 
             import re
             clean_name = re.sub(r"（[^）]+）", "", name).strip()
             for col, desc in self.column_descriptions.items():
                 desc_clean = re.sub(r"（[^）]+）", "", desc).strip()
                 if desc_clean == clean_name:
-                    return col
+                    return str(col)
 
         # 兜底：常见业务术语映射
         for term, candidates in COMMON_COLUMN_ALIASES.items():
             if term in name:
                 for sem in self.column_semantics:
                     if sem.column_name in candidates:
-                        return sem.column_name
+                        return str(sem.column_name)
 
         return None
 

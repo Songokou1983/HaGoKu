@@ -170,7 +170,7 @@ class AnalystAgent(InteractionMixin):
         self._emit(EventType.AGENT_STARTED, {"goal": "用统计方法挖出数据真相"})
 
         results = []
-        business_metrics = []
+        business_metrics: list[dict[str, Any]] = []
         focus = plan.get("analyst_focus", [])
         target_col = plan.get("target")
         query = plan.get("query", "")
@@ -229,7 +229,7 @@ class AnalystAgent(InteractionMixin):
                     suggested = f"初步发现「{top.get('question', '')}」具有统计显著性，建议重点分析"
                 else:
                     suggested = "初步结果均不显著，建议扩大样本或调整分析维度"
-            return {
+            return {  # type: ignore[return-value]
                 "status": "analyst_preliminary",
                 "power_warnings": power_warnings,
                 "business_metrics": business_metrics,
@@ -254,7 +254,7 @@ class AnalystAgent(InteractionMixin):
             violations = self.guardrails.get_violations(guardrail_results)
             if violations:
                 self._emit(EventType.QUALITY_CHECK, {
-                    "verdict": "fail" if violations.get("mandatory") else "warning",
+                    "verdict": "fail" if violations.get("mandatory") else "warning",  # type: ignore[call-overload]
                     "detail": f"{sum(len(v) for v in violations.values())} 个护栏问题",
                 })
 
@@ -270,7 +270,7 @@ class AnalystAgent(InteractionMixin):
 
     # ── 交互式接口 ────────────────────────────────────────
 
-    def begin(
+    def begin(  # type: ignore[override]
         self,
         df: pd.DataFrame,
         context: dict,
@@ -316,7 +316,7 @@ class AnalystAgent(InteractionMixin):
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
             return self._done("done", f"Analyst 失败: {e}", {"error": str(e)})
 
-    def respond(
+    def respond(  # type: ignore[override]
         self,
         user_input: dict,
     ) -> InteractionResult:
@@ -341,7 +341,7 @@ class AnalystAgent(InteractionMixin):
             if self.scribe:
                 self.scribe.unblock_task("analyst")
             # 重新执行分析
-            return self.begin(self._df, self._context, self._plan)
+            return self.begin(self._df, self._context, self._plan)  # type: ignore[arg-type]
         else:
             if self.scribe:
                 self.scribe.unblock_task("analyst")

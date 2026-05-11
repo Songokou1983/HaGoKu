@@ -316,7 +316,7 @@ class QueryParser:
         # 直接从 query 中找目标关键词
         for kw in TARGET_KEYWORDS:
             if kw in query:
-                return kw
+                return str(kw)
 
         # 从上下文中推断（如果 context 里有已识别的列）
         if context_hints:
@@ -324,11 +324,11 @@ class QueryParser:
             col_semantics = context_hints.get("column_semantics", [])
             for col in col_semantics:
                 if hasattr(col, "suggested_role") and col.suggested_role == "target":
-                    return col.column_name
+                    return str(col.column_name)
                 if hasattr(col, "confidence") and col.confidence >= 0.8:
                     # 数值型高置信度列可能是目标
                     if str(col.inferred_type) == "numeric":
-                        return col.column_name
+                        return str(col.column_name)
 
         return None
 

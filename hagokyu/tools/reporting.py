@@ -1144,7 +1144,7 @@ class ReportGenerator:
             template = env.from_string(DEFAULT_HTML_TEMPLATE)
 
         # 渲染
-        html = template.render(report=report.to_dict())
+        html: str = template.render(report=report.to_dict())
 
         # 保存
         if output_path:

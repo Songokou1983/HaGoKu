@@ -269,7 +269,7 @@ class CleanerAgent(InteractionMixin):
 
     # ── 交互式接口 ────────────────────────────────────────
 
-    def begin(
+    def begin(  # type: ignore[override]
         self,
         data_path: str,
         context: dict,
@@ -364,7 +364,7 @@ class CleanerAgent(InteractionMixin):
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
             return self._done("done", f"Cleaner 失败: {e}", {"error": str(e)})
 
-    def respond(
+    def respond(  # type: ignore[override]
         self,
         user_input: dict,
         project_id: str | None = None,

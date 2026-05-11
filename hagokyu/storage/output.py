@@ -114,7 +114,8 @@ class OutputManager:
         if not path.exists():
             return None
         with open(path) as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else None
 
     def generate_manifest(self, run_dir: Path) -> dict[str, list[dict[str, Any]]]:
         """

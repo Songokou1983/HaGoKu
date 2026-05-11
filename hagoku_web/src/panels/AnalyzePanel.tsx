@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { LogView, type LogLine } from "../components/LogView";
 import { InputBar } from "../components/InputBar";
@@ -30,6 +31,7 @@ let _msgIdCounter = 0;
 
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
+  const status = useWorkspaceStore((s) => s.status);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [dataPath, setDataPath] = useState("");
 
@@ -120,8 +122,18 @@ export default function AnalyzePanel() {
           }}
         />
       </div>
-      <LogView lines={logs} />
-      <InputBar onSend={handleSend} />
+      <div className="relative flex-1">
+        <LogView lines={logs} />
+        {status === "running" && (
+          <div className="absolute inset-0 bg-[#1e1e1e]/80 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-6 h-6 border-2 border-[#569cd6] border-t-transparent rounded-full animate-spin" />
+              <span className="text-[13px] text-[#888]">Analyzing...</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <InputBar onSend={handleSend} disabled={status === "running"} />
     </div>
   );
 }

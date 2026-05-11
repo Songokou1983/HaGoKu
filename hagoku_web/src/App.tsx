@@ -58,18 +58,23 @@ function SystemStatus() {
   const agents = useWorkspaceStore((s) => s.agents);
 
   const busyCount = Object.values(agents).filter((s) => s === "running").length;
+  const errorCount = Object.values(agents).filter((s) => s === "error").length;
 
   const color =
-    status === "running" || busyCount > 0
-      ? "bg-yellow-400"
-      : status === "done"
-        ? "bg-green-500"
-        : "bg-[#555]";
+    errorCount > 0
+      ? "bg-red-500"
+      : status === "running" || busyCount > 0
+        ? "bg-yellow-400"
+        : status === "done"
+          ? "bg-green-500"
+          : "bg-[#555]";
 
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-[#666]">
       <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
-      {status === "running" || busyCount > 0 ? (
+      {errorCount > 0 ? (
+        <span>{errorCount > 1 ? `${errorCount} errors` : "error"}</span>
+      ) : status === "running" || busyCount > 0 ? (
         <span>{busyCount > 0 ? `${busyCount} busy` : "running"}</span>
       ) : (
         <span>{status}</span>
@@ -118,7 +123,7 @@ export default function App() {
       }}
     >
       {/* Toggle bar — auto-sized row */}
-      <div className="flex items-center gap-1 px-2 py-1 bg-[#252525] border-b border-[#333] select-none">
+      <div className="flex items-center gap-1 px-2 py-1 bg-[#252525] border-b border-[#333] select-none max-md:flex-wrap">
         {PANEL_CONFIGS.map((cfg) => {
           const visible = panels[cfg.id]?.visible;
           return (

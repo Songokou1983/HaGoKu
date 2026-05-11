@@ -27,7 +27,7 @@ interface SelectProps {
 export function Select({ options, value, onChange }: SelectProps) {
   return (
     <select
-      className="w-full bg-[#252525] border border-[#444] rounded px-2 py-1 text-[13px] text-[#d4d4d4] outline-none focus:border-[#569cd6] transition-colors"
+      className="w-full bg-[#252525] border border-[#444] rounded px-2 py-1 text-[13px] text-[#d4d4d4] outline-none focus:border-[#569cd6] hover:border-[#569cd6] transition-colors duration-150"
       defaultValue={value}
       onChange={onChange ? (e) => onChange(e.target.value) : undefined}
     >

@@ -1,28 +1,30 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
-import { Send, Zap } from "lucide-react";
+import { Send, Zap, Loader2 } from "lucide-react";
 
 interface InputBarProps {
   placeholder?: string;
   onSend: (text: string) => void;
+  disabled?: boolean;
 }
 
 export function InputBar({
   placeholder = "Ask a question about your data...",
   onSend,
+  disabled = false,
 }: InputBarProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = useCallback(() => {
     const text = value.trim();
-    if (!text) return;
+    if (!text || disabled) return;
     onSend(text);
     setValue("");
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, onSend]);
+  }, [value, onSend, disabled]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -41,6 +43,8 @@ export function InputBar({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, []);
 
+  const isDisabled = !value.trim() || disabled;
+
   return (
     <div className="border-t border-[#333] p-2 flex items-end gap-2">
       <Zap size={14} className="text-[#569cd6] shrink-0 mt-1.5" />
@@ -55,14 +59,19 @@ export function InputBar({
           autoResize();
         }}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
       />
       <button
         onClick={handleSend}
-        className="p-1 text-[#569cd6] hover:text-[#9cdcfe] disabled:text-[#444] shrink-0"
-        disabled={!value.trim()}
-        aria-label="Send"
+        className="p-1 text-[#569cd6] hover:text-[#9cdcfe] disabled:text-[#444] shrink-0 transition-colors duration-150"
+        disabled={isDisabled}
+        aria-label={disabled ? "Sending..." : "Send"}
       >
-        <Send size={16} />
+        {disabled ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <Send size={16} />
+        )}
       </button>
     </div>
   );

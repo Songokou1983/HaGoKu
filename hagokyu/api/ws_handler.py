@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
 
 from hagokyu.observability.event_bus import EventBus
 from hagokyu.observability.events import Event
+
+if TYPE_CHECKING:
+    from hagokyu.manager.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 # The Orchestrator (or test harness) calls set_bus() once.
 # The WebSocket handler reads from this to subscribe.
 _shared_bus: EventBus | None = None
+_shared_orchestrator: "Orchestrator | None" = None
 
 
 def set_bus(bus: EventBus) -> None:
@@ -31,6 +35,18 @@ def get_bus() -> EventBus | None:
     return _shared_bus
 
 
+def get_orchestrator() -> "Orchestrator | None":
+    """Return the shared orchestrator instance."""
+    return _shared_orchestrator
+
+
+def set_orchestrator(orchestrator: "Orchestrator") -> None:
+    """Set the shared orchestrator instance and register its EventBus."""
+    global _shared_orchestrator
+    _shared_orchestrator = orchestrator
+    set_bus(orchestrator.event_bus)
+
+
 # ── Serialization ─────────────────────────────────────────────
 
 def _event_to_message(event: Event) -> dict[str, Any]:
@@ -38,6 +54,33 @@ def _event_to_message(event: Event) -> dict[str, Any]:
         "type": "event",
         "data": event.to_dict(),
     }
+
+
+# ── Analysis runner ─────────────────────────────────────────────
+
+def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> None:
+    """
+    在后台线程运行 Orchestrator.run()。
+    Orchestrator 会自动通过其 event_bus → WSBridge → WebSocket 推送事件到前端。
+    """
+    from hagokyu.config import HaGoKuConfig
+    from hagokyu.manager.orchestrator import Orchestrator
+
+    global _shared_orchestrator
+
+    # 创建或复用共享的 Orchestrator 实例
+    if _shared_orchestrator is None:
+        config = HaGoKuConfig.load()
+        _shared_orchestrator = Orchestrator(config)
+        set_bus(_shared_orchestrator.event_bus)
+
+    # 运行分析（同步阻塞，在 executor 线程中执行）
+    _shared_orchestrator.run(
+        data_path=data_path,
+        query=query,
+        project_name=project_name,
+        phase=phase,
+    )
 
 
 # ── WS ↔ EventBus bridge ──────────────────────────────────────
@@ -108,16 +151,46 @@ async def ws_handler(ws: WebSocket) -> None:
             if cmd == "ping":
                 await ws.send_json({"type": "pong"})
             elif cmd == "analyze":
+                payload = msg.get("payload", {})
+                data_path = payload.get("data_path", "")
+                query = payload.get("query", "")
+                project_name = payload.get("project_name", "default")
+                phase = payload.get("phase", "full")
+
+                if not data_path:
+                    await ws.send_json({
+                        "type": "error",
+                        "cmd": "analyze",
+                        "message": "Missing required field: data_path"
+                    })
+                    continue
+
+                # 发送初始 ack
                 await ws.send_json({
                     "type": "ack",
                     "cmd": "analyze",
-                    "message": "Analysis request received (placeholder)"
+                    "message": "Analysis started"
                 })
+
+                # 在后台线程运行分析（避免阻塞事件循环）
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.run_in_executor(
+                        None,
+                        _run_analysis,
+                        data_path,
+                        query,
+                        project_name,
+                        phase,
+                    )
+                except RuntimeError:
+                    # 没有运行中的事件循环，使用默认行为
+                    pass
             else:
                 await ws.send_json({"type": "error", "message": f"Unknown command: {cmd}"})
 
     except Exception:
-        logger.debug("WebSocket closed", exc_info=True)
+        logger.info("WebSocket closed", exc_info=True)
     finally:
         if bus is not None:
             try:

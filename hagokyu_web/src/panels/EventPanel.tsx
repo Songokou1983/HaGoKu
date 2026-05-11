@@ -3,7 +3,7 @@ import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { PanelHeader } from "../components/PanelHeader";
 import { EventTable, type EventEntry } from "../components/EventTable";
-import type { EventType, WSMessage } from "../types/events";
+import type { EventType } from "../types/events";
 
 const MAX_ENTRIES = 500;
 

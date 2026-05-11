@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
 from .events import Event, EventType
+
+logger = logging.getLogger(__name__)
 
 
 class EventBus:
@@ -32,8 +35,8 @@ class EventBus:
         for callback in self.subscribers:
             try:
                 callback(event)
-            except Exception:
-                pass  # 订阅者出错不影响事件流
+            except Exception as e:
+                logger.warning(f"EventBus subscriber {callback.__name__} failed: {e}")
         return event
 
     def subscribe(self, callback: Callable[[Event], None]) -> None:

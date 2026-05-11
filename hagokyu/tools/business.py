@@ -867,14 +867,13 @@ def funnel_analysis(
                 total_conv = float(lc) / float(fc)
 
         # 最大流失点
-        max_drop_idx: int = max(
-            range(len(funnel)),
-            key=lambda i: (
-                isinstance(funnel[i].get("from_previous_rate"), (int, float))
-                and funnel[i]["from_previous_rate"] < 1.0
-                and funnel[i]["from_previous_rate"] > 0
-            ),
-        ) if funnel else 0
+        def _drop_score(i: int) -> float:
+            rate = funnel[i].get("from_previous_rate")
+            if isinstance(rate, (int, float)) and 0 < rate < 1.0:
+                return rate
+            return 1.0  # 默认最高分数（不流失）
+
+        max_drop_idx: int = min(range(len(funnel)), key=_drop_score) if funnel else 0
 
         interp_drop: str = ""
         if funnel and max_drop_idx < len(funnel):

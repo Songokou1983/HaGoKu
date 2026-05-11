@@ -96,7 +96,7 @@ class CleanerAgent(InteractionMixin):
 
         path.write_text(content, encoding="utf-8")
 
-    def _emit(self, event_type: EventType, data: dict = None) -> None:
+    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     # ── 核心逻辑 ────────────────────────────────────────────

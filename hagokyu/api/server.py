@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -11,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from hagokyu.api.ws_handler import ws_handler
-from hagokyu.config import HaGoKuConfig
 
 app = FastAPI(title="HaGoKu API", version="0.1.0")
 
@@ -55,6 +52,17 @@ else:
 def main():
     """Entry point: hagokyu-api"""
     import uvicorn
+
+    from hagokyu.api.ws_handler import set_orchestrator
+    from hagokyu.config import HaGoKuConfig
+    from hagokyu.manager.orchestrator import Orchestrator
+
+    # 预初始化 Orchestrator（注册 EventBus 到 WS Handler）
+    # 确保前端连接时已订阅事件总线
+    config = HaGoKuConfig.load()
+    orchestrator = Orchestrator(config)
+    set_orchestrator(orchestrator)
+
     uvicorn.run("hagokyu.api.server:app", host="0.0.0.0", port=8000, reload=True)
 
 

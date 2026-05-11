@@ -14,6 +14,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import numpy as np
+import pandas as pd
+
 from ..config import CleaningConfig
 from ..log import get_logger
 
@@ -27,9 +30,6 @@ def set_cleaning_config(config: CleaningConfig) -> None:
     """设置模块级清洗配置（由 Orchestrator 在启动时调用）"""
     global _config
     _config = config
-
-import numpy as np
-import pandas as pd
 
 
 class MissingMechanism(Enum):

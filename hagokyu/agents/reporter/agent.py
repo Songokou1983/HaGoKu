@@ -88,7 +88,7 @@ class ReporterAgent(InteractionMixin):
 
         path.write_text(content, encoding="utf-8")
 
-    def _emit(self, event_type: EventType, data: dict = None) -> None:
+    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     # ── 核心逻辑 ────────────────────────────────────────────
@@ -97,12 +97,12 @@ class ReporterAgent(InteractionMixin):
         self,
         results: list[dict],
         context: dict,
-        cleaning_summary: dict = None,
+        cleaning_summary: dict | None = None,
         project_id: str = "分析项目",
         query: str = "",
-        output_path: str = None,
-        df: pd.DataFrame = None,
-        business_metrics: list[dict] = None,
+        output_path: str | None = None,
+        df: pd.DataFrame | None = None,
+        business_metrics: list[dict] | None = None,
         project_name: str = "分析项目",
         formats: list[str] | None = None,
         template: str | None = None,

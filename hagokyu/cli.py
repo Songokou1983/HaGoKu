@@ -739,7 +739,8 @@ def project_add(project: str, file_path: str, link: bool) -> None:
         proj_info = pm.info(project)
         mode = "链接" if link else "复制"
         click.echo(f"✅ {mode}成功: {info.name} ({info.size_kb:.1f} KB)")
-        click.echo(f"   路径: {proj_info.project_dir / info.path}")
+        if proj_info is not None:
+            click.echo(f"   路径: {proj_info.project_dir / info.path}")
     except FileNotFoundError as e:
         click.echo(f"❌ {e}", err=True)
         raise SystemExit(1)
@@ -940,11 +941,11 @@ def memory(project_name: str | None, category: str | None, set_item: tuple | Non
 
     # 导出 progress.yaml
     if export_path:
-        target_pid = pid or project_name
-        if not target_pid:
+        export_pid: str | None = pid or project_name
+        if not export_pid:
             click.echo("❌ 导出需要指定项目名或 --global")
             return
-        out_path = mm.export_progress_yaml(target_pid, Path(export_path))
+        out_path = mm.export_progress_yaml(export_pid, Path(export_path))
         click.echo(f"📄 已导出 progress.yaml 到 {out_path}")
         return
 
@@ -1149,7 +1150,7 @@ def _describe_refinement(intent: Any) -> str:
 
 def _build_refinement_query(original_result: dict, intent: Any) -> str:
     """根据 refinement 意图构建新的分析 query"""
-    orig_query = original_result.get("query", "")
+    orig_query: str = original_result.get("query", "") or ""
     if intent.refine_type == "filter" and intent.filter_column:
         val = intent.filter_value or f"[指定{intent.filter_column}]"
         return f"{orig_query} {intent.filter_column}为{val}"

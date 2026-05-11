@@ -48,6 +48,8 @@ class OutputConfig(BaseModel):
 
     project_dir: Path = Field(default_factory=lambda: Path.home() / ".hagokyu" / "projects")
     formats: list[str] = Field(default_factory=lambda: ["html"])
+    date_format: str = "%Y%m%d_%H%M%S"
+    naming: str = "{project}_{date}"
 
 
 class AnalysisConfig(BaseModel):

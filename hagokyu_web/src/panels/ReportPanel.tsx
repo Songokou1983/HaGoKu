@@ -4,7 +4,6 @@ import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
-import type { WSMessage } from "../types/events";
 
 const MAX_REPORTS = 100;
 

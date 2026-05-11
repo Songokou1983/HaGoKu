@@ -301,10 +301,10 @@ class QueryParser:
                     time_from = datetime(now.year, now.month, 1) - timedelta(days=30 * (num - 1))
                     return f"最近{num}个月", time_from, now
                 elif unit == "year":
-                    time_from = datetime(int(num_str), 1, 1)
-                    return f"{num_str}年", time_from, datetime(int(num_str), 12, 31)
+                    time_from = datetime(num, 1, 1)
+                    return f"{num}年", time_from, datetime(num, 12, 31)
                 elif unit == "quarter":
-                    q = int(num_str)
+                    q = int(num_str) if num_str else 1
                     month_start = (q - 1) * 3 + 1
                     return f"Q{q}", datetime(now.year, month_start, 1), datetime(now.year, month_start + 2, 28)
 

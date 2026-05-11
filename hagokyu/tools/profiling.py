@@ -75,9 +75,9 @@ def generate_full_profile(df: pd.DataFrame) -> dict[str, Any]:
     Returns:
         ydata-profiling 的结构化结果
     """
-    try:
-        from ydata_profiling import ProfileReport
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("ydata_profiling") is None:
         raise ImportError(
             "ydata-profiling 未安装。请运行: pip install ydata-profiling\n"
             "或使用轻量级画像: generate_profile(df)"

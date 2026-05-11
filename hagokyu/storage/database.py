@@ -190,7 +190,7 @@ class HaGoKuDB:
         description: str = "",
         data_path: str = "",
         schema_path: str = "",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """创建项目"""
         now = datetime.now().isoformat()
         self.conn.execute(
@@ -240,7 +240,7 @@ class HaGoKuDB:
         schema_json: dict | None = None,
         row_count: int = 0,
         quality_score: float = 0.0,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """注册数据源"""
         schema_str = json.dumps(schema_json, ensure_ascii=False) if schema_json else ""
         self.conn.execute(
@@ -288,7 +288,7 @@ class HaGoKuDB:
         query: str = "",
         plan: dict | None = None,
         manager_mode: str = "local_weak",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """创建分析运行"""
         plan_str = json.dumps(plan, ensure_ascii=False) if plan else ""
         now = datetime.now().isoformat()

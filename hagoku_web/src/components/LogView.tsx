@@ -1,9 +1,9 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, type ReactNode } from "react";
 import { EmptyState } from "./EmptyState";
 
 export interface LogLine {
   id: string;
-  text: string;
+  text: ReactNode;
   type: "user" | "system" | "event";
   timestamp: string;
 }
@@ -12,13 +12,14 @@ interface LogViewProps {
   lines: LogLine[];
 }
 
+const LOG_COLOR: Record<LogLine["type"], string> = {
+  user:    "text-app-accent",
+  event:   "text-event-done",
+  system:  "text-event-warn",
+};
+
 function LogRow({ line }: { line: LogLine }) {
-  const color =
-    line.type === "user"
-      ? "text-app-accent"
-      : line.type === "event"
-        ? "text-app-success"
-        : "text-app-warning";
+  const color = LOG_COLOR[line.type];
 
   return (
     <div className={`${color} mb-1`}>
@@ -40,7 +41,7 @@ export function LogView({ lines }: LogViewProps) {
   return (
     <div className="flex-1 overflow-auto px-3 py-2 font-mono text-ui-base leading-relaxed">
       {lines.length === 0 && (
-        <EmptyState message="Send a query to start analysis" />
+        <EmptyState message="在下方输入问题，开始分析" />
       )}
       {lines.map((l) => (
         <LogRow key={l.id} line={l} />

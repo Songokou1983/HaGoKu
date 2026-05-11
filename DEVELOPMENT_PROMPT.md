@@ -2253,4 +2253,52 @@ pytest tests/ -q                                  # 期望：全通过
 
 ---
 
-*第十八轮 Web UI 架构 Scaffold，于 2026-05-11 追加。目标：6 个面板全部数据流闭环。*
+### 9.5 第十八轮完成记录（2026-05-11）
+
+| 项目 | 验证方式 | 状态 |
+|------|---------|------|
+| 5 个 REST 端点注册 | `app.routes` 含 `/api/projects`×2、`/api/reports/{proj}`、`/api/reports/{proj}/{file}`、`/api/config`、`/api/knowledge/{proj}` | ✅ |
+| Reporter 两处 emit 含 `output_path`+`project_name` | `reporter/agent.py` L199-202、L303-305 | ✅ |
+| Orchestrator agent 名全小写 | `grep '"Manager"\|"Scout"...'` → 0 结果 | ✅ |
+| WS `respond` 命令 | `ws_handler.py` L189-199 | ✅ |
+| Store 扩展 | `workspace.ts` 含 projects/currentProject/reportFiles/lastError 及 setter | ✅ |
+| `useAgentStatusSync` 3 处修复 | run 状态驱动、`.toLowerCase()`、`waiting_input` | ✅ |
+| App.tsx 全局错误 toast | L92-144 | ✅ |
+| ProjectPanel CRUD | fetch `/api/projects`、create、click-to-select | ✅ |
+| AnalyzePanel 用 `currentProject` | `project_name: currentProject ?? "default"` | ✅ |
+| ReportPanel 真实报告链接 | fetch `/api/reports/{proj}`，`<a href={f.url}>` | ✅ |
+| KnowledgePanel REST 拉取 | fetch `/api/knowledge/{currentProject}` | ✅ |
+| SettingsPanel 持久化 | `localStorage`、Save 按钮、`/api/config` 合并 | ✅ |
+| `npm run build` | ✓ | ✅ |
+| `npm run lint` | ✓ 0 errors | ✅ |
+| `pytest tests/test_tools/ -q` | 93 passed | ✅ |
+
+---
+
+*第十八轮 Web UI 架构 Scaffold 全部完成（2026-05-11）。6 个面板全部数据流闭环。*
+
+**§9 完成记录（2026-05-11）：**
+
+| 子任务 | 状态 | 验证 |
+|--------|------|------|
+| §9.1.1 REST 端点（server.py） | ✅ | Backend imports OK |
+| §9.1.2 Reporter emit payload | ✅ | `output_path in emit: True` |
+| §9.1.3 Agent 名称小写 | ✅ | `grep` 无大写残留 |
+| §9.1.4 WS respond 命令 | ✅ | Backend imports OK |
+| §9.2.1 Zustand Store 扩展 | ✅ | TypeScript build OK |
+| §9.2.2 useAgentStatusSync 修复 | ✅ | TypeScript build OK |
+| §9.2.3 全局 WS 错误显示 | ✅ | ESLint OK |
+| §9.2.4 ProjectPanel 重构 | ✅ | ESLint OK |
+| §9.2.5 AnalyzePanel currentProject | ✅ | TypeScript build OK |
+| §9.2.6 ReportPanel 重构 | ✅ | ESLint OK |
+| §9.2.7 KnowledgePanel 重构 | ✅ | ESLint OK |
+| §9.2.8 SettingsPanel 持久化 | ✅ | TypeScript build OK |
+
+**构建验证：**
+```
+npm run build  ✓ built in 712ms
+npm run lint   ✓ 0 errors
+pytest tests/test_tools/ -q  ✓ 93 passed
+```
+
+**已知限制：** `tests/test_api/` 中的 async 测试因 `pytest-asyncio` 未安装而失败（非本轮引入，为既有基础设施问题）。

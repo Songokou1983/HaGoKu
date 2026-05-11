@@ -45,21 +45,8 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 - **调度执行**：按计划顺序调度 Agent，传递数据制品
 - **进度监控**：跟踪每个 Agent 的状态，检测失败并降级
 - **规则兜底**：80% 的常见场景有预定义规则覆盖，LLM 仅处理新场景
-- **模式适配**：根据用户模式（快速/普通/资深）决定交互策略
 
 ---
-
-## 用户模式 — 控制感来自互动层次
-
-三种模式对应不同的自主程度和互动预算：
-
-| 模式 | 说明 | 互动机制 | 预算 |
-|------|------|---------|------|
-| ⚡ **快速模式** | 完全自主，猜错了下次纠正 | 零互动，猜错信号检测（R²<0.1 / p 不显著时提示） | 0 次 |
-| 🔄 **普通模式**（默认） | 关键决策点寻求确认 | 流程强制互动（字段语义确认）+ 参与式互动（方法选择等） | ≤ 6 次 |
-| 🎓 **资深模式** | 用户参与每个决策 | 每个环节可介入、可跳过、可重做 | 无限制 |
-
-**模式切换机制**：`hagoku mode <fast|normal|expert>`。切换只影响后续决策，已执行步骤不回滚（资深模式可手动重做）。
 
 ---
 
@@ -228,7 +215,7 @@ HaGoKu 的 Agent 之间不直接对话，通过**看板**交换信息：
 | Analyst | LLM 自由发挥失败 | 降级到工具集保守方法 | 无感知 |
 | Cleaner | 填补失败 | 保留缺失值，标注"未处理" | 报告中说明 |
 | Cleaner | 异常检测失败 | 不处理异常，标注"未做异常检测" | 报告中说明 |
-| Scout | 语义推断失败 | 标记 UNKNOWN | 普通模式等待确认；快速模式标注"待确认" |
+| Scout | 语义推断失败 | 标记 UNKNOWN | 等待用户确认 |
 | 仲裁器 | LLM 超时 | 规则引擎兜底计划 | 无感知 |
 | Reporter | 模板渲染失败 | 降级到 Markdown 纯文本 | 格式简化 |
 
@@ -529,7 +516,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 3. **LangGraph 工作流**（从模式 1 借鉴）：
    - 引入 `langgraph` 依赖，用 `StateGraph` 替代手写 Agent 循环
-   - 条件边实现：降级路由（Analyst 失败 → 简化分析）、用户模式适配（快速模式跳过确认）
+   - 条件边实现：降级路由（Analyst 失败 → 简化分析）
    - 获得 LangGraph 内置 checkpoint/resume 能力
 
 4. **AgentState TypedDict**（从模式 5 借鉴）：
@@ -566,7 +553,6 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | 同 `HAGOKYU_LLM_API_KEY` |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
-| `HAGOKYU_MANAGER_MODE` | 仲裁器模式 | `balanced` |
 
 > `.env.example` 提供模板，复制为 `.env` 后修改。环境变量优先于配置文件。
 
@@ -592,7 +578,6 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | 命令 | 用途 |
 |------|------|
 | `hagoku run <file> -q "问题"` | 完整分析（`--mode quick/standard/expert`） |
-| `hagoku quick <file>` | 快速模式（零交互） |
 | `hagoku demo` | 列出内置演示数据集 |
 | `hagoku profile <file>` | 数据画像 |
 

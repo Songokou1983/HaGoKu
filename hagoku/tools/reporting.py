@@ -80,7 +80,6 @@ class ReportData:
         # 双轨新增
         headline: str | None = None,
         metric_cards: list[dict[str, Any]] | None = None,
-        user_mode: str = "standard",
     ) -> None:
         self.project_name = project_name
         self.query = query
@@ -92,7 +91,6 @@ class ReportData:
         # 双轨新增
         self.headline = headline
         self.metric_cards = metric_cards or []
-        self.user_mode = user_mode  # quick / standard / expert
         self.generated_at = datetime.now()
 
     def to_dict(self) -> dict[str, Any]:
@@ -106,7 +104,6 @@ class ReportData:
             "cleaning_summary": self.cleaning_summary,
             "headline": self.headline,
             "metric_cards": self.metric_cards,
-            "user_mode": self.user_mode,
             "generated_at": self.generated_at.isoformat(),
         }
 
@@ -190,7 +187,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
             生成时间: {{ report.generated_at[:19] }} | HaGoKu v0.1.0
-            {% if report.user_mode == 'quick' %}| ⚡ 快速模式{% elif report.user_mode == 'expert' %}| 🔬 资深模式{% endif %}
+
         </div>
         <div class="query">
             <strong>研究问题：</strong>{{ report.query }}
@@ -291,32 +288,32 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
             {% if finding.get('plain_explanation') %}
             <div class="plain-explanation">{{ finding.plain_explanation }}</div>
             {% endif %}
-            {% if finding.get('p_value') is not none and report.user_mode != 'quick' %}
+            {% if finding.get('p_value') is not none %}
             <div class="stats">
                 p = {{ '%.4f' | format(finding.p_value) }}
                 {% if finding.get('effect_size') is not none %}| {{ finding.get('effect_type', '效应量') }} = {{ '%.3f' | format(finding.effect_size) }}{% endif %}
                 {% if finding.get('confidence_interval') %}| 95% CI: {{ finding.confidence_interval }}{% endif %}
             </div>
             {% endif %}
-            {% if finding.get('limitations') and report.user_mode != 'quick' %}
+            {% if finding.get('limitations') %}
             <ul class="limitations">
             {% for lim in finding.limitations %}
                 <li>{{ lim }}</li>
             {% endfor %}
             </ul>
             {% endif %}
-            {% if finding.get('evidence_trace') and report.user_mode == 'expert' %}
+            {% if finding.get('evidence_trace') %}
             <div class="evidence-trace">→ {{ finding.evidence_trace }}</div>
             {% endif %}
             </div>
         </div>
         {% endfor %}
 
-        {% if section.statistical_detail and report.user_mode != 'quick' %}
+        {% if section.statistical_detail %}
         <div class="stats" style="background:var(--surface); padding:0.75rem; border-radius:6px; margin-top:0.75rem;">{{ section.statistical_detail }}</div>
         {% endif %}
 
-        {% if section.limitations and report.user_mode != 'quick' %}
+        {% if section.limitations %}
         <ul class="limitations" style="margin-top:0.5rem; padding-left:1rem; border-left:2px solid var(--border); font-size:0.9rem; color:var(--text-secondary);">
         {% for lim in section.limitations %}
             <li>{{ lim }}</li>
@@ -324,7 +321,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         </ul>
         {% endif %}
 
-        {% if section.evidence_trace and report.user_mode == 'expert' %}
+        {% if section.evidence_trace %}
         <div class="evidence-trace" style="margin-top:0.5rem;">→ {{ section.evidence_trace }}</div>
         {% endif %}
 

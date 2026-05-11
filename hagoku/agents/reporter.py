@@ -132,7 +132,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
         formats: list[str] | None = None,
         template: str | None = None,
         template_dir: str | None = None,
-        user_mode: str = "standard",
         df: pd.DataFrame | None = None,
         business_metrics: list[dict[str, Any]] | None = None,
     ) -> ReportData:
@@ -149,7 +148,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
             formats: 输出格式列表 (html / md / json)
             template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             template_dir: 自定义模板目录
-            user_mode: 用户模式 (quick / standard / expert)
             df: 清洗后数据（用于生成图表）
 
         Returns:
@@ -228,7 +226,7 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
 
             # 详细分析结果 — 双轨（附加图表）
             for result in results:
-                section = self._build_result_section(result, user_mode)
+                section = self._build_result_section(result)
 
                 # 将对应的洞察图表附加到 section
                 for chart in insight_charts:
@@ -273,7 +271,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
                 # 双轨新增
                 headline=self._generate_headline(results, context),
                 metric_cards=self._generate_metric_cards(results, context),
-                user_mode=user_mode,
             )
 
             # 3. 生成报告文件
@@ -351,7 +348,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
                 findings_summary=key_findings,
                 headline="分析完成（报告部分失败）",
                 metric_cards=[],
-                user_mode=user_mode,
             )
 
     # ── 交互式接口 ────────────────────────────────────────
@@ -417,7 +413,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
         output_path: str | None = None,
         formats: list[str] | None = None,
         template: str | None = None,
-        user_mode: str = "standard",
         df: pd.DataFrame | None = None,
     ) -> InteractionResult:
         """
@@ -444,7 +439,6 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
             output_path=output_path,
             formats=formats,
             template=template,
-            user_mode=user_mode,
             df=df,
             business_metrics=self._report_data.get("business_metrics"),
         )
@@ -748,7 +742,7 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
         else:
             return f"在 {n_total} 项分析中，未发现统计显著的结果。这本身也是重要信息。"
 
-    def _build_result_section(self, result: AnalysisResult, user_mode: str = "standard") -> ReportSection:
+    def _build_result_section(self, result: AnalysisResult) -> ReportSection:
         """构建单个分析结果的章节（双轨）"""
         # 章节标题
         title_map = {
@@ -838,7 +832,7 @@ class ReporterAgent(DataAgentBase, InteractionMixin):
 
         # 子章节：诊断（带中文解释）
         subsections = []
-        if result.diagnostics and user_mode != "quick":
+        if result.diagnostics:
             diag_items = []
             for key, val in result.diagnostics.items():
                 if isinstance(val, dict) and "verdict" in val:

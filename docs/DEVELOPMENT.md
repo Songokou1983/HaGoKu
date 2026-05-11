@@ -71,7 +71,7 @@ data_path = str(Path.home() / '.hagoku/projects/Playwright测试/input/ad_campai
 
 # Phase 1
 orch1 = Orchestrator(config)
-r1 = orch1.run(data_path, '', project_name='Playwright测试', user_mode='standard', phase='scout_first')
+r1 = orch1.run(data_path, '', project_name='Playwright测试', phase='scout_first')
 print(f'Phase1: {r1[\"status\"]}, cols={len(r1.get(\"column_semantics\",[]))}')
 assert r1['status'] == 'scout_done'
 
@@ -85,7 +85,7 @@ scout_ctx = DataContext.from_dict({
 time.sleep(1)
 orch2 = Orchestrator(config)
 r2 = orch2.run(data_path, '分析哪个渠道ROI最高',
-    project_name='Playwright测试', user_mode='standard',
+    project_name='Playwright测试',
     phase='cleaning_first', scout_context=scout_ctx)
 print(f'Phase2: {r2.get(\"status\")}')
 assert r2.get('status') == 'cleaner_strategy'
@@ -94,7 +94,7 @@ assert r2.get('status') == 'cleaner_strategy'
 time.sleep(1)
 orch3 = Orchestrator(config)
 r3 = orch3.run(data_path, '分析哪个渠道ROI最高',
-    project_name='Playwright测试', user_mode='standard',
+    project_name='Playwright测试',
     phase='analyst_first', scout_context=scout_ctx,
     cleaning_operations=r2.get('operations'))
 print(f'Phase3: {r3.get(\"status\")}')

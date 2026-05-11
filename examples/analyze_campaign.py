@@ -5,7 +5,6 @@ HaGoKu 示例：广告效果分析
 演示三种使用方式：
 1. 数据画像 (profile)
 2. 完整分析 (run)
-3. 快速模式 (quick)
 
 数据: examples/ad_campaign.csv — 50 条广告投放记录
 字段: campaign_id, channel, spend, impressions, clicks, conversions, revenue, date
@@ -49,10 +48,7 @@ def main() -> None:
         "-f", "html", "-f", "md",
     ])
 
-    # 3. 快速模式
-    print("\n### 3. 快速模式 — 零交互出结果 ###\n")
     run_cmd([
-        "hagoku", "quick", str(EXAMPLE_DATA),
         "-q", "分析不同渠道的花费和收入关系",
     ])
 

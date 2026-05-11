@@ -73,14 +73,8 @@ cd hagoku_web && npm run dev
 ### CLI
 
 ```bash
-# ⚡ 快速模式：扔数据，拿结果
-hagoku quick data.csv
-
-# 📋 普通模式：说清楚你要分析什么
 hagoku run data.csv --query "哪个广告渠道效果最好"
 
-# 🔬 资深模式：全程可控
-hagoku run data.csv --query "广告对销售的因果效应" --mode expert
 
 # 项目管理
 hagoku project create "Q1销售分析" -d "分析Q1各渠道ROI"
@@ -96,8 +90,7 @@ hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 
 | 命令 | 用途 |
 |------|------|
-| `hagoku run <file> -q "问题"` | 完整分析流程（支持 --mode quick/standard/expert） |
-| `hagoku quick <file>` | 快速模式（零交互，自动探索） |
+| `hagoku run <file> -q "问题"` | 完整分析流程 |
 | `hagoku demo` | 列出所有内置演示数据集 |
 | `hagoku demo ad_campaign -q "问题"` | 用演示数据直接运行分析 |
 | `hagoku profile <file>` | 生成数据画像 |
@@ -139,7 +132,6 @@ hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 
 | 选项 | 说明 |
 |------|------|
-| `--mode expert` | 资深模式：完整统计证据链 |
 | `--demo ad_campaign` | 使用内置演示数据集 |
 | `--format html --format md` | 输出格式（可多选） |
 | `--template academic` | 报告模板（business_analysis/academic/ab_test/executive_brief/data_audit） |
@@ -166,7 +158,7 @@ hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 | 🔍 **Scout** | Agent | 加载数据、推断字段语义（SemanticType）、评估质量 |
 | 🧹 **Cleaner** | Agent | MCAR/MNAR 检验、异常值区分、清洗影响评估 |
 | 📊 **Analyst** | Agent | 回归/假设检验/ANOVA/相关，强制效应量+CI，自动非参数切换 |
-| 📝 **Reporter** | Agent | 双轨输出（吸引力层+核心价值层），3 种用户模式，图表生成 |
+| 📝 **Reporter** | Agent | 双轨输出（吸引力层+核心价值层），图表生成 |
 | 📋 **Scribe** | 确定性引擎 | 零 LLM 调用。看板管理、记忆维护、知识注入、字段仲裁、经验更新 |
 | ⚖️ **仲裁器** | 编排 | 规则引擎（80%场景）+ LLM 决策（新场景），计划生成、调度、降级 |
 
@@ -195,14 +187,6 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 | **提示级** | 建议非线性模型、建议交互效应、建议功效分析 | 不阻断 |
 
 ---
-
-## 用户模式
-
-| 模式 | 互动程度 | 互动机制 |
-|------|---------|---------|
-| ⚡ **快速** | 完全自主 | 零交互，猜错时自动提示 |
-| 🔄 **普通**（默认） | 关键点确认 | 字段语义确认 + 方法选择参与 |
-| 🎓 **资深** | 全程可控 | 每个环节可介入、可跳过、可重做 |
 
 ---
 

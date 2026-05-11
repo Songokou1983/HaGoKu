@@ -1674,6 +1674,73 @@ print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLAT
 
 ---
 
-**待完成：任务六 Bug（优先级最高）**，修复方案见 §8.6，完成后用 `python3 -c "from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS; print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE)"` 验证，期望输出 `True`。
+---
+
+### 8.10 第十七轮任务指令（唯一待修项）
+
+> **你是一个 Python 后端开发 AI。本轮只有一个任务，完成后必须自行运行验证命令，验证通过才算完成，不得仅凭"代码看起来对"就标为完成。**
+
+#### 任务：修复 `reporting.py` 中 `_BASE_REPORT_CSS` 未嵌入 Bug
+
+**问题根因**：`DEFAULT_HTML_TEMPLATE` 等 7 个模板变量是 Python 三引号字符串。其中的 `+ _BASE_REPORT_CSS +` 是字符串内容（字面文本），不是 Python 表达式，因此 `_BASE_REPORT_CSS` 的 CSS 内容**从未被嵌入**，渲染出的 HTML 报告缺失全部基础样式。
+
+**需要修改的文件**：`hagoku/tools/reporting.py`
+
+**修复方式**：将每个模板变量的字符串在 `:root {}` 块结束后打断，用 Python 字符串拼接插入 `_BASE_REPORT_CSS`。
+
+示例（`DEFAULT_HTML_TEMPLATE`，其余 6 个模板同理）：
+
+```python
+# 修改前（错误）：
+DEFAULT_HTML_TEMPLATE = """...
+    <style>
+        :root { ... }
+ + _BASE_REPORT_CSS +
+    </style>
+..."""
+
+# 修改后（正确）：
+DEFAULT_HTML_TEMPLATE = """...
+    <style>
+        :root { ... }
+    </style>
+    <style>""" + _BASE_REPORT_CSS + """</style>
+..."""
+```
+
+**需要处理的 7 个模板变量**（每个都有同样的 `+ _BASE_REPORT_CSS +` 字面文本需要修复）：
+1. `DEFAULT_HTML_TEMPLATE`
+2. `ACADEMIC_HTML_TEMPLATE`
+3. `BUSINESS_HTML_TEMPLATE`
+4. `AB_TEST_HTML_TEMPLATE`
+5. `DATA_AUDIT_HTML_TEMPLATE`
+6. `TIME_SERIES_HTML_TEMPLATE`
+7. `MARKETING_HTML_TEMPLATE`
+
+**完成后必须运行以下验证，全部通过才可标为完成：**
+
+```bash
+# 验证 1：CSS 实际嵌入（期望输出：CSS 正确嵌入: True）
+python3 -c "
+from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS
+print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE)
+"
+
+# 验证 2：所有 7 个模板均已修复（期望输出：0）
+python3 -c "
+import hagoku.tools.reporting as m
+import inspect
+src = inspect.getsource(m)
+count = src.count('+ _BASE_REPORT_CSS +') - src.count('\"\"\" + _BASE_REPORT_CSS + \"\"\"')
+print('残留字面文本数量（期望 0）:', count)
+"
+
+# 验证 3：报告相关测试通过
+pytest tests/test_tools/ -q
+```
+
+**禁止**：不得仅修改文档状态标记而不修改代码。验证命令必须实际运行，结果必须贴入完成报告。
+
+---
 
 *第十六轮 UI 视觉升级任务：6/7 完成，任务六待修（2026-05-11）。*

@@ -69,7 +69,7 @@ export default function EventPanel() {
         {connectionStatus === "disconnected" && (
           <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
             <WifiOff size={28} className="text-app-text-muted" />
-            <span className="text-ui-base text-app-error">Connection lost</span>
+            <span className="text-ui-base text-app-error">连接断开</span>
             <span className="text-ui-xs text-app-text-muted">正在重新连接…</span>
           </div>
         )}

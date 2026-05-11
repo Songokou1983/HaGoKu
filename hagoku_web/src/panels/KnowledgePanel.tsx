@@ -1,5 +1,5 @@
-import { BookOpen } from "lucide-react";
-import { useState, useEffect } from "react";
+import { BookOpen, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
@@ -19,21 +19,25 @@ export default function KnowledgePanel() {
 
   useAgentStatusSync();
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing state when switching projects is safe and intentional
-    if (!currentProject) { setEntries([]); return; }
-     
+  const loadKnowledge = useCallback((proj: string) => {
     setLoading(true);
-     
     setError(null);
-    fetch(`/api/knowledge/${currentProject}`)
+    fetch(`/api/knowledge/${proj}`)
       .then((r) => r.json())
       .then((d) => setEntries(
         (d.entries as string[]).map((k) => ({ key: k, title: k, tags: [] as string[] }))
       ))
       .catch(() => setError("知识库加载失败"))
       .finally(() => setLoading(false));
-  }, [currentProject]);
+  }, []);
+
+  useEffect(() => {
+    if (!currentProject) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear entries when project is null
+      setEntries([]); return;
+    }
+    loadKnowledge(currentProject);
+  }, [currentProject, loadKnowledge]);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
@@ -41,13 +45,19 @@ export default function KnowledgePanel() {
       <div className="flex-1 overflow-auto p-3">
         {loading && (
           <div className="flex items-center justify-center py-4 gap-2">
-            <div className="w-4 h-4 border border-app-accent border-t-transparent rounded-full animate-spin" />
+            <Loader2 size={16} className="animate-spin text-app-accent" />
             <span className="text-ui-sm text-app-text-muted">加载中…</span>
           </div>
         )}
         {error && (
-          <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded">
-            {error}
+          <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded flex items-center gap-2">
+            <span className="flex-1">{error}</span>
+            <button
+              onClick={() => currentProject && loadKnowledge(currentProject)}
+              className="underline cursor-pointer hover:no-underline"
+            >
+              重试
+            </button>
           </div>
         )}
         {entries.length === 0 && !loading ? (

@@ -7,7 +7,7 @@ import { PanelHeader } from "../components/PanelHeader";
 import { LogView, type LogLine } from "../components/LogView";
 import { InputBar } from "../components/InputBar";
 import { ScoutConfirmPanel, type ScoutPendingData } from "../components/ScoutConfirmPanel";
-import { Loader2, WifiOff, Search, Sparkles, BarChart2, FileText, Cpu } from "lucide-react";
+import { Loader2, WifiOff, Search, Sparkles, BarChart2, FileText, Cpu, ArrowRight } from "lucide-react";
 
 const MAX_LOG_LINES = 500;
 
@@ -80,7 +80,7 @@ export default function AnalyzePanel() {
             ...next.slice(-(MAX_LOG_LINES - 1)),
             {
               id: `ack-${++_msgIdCounter}`,
-              text: msg.message ?? "Processing...",
+              text: msg.message ?? "处理中…",
               type: "system" as const,
               timestamp: new Date().toISOString(),
             },
@@ -175,7 +175,7 @@ export default function AnalyzePanel() {
                 : "bg-app-bg-secondary border-app-border text-app-text-muted hover:text-app-text"
               }`}
           >
-            {p === "full" ? "Full Run" : "Step by Step"}
+            {p === "full" ? "完整分析" : "分步执行"}
           </button>
         ))}
       </div>
@@ -219,7 +219,7 @@ export default function AnalyzePanel() {
               className="shrink-0 px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white
                          text-ui-xs rounded cursor-pointer transition-colors duration-150 whitespace-nowrap"
             >
-              查看报告 →
+              查看报告 <ArrowRight size={12} className="inline" />
             </a>
           </div>
         )}

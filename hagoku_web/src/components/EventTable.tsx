@@ -40,7 +40,7 @@ function EventRow({ entry }: { entry: EventEntry }) {
   return (
     <tr className="border-b border-app-border hover:bg-app-bg-secondary transition-colors duration-150">
       <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
-        {new Date(entry.timestamp).toLocaleTimeString()}
+        {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
       </td>
       <td className={`px-3 py-0.5 whitespace-nowrap ${agentColor}`}>
         {entry.agent}

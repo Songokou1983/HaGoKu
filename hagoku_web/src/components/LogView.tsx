@@ -24,7 +24,7 @@ function LogRow({ line }: { line: LogLine }) {
   return (
     <div className={`${color} mb-1`}>
       <span className="text-app-text-muted text-ui-xs mr-2">
-        {new Date(line.timestamp).toLocaleTimeString()}
+        {new Date(line.timestamp).toLocaleTimeString('zh-CN')}
       </span>
       {line.text}
     </div>

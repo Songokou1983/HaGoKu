@@ -1,4 +1,4 @@
-import { Server, Key, Database, Save } from "lucide-react";
+import { Server, Key, Database, Save, CheckCircle2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field, Select } from "../components/FormField";
@@ -47,7 +47,7 @@ export default function SettingsPanel() {
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Settings" />
       <div className="flex-1 overflow-auto p-4 space-y-4">
-        <Field label="API Base URL" icon={<Server size={14} />}>
+        <Field label="接口地址" icon={<Server size={14} />}>
           <input
             className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none transition-colors duration-150"
             placeholder="http://localhost:8000"
@@ -56,7 +56,7 @@ export default function SettingsPanel() {
           />
         </Field>
 
-        <Field label="LLM Provider" icon={<Key size={14} />}>
+        <Field label="模型提供商" icon={<Key size={14} />}>
           <Select
             options={[...LLM_PROVIDERS]}
             value={cfg.model}
@@ -64,7 +64,7 @@ export default function SettingsPanel() {
           />
         </Field>
 
-        <Field label="Workspace Dir" icon={<Database size={14} />}>
+        <Field label="工作目录" icon={<Database size={14} />}>
           <input
             className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none transition-colors duration-150"
             placeholder="./workspace"
@@ -76,10 +76,10 @@ export default function SettingsPanel() {
         <button
           onClick={handleSave}
           className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover
-                     text-white text-ui-base rounded transition-colors duration-150"
+                     text-white text-ui-base rounded transition-colors duration-150 cursor-pointer"
         >
-          <Save size={14} />
-          {saved ? "Saved ✓" : "Save Settings"}
+          {saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+          {saved ? "已保存" : "保存设置"}
         </button>
       </div>
     </div>

@@ -8,7 +8,7 @@ export interface InputBarProps {
 }
 
 export function InputBar({
-  placeholder = "Ask a question about your data...",
+  placeholder = "输入关于数据的问题…",
   onSend,
   disabled = false,
 }: InputBarProps) {
@@ -50,7 +50,8 @@ export function InputBar({
       <Zap size={14} className="text-app-accent shrink-0 mt-1.5" />
       <textarea
         ref={textareaRef}
-        className="flex-1 bg-transparent border-none outline-none text-ui-base text-app-text placeholder-app-text-muted resize-none leading-relaxed max-h-[120px] focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none"
+        aria-label="输入分析问题"
+        className="flex-1 bg-transparent border-none outline-none text-ui-base text-app-text placeholder-app-text-muted resize-none leading-relaxed max-h-[120px] focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none"
         placeholder={placeholder}
         rows={1}
         value={value}
@@ -63,7 +64,7 @@ export function InputBar({
       />
       <button
         onClick={handleSend}
-        className="p-1 text-app-accent hover:text-app-accent disabled:text-app-text-muted shrink-0 transition-colors duration-150 active:scale-95"
+        className="p-1 text-app-accent hover:text-app-accent disabled:text-app-text-muted shrink-0 transition-colors duration-150 active:scale-95 cursor-pointer"
         disabled={isDisabled}
         aria-label={disabled ? "Sending..." : "Send"}
       >

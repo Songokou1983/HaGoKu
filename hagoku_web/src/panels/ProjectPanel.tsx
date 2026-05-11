@@ -1,5 +1,5 @@
-import { FolderOpen, Plus } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { FolderOpen, Plus, Loader2, Search, Sparkles, BarChart2, FileText, Circle, CheckCircle2, XCircle } from "lucide-react";
+import { useState, useEffect, useRef, type ComponentType } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -7,11 +7,19 @@ import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
 import type { AgentId, AgentStatus } from "../types/events";
 
-const agentDef: Record<AgentId, { emoji: string; label: string }> = {
-  scout: { emoji: "🔍", label: "Scout" },
-  cleaner: { emoji: "🧹", label: "Cleaner" },
-  analyst: { emoji: "📊", label: "Analyst" },
-  reporter: { emoji: "📝", label: "Reporter" },
+const agentDef: Record<AgentId, { Icon: ComponentType<{ size?: number; className?: string }>; label: string }> = {
+  scout:    { Icon: Search,      label: "Scout" },
+  cleaner:  { Icon: Sparkles,    label: "Cleaner" },
+  analyst:  { Icon: BarChart2,  label: "Analyst" },
+  reporter: { Icon: FileText,    label: "Reporter" },
+};
+
+const STATUS_LABEL: Record<AgentStatus, string> = {
+  idle:          "待机",
+  running:       "运行中",
+  done:          "完成",
+  error:         "异常",
+  waiting_input: "等待确认",
 };
 
 function StatusBadge({ status }: { status: AgentStatus }) {
@@ -24,7 +32,7 @@ function StatusBadge({ status }: { status: AgentStatus }) {
   }[status];
   return (
     <span className={`text-ui-xs px-1.5 py-0.5 rounded ${def}`}>
-      {status}
+      {STATUS_LABEL[status]}
     </span>
   );
 }
@@ -39,6 +47,7 @@ export default function ProjectPanel() {
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [runMeta, setRunMeta] = useState<{
     query: string;
     startedAt: number;
@@ -71,7 +80,7 @@ export default function ProjectPanel() {
       if (msg.type === "event" && msg.data) {
         const d = msg.data;
         if (d.event_type === "run_started" && typeof d.data?.query === "string") {
-          found = `📋 ${d.data.query}`;
+          found = d.data.query as string;
           runStartedAtRef.current = Date.now();
           // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: tracking run start, ref avoids dep cycle
           setRunMeta({ query: d.data.query as string, startedAt: Date.now(), elapsed: "", status: "running" });
@@ -93,7 +102,9 @@ export default function ProjectPanel() {
   }, [batch]);
 
   const handleCreate = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || creating) return;
+    setCreating(true);
+    try {
     await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,13 +114,16 @@ export default function ProjectPanel() {
     setProjects(updated.projects as string[]);
     setCurrentProject(newName.trim());
     setNewName("");
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const agentList = Object.entries(agentDef) as [AgentId, { emoji: string; label: string }][];
+  const agentList = Object.entries(agentDef) as [AgentId, { Icon: ComponentType<{ size?: number; className?: string }>; label: string }][];
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
-      <PanelHeader title="Project" />
+      <PanelHeader title="Projects" />
       <div className="flex-1 overflow-auto p-3 space-y-4">
         {/* Summary */}
         {summary ? (
@@ -119,7 +133,7 @@ export default function ProjectPanel() {
         ) : (
           <EmptyState
             icon={<FolderOpen size={32} />}
-            message="Start a query in Analyze"
+            message="在 Analyze 面板发起分析"
           />
         )}
 
@@ -138,10 +152,10 @@ export default function ProjectPanel() {
                 <button
                   key={p}
                   onClick={() => setCurrentProject(p)}
-                  className={`px-2 py-0.5 text-ui-sm rounded border transition-colors ${
+                  className={`px-2 py-0.5 text-ui-sm rounded border transition-colors duration-150 ${
                     p === currentProject
-                      ? "bg-app-accent text-white border-app-accent"
-                      : "bg-app-bg-secondary text-app-text border-app-border hover:border-app-accent"
+                      ? "bg-app-accent text-white border-app-accent cursor-pointer hover:brightness-110"
+                      : "bg-app-bg-secondary text-app-text border-app-border hover:border-app-accent cursor-pointer"
                   }`}
                 >
                   {p}
@@ -155,20 +169,22 @@ export default function ProjectPanel() {
         <div className="flex gap-1">
           <input
             type="text"
+            aria-label="新项目名称"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            placeholder="New project name"
+            placeholder="新项目名称"
             className="flex-1 px-2 py-1 text-ui-sm bg-app-bg-secondary border border-app-border rounded
-                       text-app-text placeholder-app-text-muted focus:outline-none focus:border-app-accent"
+                       text-app-text placeholder-app-text-muted focus:outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent"
           />
           <button
             onClick={handleCreate}
+            disabled={creating}
             className="px-2 py-1 text-ui-sm bg-app-accent hover:bg-app-accent-hover text-white rounded
-                       flex items-center gap-1 transition-colors"
+                       flex items-center gap-1 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus size={14} />
-            <span>New</span>
+            {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            <span>{creating ? "创建中…" : "New"}</span>
           </button>
         </div>
 
@@ -177,21 +193,21 @@ export default function ProjectPanel() {
           <div className={`px-3 py-1.5 border-b border-app-border text-ui-xs flex items-center gap-2
             ${runMeta.status === "running" ? "text-app-warning" : runMeta.status === "done" ? "text-app-success" : "text-app-error"}`}>
             <span className={runMeta.status === "running" ? "animate-pulse" : ""}>
-              {runMeta.status === "running" ? "⬤" : runMeta.status === "done" ? "✓" : "✕"}
+              {runMeta.status === "running" ? <Circle size={10} className="text-app-warning fill-current" /> : runMeta.status === "done" ? <CheckCircle2 size={10} className="text-app-success" /> : <XCircle size={10} className="text-app-error" />}
             </span>
             <span className="flex-1 truncate">{runMeta.query}</span>
             {runMeta.elapsed && <span className="shrink-0 text-app-text-muted">{runMeta.elapsed}</span>}
           </div>
         )}
         <div className="space-y-2">
-          {agentList.map(([id, { emoji, label }]) => {
+          {agentList.map(([id, { Icon, label }]) => {
             const st = agents[id] ?? "idle";
             return (
               <div
                 key={id}
                 className="flex items-center gap-2 p-1.5 bg-app-bg-secondary border border-app-border rounded"
               >
-                <span className="text-sm">{emoji}</span>
+                <Icon size={14} className="text-app-text-muted" />
                 <span className="text-ui-base text-app-text flex-1">{label}</span>
                 <StatusBadge status={st} />
               </div>

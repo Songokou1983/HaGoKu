@@ -7,25 +7,25 @@ import { PanelHeader } from "../components/PanelHeader";
 import { LogView, type LogLine } from "../components/LogView";
 import { InputBar } from "../components/InputBar";
 import { ScoutConfirmPanel, type ScoutPendingData } from "../components/ScoutConfirmPanel";
-import { FileText } from "lucide-react";
+import { Loader2, WifiOff, Search, Sparkles, BarChart2, FileText, Cpu } from "lucide-react";
 
 const MAX_LOG_LINES = 500;
 
-const agentLabelMap = new Map<string, string>([
-  ["scout", "🔍"],
-  ["cleaner", "🧹"],
-  ["analyst", "📊"],
-  ["reporter", "📝"],
-  ["manager", "🧠"],
-  ["system", "⚙️"],
-]);
+const AGENT_ICON_MAP: Record<string, React.ReactNode> = {
+  scout:    <Search size={12} />,
+  cleaner:  <Sparkles size={12} />,
+  analyst:  <BarChart2 size={12} />,
+  reporter: <FileText size={12} />,
+  manager:  <Cpu size={12} />,
+  system:   <Cpu size={12} />,
+};
 
-function agentEmoji(name: string): string {
+function agentIcon(name: string): React.ReactNode {
   const key = name.replace(/_/g, " ").toLowerCase();
-  for (const [k, v] of agentLabelMap) {
-    if (key.includes(k)) return v;
+  for (const k of Object.keys(AGENT_ICON_MAP)) {
+    if (key.includes(k)) return AGENT_ICON_MAP[k];
   }
-  return "📌";
+  return <Cpu size={12} />;
 }
 
 let _msgIdCounter = 0;
@@ -64,12 +64,12 @@ export default function AnalyzePanel() {
           if (d.event_type === "user_input_requested" && d.agent === "scout") {
             setPendingScout(d.data as unknown as ScoutPendingData);
           }
-          const emoji = agentEmoji(d.agent);
+          const icon = agentIcon(d.agent);
           next = [
             ...next.slice(-(MAX_LOG_LINES - 1)),
             {
               id: d.event_id,
-              text: `${emoji} [${d.event_type}] ${d.agent.replace(/_/g, " ")}`,
+              text: <><span className="inline-flex items-center mr-1">{icon}</span>[{d.event_type}] {d.agent.replace(/_/g, " ")}</>,
               type: "event" as const,
               timestamp: d.timestamp,
             },
@@ -80,7 +80,7 @@ export default function AnalyzePanel() {
             ...next.slice(-(MAX_LOG_LINES - 1)),
             {
               id: `ack-${++_msgIdCounter}`,
-              text: `⏳ ${msg.message ?? "Processing..."}`,
+              text: msg.message ?? "Processing...",
               type: "system" as const,
               timestamp: new Date().toISOString(),
             },
@@ -139,7 +139,7 @@ export default function AnalyzePanel() {
           ...prev.slice(-(MAX_LOG_LINES - 1)),
           {
             id: `user-${++_msgIdCounter}`,
-            text: "⚠️ 请先输入数据文件路径",
+            text: "请先输入数据文件路径",
             type: "system" as const,
             timestamp: new Date().toISOString(),
           },
@@ -169,7 +169,7 @@ export default function AnalyzePanel() {
           <button
             key={p}
             onClick={() => setPhase(p)}
-            className={`px-2 py-0.5 text-ui-xs rounded border transition-colors cursor-pointer
+            className={`px-2 py-0.5 text-ui-xs rounded border transition-colors duration-150 cursor-pointer
               ${phase === p
                 ? "bg-app-accent border-app-accent text-white"
                 : "bg-app-bg-secondary border-app-border text-app-text-muted hover:text-app-text"
@@ -183,7 +183,8 @@ export default function AnalyzePanel() {
         <FileText size={14} className="text-app-accent shrink-0" />
         <input
           type="text"
-          className="flex-1 bg-transparent border-none outline-none text-ui-base text-app-text placeholder-app-text-muted focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none"
+          aria-label="数据文件路径"
+          className="flex-1 bg-transparent border-none outline-none text-ui-base text-app-text placeholder-app-text-muted focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none"
           placeholder="数据文件路径 (e.g. /path/to/data.csv)"
           value={dataPath}
           onChange={(e) => setDataPath(e.target.value)}
@@ -216,25 +217,26 @@ export default function AnalyzePanel() {
               target="_blank"
               rel="noopener noreferrer"
               className="shrink-0 px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white
-                         text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap"
+                         text-ui-xs rounded cursor-pointer transition-colors duration-150 whitespace-nowrap"
             >
               查看报告 →
             </a>
           </div>
         )}
         {status === "running" && (
-          <div className="absolute inset-0 bg-app-bg/80 flex items-center justify-center z-10">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin" />
-              <span className="text-ui-base text-app-text-muted">Analyzing...</span>
-            </div>
+          <div className="h-0.5 bg-app-accent animate-pulse" />
+        )}
+        {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-app-bg/80 backdrop-blur-sm">
+            <Loader2 size={20} className="animate-spin text-app-accent" />
+            <span className="text-ui-sm text-app-text-muted">正在连接服务器…</span>
           </div>
         )}
         {connectionStatus === "disconnected" && (
           <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
-            <span className="text-2xl">📡</span>
-            <span className="text-ui-base text-app-error">Connection lost</span>
-            <span className="text-ui-xs text-app-text-muted">Reconnecting…</span>
+            <WifiOff size={28} className="text-app-text-muted" />
+            <span className="text-ui-base text-app-error">连接断开</span>
+            <span className="text-ui-xs text-app-text-muted">正在重新连接…</span>
           </div>
         )}
       </div>

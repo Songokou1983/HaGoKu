@@ -25,6 +25,12 @@ export default {
         "app-status-waiting": '#3a3a1a',
         // Agent text (VS Code bright blue)
         "app-agent":         '#9cdcfe',
+        // Event type colors
+        "event-run":    '#569cd6',
+        "event-done":   '#6a9955',
+        "event-fail":   '#f44747',
+        "event-warn":   '#dcdcaa',
+        "event-purple":  '#c586c0',
       },
       fontSize: {
         "ui-xs":   ['11px', { lineHeight: '16px' }],

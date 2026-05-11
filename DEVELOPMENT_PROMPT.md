@@ -2526,7 +2526,25 @@ cd hagoku_web && npx tsc --noEmit                # 期望：0 errors
 
 ---
 
-*第十九轮：端到端联调 + Scout 交互确认流，于 2026-05-11 追加。*
+### 10.5 第十九轮完成记录（2026-05-11）
+
+| 项目 | 验证方式 | 状态 |
+|------|---------|------|
+| `ScoutConfirmPanel.tsx` 组件存在 | `ls src/components/ScoutConfirmPanel.tsx` | ✅ |
+| 组件含 `onConfirm`/`onSkip`/`inferred_type`/`columns` | 代码行级确认 | ✅ |
+| AnalyzePanel `phase` state + 切换按钮 | L40-41, L141-148 | ✅ |
+| `user_input_requested` 拦截 → `pendingScout` | L58-60 | ✅ |
+| `respond` WS 命令发送 | L91-103 | ✅ |
+| ProjectPanel 加载/错误态 | `loading` L40, `loadError` L113 | ✅ |
+| ReportPanel 加载/错误态 | `loading` L13, `error` L14, L44-55 | ✅ |
+| KnowledgePanel 加载/错误态 | `loading` L17, `error` L18, L42-55 | ✅ |
+| `npm run build` | ✓ | ✅ |
+| `npm run lint` | ✓ 0 errors | ✅ |
+| `tsc --noEmit` | ✓ 0 errors | ✅ |
+
+---
+
+*第十九轮全部完成（2026-05-11）。Scout 交互确认流已接入 Web UI，产品核心差异化功能闭环。*
 
 **§9 完成记录（2026-05-11）：**
 
@@ -2553,3 +2571,23 @@ pytest tests/test_tools/ -q  ✓ 93 passed
 ```
 
 **已知限制：** `tests/test_api/` 中的 async 测试因 `pytest-asyncio` 未安装而失败（非本轮引入，为既有基础设施问题）。
+
+---
+
+**§10 完成记录（2026-05-11）：**
+
+| 子任务 | 状态 | 验证 |
+|--------|------|------|
+| §10.2.2 ScoutConfirmPanel 组件 | ✅ | TypeScript build OK |
+| §10.2.1 AnalyzePanel 模式切换 | ✅ | ESLint OK |
+| §10.2.3 Scout user_input_requested 处理 | ✅ | ESLint OK |
+| §10.3 ProjectPanel 加载/错误态 | ✅ | ESLint OK |
+| §10.3 ReportPanel 加载/错误态 | ✅ | ESLint OK |
+| §10.3 KnowledgePanel 加载/错误态 | ✅ | ESLint OK |
+
+**构建验证：**
+```
+npm run build       ✓ built in 762ms
+npm run lint        ✓ 0 errors
+tsc --noEmit        ✓ 0 errors
+```

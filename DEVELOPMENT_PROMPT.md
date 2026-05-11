@@ -1767,3 +1767,490 @@ Buggy literal patterns remaining: 0
 
 *第十六轮 UI 视觉升级任务：6/7 完成，任务六待修（2026-05-11）。*
 *§8.10 Round 17 CSS 嵌入修复：✅ 完成（2026-05-11）。*
+
+---
+
+## 九、Web UI 架构 Scaffold（第十八轮）
+
+> **目标**：把 6 个面板从"壳"升级为"架构完整的骨架"——每个面板都有真实的数据流入/流出，用户操作有真实效果，即使 UI 简陋。不追求 UX 完美，只追求流程闭环。
+>
+> **原则**：只增不删，最小改动。不得重写现有工作正常的逻辑。
+>
+> **完成标准**：用户可以：①创建/切换项目 → ②输入文件路径发起分析 → ③看到运行状态更新 → ④分析完成后在 Reports 面板点击查看完整报告 → ⑤Settings 保存后下次打开仍生效。
+
+---
+
+### 9.1 后端改动（`hagoku/` — Python）
+
+#### 9.1.1 新增 REST 端点（`hagoku/api/server.py`）
+
+在现有 `/api/health` 下方依次添加以下端点（导入所需模块）：
+
+```python
+import os, json
+from pathlib import Path
+from fastapi import HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
+from pydantic import BaseModel
+
+# ── 项目目录约定（与 Orchestrator 保持一致）──────────────────
+def _projects_root() -> Path:
+    return Path(os.path.expanduser("~/.hagoku/projects"))
+
+# ── GET /api/projects — 列出所有项目名 ──────────────────────
+@app.get("/api/projects")
+async def list_projects():
+    root = _projects_root()
+    if not root.exists():
+        return {"projects": []}
+    names = [d.name for d in sorted(root.iterdir()) if d.is_dir()]
+    return {"projects": names}
+
+# ── POST /api/projects — 创建新项目 ─────────────────────────
+class CreateProjectRequest(BaseModel):
+    name: str
+
+@app.post("/api/projects")
+async def create_project(req: CreateProjectRequest):
+    name = req.name.strip()
+    if not name or "/" in name:
+        raise HTTPException(400, "Invalid project name")
+    proj_dir = _projects_root() / name
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    return {"project": name, "created": True}
+
+# ── GET /api/reports/{project_name} — 列出该项目的报告文件 ──
+@app.get("/api/reports/{project_name}")
+async def list_reports(project_name: str):
+    output_dir = _projects_root() / project_name / "output"
+    if not output_dir.exists():
+        return {"reports": []}
+    files = sorted(output_dir.glob("*.html"), key=lambda f: f.stat().st_mtime, reverse=True)
+    return {
+        "reports": [
+            {"name": f.name, "url": f"/api/reports/{project_name}/{f.name}",
+             "mtime": int(f.stat().st_mtime)}
+            for f in files
+        ]
+    }
+
+# ── GET /api/reports/{project_name}/{filename} — 返回报告 HTML ──
+@app.get("/api/reports/{project_name}/{filename}")
+async def get_report(project_name: str, filename: str):
+    if not filename.endswith(".html") or "/" in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = _projects_root() / project_name / "output" / filename
+    if not path.exists():
+        raise HTTPException(404, "Report not found")
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+# ── GET /api/config — 读取当前前端可见配置 ───────────────────
+@app.get("/api/config")
+async def get_config():
+    from hagoku.config import HaGoKuConfig
+    try:
+        cfg = HaGoKuConfig.load()
+        return {
+            "base_url": cfg.llm.base_url or "",
+            "model": cfg.llm.model or "",
+            "workspace": str(_projects_root()),
+        }
+    except Exception:
+        return {"base_url": "", "model": "", "workspace": str(_projects_root())}
+```
+
+> **注意**：报告文件路径约定与 `Orchestrator` 中的 `output_dir = project_dir / "output"` 保持一致（见 `orchestrator.py` ~L488）。若路径不同，以 Orchestrator 实际路径为准，调整 `_projects_root()` 的子路径。
+
+---
+
+#### 9.1.2 修复 Reporter 事件 payload（`hagoku/agents/reporter/agent.py`）
+
+找到 `AGENT_COMPLETED` 的 emit 调用，在 payload 中加入 `output_path`：
+
+```python
+# 修改前（reporter/agent.py ~L196-199）：
+self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"生成 {len(sections)} 个章节"})
+
+# 修改后：
+self._emit(EventType.AGENT_COMPLETED, {
+    "result_summary": f"生成 {len(sections)} 个章节",
+    "output_path": str(report_path),        # 报告文件绝对路径
+    "project_name": effective_project_name, # 项目名，供前端构造 URL
+})
+```
+
+`report_path` 应从 Reporter 内部已有的输出路径变量中取（grep `output_path` 或 `report_path` 在该文件中找到实际变量名）。
+
+---
+
+#### 9.1.3 统一 Agent 名称为小写（`hagoku/manager/orchestrator.py`）
+
+grep `orchestrator.py` 中所有 `emit` 调用里的 `agent=` 参数，确保值全为小写：
+
+```bash
+grep -n '"Manager"\|"Scout"\|"Cleaner"\|"Analyst"\|"Reporter"\|"Scribe"' hagoku/manager/orchestrator.py
+```
+
+将搜索到的所有首字母大写的 agent 名称改为小写（`"manager"`、`"scout"` 等）。重点检查 `run_started`、`quality_check`、`plan_created` 等 Orchestrator 自身 emit 的位置。
+
+---
+
+#### 9.1.4 新增 WS 命令 `respond`（`hagoku/api/ws_handler.py`）
+
+在 `elif cmd == "analyze":` 块之后添加：
+
+```python
+elif cmd == "respond":
+    # Scout 交互确认流程：用户回复字段确认问题
+    payload = msg.get("payload", {})
+    user_input = payload.get("user_input", "")
+    orch = _orchestrator
+    if orch is None:
+        await ws.send_json({"type": "error", "message": "No active orchestrator"})
+    else:
+        try:
+            result = orch.respond(user_input)
+            await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
+        except Exception as e:
+            await ws.send_json({"type": "error", "message": str(e)})
+```
+
+---
+
+### 9.2 前端改动（`hagoku_web/src/` — TypeScript/React）
+
+#### 9.2.1 扩展 Zustand Store（`stores/workspace.ts`）
+
+在现有 `WorkspaceStore` interface 中增加字段，并在 `create(...)` 里初始化：
+
+```typescript
+// 新增到 interface WorkspaceStore：
+projects: string[];
+currentProject: string | null;
+reportFiles: { name: string; url: string; mtime: number }[];
+lastError: string | null;
+
+setProjects: (projects: string[]) => void;
+setCurrentProject: (name: string | null) => void;
+setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
+setLastError: (msg: string | null) => void;
+
+// 新增到 create(...) 初始值：
+projects: [],
+currentProject: null,
+reportFiles: [],
+lastError: null,
+
+setProjects: (projects) => set({ projects }),
+setCurrentProject: (currentProject) => set({ currentProject }),
+setReportFiles: (reportFiles) => set({ reportFiles }),
+setLastError: (lastError) => set({ lastError }),
+```
+
+---
+
+#### 9.2.2 修复 `useAgentStatusSync.ts`（3 处修复）
+
+```typescript
+import { useWorkspaceStore } from "../stores/workspace";
+
+export function useAgentStatusSync() {
+  const { onMessage } = useWebSocket();
+  const setAgentStatus = useWorkspaceStore((s) => s.setAgentStatus);
+  const setStatus = useWorkspaceStore((s) => s.setStatus);      // 新增
+
+  useEffect(() => {
+    return onMessage((msg: WSMessage) => {
+      // 修复 1：全局运行状态
+      if (msg.type === "event" && msg.data) {
+        const { agent, event_type } = msg.data;
+        const agentKey = agent?.toLowerCase() ?? "";            // 修复 2：统一小写
+
+        switch (event_type) {
+          case "run_started":
+            setStatus("running");
+            break;
+          case "run_completed":
+          case "run_failed":
+            setStatus("idle");
+            break;
+          case "agent_started":
+            setAgentStatus(agentKey, "running");
+            break;
+          case "agent_completed":
+            setAgentStatus(agentKey, "done");
+            break;
+          case "agent_failed":
+            setAgentStatus(agentKey, "error");
+            break;
+          case "user_input_requested":                          // 修复 3：交互等待状态
+            setAgentStatus(agentKey, "waiting_input");
+            break;
+        }
+      }
+    });
+  }, [onMessage, setAgentStatus, setStatus]);
+}
+```
+
+---
+
+#### 9.2.3 全局 WS 错误显示（`App.tsx`）
+
+在 `App.tsx` 顶部增加一个 `useEffect`，监听 WS `error` 类型消息，写入 store：
+
+```typescript
+// App.tsx 内，在现有 hooks 下方添加：
+import { useWebSocket } from "./hooks/useWebSocket";
+
+// 在 App() 函数体内：
+const { onMessage } = useWebSocket();
+const setLastError = useWorkspaceStore((s) => s.setLastError);
+const lastError = useWorkspaceStore((s) => s.lastError);
+
+useEffect(() => {
+  return onMessage((msg) => {
+    if (msg.type === "error") {
+      setLastError((msg as { type: "error"; message: string }).message);
+      setTimeout(() => setLastError(null), 5000); // 5秒后自动消失
+    }
+  });
+}, [onMessage, setLastError]);
+```
+
+在 JSX 顶层（Dockview 外层 div 内）加错误提示条：
+
+```tsx
+{lastError && (
+  <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2
+                  bg-app-error/90 text-white text-ui-sm rounded shadow-lg
+                  flex items-center gap-2">
+    <span>{lastError}</span>
+    <button onClick={() => setLastError(null)} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+  </div>
+)}
+```
+
+---
+
+#### 9.2.4 ProjectPanel — 从只读变为可操作（`panels/ProjectPanel.tsx`）
+
+完整重构该面板，保留现有 Agent 状态徽章显示逻辑，新增项目管理区域：
+
+**新增功能：**
+1. Mount 时调用 `GET /api/projects` 加载项目列表到 store
+2. 项目列表显示，点击切换 `currentProject`
+3. 底部"新建项目"输入框 + 按钮（`POST /api/projects`）
+
+**核心逻辑示意：**
+
+```typescript
+// 加载项目列表
+useEffect(() => {
+  fetch("/api/projects")
+    .then((r) => r.json())
+    .then((d) => setProjects(d.projects));
+}, [setProjects]);
+
+// 创建项目
+const handleCreate = async () => {
+  if (!newName.trim()) return;
+  await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: newName.trim() }),
+  });
+  const updated = await fetch("/api/projects").then((r) => r.json());
+  setProjects(updated.projects);
+  setCurrentProject(newName.trim());
+  setNewName("");
+};
+```
+
+**保留现有的**：`useBatchEvents` 中监听 `run_started` 的查询摘要展示，以及 Agent 状态徽章行（`agentDef` + `StatusBadge`）。
+
+---
+
+#### 9.2.5 AnalyzePanel — 使用当前项目名（`panels/AnalyzePanel.tsx`）
+
+将 `handleSend` 里的 `project_name: "default"` 改为读取 store：
+
+```typescript
+const currentProject = useWorkspaceStore((s) => s.currentProject);
+
+// handleSend 内：
+send("analyze", {
+  data_path: dataPath,
+  query: text,
+  project_name: currentProject ?? "default",   // ← 唯一改动
+  phase: "full",
+});
+```
+
+---
+
+#### 9.2.6 ReportPanel — 展示真实报告（`panels/ReportPanel.tsx`）
+
+将现有"显示 JSON 片段"逻辑替换为：收到 Reporter `agent_completed` 时调用 API 获取报告列表，以卡片形式展示可点击的报告链接。
+
+```typescript
+const currentProject = useWorkspaceStore((s) => s.currentProject);
+const reportFiles = useWorkspaceStore((s) => s.reportFiles);
+const setReportFiles = useWorkspaceStore((s) => s.setReportFiles);
+
+// 在 useEffect 中处理 reporter agent_completed：
+if (d.agent === "reporter" && d.event_type === "agent_completed") {
+  const proj = d.data?.project_name ?? currentProject ?? "default";
+  fetch(`/api/reports/${proj}`)
+    .then((r) => r.json())
+    .then((data) => setReportFiles(data.reports));
+}
+
+// JSX：用卡片替换 JSON 文本
+{reportFiles.length === 0 ? (
+  <EmptyState icon={<FileText size={32} />} message="No reports yet" />
+) : (
+  reportFiles.map((f) => (
+    <a
+      key={f.name}
+      href={f.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded
+                 flex items-center gap-2 hover:border-app-accent transition-colors cursor-pointer"
+    >
+      <FileText size={14} className="text-app-accent shrink-0" />
+      <span className="text-ui-base text-app-text flex-1 truncate">{f.name}</span>
+      <span className="text-ui-xs text-app-text-muted shrink-0">
+        {new Date(f.mtime * 1000).toLocaleString()}
+      </span>
+    </a>
+  ))
+)}
+```
+
+---
+
+#### 9.2.7 KnowledgePanel — 移除死代码，改为 REST 拉取（`panels/KnowledgePanel.tsx`）
+
+移除 `load_knowledge` 的 WS heuristic（该工具名在 Python 侧不存在），改为在 `currentProject` 变化时从后端拉取知识库文件列表：
+
+> **注意**：此步需要先确认 `hagoku/kb/` 或 Scribe 的知识库实际存储路径。如果没有现成 API，暂时改为读取项目目录下 `kb/` 文件夹的文件名。
+
+**临时 REST 端点**（追加到 `server.py`）：
+
+```python
+@app.get("/api/knowledge/{project_name}")
+async def list_knowledge(project_name: str):
+    kb_dir = _projects_root() / project_name / "kb"
+    if not kb_dir.exists():
+        return {"entries": []}
+    files = [f.stem for f in kb_dir.glob("*.md")]
+    return {"entries": files}
+```
+
+**`KnowledgePanel.tsx`** — 移除整个 `useBatchEvents`/`useEffect` 块，改为：
+
+```typescript
+const currentProject = useWorkspaceStore((s) => s.currentProject);
+
+useEffect(() => {
+  if (!currentProject) { setEntries([]); return; }
+  fetch(`/api/knowledge/${currentProject}`)
+    .then((r) => r.json())
+    .then((d) => setEntries(
+      (d.entries as string[]).map((k) => ({ key: k, title: k, tags: [] }))
+    ));
+}, [currentProject]);
+```
+
+---
+
+#### 9.2.8 SettingsPanel — 持久化配置（`panels/SettingsPanel.tsx`）
+
+将三个输入框改为受控组件，读写 `localStorage`，添加 Save 按钮：
+
+```typescript
+const STORAGE_KEY = "hagoku_settings";
+
+const defaults = { baseUrl: "http://localhost:8000", model: "", workspace: "" };
+
+export default function SettingsPanel() {
+  const [cfg, setCfg] = useState(() => {
+    try { return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") }; }
+    catch { return defaults; }
+  });
+  const [saved, setSaved] = useState(false);
+
+  // Mount 时从 /api/config 合并服务端默认值
+  useEffect(() => {
+    fetch("/api/config").then((r) => r.json()).then((d) => {
+      setCfg((prev) => ({
+        baseUrl: prev.baseUrl || d.base_url || defaults.baseUrl,
+        model: prev.model || d.model || "",
+        workspace: prev.workspace || d.workspace || "",
+      }));
+    }).catch(() => {});
+  }, []);
+
+  const handleSave = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    // ... 现有字段改为 value={cfg.xxx} onChange={(e) => setCfg({...cfg, xxx: e.target.value})}
+    // ... 底部加 Save 按钮：
+    <button onClick={handleSave} className="...">
+      {saved ? "Saved ✓" : "Save Settings"}
+    </button>
+  );
+}
+```
+
+---
+
+### 9.3 验证清单
+
+```bash
+# 后端 API
+curl http://localhost:8000/api/projects           # 期望：{"projects": [...]}
+curl http://localhost:8000/api/config             # 期望：{base_url, model, workspace}
+curl -X POST http://localhost:8000/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test_project"}'                    # 期望：{"project":"test_project","created":true}
+
+# reporter 事件 payload
+python3 -c "
+# 检查 reporter/agent.py 中 AGENT_COMPLETED emit 是否包含 output_path
+import re, pathlib
+src = pathlib.Path('hagoku/agents/reporter/agent.py').read_text()
+print('output_path in emit:', 'output_path' in src)
+"  # 期望：True
+
+# agent 名称大写检查（期望输出为空）
+grep -n '"Manager"\|"Scout"\|"Cleaner"\|"Analyst"\|"Reporter"' hagoku/manager/orchestrator.py
+
+# 前端构建
+cd hagoku_web && npm run build && npm run lint   # 期望：0 errors
+
+# pytest 全量
+pytest tests/ -q                                  # 期望：全通过
+```
+
+### 9.4 完成顺序建议
+
+1. **后端先行**（§9.1.1 → §9.1.2 → §9.1.3）— 验证 API curl 通
+2. **Store 扩展**（§9.2.1）— 基础，其他面板依赖它
+3. **`useAgentStatusSync` 修复**（§9.2.2）— 修好状态机
+4. **AnalyzePanel 一行修改**（§9.2.5）— 最简单
+5. **ProjectPanel 重构**（§9.2.4）— 核心项目管理入口
+6. **ReportPanel 重构**（§9.2.6）
+7. **KnowledgePanel 重构**（§9.2.7）
+8. **SettingsPanel 持久化**（§9.2.8）
+9. **全局错误提示**（§9.2.3）— 最后加，验收用
+
+---
+
+*第十八轮 Web UI 架构 Scaffold，于 2026-05-11 追加。目标：6 个面板全部数据流闭环。*

@@ -41,8 +41,8 @@ function eventColor(evt: EventType): string {
 
 function EventRow({ entry }: { entry: EventEntry }) {
   return (
-    <tr className="border-b border-[#2a2a2a] hover:bg-[#252525] transition-colors duration-150">
-      <td className="px-3 py-0.5 text-[#555] whitespace-nowrap">
+    <tr className="border-b border-[#2a2a2a] hover:bg-app-bg-secondary transition-colors duration-150">
+      <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
         {new Date(entry.timestamp).toLocaleTimeString()}
       </td>
       <td className="px-3 py-0.5 text-[#9cdcfe] whitespace-nowrap">
@@ -73,7 +73,7 @@ export function EventTable({ entries }: EventTableProps) {
 
   return (
     <table className="w-full border-collapse">
-      <thead className="sticky top-0 bg-[#252525] text-[#888] text-[11px] uppercase select-none z-10">
+      <thead className="sticky top-0 bg-app-bg-secondary text-app-text-muted text-ui-xs uppercase select-none z-10">
         <tr>
           <th className="px-3 py-1 text-left font-medium">Time</th>
           <th className="px-3 py-1 text-left font-medium">Agent</th>

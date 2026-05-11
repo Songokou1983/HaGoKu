@@ -23,37 +23,18 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div
-          style={{
-            height: "100vh",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#1e1e1e",
-            color: "#cccccc",
-            fontFamily: "monospace",
-            padding: 32,
-          }}
-        >
-          <h2 style={{ color: "#f44747", marginBottom: 8 }}>Something went wrong</h2>
-          <p style={{ color: "#888", fontSize: 13, maxWidth: 600, textAlign: "center" }}>
+        <div className="flex flex-col items-center justify-center h-full bg-app-bg text-app-text p-8">
+          <div className="text-app-error text-ui-md font-semibold mb-2">出现错误</div>
+          <pre className="font-mono text-ui-sm text-app-text-muted bg-app-bg-secondary rounded p-4 max-w-lg overflow-auto mb-4">
             {this.state.error?.message}
-          </p>
+          </pre>
           <button
             onClick={() => window.location.reload()}
-            style={{
-              marginTop: 16,
-              padding: "6px 16px",
-              background: "#3a3a3a",
-              color: "#d4d4d4",
-              border: "1px solid #555",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
+            className="px-4 py-2 bg-app-accent hover:bg-app-accent-hover text-white text-ui-sm rounded
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent
+                       transition-colors duration-150 cursor-pointer"
           >
-            Reload
+            重试
           </button>
         </div>
       );

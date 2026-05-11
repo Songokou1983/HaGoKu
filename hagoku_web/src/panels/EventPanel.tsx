@@ -49,20 +49,20 @@ export default function EventPanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader
         title="Event Log"
         badge={
-          <span className="text-[#555] font-normal">({entries.length})</span>
+          <span className="text-app-text-muted font-normal">({entries.length})</span>
         }
       />
-      <div className="flex-1 overflow-auto font-mono text-[12px] relative">
+      <div className="flex-1 overflow-auto font-mono text-ui-sm relative">
         <EventTable entries={entries} />
         {connectionStatus === "disconnected" && (
-          <div className="absolute inset-0 bg-[#1e1e1e]/90 flex flex-col items-center justify-center gap-2 z-10">
+          <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
             <span className="text-2xl">📡</span>
-            <span className="text-[13px] text-[#f44747]">Connection lost</span>
-            <span className="text-[11px] text-[#666]">Reconnecting…</span>
+            <span className="text-ui-base text-app-error">Connection lost</span>
+            <span className="text-ui-xs text-app-text-muted">Reconnecting…</span>
           </div>
         )}
       </div>

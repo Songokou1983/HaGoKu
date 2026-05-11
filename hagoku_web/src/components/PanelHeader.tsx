@@ -10,7 +10,7 @@ export interface PanelHeaderProps {
 
 export function PanelHeader({ title, badge, children }: PanelHeaderProps) {
   return (
-    <div className="px-3 py-2 text-[11px] uppercase tracking-widest font-semibold text-[#888] select-none flex items-center gap-2 border-b border-[#333]">
+    <div className="px-3 py-2 text-ui-xs uppercase tracking-widest font-semibold text-app-text-muted select-none flex items-center gap-2 border-b border-app-border">
       <span>{title}</span>
       {badge}
       <div className="flex-1" />

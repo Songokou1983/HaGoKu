@@ -7,9 +7,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, message }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center gap-2 text-[#666] pt-8">
+    <div className="flex flex-col items-center gap-2 text-app-text-muted pt-8">
       {icon}
-      <span className="text-[13px] italic">{message}</span>
+      <span className="text-ui-base italic">{message}</span>
     </div>
   );
 }

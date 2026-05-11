@@ -62,15 +62,15 @@ function SystemStatus() {
 
   const color =
     errorCount > 0
-      ? "bg-red-500"
+      ? "bg-app-error"
       : status === "running" || busyCount > 0
-        ? "bg-yellow-400"
+        ? "bg-app-warning"
         : status === "done"
-          ? "bg-green-500"
-          : "bg-[#555]";
+          ? "bg-app-success"
+          : "bg-app-text-muted";
 
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-[#666]">
+    <div className="flex items-center gap-1.5 text-ui-xs text-app-text-muted">
       <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
       {errorCount > 0 ? (
         <span>{errorCount > 1 ? `${errorCount} errors` : "error"}</span>
@@ -123,17 +123,17 @@ export default function App() {
       }}
     >
       {/* Toggle bar — auto-sized row */}
-      <div className="flex items-center gap-1 px-2 py-1 bg-[#252525] border-b border-[#333] select-none max-md:flex-wrap">
+      <div className="flex items-center gap-1 px-2 py-1 bg-app-bg-secondary border-b border-app-border select-none max-md:flex-wrap">
         {PANEL_CONFIGS.map((cfg) => {
           const visible = panels[cfg.id]?.visible;
           return (
             <button
               key={cfg.id}
               onClick={() => togglePanel(cfg.id)}
-              className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded transition-colors active:scale-95 ${
+              className={`flex items-center gap-1 px-2 py-1 text-ui-sm rounded transition-colors active:scale-95 ${
                 visible
-                  ? "bg-[#3a3a3a] text-[#d4d4d4]"
-                  : "text-[#555] hover:text-[#888] hover:bg-[#2a2a2a]"
+                  ? "bg-app-bg-tertiary text-app-text"
+                  : "text-app-text-muted hover:text-app-text-muted hover:bg-app-bg-tertiary"
               }`}
             >
               {iconMap[cfg.iconName]}

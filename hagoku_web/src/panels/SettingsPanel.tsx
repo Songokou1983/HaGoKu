@@ -9,12 +9,12 @@ export default function SettingsPanel() {
   const [, setProvider] = useState<string>("openai");
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Settings" />
       <div className="flex-1 overflow-auto p-4 space-y-4">
         <Field label="API Base URL" icon={<Server size={14} />}>
           <input
-            className="w-full bg-[#252525] border border-[#444] rounded px-2 py-1 text-[13px] text-[#d4d4d4] placeholder-[#555] outline-none focus:border-[#569cd6] focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
+            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
             placeholder="http://localhost:8000"
             defaultValue="http://localhost:8000"
           />
@@ -30,7 +30,7 @@ export default function SettingsPanel() {
 
         <Field label="Workspace Dir" icon={<Database size={14} />}>
           <input
-            className="w-full bg-[#252525] border border-[#444] rounded px-2 py-1 text-[13px] text-[#d4d4d4] placeholder-[#555] outline-none focus:border-[#569cd6] focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
+            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
             placeholder="./workspace"
             defaultValue="./workspace"
           />

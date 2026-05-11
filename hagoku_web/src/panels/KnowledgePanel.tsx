@@ -48,7 +48,7 @@ export default function KnowledgePanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Knowledge" />
       <div className="flex-1 overflow-auto p-3">
         {entries.length === 0 ? (
@@ -61,10 +61,10 @@ export default function KnowledgePanel() {
             {entries.map((e) => (
               <div
                 key={e.key}
-                className="p-2 bg-[#252525] border border-[#333] rounded flex items-center gap-2"
+                className="p-2 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2"
               >
-                <BookOpen size={14} className="text-[#569cd6] shrink-0" />
-                <span className="text-[13px] text-[#d4d4d4]">{e.title}</span>
+                <BookOpen size={14} className="text-app-accent shrink-0" />
+                <span className="text-ui-base text-app-text">{e.title}</span>
               </div>
             ))}
           </div>

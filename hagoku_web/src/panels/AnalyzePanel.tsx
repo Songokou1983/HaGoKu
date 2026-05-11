@@ -106,13 +106,13 @@ export default function AnalyzePanel() {
   );
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#d4d4d4] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Analyze" />
-      <div className="px-3 py-2 border-b border-[#333] flex items-center gap-2">
-        <FileText size={14} className="text-[#569cd6] shrink-0" />
+      <div className="px-3 py-2 border-b border-app-border flex items-center gap-2">
+        <FileText size={14} className="text-app-accent shrink-0" />
         <input
           type="text"
-          className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#d4d4d4] placeholder-[#555] focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none"
+          className="flex-1 bg-transparent border-none outline-none text-ui-base text-app-text placeholder-app-text-muted focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none"
           placeholder="数据文件路径 (e.g. /path/to/data.csv)"
           value={dataPath}
           onChange={(e) => setDataPath(e.target.value)}
@@ -126,18 +126,18 @@ export default function AnalyzePanel() {
       <div className="relative flex-1">
         <LogView lines={logs} />
         {status === "running" && (
-          <div className="absolute inset-0 bg-[#1e1e1e]/80 flex items-center justify-center z-10">
+          <div className="absolute inset-0 bg-app-bg/80 flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-2">
-              <div className="w-6 h-6 border-2 border-[#569cd6] border-t-transparent rounded-full animate-spin" />
-              <span className="text-[13px] text-[#888]">Analyzing...</span>
+              <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin" />
+              <span className="text-ui-base text-app-text-muted">Analyzing...</span>
             </div>
           </div>
         )}
         {connectionStatus === "disconnected" && (
-          <div className="absolute inset-0 bg-[#1e1e1e]/90 flex flex-col items-center justify-center gap-2 z-10">
+          <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
             <span className="text-2xl">📡</span>
-            <span className="text-[13px] text-[#f44747]">Connection lost</span>
-            <span className="text-[11px] text-[#666]">Reconnecting…</span>
+            <span className="text-ui-base text-app-error">Connection lost</span>
+            <span className="text-ui-xs text-app-text-muted">Reconnecting…</span>
           </div>
         )}
       </div>

@@ -16,14 +16,14 @@ const agentDef: Record<AgentId, { emoji: string; label: string }> = {
 
 function StatusBadge({ status }: { status: AgentStatus }) {
   const def = {
-    idle: "bg-[#333] text-[#666]",
-    running: "bg-[#1a3a5c] text-[#569cd6]",
-    done: "bg-[#1a3a1a] text-[#6a9955]",
-    error: "bg-[#3a1a1a] text-[#f44747]",
-    waiting_input: "bg-[#3a3a1a] text-[#dcdcaa]",
+    idle: "bg-[#333] text-app-text-muted",
+    running: "bg-[#1a3a5c] text-app-accent",
+    done: "bg-[#1a3a1a] text-app-success",
+    error: "bg-[#3a1a1a] text-app-error",
+    waiting_input: "bg-[#3a3a1a] text-app-warning",
   }[status];
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded ${def}`}>
+    <span className={`text-ui-xs px-1.5 py-0.5 rounded ${def}`}>
       {status}
     </span>
   );
@@ -53,11 +53,11 @@ export default function ProjectPanel() {
   const agentList = Object.entries(agentDef) as [AgentId, { emoji: string; label: string }][];
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Project" />
       <div className="flex-1 overflow-auto p-3 space-y-4">
         {summary ? (
-          <div className="p-2 bg-[#252525] border border-[#333] rounded text-[13px] text-[#d4d4d4] whitespace-pre-wrap">
+          <div className="p-2 bg-app-bg-secondary border border-app-border rounded text-ui-base text-app-text whitespace-pre-wrap">
             {summary}
           </div>
         ) : (
@@ -72,10 +72,10 @@ export default function ProjectPanel() {
             return (
               <div
                 key={id}
-                className="flex items-center gap-2 p-1.5 bg-[#252525] border border-[#333] rounded"
+                className="flex items-center gap-2 p-1.5 bg-app-bg-secondary border border-app-border rounded"
               >
                 <span className="text-sm">{emoji}</span>
-                <span className="text-[13px] text-[#d4d4d4] flex-1">{label}</span>
+                <span className="text-ui-base text-app-text flex-1">{label}</span>
                 <StatusBadge status={st} />
               </div>
             );

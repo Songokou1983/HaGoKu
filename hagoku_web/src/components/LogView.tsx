@@ -15,14 +15,14 @@ interface LogViewProps {
 function LogRow({ line }: { line: LogLine }) {
   const color =
     line.type === "user"
-      ? "text-[#569cd6]"
+      ? "text-app-accent"
       : line.type === "event"
-        ? "text-[#6a9955]"
-        : "text-[#ce9178]";
+        ? "text-app-success"
+        : "text-app-warning";
 
   return (
     <div className={`${color} mb-1`}>
-      <span className="text-[#555] text-[11px] mr-2">
+      <span className="text-app-text-muted text-ui-xs mr-2">
         {new Date(line.timestamp).toLocaleTimeString()}
       </span>
       {line.text}
@@ -38,7 +38,7 @@ export function LogView({ lines }: LogViewProps) {
   }, [lines]);
 
   return (
-    <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[13px] leading-relaxed">
+    <div className="flex-1 overflow-auto px-3 py-2 font-mono text-ui-base leading-relaxed">
       {lines.length === 0 && (
         <EmptyState message="Send a query to start analysis" />
       )}

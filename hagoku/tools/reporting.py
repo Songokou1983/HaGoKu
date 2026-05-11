@@ -111,6 +111,56 @@ class ReportData:
         }
 
 
+# ── 共享基础 CSS（所有模板通用） ───────────────────────────────
+
+_BASE_REPORT_CSS = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem; }
+header { border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem; }
+h1 { font-size: 1.8rem; color: var(--primary); }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
+.meta { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem; }
+.query { font-size: 1.1rem; margin: 1rem 0; padding: 0.75rem 1rem; background: var(--surface); border-left: 4px solid var(--primary); border-radius: 4px; }
+.section { margin: 2rem 0; }
+.section h2 { font-size: 1.4rem; color: var(--primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+.metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.metric-card { background: var(--surface); border-radius: 10px; padding: 1.25rem; text-align: center; border: 1px solid var(--border); transition: transform 0.2s, box-shadow 0.2s; }
+.metric-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.metric-card .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+.metric-card .label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
+.metric-card .trend-up { color: var(--success); }
+.metric-card .trend-down { color: var(--error); }
+.finding { background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem; margin: 0.75rem 0; border-left: 4px solid var(--success); }
+.finding.warning { border-left-color: var(--warning); }
+.finding.error { border-left-color: var(--error); }
+.finding .headline { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.35rem; color: var(--text); }
+.finding .conclusion { font-weight: 500; margin-bottom: 0.25rem; }
+.finding .detail { font-size: 0.9rem; color: var(--text-secondary); }
+.finding .core-value { margin-top: 0.75rem; }
+.finding .plain-explanation { font-size: 0.95rem; line-height: 1.7; margin-bottom: 0.5rem; }
+.finding .stats { font-family: 'Courier New', monospace; font-size: 0.85rem; background: #fff; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; }
+.finding .limitations { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid var(--border); }
+.finding .limitations li { margin: 0.2rem 0; }
+.finding .evidence-trace { font-size: 0.8rem; color: #80868b; margin-top: 0.5rem; font-family: 'Courier New', monospace; }
+.chart { margin: 1rem 0; text-align: center; }
+.chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.badge-pass { background: #e6f4ea; color: #137333; }
+.badge-warn { background: #fef7e0; color: #b06000; }
+.badge-fail { background: #fce8e6; color: #c5221f; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.summary-card { background: var(--surface); border-radius: 8px; padding: 1rem; text-align: center; }
+.summary-card .value { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+.summary-card .label { font-size: 0.85rem; color: var(--text-secondary); }
+.guardrail { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 0.9rem; }
+.guardrail-pass { background: #e6f4ea; }
+.guardrail-warn { background: #fef7e0; }
+.guardrail-fail { background: #fce8e6; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+"""
+
+
 # ── 默认模板 ──────────────────────────────────────────────────
 
 DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>

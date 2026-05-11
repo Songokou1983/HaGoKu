@@ -37,7 +37,7 @@ export default function ReportPanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Reports" />
       <div className="flex-1 overflow-auto p-3">
         {content.length === 0 ? (
@@ -46,7 +46,7 @@ export default function ReportPanel() {
           content.map((c, i) => (
             <div
               key={i}
-              className="mb-2 p-2 bg-[#252525] border border-[#333] rounded text-[13px] font-mono text-[#6a9955] whitespace-pre-wrap break-words"
+              className="mb-2 p-2 bg-app-bg-secondary border border-app-border rounded text-ui-base font-mono text-app-success whitespace-pre-wrap break-words"
             >
               {c}
             </div>

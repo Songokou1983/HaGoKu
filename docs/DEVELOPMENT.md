@@ -108,7 +108,7 @@ print('ALL 3 PHASES OK')
 ```
 
 ### UI 手动测试步骤
-1. 浏览器打开 http://localhost:8501
+1. 浏览器打开 http://localhost:5173
 2. 侧边栏 → 互动分析
 3. 项目选 "Playwright测试"，数据选 "ad_campaign_1.csv"
 4. 点击 🚀 启动分析
@@ -125,7 +125,7 @@ from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False, args=['--no-sandbox'])
     page = browser.new_page()
-    page.goto('http://localhost:8501', timeout=60000)
+    page.goto('http://localhost:5173', timeout=60000)
     page.wait_for_load_state('domcontentloaded')
     # 注意：按钮点击无法正确触发，只能测试导航和页面结构
     page.locator('text=互动分析').first.evaluate('(el) => el.click()')
@@ -147,7 +147,7 @@ with sync_playwright() as p:
 2. `column_semantics` 是否正确传递？
    ```bash
    grep -n "column_semantics" hagoku/manager/orchestrator.py
-   grep -n "scout_data.get" hagoku/ui/_pages/app_analyze.py
+   grep -n "scout_data.get" hagoku/agent/scout.py
    ```
 
 3. SQLite 线程安全是否完整？

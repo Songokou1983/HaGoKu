@@ -9,7 +9,7 @@ export interface FieldProps {
 export function Field({ label, icon, children }: FieldProps) {
   return (
     <label className="block">
-      <span className="flex items-center gap-1.5 text-[11px] text-[#888] mb-1">
+      <span className="flex items-center gap-1.5 text-ui-xs text-app-text-muted mb-1">
         {icon}
         {label}
       </span>
@@ -27,7 +27,7 @@ export interface SelectProps {
 export function Select({ options, value, onChange }: SelectProps) {
   return (
     <select
-      className="w-full bg-[#252525] border border-[#444] rounded px-2 py-1 text-[13px] text-[#d4d4d4] outline-none focus:border-[#569cd6] hover:border-[#569cd6] transition-colors duration-150"
+      className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text outline-none focus:border-app-accent hover:border-app-accent transition-colors duration-150"
       defaultValue={value}
       onChange={onChange ? (e) => onChange(e.target.value) : undefined}
     >

@@ -6,7 +6,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -66,15 +66,28 @@ async def list_projects():
 # ── POST /api/projects — 创建新项目 ─────────────────────────
 class CreateProjectRequest(BaseModel):
     name: str
+    description: str = ""
 
 
 @app.post("/api/projects")
 async def create_project(req: CreateProjectRequest):
+    import re as _re
     name = req.name.strip()
-    if not name or "/" in name:
-        raise HTTPException(400, "Invalid project name")
+    if not name or not _re.match(r'^[a-zA-Z0-9_-]+$', name):
+        raise HTTPException(400, "项目名称只允许英文字母、数字、下划线和连字符")
     proj_dir = _projects_root() / name
     proj_dir.mkdir(parents=True, exist_ok=True)
+    # Persist to metadata DB
+    try:
+        from hagoku.storage.database import HaGoKuDB
+        db = HaGoKuDB.get_instance()
+        desc = req.description.strip()
+        # create_project uses INSERT OR IGNORE — if row already exists, update description explicitly
+        db.create_project(name, description=desc)
+        if desc:
+            db.update_project(name, description=desc)
+    except Exception:
+        pass
     return {"project": name, "created": True}
 
 
@@ -149,6 +162,208 @@ async def list_knowledge(project_name: str):
         return {"entries": []}
     files = [f.stem for f in kb_dir.glob("*.md")]
     return {"entries": files}
+
+
+# ── PATCH /api/projects/{project_name} — 更新项目描述 ───────
+class UpdateProjectRequest(BaseModel):
+    description: str = ""
+
+
+@app.patch("/api/projects/{project_name}")
+async def update_project(project_name: str, req: UpdateProjectRequest):
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    try:
+        from hagoku.storage.database import HaGoKuDB
+        db = HaGoKuDB.get_instance()
+        db.create_project(project_name)
+        db.update_project(project_name, description=req.description.strip())
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"project": project_name, "updated": True}
+
+
+# ── DELETE /api/projects/{project_name} — 删除项目 ──────────
+@app.delete("/api/projects/{project_name}")
+async def delete_project(project_name: str):
+    import shutil
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    try:
+        shutil.rmtree(proj_dir)
+        from hagoku.storage.database import HaGoKuDB
+        db = HaGoKuDB.get_instance()
+        db.conn.execute("DELETE FROM projects WHERE id = ?", (project_name,))
+        db.conn.commit()
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"project": project_name, "deleted": True}
+
+
+# ── GET /api/projects/{project_name}/detail — 项目详情（含最近运行摘要）──
+@app.get("/api/projects/{project_name}/detail")
+async def get_project_detail(project_name: str):
+    import json as _json
+    import sqlite3
+
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    runs_dir = proj_dir / "runs"
+    run_dirs = sorted(
+        [d for d in runs_dir.iterdir() if d.is_dir()],
+        key=lambda d: d.name,
+        reverse=True,
+    ) if runs_dir.exists() else []
+    run_count = len(run_dirs)
+
+    # Last run metadata
+    last_query = ""
+    last_run_at = ""
+    last_status = "none"
+    if run_dirs:
+        meta_file = run_dirs[0] / "run_meta.json"
+        if meta_file.exists():
+            try:
+                meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+                last_query = meta.get("query", "")
+                last_run_at = run_dirs[0].name  # e.g. 20260511_175523
+                output_path = meta.get("output_path", "")
+                last_status = "completed" if (output_path and Path(output_path).exists()) else "unknown"
+            except Exception:
+                last_run_at = run_dirs[0].name
+
+    db_path = Path(os.path.expanduser("~/.hagoku/hagoku.db"))
+    data_path = ""
+    created_at = ""
+    description = ""
+    if db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            row = conn.execute(
+                "SELECT created_at, data_path, description FROM projects WHERE id = ?",
+                (project_name,),
+            ).fetchone()
+            conn.close()
+            if row:
+                created_at  = row[0] or ""
+                data_path   = row[1] or ""
+                description = row[2] or ""
+        except Exception:
+            pass
+
+    return {
+        "name": project_name,
+        "created_at": created_at,
+        "data_path": data_path,
+        "description": description,
+        "run_count": run_count,
+        "last_query": last_query,
+        "last_run_at": last_run_at,
+        "last_status": last_status,
+    }
+
+
+# ── GET /api/projects/{project_name}/runs — 运行历史列表 ────
+@app.get("/api/projects/{project_name}/runs")
+async def get_project_runs(project_name: str):
+    import json as _json
+
+    runs_dir = _projects_root() / project_name / "runs"
+    if not runs_dir.exists():
+        return {"runs": []}
+
+    runs = []
+    for run_dir in sorted(runs_dir.iterdir(), key=lambda d: d.name, reverse=True):
+        if not run_dir.is_dir():
+            continue
+        meta_file = run_dir / "run_meta.json"
+        if not meta_file.exists():
+            continue
+        try:
+            meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+            output_path = meta.get("output_path", "")
+            has_report = bool(output_path and Path(output_path).exists())
+            runs.append({
+                "run_id": meta.get("run_id", run_dir.name),
+                "query": meta.get("query", ""),
+                "status": "completed" if has_report else "unknown",
+                "report_url": (
+                    f"/api/reports/{project_name}/{meta.get('run_id', run_dir.name)}/{Path(output_path).name}"
+                    if has_report else None
+                ),
+            })
+        except Exception:
+            runs.append({"run_id": run_dir.name, "query": "", "status": "unknown", "report_url": None})
+
+    return {"runs": runs}
+
+
+# ── GET /api/projects/{project_name}/files — 列出项目数据文件 ─
+_DATA_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".xlsx", ".xls", ".parquet", ".txt"}
+
+@app.get("/api/projects/{project_name}/files")
+async def list_project_files(project_name: str):
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    files = []
+    # Scan project root and data/ subdirectory
+    for subdir in [proj_dir, proj_dir / "data"]:
+        if not subdir.exists():
+            continue
+        for f in sorted(subdir.iterdir()):
+            if f.is_file() and f.suffix.lower() in _DATA_EXTENSIONS:
+                files.append({
+                    "name": f.name,
+                    "path": str(f),
+                    "size": f.stat().st_size,
+                    "mtime": int(f.stat().st_mtime),
+                })
+    return {"files": files}
+
+
+# ── POST /api/projects/{project_name}/upload — 上传数据文件 ───
+@app.post("/api/projects/{project_name}/upload")
+async def upload_project_file(project_name: str, file: UploadFile = File(...)):
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    filename = Path(file.filename or "upload").name
+    if not filename or Path(filename).suffix.lower() not in _DATA_EXTENSIONS:
+        raise HTTPException(400, f"不支持的文件类型，允许: {', '.join(_DATA_EXTENSIONS)}")
+    data_dir = proj_dir / "data"
+    data_dir.mkdir(exist_ok=True)
+    dest = data_dir / filename
+    content = await file.read()
+    dest.write_bytes(content)
+    # Auto-bind data_path to project in DB
+    try:
+        from hagoku.storage.database import HaGoKuDB
+        db = HaGoKuDB.get_instance()
+        db.create_project(project_name)
+        db.update_project(project_name, data_path=str(dest))
+    except Exception:
+        pass
+    return {"name": filename, "path": str(dest), "size": len(content)}
+
+
+# ── GET /api/kb — 全局学术知识库（kb/_registry.yaml） ───────
+@app.get("/api/kb")
+async def list_kb():
+    import yaml
+
+    registry = Path(__file__).resolve().parent.parent / "kb" / "_registry.yaml"
+    if not registry.exists():
+        return {"entries": []}
+    try:
+        data = yaml.safe_load(registry.read_text(encoding="utf-8"))
+        return {"entries": data.get("entries", [])}
+    except Exception:
+        return {"entries": []}
 
 
 @app.websocket("/ws")

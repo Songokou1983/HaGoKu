@@ -9,13 +9,8 @@ export type PanelId =
   | "settings"
   | "events";
 
-interface PanelState {
-  visible: boolean;
-  order: number;
-}
-
 interface WorkspaceStore {
-  panels: Record<PanelId, PanelState>;
+  activeView: PanelId;
   status: "idle" | "running" | "done";
   agents: Record<string, AgentStatus>;
   connectionStatus: ConnectionStatus;
@@ -24,7 +19,7 @@ interface WorkspaceStore {
   reportFiles: { name: string; url: string; mtime: number }[];
   lastError: string | null;
 
-  togglePanel: (id: PanelId) => void;
+  setActiveView: (view: PanelId) => void;
   setStatus: (s: "idle" | "running" | "done") => void;
   setAgentStatus: (agent: string, s: AgentStatus) => void;
   setConnectionStatus: (s: ConnectionStatus) => void;
@@ -35,14 +30,7 @@ interface WorkspaceStore {
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  panels: {
-    projects: { visible: true, order: 0 },
-    analyze: { visible: true, order: 1 },
-    report: { visible: false, order: 2 },
-    knowledge: { visible: true, order: 3 },
-    settings: { visible: false, order: 4 },
-    events: { visible: true, order: 5 },
-  },
+  activeView: "projects",
   status: "idle",
   agents: {},
   connectionStatus: "connecting",
@@ -51,14 +39,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   reportFiles: [],
   lastError: null,
 
-  togglePanel: (id) =>
-    set((s) => ({
-      panels: {
-        ...s.panels,
-        [id]: { ...s.panels[id], visible: !s.panels[id].visible },
-      },
-    })),
-
+  setActiveView: (activeView) => set({ activeView }),
   setStatus: (status) => set({ status }),
   setAgentStatus: (agent, st) =>
     set((s) => ({

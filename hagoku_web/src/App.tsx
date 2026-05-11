@@ -1,6 +1,4 @@
-import { DockviewReact, type DockviewApi } from "dockview";
-import "dockview/dist/styles/dockview.css";
-import { useRef, useCallback, useMemo, useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useWorkspaceStore, type PanelId } from "./stores/workspace";
 import { useWebSocket } from "./hooks/useWebSocket";
 import ProjectPanel from "./panels/ProjectPanel";
@@ -19,42 +17,30 @@ import {
   X,
 } from "lucide-react";
 
-interface PanelConfig {
+interface NavItem {
   id: PanelId;
-  component: string;
   title: string;
-  iconName: string;
+  Icon: React.ComponentType<{ size?: number; className?: string }>;
 }
 
-const PANEL_CONFIGS: PanelConfig[] = [
-  { id: "projects", component: "ProjectPanel", title: "Projects", iconName: "FolderKanban" },
-  { id: "analyze", component: "AnalyzePanel", title: "Analyze", iconName: "BarChart3" },
-  { id: "report", component: "ReportPanel", title: "Reports", iconName: "FileText" },
-  { id: "knowledge", component: "KnowledgePanel", title: "Knowledge", iconName: "BookOpen" },
-  { id: "settings", component: "SettingsPanel", title: "Settings", iconName: "Settings" },
-  { id: "events", component: "EventPanel", title: "Events", iconName: "Activity" },
+const NAV_ITEMS: NavItem[] = [
+  { id: "projects",  title: "项目",   Icon: FolderKanban },
+  { id: "analyze",   title: "分析",   Icon: BarChart3 },
+  { id: "report",    title: "报告",   Icon: FileText },
+  { id: "knowledge", title: "知识库", Icon: BookOpen },
+  { id: "events",    title: "运行日志", Icon: Activity },
+  { id: "settings",  title: "设置",   Icon: Settings },
 ];
 
-/** Map icon names to pre-rendered JSX — avoids recreating icons per render. */
-const iconMap: Record<string, ReactNode> = {
-  FolderKanban: <FolderKanban size={14} />,
-  BarChart3: <BarChart3 size={14} />,
-  FileText: <FileText size={14} />,
-  BookOpen: <BookOpen size={14} />,
-  Settings: <Settings size={14} />,
-  Activity: <Activity size={14} />,
+const PANEL_MAP: Record<PanelId, ReactNode> = {
+  projects:  <ProjectPanel />,
+  analyze:   <AnalyzePanel />,
+  report:    <ReportPanel />,
+  knowledge: <KnowledgePanel />,
+  events:    <EventPanel />,
+  settings:  <SettingsPanel />,
 };
 
-const COMPONENT_MAP = {
-  ProjectPanel,
-  AnalyzePanel,
-  ReportPanel,
-  KnowledgePanel,
-  SettingsPanel,
-  EventPanel,
-} as const;
-
-/** Lightweight indicator dot showing overall agent status */
 function SystemStatus() {
   const status = useWorkspaceStore((s) => s.status);
   const agents = useWorkspaceStore((s) => s.agents);
@@ -62,40 +48,39 @@ function SystemStatus() {
   const busyCount = Object.values(agents).filter((s) => s === "running").length;
   const errorCount = Object.values(agents).filter((s) => s === "error").length;
 
-  const color =
+  const dotColor =
     errorCount > 0
       ? "bg-app-error"
       : status === "running" || busyCount > 0
-        ? "bg-app-warning"
+        ? "bg-app-warning animate-pulse"
         : status === "done"
           ? "bg-app-success"
           : "bg-app-text-muted";
 
+  const label =
+    errorCount > 0
+      ? `${errorCount} 个异常`
+      : status === "running" || busyCount > 0
+        ? busyCount > 0 ? `${busyCount} 个运行中` : "运行中"
+        : status === "done"
+          ? "完成"
+          : "就绪";
+
   return (
     <div className="flex items-center gap-1.5 text-ui-xs text-app-text-muted">
-      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
-      {errorCount > 0 ? (
-        <span>{errorCount > 1 ? `${errorCount} 个异常` : "异常"}</span>
-      ) : status === "running" || busyCount > 0 ? (
-        <span>{busyCount > 0 ? `${busyCount} 个运行中` : "运行中"}</span>
-      ) : status === "done" ? (
-        <span>完成</span>
-      ) : status === "idle" ? (
-        <span>就绪</span>
-      ) : (
-        <span>{status}</span>
-      )}
+      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+      <span>{label}</span>
     </div>
   );
 }
 
 export default function App() {
-  const apiRef = useRef<DockviewApi | null>(null);
-  const togglePanel = useWorkspaceStore((s) => s.togglePanel);
-  const panels = useWorkspaceStore((s) => s.panels);
   const { onMessage } = useWebSocket();
   const setLastError = useWorkspaceStore((s) => s.setLastError);
   const lastError = useWorkspaceStore((s) => s.lastError);
+  const activeView = useWorkspaceStore((s) => s.activeView);
+  const setActiveView = useWorkspaceStore((s) => s.setActiveView);
+  const currentProject = useWorkspaceStore((s) => s.currentProject);
 
   useEffect(() => {
     return onMessage((msg) => {
@@ -106,82 +91,90 @@ export default function App() {
     });
   }, [onMessage, setLastError]);
 
-  const initialPanels = useMemo(
-    () =>
-      PANEL_CONFIGS.filter((cfg) => panels[cfg.id]?.visible).map(
-        (cfg) => cfg.id,
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const onReady = useCallback(
-    (event: { api: DockviewApi }) => {
-      apiRef.current = event.api;
-      for (const pid of initialPanels) {
-        const cfg = PANEL_CONFIGS.find((c) => c.id === pid);
-        if (!cfg) continue;
-        event.api.addPanel({
-          id: cfg.id,
-          component: cfg.component,
-        });
-      }
-    },
-    [initialPanels],
-  );
-
   return (
     <div
-      className="dockview-theme-dark"
       style={{
-        height: "100%",
         display: "grid",
-        gridTemplateRows: "auto 1fr",
+        gridTemplateColumns: "180px 1fr",
+        height: "100%",
         overflow: "hidden",
       }}
     >
-      {/* Global error toast */}
-      {lastError && (
-        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2
-                        bg-app-error/90 text-white text-ui-sm rounded shadow-lg
-                        flex items-center gap-2">
-          <span>{lastError}</span>
-          <button aria-label="关闭提示" onClick={() => setLastError(null)} className="ml-2 opacity-70 hover:opacity-100 transition-opacity duration-150 focus:outline-none focus:ring-1 focus:ring-white rounded cursor-pointer"><X size={12} /></button>
+      {/* ── Left sidebar ── */}
+      <aside className="flex flex-col border-r border-app-border bg-app-bg-secondary overflow-hidden">
+        {/* Logo */}
+        <div className="px-4 py-3 border-b border-app-border shrink-0">
+          <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu</div>
+          <div className="text-ui-xs text-app-text-muted mt-0.5">多 Agent 数据分析</div>
         </div>
-      )}
 
-      {/* Toggle bar — auto-sized row */}
-      <div className="flex items-center gap-1 px-2 py-1 bg-app-bg-secondary border-b border-app-border select-none max-md:flex-wrap">
-        {PANEL_CONFIGS.map((cfg) => {
-          const visible = panels[cfg.id]?.visible;
-          return (
+        {/* Current project indicator */}
+        <div className="px-3 py-2 border-b border-app-border shrink-0">
+          <div className="text-ui-xs text-app-text-muted mb-1">当前项目</div>
+          {currentProject ? (
             <button
-              key={cfg.id}
-              onClick={() => togglePanel(cfg.id)}
-              className={`flex items-center gap-1 px-2 py-1 text-ui-sm rounded transition active:scale-95 cursor-pointer ${
-                visible
-                  ? "bg-app-bg-tertiary text-app-text hover:brightness-110"
-                  : "text-app-text-muted hover:text-app-text hover:bg-app-bg-tertiary"
-              }`}
+              onClick={() => setActiveView("projects")}
+              title={currentProject}
+              className="text-ui-sm text-app-accent truncate w-full text-left cursor-pointer hover:brightness-125 transition-all duration-150"
             >
-              {iconMap[cfg.iconName]}
-              {cfg.title}
+              {currentProject}
             </button>
-          );
-        })}
-        <div style={{ flex: 1 }} />
-        <SystemStatus />
-      </div>
+          ) : (
+            <button
+              onClick={() => setActiveView("projects")}
+              className="text-ui-xs text-app-text-muted cursor-pointer hover:text-app-text transition-colors duration-150"
+            >
+              未选择项目 →
+            </button>
+          )}
+        </div>
 
-      {/* Dockview workspace — fills remaining 1fr row.
-          CSS Grid 1fr track provides a definite height,
-          so Dockview's inner height:100% resolves correctly. */}
-      <div style={{ minHeight: 0, overflow: "hidden" }}>
-        <DockviewReact
-          components={COMPONENT_MAP}
-          onReady={onReady}
-        />
-      </div>
+        {/* Nav items */}
+        <nav className="flex-1 py-1 overflow-y-auto">
+          {NAV_ITEMS.map(({ id, title, Icon }) => {
+            const isActive = activeView === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveView(id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-ui-sm transition-colors duration-150 cursor-pointer text-left
+                  ${isActive
+                    ? "bg-app-accent/15 text-app-accent border-l-2 border-app-accent"
+                    : "text-app-text-muted hover:text-app-text hover:bg-app-bg-tertiary border-l-2 border-transparent"
+                  }`}
+              >
+                <Icon size={15} />
+                <span>{title}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* System status */}
+        <div className="px-3 py-2.5 border-t border-app-border shrink-0">
+          <SystemStatus />
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <main className="overflow-hidden relative">
+        {/* Global error toast */}
+        {lastError && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2
+                          bg-app-error/90 text-white text-ui-sm rounded shadow-lg
+                          flex items-center gap-2">
+            <span>{lastError}</span>
+            <button
+              aria-label="关闭提示"
+              onClick={() => setLastError(null)}
+              className="ml-2 opacity-70 hover:opacity-100 transition-opacity duration-150 focus:outline-none focus:ring-1 focus:ring-white rounded cursor-pointer"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+        {PANEL_MAP[activeView]}
+      </main>
     </div>
   );
 }

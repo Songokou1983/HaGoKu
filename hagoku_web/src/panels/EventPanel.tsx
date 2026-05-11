@@ -23,6 +23,7 @@ function detailSnippet(data: Record<string, unknown>): string {
 export default function EventPanel() {
   const [entries, setEntries] = useState<EventEntry[]>([]);
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
+  const loading = connectionStatus === "connecting" || connectionStatus === "reconnecting";
 
   useAgentStatusSync();
 
@@ -53,11 +54,18 @@ export default function EventPanel() {
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader
-        title="Events"
+        title="运行日志"
         badge={
           <span className="text-app-text-muted font-normal">({entries.length})</span>
         }
       />
+      {entries.length === 0 && !loading && connectionStatus === "connected" && (
+        <div className="px-3 py-2 border-b border-app-border shrink-0">
+          <p className="text-ui-xs text-app-text-muted">
+            分析运行时，每个 Agent 的工作进展会实时显示在这里。
+          </p>
+        </div>
+      )}
       <div className="flex-1 overflow-auto font-mono text-ui-sm relative">
         <EventTable entries={entries} />
         {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (

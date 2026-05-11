@@ -9,14 +9,21 @@
     @apply bg-app-bg text-app-text;
   }
 
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   code, pre, kbd, .font-mono {
     font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
   }
 
   table, .font-mono {
     font-variant-numeric: tabular-nums;
   }
 }
+
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -18,6 +18,13 @@ export default {
         "app-error":         '#EF4444',
         "app-success":       '#10B981',
         "app-warning":       '#F59E0B',
+        // Status badge backgrounds
+        "app-running":       '#1a3a5c',
+        "app-done":          '#1a3a1a',
+        "app-status-error":  '#3a1a1a',
+        "app-status-waiting": '#3a3a1a',
+        // Agent text (VS Code bright blue)
+        "app-agent":         '#9cdcfe',
       },
       fontSize: {
         "ui-xs":   ['11px', { lineHeight: '16px' }],

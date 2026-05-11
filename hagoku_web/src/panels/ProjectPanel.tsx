@@ -16,11 +16,11 @@ const agentDef: Record<AgentId, { emoji: string; label: string }> = {
 
 function StatusBadge({ status }: { status: AgentStatus }) {
   const def = {
-    idle: "bg-[#333] text-app-text-muted",
-    running: "bg-[#1a3a5c] text-app-accent",
-    done: "bg-[#1a3a1a] text-app-success",
-    error: "bg-[#3a1a1a] text-app-error",
-    waiting_input: "bg-[#3a3a1a] text-app-warning",
+    idle: "bg-app-bg-tertiary text-app-text-muted",
+    running: "bg-app-running text-app-accent",
+    done: "bg-app-done text-app-success",
+    error: "bg-app-status-error text-app-error",
+    waiting_input: "bg-app-status-waiting text-app-warning",
   }[status];
   return (
     <span className={`text-ui-xs px-1.5 py-0.5 rounded ${def}`}>

@@ -80,6 +80,8 @@ function SystemStatus() {
         <span>{busyCount > 0 ? `${busyCount} 个运行中` : "运行中"}</span>
       ) : status === "done" ? (
         <span>完成</span>
+      ) : status === "idle" ? (
+        <span>就绪</span>
       ) : (
         <span>{status}</span>
       )}

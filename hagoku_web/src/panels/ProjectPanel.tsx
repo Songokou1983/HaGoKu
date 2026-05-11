@@ -184,7 +184,7 @@ export default function ProjectPanel() {
                        flex items-center gap-1 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            <span>{creating ? "创建中…" : "New"}</span>
+            <span>{creating ? "创建中…" : "新建"}</span>
           </button>
         </div>
 

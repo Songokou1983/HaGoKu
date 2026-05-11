@@ -2723,7 +2723,19 @@ cd hagoku_web && npm run build && npx tsc --noEmit && npm run lint
 
 ---
 
-*第二十轮：分析结果可读性提升，于 2026-05-11 追加。4 项改动，全部基于现有事件 payload，无需新增后端接口。*
+### 11.6 第二十轮完成记录（2026-05-11）
+
+| 项目 | 验证方式 | 状态 |
+|------|---------|------|
+| AnalyzePanel 摘要卡 + 日志清空 | `resultSummary` state L42；`setLogs([])` L136；摘要卡 JSX L208-221 | ✅ |
+| ProjectPanel 运行状态条 + 耗时 | `runMeta` L42；`useRef` L48；elapsed 计算 L80；JSX L176-188 | ✅ |
+| dataPath 非空校验 | `!dataPath.trim()` L137；错误提示 L142 | ✅ |
+| EventTable Agent 分色 | `AGENT_COLORS` L16；`agentColor` L52；Scout=蓝/Cleaner=黄/Analyst=紫/Reporter=绿 | ✅ |
+| `npm run build` | ✓ built in 726ms | ✅ |
+| `npm run lint` | ✓ 0 errors | ✅ |
+| `tsc --noEmit` | ✓ 0 errors | ✅ |
+
+*第二十轮全部完成（2026-05-11）。*
 
 **§9 完成记录（2026-05-11）：**
 
@@ -2766,7 +2778,25 @@ pytest tests/test_tools/ -q  ✓ 93 passed
 
 **构建验证：**
 ```
-npm run build       ✓ built in 762ms
+npm run build       ✓ built in 726ms
+npm run lint        ✓ 0 errors
+tsc --noEmit        ✓ 0 errors
+```
+
+---
+
+**§11 完成记录（2026-05-11）：**
+
+| 子任务 | 状态 | 验证 |
+|--------|------|------|
+| §11.1 AnalyzePanel 摘要卡 | ✅ | ESLint OK, TypeScript OK |
+| §11.2 ProjectPanel 运行耗时 | ✅ | ESLint OK, TypeScript OK |
+| §11.3 dataPath 非空校验 | ✅ | 已在 Round 19 完成 |
+| §11.4 EventTable Agent 着色 | ✅ | ESLint OK, TypeScript OK |
+
+**构建验证：**
+```
+npm run build       ✓ built in 726ms
 npm run lint        ✓ 0 errors
 tsc --noEmit        ✓ 0 errors
 ```

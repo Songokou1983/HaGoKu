@@ -2277,6 +2277,257 @@ pytest tests/ -q                                  # 期望：全通过
 
 *第十八轮 Web UI 架构 Scaffold 全部完成（2026-05-11）。6 个面板全部数据流闭环。*
 
+---
+
+## 十、第十九轮：端到端联调 + Scout 交互确认流（2026-05-11）
+
+> **目标**：① 验证 Scaffold 在真实环境中端到端跑通；② 接入产品最核心的差异化功能：Scout 字段确认交互流（分步模式）。
+>
+> **前置条件**：需要配置好 `.env` 中的 LLM 密钥（`HAGOKYU_LLM_MODEL` + `HAGOKYU_LLM_API_KEY`），并有一个本地可访问的 CSV 文件用于测试。
+
+---
+
+### 10.1 端到端联调验证（先跑，再改代码）
+
+按以下步骤手动验证 Round 18 Scaffold 各面板是否真实联通，**记录每步结果，发现问题才继续修**：
+
+```bash
+# 启动后端
+hagoku-api   # 监听 http://localhost:8000
+
+# 另一终端启动前端开发服务器
+cd hagoku_web && npm run dev   # 监听 http://localhost:5173
+```
+
+| 步骤 | 操作 | 期望结果 |
+|------|------|---------|
+| 1 | 打开 http://localhost:5173，看 SystemStatus | 状态灯变绿（Connected） |
+| 2 | Project 面板：点"New Project"，输入 `test01`，点创建 | 列表出现 `test01`，自动选中 |
+| 3 | Analyze 面板：输入本地 CSV 路径 + 查询语句，发送 | LogView 开始滚动事件；Project 面板 Agent 徽章状态变化 |
+| 4 | 分析完成后看 Project 面板 | Scout/Cleaner/Analyst/Reporter 徽章全部变为 `done` |
+| 5 | Reports 面板 | 出现报告卡片，点击在新标签页打开完整 HTML 报告 |
+| 6 | Settings 面板：修改 Model 字段，点 Save，刷新页面 | 字段保持修改后的值（localStorage 持久化） |
+| 7 | 关闭/重开浏览器标签页 | SystemStatus 经历 connecting → connected，panels 状态重置正常 |
+
+**如果步骤 3 的 Agent 徽章不更新**：检查 `useAgentStatusSync` 是否正确挂载（确认至少一个 Panel 在 mount 时调用了 `useAgentStatusSync()`）。
+
+---
+
+### 10.2 Scout 交互确认流（产品核心差异化功能）
+
+**背景**：后端 `phase: "scout_first"` 已完整实现（`orchestrator.py` L236-241）——Scout 分析字段后暂停，等用户确认字段类型，再继续全流程。WS `respond` 命令也已接入（Round 18）。前端目前始终发送 `phase: "full"`，该功能从未在 Web 上暴露过。
+
+**本轮任务**：在 AnalyzePanel 中接入分步模式，让用户可以先看 Scout 的字段分析，确认后再进入清洗/分析阶段。
+
+---
+
+#### 10.2.1 AnalyzePanel：添加模式切换
+
+在查询输入框上方添加两个模式按钮（`Full Run` / `Step by Step`），切换 `phase`：
+
+```typescript
+// AnalyzePanel.tsx 新增 state
+const [phase, setPhase] = useState<"full" | "scout_first">("full");
+
+// handleSend 里改用 phase 变量：
+send("analyze", { data_path: dataPath, query: text, project_name: currentProject ?? "default", phase });
+```
+
+UI 样式（两个切换按钮，当前选中高亮）：
+
+```tsx
+<div className="flex gap-1 mb-2">
+  {(["full", "scout_first"] as const).map((p) => (
+    <button
+      key={p}
+      onClick={() => setPhase(p)}
+      className={`px-2 py-0.5 text-ui-xs rounded border transition-colors cursor-pointer
+        ${phase === p
+          ? "bg-app-accent border-app-accent text-white"
+          : "bg-app-bg-secondary border-app-border text-app-text-muted hover:text-app-text"
+        }`}
+    >
+      {p === "full" ? "Full Run" : "Step by Step"}
+    </button>
+  ))}
+</div>
+```
+
+---
+
+#### 10.2.2 Scout 确认面板组件（新建 `components/ScoutConfirmPanel.tsx`）
+
+当 `user_input_requested` 事件到达时，在 AnalyzePanel 内渲染字段确认面板。
+
+**Scout `begin()` 返回的 `data` 结构**（来自 `agents/scout/agent.py`）：
+
+```typescript
+interface ScoutPendingData {
+  message: string;           // Scout 的说明文字
+  data_path: string;
+  query: string;
+  context: {
+    columns: Array<{
+      name: string;
+      inferred_type: string;    // Scout 推断的类型
+      sample_values: string[];
+      description: string;
+    }>;
+    n_rows: number;
+    n_cols: number;
+  };
+  phase: "confirm_fields";     // 当前等待阶段
+  agent: "scout";
+}
+```
+
+**组件功能**：展示每列的推断类型，允许用户修改，点"确认并继续"发送 `respond` 命令。
+
+```tsx
+// components/ScoutConfirmPanel.tsx
+interface Props {
+  data: ScoutPendingData;
+  onConfirm: (confirmed: Record<string, string>) => void;
+  onSkip: () => void;     // 跳过确认，直接 full run
+}
+
+export function ScoutConfirmPanel({ data, onConfirm, onSkip }: Props) {
+  const [types, setTypes] = useState<Record<string, string>>(
+    Object.fromEntries(data.context.columns.map((c) => [c.name, c.inferred_type]))
+  );
+
+  return (
+    <div className="border border-app-accent rounded p-3 bg-app-bg-secondary space-y-3">
+      <div className="text-ui-sm text-app-accent font-semibold">
+        Scout 字段确认 — {data.context.n_rows} 行 × {data.context.n_cols} 列
+      </div>
+      <div className="text-ui-xs text-app-text-muted">{data.message}</div>
+
+      <div className="space-y-1 max-h-[200px] overflow-auto">
+        {data.context.columns.map((col) => (
+          <div key={col.name} className="flex items-center gap-2">
+            <span className="text-ui-sm text-app-text w-32 truncate" title={col.name}>
+              {col.name}
+            </span>
+            <select
+              value={types[col.name]}
+              onChange={(e) => setTypes({ ...types, [col.name]: e.target.value })}
+              className="bg-app-bg border border-app-border rounded px-1 py-0.5 text-ui-xs text-app-text flex-1"
+            >
+              {["numeric", "categorical", "text", "datetime", "id", "boolean"].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <span className="text-ui-xs text-app-text-muted truncate max-w-[100px]" title={col.sample_values.join(", ")}>
+              {col.sample_values.slice(0, 2).join(", ")}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onConfirm(types)}
+          className="px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white text-ui-xs rounded cursor-pointer transition-colors"
+        >
+          确认并继续
+        </button>
+        <button
+          onClick={onSkip}
+          className="px-3 py-1 border border-app-border text-app-text-muted text-ui-xs rounded cursor-pointer hover:text-app-text transition-colors"
+        >
+          跳过
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+#### 10.2.3 AnalyzePanel：处理 `user_input_requested` 事件
+
+在 AnalyzePanel 中：
+
+1. 新增 `pendingScout` state 存储待确认的 Scout 数据
+2. 从事件流中拦截 `user_input_requested` 事件，填充 `pendingScout`
+3. 在 LogView 上方（或下方）渲染 `ScoutConfirmPanel`
+4. 用户点"确认并继续" → 发送 `respond` WS 命令，清除 `pendingScout`
+
+```typescript
+// 新增 state
+const [pendingScout, setPendingScout] = useState<ScoutPendingData | null>(null);
+
+// 在 useEffect 处理事件流中，增加对 user_input_requested 的处理：
+if (d.event_type === "user_input_requested" && d.agent === "scout") {
+  setPendingScout(d.data as ScoutPendingData);
+}
+
+// 确认回调
+const handleScoutConfirm = (confirmedTypes: Record<string, string>) => {
+  if (!pendingScout) return;
+  send("respond", {
+    user_input: {
+      agent: "scout",
+      phase: "confirm_fields",
+      confirmed: confirmedTypes,
+      data_path: pendingScout.data_path,
+      query: pendingScout.query,
+      context: pendingScout.context,
+    },
+    project_name: currentProject ?? "default",
+  });
+  setPendingScout(null);
+};
+
+// JSX 中，在 LogView 上方插入：
+{pendingScout && (
+  <ScoutConfirmPanel
+    data={pendingScout}
+    onConfirm={handleScoutConfirm}
+    onSkip={() => setPendingScout(null)}
+  />
+)}
+```
+
+---
+
+### 10.3 加载态与错误态（各面板）
+
+各面板在 fetch 期间和出错时应有反馈，而不是无响应：
+
+| 面板 | 加载态 | 错误态 |
+|------|-------|-------|
+| ProjectPanel | fetch 期间列表区显示 `"加载中…"` | fetch 失败显示 `"加载失败，请检查服务"` |
+| ReportPanel | Reporter 完成后 fetch 期间卡片区 spinner | fetch 失败保留旧列表，顶部显示错误 badge |
+| KnowledgePanel | currentProject 变化时 spinner | fetch 失败显示 `"知识库加载失败"` |
+
+实现方式：各 Panel 增加 `const [loading, setLoading] = useState(false)` + `const [error, setError] = useState<string|null>(null)`，在 fetch 前后设置，JSX 中条件渲染。
+
+---
+
+### 10.4 验证清单
+
+```bash
+# Scout 交互流测试（需 phase: "scout_first"）
+# 1. 在 AnalyzePanel 切换到 "Step by Step" 模式
+# 2. 发送分析请求
+# 3. 期望：LogView 收到 user_input_requested 事件，ScoutConfirmPanel 出现
+# 4. 确认字段类型，点"确认并继续"
+# 5. 期望：LogView 继续出现 Cleaner/Analyst/Reporter 事件，最终 Reports 面板出现报告
+
+# 前端构建
+cd hagoku_web && npm run build && npm run lint   # 期望：0 errors
+
+# 新组件类型检查
+cd hagoku_web && npx tsc --noEmit                # 期望：0 errors
+```
+
+---
+
+*第十九轮：端到端联调 + Scout 交互确认流，于 2026-05-11 追加。*
+
 **§9 完成记录（2026-05-11）：**
 
 | 子任务 | 状态 | 验证 |

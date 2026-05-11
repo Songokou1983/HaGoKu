@@ -740,8 +740,8 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 | 2 | 🔴 P0 | 缺少 `[project.scripts]` 入口点 | ✅ 已确认已修复 | `pyproject.toml:80-82`（第九轮误报） | 简单 |
 | 3 | 🔴 P0 | EventBus 未注册到 WS Handler | ✅ 已修复（第十轮） | `hagoku/api/ws_handler.py:40-44` | 中等 |
 | 4 | 🔴 P0 | 前端 AnalyzePanel→WS 调用链 | ✅ 已修复（第十轮） | `hagoku_web/src/panels/AnalyzePanel.tsx:34-103` | 简单-中等 |
-| 5 | 🟡 P1 | 前端事件订阅链路验证 | ⚠️ 待端到端验证 | `hagoku_web/src/hooks/useAgentStatusSync.ts` | 简单 |
-| 6 | 🟡 P1 | Server 启动时 Orchestrator 初始化 | ⚠️ 待验证 | `hagoku/api/server.py` | 简单 |
+| 5 | 🟡 P1 | 前端事件订阅链路验证 | ✅ **已修复（Round 18/19）** | `hagoku_web/src/hooks/useAgentStatusSync.ts` | 简单 |
+| 6 | 🟡 P1 | Server 启动时 Orchestrator 初始化 | ✅ **已验证（server.py `main()` 预初始化）** | `hagoku/api/server.py` | 简单 |
 | 7 | 🟡 P1 | API/WS 集成测试 | 🟡 **已有基础覆盖** | `tests/test_api/`（已创建于第十三轮） | 中等（需扩展） |
 | 8 | 🟡 P1 | 前端组件测试缺失 | 🟡 **未修复** | `hagoku_web/src/__tests__/`（新建） | 中等 |
 | 9 | 🟡 P1 | mypy 类型错误修复 | ✅ **已修复（第十三轮 2026-05-10）** | 多个文件（§4.3） | mypy → Success: no issues found |
@@ -1352,7 +1352,7 @@ function logReducer(state: LogLine[], action: Action): LogLine[] {
 | 3 | 🟡 P1 | `App.tsx:63-70` + 全局 | 两套颜色系统共存（hex 字面量 vs Tailwind 语义色） | ✅ 已完成 |
 | 4 | 🟡 P1 | 全部 `.tsx` | 字号用任意值（`text-[10px]`..`text-[13px]`），无比例系统 | ✅ 已完成 |
 | 5 | 🟡 P1 | `ErrorBoundary.tsx:26-54` | 完全使用 inline style，脱离设计系统，无 focus ring | ✅ 已完成 |
-| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ⚠️ **Bug 未修（CSS 未嵌入，见 §8.6）** |
+| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ✅ **已完成（Round 17 修复，CSS 正确嵌入）** |
 | 7 | 🟢 P2 | 仓库根目录 | `.streamlit/config.toml` 残留（已删除 Streamlit，文件无用） | ✅ 已完成 |
 
 ---
@@ -2545,6 +2545,185 @@ cd hagoku_web && npx tsc --noEmit                # 期望：0 errors
 ---
 
 *第十九轮全部完成（2026-05-11）。Scout 交互确认流已接入 Web UI，产品核心差异化功能闭环。*
+
+---
+
+## 十一、第二十轮：分析结果可读性提升（2026-05-11）
+
+> **目标**：让用户在 Web UI 里真正"看到"分析产出，而不只是事件流 + 报告链接。核心是：① AnalyzePanel 分析完成后展示关键发现摘要；② ProjectPanel 展示运行耗时；③ 多次运行的状态重置。
+>
+> **原则**：不新增后端接口，只利用现有 WS 事件 payload 里的信息。
+
+---
+
+### 11.1 AnalyzePanel：分析完成摘要卡（Result Summary Card）
+
+**问题**：分析结束后 LogView 里只有事件行，用户要点开 Reports 面板才知道结论。
+
+**做法**：监听 `event_type === "agent_completed" && agent === "reporter"` 事件，从 payload 的 `result_summary` 和 `output_path` 字段提取信息，在 AnalyzePanel 底部渲染一张摘要卡。
+
+```typescript
+// AnalyzePanel.tsx 新增 state
+const [resultSummary, setResultSummary] = useState<{
+  summary: string;
+  reportUrl: string;
+  project: string;
+} | null>(null);
+
+// 在 useEffect 处理事件流中增加：
+if (d.agent === "reporter" && d.event_type === "agent_completed") {
+  const proj = (d.data as Record<string,unknown>)?.project_name as string
+               ?? currentProject ?? "default";
+  setResultSummary({
+    summary: (d.data as Record<string,unknown>)?.result_summary as string ?? "分析完成",
+    reportUrl: `/api/reports/${proj}`,
+    project: proj,
+  });
+}
+```
+
+JSX — 在 LogView 下方插入（只在有结果时显示）：
+
+```tsx
+{resultSummary && (
+  <div className="mt-2 p-3 bg-app-bg-secondary border border-app-success rounded flex items-center justify-between gap-3">
+    <div>
+      <div className="text-ui-xs text-app-success font-semibold mb-0.5">分析完成</div>
+      <div className="text-ui-sm text-app-text">{resultSummary.summary}</div>
+    </div>
+    <a
+      href={resultSummary.reportUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white
+                 text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap"
+    >
+      查看报告 →
+    </a>
+  </div>
+)}
+```
+
+**重置**：开始新一次分析时（`handleSend` 调用时）清除摘要：
+
+```typescript
+// handleSend 开头加：
+setResultSummary(null);
+setLogs([]);   // 同时清空上次日志，避免堆叠
+```
+
+---
+
+### 11.2 ProjectPanel：展示运行耗时
+
+**做法**：记录 `run_started` 的时间戳，`run_completed`/`run_failed` 时计算 elapsed，展示在面板顶部。
+
+```typescript
+// ProjectPanel.tsx 新增 state
+const [runMeta, setRunMeta] = useState<{
+  query: string;
+  startedAt: number;
+  elapsed: string;
+  status: "running" | "done" | "failed";
+} | null>(null);
+
+// 在 useBatchEvents useEffect 中：
+if (d.event_type === "run_started") {
+  setRunMeta({ query: d.data?.query ?? "", startedAt: Date.now(), elapsed: "", status: "running" });
+}
+if (d.event_type === "run_completed" || d.event_type === "run_failed") {
+  setRunMeta((prev) => prev ? {
+    ...prev,
+    elapsed: `${((Date.now() - prev.startedAt) / 1000).toFixed(1)}s`,
+    status: d.event_type === "run_completed" ? "done" : "failed",
+  } : null);
+}
+```
+
+JSX — 在 Agent 列表上方：
+
+```tsx
+{runMeta && (
+  <div className={`px-3 py-1.5 border-b border-app-border text-ui-xs flex items-center gap-2
+    ${runMeta.status === "running" ? "text-app-warning" : runMeta.status === "done" ? "text-app-success" : "text-app-error"}`}>
+    <span className={runMeta.status === "running" ? "animate-pulse" : ""}>
+      {runMeta.status === "running" ? "⬤" : runMeta.status === "done" ? "✓" : "✕"}
+    </span>
+    <span className="flex-1 truncate">{runMeta.query}</span>
+    {runMeta.elapsed && <span className="shrink-0 text-app-text-muted">{runMeta.elapsed}</span>}
+  </div>
+)}
+```
+
+---
+
+### 11.3 AnalyzePanel：dataPath 非空校验
+
+**问题**：`dataPath` 为空时仍可发送，后端会报错，但前端没有提示。
+
+```typescript
+// handleSend 开头加（在 setResultSummary(null) 之后）：
+if (!dataPath.trim()) {
+  setLogs((prev) => [...prev, {
+    type: "error" as const,
+    text: "请先输入数据文件路径",
+    ts: new Date().toISOString(),
+  }]);
+  return;
+}
+```
+
+---
+
+### 11.4 EventPanel：按 Agent 分组着色
+
+**问题**：当前 EventTable 的 Agent 列颜色统一为 `text-app-agent`（VS Code 蓝），区分度低。
+
+**做法**：在 `EventTable.tsx` 中为 4 个 Agent 分配不同颜色：
+
+```typescript
+// EventTable.tsx 新增
+const AGENT_COLORS: Record<string, string> = {
+  scout:    "text-app-accent",      // 蓝
+  cleaner:  "text-app-warning",     // 黄
+  analyst:  "text-[#c586c0]",       // 紫（VS Code 关键字色，设计系统中已有）
+  reporter: "text-app-success",     // 绿
+  manager:  "text-app-text-muted",  // 灰
+  scribe:   "text-app-text-muted",  // 灰
+};
+
+// EventRow 里：
+<td className={`px-3 py-0.5 whitespace-nowrap ${AGENT_COLORS[entry.agent?.toLowerCase() ?? ""] ?? "text-app-agent"}`}>
+  {entry.agent}
+</td>
+```
+
+> **注意**：`text-[#c586c0]` 是任意值，若后续要统一设计系统，可在 `tailwind.config.js` 中加 `"app-keyword": "#c586c0"`。
+
+---
+
+### 11.5 验证清单
+
+```bash
+# 1. 前端构建+类型检查
+cd hagoku_web && npm run build && npx tsc --noEmit && npm run lint
+# 期望：0 errors
+
+# 2. 功能验证（手动）
+# - 发起一次分析（Step by Step 或 Full Run）
+# - 期望：分析完成后 AnalyzePanel 底部出现绿色摘要卡，含"查看报告"链接
+# - 期望：ProjectPanel 顶部显示查询摘要 + 耗时（如 "12.3s"）
+# - 期望：空路径发送时，LogView 出现红色"请先输入数据文件路径"提示
+# - 期望：EventPanel Agent 列 Scout=蓝 / Cleaner=黄 / Analyst=紫 / Reporter=绿
+
+# 3. 多次运行重置
+# - 第一次分析完成后，重新发送
+# - 期望：旧日志清空，旧摘要卡消失，新运行开始
+```
+
+---
+
+*第二十轮：分析结果可读性提升，于 2026-05-11 追加。4 项改动，全部基于现有事件 payload，无需新增后端接口。*
 
 **§9 完成记录（2026-05-11）：**
 

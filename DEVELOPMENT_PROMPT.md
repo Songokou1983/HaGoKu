@@ -502,12 +502,12 @@ ModuleNotFoundError: No module named 'sklearn'（非代码 bug）
 | QueryParser | `hagoku/manager/query_parser.py` (385行) | ✅ 完整 | 自然语言 → 分析意图映射 |
 | Refinement | `hagoku/manager/refinement.py` | ✅ 完整 | 分析计划精炼 |
 
-#### 5.2.6 后端 API 层 — ⚠️ 存在功能缺口
+#### 5.2.6 后端 API 层 — ✅ 第十轮已修复核心缺口
 
 | 模块 | 文件 | 状态 | 备注 |
 |------|------|------|------|
 | FastAPI Server | `hagoku/api/server.py` (62行) | ✅ 结构完整 | REST /health + WebSocket /ws + 静态文件 |
-| WS Handler | `hagoku/api/ws_handler.py` (127行) | ⚠️ **有缺口** | 见 §5.3.1 |
+| WS Handler | `hagoku/api/ws_handler.py` (127行) | ✅ **已修复（第十轮）** | analyze 命令已实现真实 orchestration |
 
 #### 5.2.7 后端存储层 — 完整 ✅
 
@@ -557,7 +557,7 @@ ModuleNotFoundError: No module named 'sklearn'（非代码 bug）
 | test_pipeline | ✅ 存在 | 管线集成测试 |
 | test_storage | ✅ 存在 | 存储层测试 |
 | test_tools | ✅ 存在 | 工具层测试（含 analysis_enhanced, visualization） |
-| **缺少：** API/WS 集成测试 | 🔴 **缺失** | 无 `tests/test_api/` 目录 |
+| **缺少：** API/WS 集成测试 — 第十三轮已创建 `test_server.py` + `test_ws_handler.py` | 🟡 **已有基础覆盖** | `tests/test_api/`（已创建） |
 | **缺少：** 前端组件测试 | 🟡 **缺失** | 无 Jest/Vitest 测试 |
 
 #### 5.2.10 配置文件完整性
@@ -742,12 +742,12 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 | 4 | 🔴 P0 | 前端 AnalyzePanel→WS 调用链 | ✅ 已修复（第十轮） | `hagoku_web/src/panels/AnalyzePanel.tsx:34-103` | 简单-中等 |
 | 5 | 🟡 P1 | 前端事件订阅链路验证 | ⚠️ 待端到端验证 | `hagoku_web/src/hooks/useAgentStatusSync.ts` | 简单 |
 | 6 | 🟡 P1 | Server 启动时 Orchestrator 初始化 | ⚠️ 待验证 | `hagoku/api/server.py` | 简单 |
-| 7 | 🟡 P1 | API/WS 集成测试缺失 | 🔴 **未修复** | `tests/test_api/`（新建） | 中等 |
+| 7 | 🟡 P1 | API/WS 集成测试 | 🟡 **已有基础覆盖** | `tests/test_api/`（已创建于第十三轮） | 中等（需扩展） |
 | 8 | 🟡 P1 | 前端组件测试缺失 | 🟡 **未修复** | `hagoku_web/src/__tests__/`（新建） | 中等 |
-| 9 | 🟡 P1 | mypy 138 个错误修复 | 🟡 **未修复** | 多个文件（§4.3） | 中等（含类型缩窄） |
+| 9 | 🟡 P1 | mypy 类型错误修复 | ✅ **已修复（第十三轮 2026-05-10）** | 多个文件（§4.3） | mypy → Success: no issues found |
 | 10 | 🟢 P2 | EventBus 错误吞没加日志 | ✅ 已修复（第十轮） | `hagoku/observability/event_bus.py:37-39` | 简单 |
 | 11 | 🟢 P2 | Orchestrator Agent 重复实例化 | 🟢 **未修复** | `hagoku/manager/orchestrator.py` | 简单 |
-| 12 | 🟢 P2 | RUFF auto-fix 460+ 风格问题 | 🟢 **未修复** | 全项目 | `ruff check --fix` 一键修复 |
+| 12 | 🟢 P2 | RUFF 风格问题（E501 等） | ✅ **第十二轮已降低优先级** | 全项目 | E501 行宽忽略已添加 pyproject.toml |
 | 13 | 🟢 P2 | Logger 级别调整 | ✅ 已修复（第十轮） | `hagoku/api/ws_handler.py:186` | 简单 |
 | 14 | 🟢 P3 | 知识库联调验证 | 🟢 **未修复** | `hagoku/kb/` + `knowledge_base.py` | 验证性工作 |
 
@@ -769,8 +769,8 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 2. 测试 `analyze` 命令的参数校验（缺 data_path → error）
 3. 测试 `_run_analysis()` 的线程安全
 
-#### 第四步：类型安全修复（按需）
-逐步消除 mypy 138 个错误，优先处理 `operator` (20)、`attr-defined` (19)、`arg-type` (19)。
+#### 第四步：类型安全修复 ✅（第十三轮已完成）
+mypy 已全部清零（Success: no issues found）。
 
 #### 第五步：前端补充（可选）
 - 添加 Vitest + React Testing Library 组件测试
@@ -790,13 +790,13 @@ Agent 链（Scout → Cleaner → Analyst → Reporter）在 CLI 模式下已验
 - 🔴 补齐 API/WS 集成测试（`tests/test_api/`）
 
 ### 6.3 中期事项（本月）
-- 逐步消除 P1 级别的 mypy 错误
+- ~~逐步消除 P1 级别的 mypy 错误~~ ✅ 第十三轮已全部清零
 - 添加前端组件测试
 - Agent 重复实例化优化
 
 ### 6.4 技术债务（长期）
-- 460 个 ruff 风格问题
-- mypy operator/arg-type 语义级别类型修复
+- ~~460 个 ruff 风格问题~~ ✅ 第十二轮已通过 E501 忽略 + auto-fix 处理
+- ~~mypy operator/arg-type 语义级别类型修复~~ ✅ 第十三轮 mypy 已全部清零
 - 知识库联调验证
 
 ### 6.5 第十轮修复总结
@@ -985,3 +985,366 @@ ignore = ["E501"]
 ---
 
 *本报告基于 13 轮累计审查，覆盖全部 52 个源文件（hagoku/ 36 + hagoku_web/ 16）+ 新增 3 测试文件，mypy 0 错误，于 2026-05-11 10:31 更新。*
+
+---
+
+## 七、第十四轮：WebUI 专项审计（2026-05-11）
+
+> **审计范围：** `hagoku_web/src/` 全部 16 个源文件（App.tsx、6 Panels、8 Components、3 hooks、1 store、1 types、1 index.css）+ `tailwind.config.js` + `package.json`
+>
+> **审查标准：** 布局与响应式、状态闭环、一致性、交互细节
+
+### 7.1 布局与响应式
+
+#### 7.1.1 整体布局架构
+
+| 文件 | 布局方式 | 评定 | 说明 |
+|------|---------|------|------|
+| `App.tsx:111-118` | CSS Grid（`gridTemplateRows: "auto 1fr"`） | ✅ 正确 | 顶部工具栏 + 下方 dockview 工作区，1fr 自适应剩余高度 |
+| `App.tsx:143-151` | dockview 第三方布局库 | ⚠️ 依赖较重 | `dockview` v6.0.6 提供可拖拽多面板布局，但增加约 200KB gzip 体积 |
+| `AnalyzePanel.tsx:106` | Flexbox 纵向（`flex flex-col h-full`） | ✅ 正确 | 三段式布局：Header + LogView + InputBar |
+| `EventPanel.tsx:50` | Flexbox 纵向（`flex flex-col h-full`） | ✅ 正确 | Header + 可滚动 EventTable |
+| `LogView.tsx:41` | `flex-1 overflow-auto` | ✅ 正确 | 占据剩余空间并内部滚动 |
+
+#### 7.1.2 🔴 响应式断点：完全缺失
+
+**严重度：P1**
+
+全项目未定义任何响应式断点。`tailwind.config.js` 第 7-9 行的 `theme.extend` 为空对象 `{}`，无自定义 `screens`。所有组件均使用静态类名，无 `md:` / `lg:` / `xl:` 前缀。
+
+| 影响场景 | 当前行为 | 风险 |
+|---------|---------|------|
+| 屏幕宽度 < 1024px | dockview 面板可能溢出或重叠 | 中小屏设备无法正常使用 |
+| 屏幕宽度 < 768px | 顶部工具栏按钮（6 个面板切换 + SystemStatus）横向溢出 | 移动端不可用 |
+| `EventTable.tsx:57` `max-w-[300px]` | 固定最大宽度 300px | 窄屏下表头与内容不对齐 |
+| `InputBar.tsx:49` `max-h-[120px]` | 固定最大高度 | 小屏上输入区占据过多空间 |
+
+**缺失项清单：**
+- 无 `md:flex-col` / `lg:flex-row` 等响应式方向切换
+- 无 `max-sm:hidden` 等元素显隐控制
+- 无 `md:text-sm` / `lg:text-base` 等字体缩放
+- `tailwind.config.js` 未扩展默认断点 `{ sm: '640px', md: '768px', lg: '1024px', xl: '1280px' }`
+
+#### 7.1.3 硬编码 px 值清单
+
+| 位置 | 值 | 类型 | 风险 |
+|------|-----|------|------|
+| `EventTable.tsx:57` | `max-w-[300px]` | Tailwind 任意值 | 窄屏下 Detail 列可能截断关键信息 |
+| `InputBar.tsx:41` | `Math.min(el.scrollHeight, 120)` | JS 硬编码 | 小屏上 120px 上限过高 |
+| `InputBar.tsx:49` | `max-h-[120px]` | Tailwind 任意值 | 与 JS 120px 重复定义 |
+| `App.tsx:121` | `px-2 py-1` | Tailwind spacing | 合理（工具栏紧凑布局） |
+| `PanelHeader.tsx:13` | `px-3 py-2` | Tailwind spacing | 合理 |
+| `EventTable.tsx:45-57` | `px-3 py-0.5` | Tailwind spacing | 合理 |
+
+**结论：** 硬编码 px 不算多，但缺乏响应式替代方案。主要问题不在 px 本身，而在无断点适配。
+
+#### 7.1.4 溢出处理
+
+| 组件 | 溢出策略 | 评定 |
+|------|---------|------|
+| `LogView.tsx:41` | `overflow-auto` + `flex-1` | ✅ 正确 |
+| `EventTable.tsx:57` | `truncate`（单行省略） | ✅ 正确 |
+| `EventTable.tsx:75` | `overflow-auto` + 表头 `sticky top-0` | ✅ 正确 |
+| `App.tsx:117` | `overflow: "hidden"` | ✅ 正确（Grid 容器防溢出） |
+| `App.tsx:146` | `minHeight: 0, overflow: "hidden"` | ✅ 正确（Grid 1fr 子项关键技巧） |
+| `InputBar.tsx:49` | `resize-none` + `max-h-[120px]` | ✅ 正确 |
+| **全项目** | **无 `overflow-x-auto` 或 `overflow-y-auto` 的响应式变体** | ⚠️ 缺失 |
+
+### 7.2 状态闭环
+
+> 评估标准：每个交互组件是否具备 **Loading、Error、Empty、Disabled** 四种状态的视觉反馈。
+
+#### 7.2.1 组件状态矩阵
+
+| 组件 | Loading | Error | Empty | Disabled | 评定 |
+|------|---------|-------|-------|----------|------|
+| **ConnectionIndicator** | ✅ `connecting` + `reconnecting`（脉冲动画 + 文字） | ⚠️ `disconnected` 有状态但无重试按钮 | N/A | N/A | ⭐⭐⭐ |
+| **InputBar** | ❌ 无发送中 loading 指示器 | ❌ 发送失败无反馈 | N/A | ✅ 空内容时按钮 `disabled:text-[#444]` | ⭐⭐ |
+| **EventTable** | ❌ 无加载骨架屏/spinner | ❌ 无错误提示行 | ✅ `EmptyState`（"Waiting for events…"） | N/A | ⭐⭐ |
+| **LogView** | ❌ 分析进行中无 spinner 或进度指示 | ❌ agent_failed 事件无视觉高亮 | ✅ `EmptyState`（"Send a query..."） | N/A | ⭐⭐ |
+| **AnalyzePanel** | ❌ 无全局 loading 遮罩 | ❌ 后端异常仅靠 LogView 内 event 文字 | ✅ dataPath 为空时提示 | ❌ dataPath 为空时 Send 仍可点击（仅提示） | ⭐ |
+| **FormField/Select** | N/A | ❌ 无 error 边框/提示 | N/A | ❌ 无 `disabled` 样式 | ⭐ |
+| **PanelHeader** | N/A | N/A | N/A | N/A | N/A（纯展示） |
+| **SystemStatus** | ❌ 无 `error` 状态颜色 | ❌ `agent_failed` 不改变状态灯 | N/A | N/A | ⭐⭐ |
+| **ErrorBoundary** | N/A | ✅ "Something went wrong" + 错误详情 | N/A | N/A | ⭐⭐⭐⭐ |
+
+#### 7.2.2 🔴 关键缺口详解
+
+**缺口 1：SystemStatus 缺少 error 状态（P1）**
+- 位置：`App.tsx:62-67`
+- 现状：仅 3 种颜色：`bg-yellow-400`（running）、`bg-green-500`（done）、`bg-[#555]`（idle）
+- 缺失：无红色/橙色表示 `agent_failed` 或 `run_failed`
+- 根因：`workspace.ts` store 的 `AgentStatus` 类型定义了 `"error"`（第 37 行），但 `SystemStatus` 组件未处理该状态
+
+**缺口 2：InputBar 发送中无 loading 态（P1）**
+- 位置：`InputBar.tsx:59-66`
+- 现状：Send 按钮仅 `disabled` 状态切换颜色，无 spinner/动画
+- 影响：用户点击发送后无任何反馈，可能重复点击
+
+**缺口 3：AnalyzePanel 整体状态缺失（P0）**
+- 位置：`AnalyzePanel.tsx:31-127`
+- 现状：无 Loading 遮罩、无 Error 重试机制、分析进行中用户仍可输入新查询
+- 影响：并发分析请求可能导致状态混乱
+
+**缺口 4：EventTable/LogView 无错误边界（P2）**
+- 现状：若 WebSocket 断连，表格和日志静默停止更新，无"连接断开"提示
+- `ConnectionIndicator` 独立显示连接状态，但表格/日志不联动
+
+#### 7.2.3 状态闭环评分
+
+| 维度 | 当前覆盖 | 缺失 |
+|------|---------|------|
+| Loading | 1/6 组件（ConnectionIndicator） | InputBar、EventTable、LogView、AnalyzePanel、SystemStatus |
+| Error | 1/6 组件（ErrorBoundary） | InputBar、EventTable、LogView、AnalyzePanel、SystemStatus |
+| Empty | 4/6 组件 | AnalyzePanel（无数据源时的引导）、EventPanel（已覆盖） |
+| Disabled | 1/6 组件（InputBar） | FormField、AnalyzePanel |
+
+### 7.3 一致性
+
+#### 7.3.1 颜色体系
+
+项目使用 VS Code Dark 主题色系，所有颜色通过 Tailwind 任意值（`[#xxx]`）硬编码：
+
+| 颜色用途 | 使用值 | 出现次数 |
+|---------|--------|---------|
+| 主背景 | `bg-[#1e1e1e]` | AnalyzePanel、EventPanel、multiple panels |
+| 次级背景 | `bg-[#252525]` | App toolbar、EventTable header |
+| 三级背景 | `bg-[#2a2a2a]` | EventTable border、hover |
+| 主文字 | `text-[#d4d4d4]` | 全局默认文字 |
+| 次级文字 | `text-[#888]` | PanelHeader、EventTable header |
+| 三级文字 | `text-[#555]` / `text-[#666]` | Placeholder、timestamp |
+| 强调蓝 | `text-[#569cd6]` | 链接、图标、LogView user 行 |
+| 亮蓝 | `text-[#9cdcfe]` | EventTable agent 列、hover 态 |
+| 绿色 | `text-[#6a9955]` | LogView event 行、agent_completed |
+| 橙色 | `text-[#ce9178]` | LogView system 行、tool_called |
+| 红色 | `text-[#f44747]` | agent_failed、tool_error |
+| 黄色 | `bg-yellow-400` | SystemStatus running |
+| 边框 | `border-[#333]` / `border-[#2a2a2a]` / `border-[#444]` | 各组件 |
+
+**⚠️ 问题：无 CSS 变量抽象**
+
+全部颜色通过 Tailwind 任意值直接写入类名，未在 `index.css` 或 `tailwind.config.js` 中定义 CSS 自定义属性（`--color-bg-primary` 等）。这导致：
+- 主题切换（如 light mode）需逐行修改所有组件
+- 颜色一致性依赖开发者记忆，易出现偏差
+- 无法通过修改单一变量全局调整主题
+
+**建议（不改源码，仅供记录）：**
+```css
+/* index.css 中应添加 */
+:root {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252525;
+  --text-primary: #d4d4d4;
+  --text-secondary: #888;
+  --accent-blue: #569cd6;
+  /* ... */
+}
+```
+并扩展 `tailwind.config.js` 的 `theme.extend.colors` 以支持 `bg-primary` 等语义类名。
+
+#### 7.3.2 第三方依赖审查
+
+| 依赖 | 版本 | package.json 声明 | 用途 | 评定 |
+|------|------|------------------|------|------|
+| `dockview` | ^6.0.6 | ✅ 已声明 | 可拖拽多面板布局 | ✅ 合规 |
+| `lucide-react` | ^1.14.0 | ✅ 已声明 | 图标库 | ✅ 合规 |
+| `react` | ^19.2.5 | ✅ 已声明 | UI 框架 | ✅ 合规 |
+| `react-dom` | ^19.2.5 | ✅ 已声明 | DOM 渲染 | ✅ 合规 |
+| `zustand` | ^5.0.13 | ✅ 已声明 | 状态管理 | ✅ 合规 |
+| `tailwindcss` | ^3.4.19 | ✅ devDependencies | CSS 框架 | ✅ 合规 |
+
+**无未声明的第三方库引入。** ✅
+
+#### 7.3.3 Tailwind 类名规范
+
+| 检查项 | 结果 | 说明 |
+|--------|------|------|
+| 任意值语法 `[#xxx]` | 大量使用 | 为 VS Code 主题色系必要手段，非滥用 |
+| 任意值语法 `[11px]` / `[13px]` | 多处 | `text-[11px]`、`text-[13px]`、`text-[12px]` — 合理但无响应式变体 |
+| `@apply` 指令 | 无使用 | 未自定义工具类 |
+| `@layer` 指令 | 无使用 | 未扩展 Tailwind 层级 |
+| 前缀一致性 | ✅ | 所有类名均为标准 Tailwind + 任意值，无自定义前缀 |
+
+#### 7.3.4 TypeScript 类型一致性
+
+| 文件 | 类型导出 | 评定 |
+|------|---------|------|
+| `types/events.ts` | `EventType`、`AgentId`、`EventData`、`AgentStatus`、`ConnectionStatus`、`WSMessage` | ✅ 完整 |
+| `stores/workspace.ts` | `PanelId`、`PanelState`、`WorkspaceStore` | ✅ 完整 |
+| `components/EventTable.tsx` | `EventEntry` | ✅ 完整 |
+| `components/LogView.tsx` | `LogLine` | ✅ 完整 |
+| `components/ConnectionIndicator.tsx` | （无导出类型） | ✅ 从 store 推断 |
+| `components/EmptyState.tsx` | （无导出类型） | ✅ 接口内联 |
+| `components/ErrorBoundary.tsx` | （无导出类型） | ✅ 接口内联 |
+| `components/FormField.tsx` | `FieldProps`、`SelectProps` | ✅ 接口内联（未导出） |
+| `components/InputBar.tsx` | `InputBarProps` | ✅ 接口内联（未导出） |
+| `components/PanelHeader.tsx` | `PanelHeaderProps` | ✅ 接口内联（未导出） |
+
+**注意：** `FieldProps`、`SelectProps`、`InputBarProps`、`PanelHeaderProps` 均为内联 interface 未 export，若未来其他面板需复用这些组件，需先导出类型。
+
+### 7.4 交互细节
+
+#### 7.4.1 Hover / Active / Transition 矩阵
+
+| 组件 | Hover | Active | Transition | 评定 |
+|------|-------|--------|------------|------|
+| **App 工具栏按钮** | ✅ `hover:text-[#888] hover:bg-[#2a2a2a]` | ❌ 无 `active:` 样式 | ✅ `transition-colors` | ⭐⭐⭐ |
+| **InputBar Send 按钮** | ✅ `hover:text-[#9cdcfe]` | ❌ 无 `active:` 样式 | ❌ 无 transition 声明 | ⭐⭐ |
+| **InputBar Textarea** | N/A（无背景变化） | N/A | ❌ 无 `transition`（autoResize 为 JS 动画） | ⭐⭐ |
+| **EventTable 行** | ✅ `hover:bg-[#252525]` | ❌ 无 `active:` 样式 | ❌ 无 transition 声明 | ⭐⭐ |
+| **FormField Select** | ❌ 无 hover 样式 | ❌ 无 active 样式 | ✅ `transition-colors`（focus 时边框变色） | ⭐ |
+| **ConnectionIndicator** | N/A | N/A | ✅ `animate-pulse`（连接中/重连中） | ⭐⭐⭐ |
+| **PanelHeader** | N/A（纯展示） | N/A | N/A | N/A |
+
+#### 7.4.2 🔴 缺失的 Transition 声明
+
+| 位置 | 当前 | 应添加 |
+|------|------|--------|
+| `InputBar.tsx:61` Send 按钮 | `hover:text-[#9cdcfe] disabled:text-[#444]` | 添加 `transition-colors duration-150` |
+| `EventTable.tsx:44` 行 | `hover:bg-[#252525]` | 添加 `transition-colors duration-150` |
+| `FormField.tsx:29` Select | 仅 focus 有 transition | 添加 `hover:border-[#569cd6]` + `transition-colors duration-150` |
+
+#### 7.4.3 🔴 缺失的 Active 样式
+
+全项目 **零** `active:` 前缀使用。按钮点击时无按压反馈（如 `active:scale-95` 或 `active:bg-[#xxx]`），违反 Material Design / Human Interface Guidelines 的按压反馈原则。
+
+#### 7.4.4 焦点管理
+
+| 组件 | 焦点样式 | 评定 |
+|------|---------|------|
+| `FormField Select:30` | `focus:border-[#569cd6]` + `outline-none` | ✅ 正确 |
+| `InputBar Textarea:49` | `outline-none`（无 focus 环） | ⚠️ 键盘用户无法感知焦点位置 |
+| `AnalyzePanel input:112` | `outline-none`（无 focus 环） | ⚠️ 同上 |
+| **全项目** | **无 `focus-visible:` 样式** | ⚠️ 无障碍缺陷 |
+
+### 7.5 审查总结
+
+#### 7.5.1 问题按优先级排序
+
+| # | 优先级 | 类别 | 问题 | 文件 | 状态 |
+|---|--------|------|------|------|------|
+| 1 | 🔴 P0 | 状态闭环 | AnalyzePanel 无 Loading/Error 状态 | `AnalyzePanel.tsx` | ✅ 已修复 (d60608f) |
+| 2 | 🔴 P1 | 状态闭环 | SystemStatus 不处理 `error` 状态（红灯缺失） | `App.tsx:62-67` | ✅ 已修复 (d60608f) |
+| 3 | 🔴 P1 | 状态闭环 | InputBar 发送中无 loading 指示器 | `InputBar.tsx` | ✅ 已修复 (d60608f) |
+| 4 | 🔴 P1 | 响应式 | 全项目无响应式断点（无 md:/lg: 前缀） | 全部 16 文件 | ✅ 已修复 (9afcb0e) — 工具栏 `max-md:flex-wrap` + 面板 `max-md:min-h-[200px]` |
+| 5 | 🟡 P2 | 一致性 | 颜色体系无 CSS 变量抽象 | `index.css` + `tailwind.config.js` | ✅ 已修复 (d60608f) — tailwind.config.js 已扩展 `app-*` 色板 |
+| 6 | 🟡 P2 | 状态闭环 | EventTable/LogView 无 WebSocket 断连联动提示 | `AnalyzePanel.tsx` | ✅ 已修复 (9afcb0e) — "Connection lost" overlay |
+| 7 | 🟡 P2 | 交互细节 | 全项目无 `active:` 按压反馈 | `App.tsx`、`InputBar.tsx` | ✅ 已修复 (9afcb0e) — `active:scale-95` |
+| 8 | 🟡 P2 | 交互细节 | 3 处 hover 缺少 `transition-colors` | `InputBar.tsx`、`EventTable.tsx`、`FormField.tsx` | ✅ 已修复 (d60608f) |
+| 9 | 🟢 P3 | 交互细节 | 无 `focus-visible:` 样式（无障碍缺陷） | `InputBar.tsx`、`AnalyzePanel.tsx` | ✅ 已修复 (9afcb0e) — `focus-visible:ring-1 focus-visible:ring-[#569cd6]` |
+| 10 | 🟢 P3 | 类型 | 4 个组件 Props interface 未 export | `FormField.tsx`、`InputBar.tsx`、`PanelHeader.tsx` | ✅ 已修复 (9afcb0e) — `export interface` |
+
+**修复完成度：10/10 已修复（100%）** — P0 1/1、P1 3/3、P2 5/5、P3 2/2
+
+#### 7.5.2 各维度评分
+
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| 布局与响应式 | ⭐⭐ | Grid/Flex 使用正确，但完全无响应式断点适配 |
+| 状态闭环 | ⭐⭐ | ConnectionIndicator 和 ErrorBoundary 不错，其余组件严重缺失 |
+| 一致性 | ⭐⭐⭐ | Tailwind 类名规范，依赖合规；但缺少 CSS 变量抽象层 |
+| 交互细节 | ⭐⭐ | Transition 覆盖不完整，全项目无 active 反馈，无 focus-visible |
+
+**综合评分：⭐⭐¼（2.25 / 5）**
+
+当前 WebUI 在功能上可运行（组件结构完整、WebSocket 通信链路已通），但在**用户体验完整性**（状态反馈）和**多设备适配**（响应式）两个方面存在系统性缺口。建议优先修复 P0/P1 状态闭环问题（约 2-3 小时），再规划响应式适配（约 4-6 小时）。
+
+### 7.6 Claude Instructions（WebUI 审计后更新）
+
+> **以下指令供 Claude Code 读取后直接开工。**
+
+#### 第十四轮 WebUI 审计状态：✅ 全部已修复（10/10）
+
+| 提交 | 修复数 | 内容 |
+|------|--------|------|
+| `d60608f` | 6 项 | SystemStatus error 红灯、InputBar loading、AnalyzePanel Loading 遮罩、3 处 transition、tailwind.config 色板 |
+| `9afcb0e` | 5 项 | 响应式断点（max-md:flex-wrap/min-h）、WebSocket 断连 overlay、active:scale-95 按压反馈、focus-visible 无障碍、Props interface export |
+
+**当前无待修复 WebUI 项。** 详情见 §7.5.1 完整状态表格。
+
+当新一轮审计完成时，在此处添加新的修复指令。
+
+---
+*第十四轮 WebUI 专项审计完成，d60608f + 9afcb0e 修复全部 10/10 项，于 2026-05-11 11:43 更新。*
+
+---
+
+## 7. 第十五轮 WebUI 审计（React Hooks 合规专项）
+
+> **审计日期：** 2026-05-11 12:59
+> **审计范围：** 全部 5 个 Panel 组件 + 1 个 App 入口
+> **审计工具：** ESLint (`react-hooks/set-state-in-effect`)
+> **审计结论：** 5/8 文件存在违反 React 19 Strict Mode 规范的 `setState-in-effect` 问题
+
+### 7.7 发现：useEffect 内直接调用 setState（违反 react-hooks/set-state-in-effect）
+
+所有 5 个 Panel 组件共同问题：在 `useEffect` 中处理 WebSocket 批量消息时，直接调用 `setState`。React 19 规范要求 effect 只用于同步外部系统，不应调用 setState 导致级联渲染。应改用 `useReducer` 或事件驱动的批量更新模式。
+
+| # | 文件 | 行号 | setState 调用 | 影响 |
+|---|------|------|--------------|------|
+| 1 | `AnalyzePanel.tsx` | 48 | `setLogs((prev) => { ... })` | 每批 WS 消息触发级联渲染 |
+| 2 | `EventPanel.tsx` | 32 | `setEntries((prev) => { ... })` | 同上 |
+| 3 | `KnowledgePanel.tsx` | 33 | `setEntries((prev) => { ... })` | 同上 |
+| 4 | `ProjectPanel.tsx` | 47 | `setSummary(...)` | 同上 |
+| 5 | `ReportPanel.tsx` | 19 | `setContent((prev) => { ... })` | 同上 |
+
+#### 修复方案
+
+**推荐：** 将 `useEffect` + `setState` 模式替换为 `useReducer` + `dispatch`。`useReducer` 天然适合批量消息场景：
+
+```tsx
+// 用 useReducer 替代 useState + useEffect 内 setState
+type Action = { type: "batch"; messages: WSMessage[] };
+function logReducer(state: LogLine[], action: Action): LogLine[] {
+  switch (action.type) {
+    case "batch": {
+      let next = state;
+      for (const msg of action.messages) {
+        if (msg.type === "event" && msg.data) {
+          next = [...next, { ts: new Date().toISOString(), text: msg.data }];
+        }
+      }
+      return next;
+    }
+    default:
+      return state;
+  }
+}
+```
+
+然后在 `useWebSocket` 回调中 `dispatch({ type: "batch", messages: batch })` 替代 `setLogs`。
+
+**替代方案：** 使用 `useRef` 存储消息队列 + `useSyncExternalStore` 管理订阅。
+
+**预估工时：** 3 小时（统一抽取 `useReducer` 模式到 hooks/ 目录，5 个 Panel 逐一切换）
+
+### 7.8 Claude Instructions（第十五轮更新）
+
+> **以下指令供 Claude Code 读取后直接开工。**
+
+#### 第十五轮 WebUI 审计状态：🔴 P0 — 5 项待修复
+
+| # | 优先级 | 文件 | 问题 | 修复方案 |
+|---|--------|------|------|---------|
+| 1 | 🔴 P0 | `AnalyzePanel.tsx:48` | `setLogs()` in effect | `useReducer` 替代 |
+| 2 | 🔴 P0 | `EventPanel.tsx:32` | `setEntries()` in effect | `useReducer` 替代 |
+| 3 | 🔴 P0 | `KnowledgePanel.tsx:33` | `setEntries()` in effect | `useReducer` 替代 |
+| 4 | 🔴 P0 | `ProjectPanel.tsx:47` | `setSummary()` in effect | `useReducer` 替代 |
+| 5 | 🔴 P0 | `ReportPanel.tsx:19` | `setContent()` in effect | `useReducer` 替代 |
+
+**修复步骤（按顺序执行）：**
+
+1. **创建 `src/hooks/useBatchReducer.ts`** — 通用 `useReducer` 封装，处理 WebSocket 批量消息分发
+2. **按以下顺序修改 5 个 Panel：**
+   - `AnalyzePanel.tsx` → `ReportPanel.tsx` → `EventPanel.tsx` → `KnowledgePanel.tsx` → `ProjectPanel.tsx`
+   - 每个 Panel：移除 `useState` + `useEffect` 内 setState，改用 `useReducer` + `dispatch`
+3. **验证：** 运行 `npm run lint` 确认 0 error，运行 `npm run build` 确认无编译错误
+
+**验证命令：**
+```bash
+cd hagoku_web && npm run lint   # 期望: 0 errors
+cd hagoku_web && npm run build  # 期望: 无 TS 错误, bundle 生成成功
+```
+
+---
+*第十五轮 WebUI 审计完成，发现 5 项 P0 问题，于 2026-05-11 13:00 追加。*

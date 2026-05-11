@@ -1,6 +1,6 @@
 import { DockviewReact, type DockviewApi } from "dockview";
 import "dockview/dist/styles/dockview.css";
-import { useRef, useCallback, useMemo, useEffect } from "react";
+import { useRef, useCallback, useMemo, useEffect, type ReactNode } from "react";
 import { useWorkspaceStore, type PanelId } from "./stores/workspace";
 import { useWebSocket } from "./hooks/useWebSocket";
 import ProjectPanel from "./panels/ProjectPanel";
@@ -16,6 +16,7 @@ import {
   BookOpen,
   Settings,
   Activity,
+  X,
 } from "lucide-react";
 
 interface PanelConfig {
@@ -31,11 +32,11 @@ const PANEL_CONFIGS: PanelConfig[] = [
   { id: "report", component: "ReportPanel", title: "Reports", iconName: "FileText" },
   { id: "knowledge", component: "KnowledgePanel", title: "Knowledge", iconName: "BookOpen" },
   { id: "settings", component: "SettingsPanel", title: "Settings", iconName: "Settings" },
-  { id: "events", component: "EventPanel", title: "Event Log", iconName: "Activity" },
+  { id: "events", component: "EventPanel", title: "Events", iconName: "Activity" },
 ];
 
 /** Map icon names to pre-rendered JSX — avoids recreating icons per render. */
-const iconMap: Record<string, React.ReactNode> = {
+const iconMap: Record<string, ReactNode> = {
   FolderKanban: <FolderKanban size={14} />,
   BarChart3: <BarChart3 size={14} />,
   FileText: <FileText size={14} />,
@@ -74,9 +75,11 @@ function SystemStatus() {
     <div className="flex items-center gap-1.5 text-ui-xs text-app-text-muted">
       <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
       {errorCount > 0 ? (
-        <span>{errorCount > 1 ? `${errorCount} errors` : "error"}</span>
+        <span>{errorCount > 1 ? `${errorCount} 个异常` : "异常"}</span>
       ) : status === "running" || busyCount > 0 ? (
-        <span>{busyCount > 0 ? `${busyCount} busy` : "running"}</span>
+        <span>{busyCount > 0 ? `${busyCount} 个运行中` : "运行中"}</span>
+      ) : status === "done" ? (
+        <span>完成</span>
       ) : (
         <span>{status}</span>
       )}
@@ -141,7 +144,7 @@ export default function App() {
                         bg-app-error/90 text-white text-ui-sm rounded shadow-lg
                         flex items-center gap-2">
           <span>{lastError}</span>
-          <button onClick={() => setLastError(null)} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+          <button aria-label="关闭提示" onClick={() => setLastError(null)} className="ml-2 opacity-70 hover:opacity-100 transition-opacity duration-150 focus:outline-none focus:ring-1 focus:ring-white rounded cursor-pointer"><X size={12} /></button>
         </div>
       )}
 
@@ -153,10 +156,10 @@ export default function App() {
             <button
               key={cfg.id}
               onClick={() => togglePanel(cfg.id)}
-              className={`flex items-center gap-1 px-2 py-1 text-ui-sm rounded transition-colors active:scale-95 ${
+              className={`flex items-center gap-1 px-2 py-1 text-ui-sm rounded transition active:scale-95 cursor-pointer ${
                 visible
-                  ? "bg-app-bg-tertiary text-app-text"
-                  : "text-app-text-muted hover:text-app-text-muted hover:bg-app-bg-tertiary"
+                  ? "bg-app-bg-tertiary text-app-text hover:brightness-110"
+                  : "text-app-text-muted hover:text-app-text hover:bg-app-bg-tertiary"
               }`}
             >
               {iconMap[cfg.iconName]}

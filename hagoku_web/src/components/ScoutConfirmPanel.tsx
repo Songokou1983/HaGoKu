@@ -40,6 +40,11 @@ export function ScoutConfirmPanel({ data, onConfirm, onSkip }: Props) {
       </div>
       <div className="text-ui-xs text-app-text-muted">{data.message}</div>
 
+      <div className="flex items-center gap-2 text-ui-xs text-app-text-muted mb-1 px-0.5">
+        <span className="w-32">字段名</span>
+        <span className="flex-1">类型</span>
+        <span className="max-w-[100px]">样例</span>
+      </div>
       <div className="space-y-1 max-h-[200px] overflow-auto">
         {data.context.columns.map((col) => (
           <div key={col.name} className="flex items-center gap-2">
@@ -47,9 +52,10 @@ export function ScoutConfirmPanel({ data, onConfirm, onSkip }: Props) {
               {col.name}
             </span>
             <select
+              aria-label={`${col.name} 字段类型`}
               value={types[col.name]}
               onChange={(e) => setTypes({ ...types, [col.name]: e.target.value })}
-              className="bg-app-bg border border-app-border rounded px-1 py-0.5 text-ui-xs text-app-text flex-1"
+              className="bg-app-bg border border-app-border rounded px-1 py-0.5 text-ui-xs text-app-text flex-1 outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent hover:border-app-accent transition-colors duration-150 cursor-pointer"
             >
               {TYPE_OPTIONS.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -68,13 +74,13 @@ export function ScoutConfirmPanel({ data, onConfirm, onSkip }: Props) {
       <div className="flex gap-2">
         <button
           onClick={() => onConfirm(types)}
-          className="px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white text-ui-xs rounded cursor-pointer transition-colors"
+          className="px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white text-ui-xs rounded cursor-pointer transition-colors duration-150"
         >
           确认并继续
         </button>
         <button
           onClick={onSkip}
-          className="px-3 py-1 border border-app-border text-app-text-muted text-ui-xs rounded cursor-pointer hover:text-app-text transition-colors"
+          className="px-3 py-1 border border-app-border text-app-text-muted text-ui-xs rounded cursor-pointer hover:text-app-text transition-colors duration-150"
         >
           跳过
         </button>

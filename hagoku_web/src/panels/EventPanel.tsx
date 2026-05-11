@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { WifiOff, Loader2 } from "lucide-react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -52,18 +53,24 @@ export default function EventPanel() {
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader
-        title="Event Log"
+        title="Events"
         badge={
           <span className="text-app-text-muted font-normal">({entries.length})</span>
         }
       />
       <div className="flex-1 overflow-auto font-mono text-ui-sm relative">
         <EventTable entries={entries} />
+        {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-app-bg/80 backdrop-blur-sm">
+            <Loader2 size={20} className="animate-spin text-app-accent" />
+            <span className="text-ui-xs text-app-text-muted">正在连接服务器…</span>
+          </div>
+        )}
         {connectionStatus === "disconnected" && (
           <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
-            <span className="text-2xl">📡</span>
+            <WifiOff size={28} className="text-app-text-muted" />
             <span className="text-ui-base text-app-error">Connection lost</span>
-            <span className="text-ui-xs text-app-text-muted">Reconnecting…</span>
+            <span className="text-ui-xs text-app-text-muted">正在重新连接…</span>
           </div>
         )}
       </div>

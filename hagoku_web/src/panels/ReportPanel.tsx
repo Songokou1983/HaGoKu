@@ -53,7 +53,7 @@ export default function ReportPanel() {
           </div>
         )}
         {reportFiles.length === 0 && !loading ? (
-          <EmptyState icon={<FileText size={32} />} message="No reports yet" />
+          <EmptyState icon={<FileText size={32} />} message="运行分析后，报告会出现在这里" />
         ) : (
           <div className="space-y-2">
             {reportFiles.map((f) => (
@@ -63,7 +63,7 @@ export default function ReportPanel() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded
-                           flex items-center gap-2 hover:border-app-accent transition-colors cursor-pointer"
+                           flex items-center gap-2 hover:border-app-accent transition-colors duration-150 cursor-pointer"
               >
                 <FileText size={14} className="text-app-accent shrink-0" />
                 <span className="text-ui-base text-app-text flex-1 truncate">{f.name}</span>

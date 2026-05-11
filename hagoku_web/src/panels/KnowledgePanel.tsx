@@ -53,7 +53,7 @@ export default function KnowledgePanel() {
         {entries.length === 0 && !loading ? (
           <EmptyState
             icon={<BookOpen size={32} />}
-            message="Knowledge base empty"
+            message="分析完成后，Scout 会自动学习字段含义并存入知识库"
           />
         ) : (
           <div className="space-y-2">

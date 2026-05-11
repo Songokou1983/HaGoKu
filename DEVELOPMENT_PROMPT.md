@@ -1352,7 +1352,7 @@ function logReducer(state: LogLine[], action: Action): LogLine[] {
 | 3 | 🟡 P1 | `App.tsx:63-70` + 全局 | 两套颜色系统共存（hex 字面量 vs Tailwind 语义色） | 🟡 待完成 |
 | 4 | 🟡 P1 | 全部 `.tsx` | 字号用任意值（`text-[10px]`..`text-[13px]`），无比例系统 | 🟡 待完成 |
 | 5 | 🟡 P1 | `ErrorBoundary.tsx:26-54` | 完全使用 inline style，脱离设计系统，无 focus ring | 🟡 待完成 |
-| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ✅ **已完成（-295 行，_BASE_REPORT_CSS 统一）** |
+| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ⚠️ **有 Bug（见 §8.6 说明）** |
 | 7 | 🟢 P2 | 仓库根目录 | `.streamlit/config.toml` 残留（已删除 Streamlit，文件无用） | ✅ **已完成（文件已删除）** |
 
 ---
@@ -1532,59 +1532,72 @@ const statusColor = {
 
 ---
 
-### 8.6 任务五：统一 HTML 报告 CSS（P2）
+### 8.6 任务五：统一 HTML 报告 CSS（P2）⚠️ 已发现 Bug，需修复
 
-**问题**：`hagoku/tools/reporting.py` 中有 **7 个独立 `<style>` 块**（第 122、395、506、597、751、853、948 行），每个模板各自定义相同的 reset CSS、字体、`max-width`、`metric-cards` 等，修改任何全局样式需要改 7 处。
-
-**修改步骤**：
-
-1. 在 `reporting.py` 文件顶部（所有模板函数之前）定义一个 `_BASE_REPORT_CSS` 常量：
+**当前状态（审计后）**：`_BASE_REPORT_CSS` 已在 `reporting.py:116` 定义，7 个模板均引用了它，但**嵌入方式有根本性错误**：
 
 ```python
-_BASE_REPORT_CSS = """
-<style>
-  *, *::before, *::after { box-sizing: border-box; }
-  :root {
-    --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'Fira Code', 'Cascadia Code', monospace;
-    --radius:   6px;
-    --shadow:   0 1px 4px rgba(0,0,0,.08);
-  }
-  body {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.6;
-    color: #1e293b;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-    background: #f8fafc;
-  }
-  h1, h2, h3 { font-weight: 600; line-height: 1.3; margin: 0 0 .75rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { background: #f1f5f9; text-align: center; padding: .5rem .75rem; border-bottom: 2px solid #e2e8f0; }
-  td { padding: .45rem .75rem; border-bottom: 1px solid #e2e8f0; }
-  .metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-  .metric-card  { background: #fff; border-radius: var(--radius); padding: 1rem 1.25rem; box-shadow: var(--shadow); }
-  .metric-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
-  .metric-label { font-size: 12px; color: #64748b; margin-top: .25rem; }
-</style>
-"""
+# 错误写法（实际代码现状）：+ _BASE_REPORT_CSS + 写在三引号字符串内，是字面文本
+DEFAULT_HTML_TEMPLATE = """...
+    <style>
+        :root { --primary: #1a73e8; ... }
+ + _BASE_REPORT_CSS +   ← 这是字符串内容，不是 Python 拼接！
+    </style>
+..."""
 ```
 
-2. 每个模板函数中，将原有 `<style>...</style>` 块替换为 `{_BASE_REPORT_CSS}` + 仅保留该模板**差异化**的 `:root` 变量覆盖（约 5-10 行/模板）：
+验证结果：
+```
+CSS 内容实际嵌入: False
+字面文本残留:   True   ← 渲染后 HTML 里出现 "+ _BASE_REPORT_CSS +" 字符串
+```
+
+**后果**：7 个报告模板均丢失了基础 CSS（`body`、`table`、`.metric-cards`、`.finding` 等样式），报告渲染严重缺样式。
+
+---
+
+**修复方案：将模板字符串拆成 Python 拼接**
+
+每个模板变量由三引号字符串改为在 `:root {}` 闭合后用 `+` 拼接 `_BASE_REPORT_CSS`：
 
 ```python
-# 每个模板的差异化部分（示例：business 模板）
-_BUSINESS_THEME_CSS = """
-<style>
-  :root { --primary: #0d47a1; --accent: #ff6f00; }
-  h2 { color: var(--primary); border-left: 4px solid var(--accent); padding-left: .5rem; }
-</style>
-"""
+# 正确写法示例（DEFAULT_HTML_TEMPLATE）
+DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.project_name }} — HaGoKu 分析报告</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --bg: #ffffff;
+            --surface: #f8f9fa;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --success: #34a853;
+            --warning: #fbbc04;
+            --error: #ea4335;
+        }
+    </style>
+    <style>""" + _BASE_REPORT_CSS + """</style>
+</head>
+<body>
+    ...
 ```
 
-**验证**：修改后运行 `pytest tests/test_tools/ -q` 确认报告生成测试全部通过。
+对 7 个模板变量（`DEFAULT_HTML_TEMPLATE`、`ACADEMIC_HTML_TEMPLATE`、`BUSINESS_HTML_TEMPLATE`、`AB_TEST_HTML_TEMPLATE`、`DATA_AUDIT_HTML_TEMPLATE`、`TIME_SERIES_HTML_TEMPLATE`、`MARKETING_HTML_TEMPLATE`）统一执行同样的修改。
+
+**验证命令**：
+```bash
+python3 -c "
+from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS
+has_content = _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE
+print('CSS 正确嵌入:', has_content)   # 期望: True
+"
+pytest tests/test_tools/ -q   # 期望：全部通过
+```
 
 ---
 
@@ -1632,11 +1645,14 @@ cd hagoku_web && npm run lint
 | 任务三：统一颜色系统 | 🟡 待完成 | 依赖任务一完成后进行 |
 | 任务四：字号比例系统 | 🟡 待完成 | 依赖任务一完成后进行 |
 | 任务五：修复 ErrorBoundary | 🟡 待完成 | 依赖任务一完成后进行 |
-| 任务六：统一 HTML 报告 CSS | ✅ 已完成 | `reporting.py` 减少 295 行，7 个模板统一引用 `_BASE_REPORT_CSS` |
-| 任务七：清理 Streamlit 残留 | ✅ 已完成 | `.streamlit/config.toml` 已删除；`docs/DEVELOPMENT.md` ESLint 5 项 P0 问题已修复 |
+| 任务六：统一 HTML 报告 CSS | ⚠️ 有 Bug | `_BASE_REPORT_CSS` 已定义，但嵌入方式错误（字面文本而非 Python 拼接），报告缺失基础样式，需重新修复（见 §8.6） |
+| 任务七：清理 Streamlit 残留 | ✅ 已完成 | `.streamlit/config.toml` 已删除；第十五轮 ESLint 5 项 P0 问题已修复 |
 
-**待完成项（P0 优先）**：任务一（Tailwind token）+ 任务二（字体）是视觉升级的地基，建议下轮优先执行。
+**待完成项优先级**：
+1. 🔴 **立即修复**：任务六 Bug（报告 CSS 丢失，影响已有功能）
+2. 🔴 任务一（Tailwind token）+ 任务二（字体）—— 视觉升级地基
+3. 🟡 任务三、四、五（颜色系统、字号、ErrorBoundary）
 
 ---
 
-*第十六轮 UI 视觉升级任务，于 2026-05-11 追加。7 项中 2 项已完成，5 项待续。*
+*第十六轮 UI 视觉升级任务，于 2026-05-11 追加。任务七已完成，任务六有 Bug 待修，任务一至五待续。*

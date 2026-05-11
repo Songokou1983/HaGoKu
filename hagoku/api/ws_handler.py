@@ -186,6 +186,19 @@ async def ws_handler(ws: WebSocket) -> None:
                 except RuntimeError:
                     # 没有运行中的事件循环，使用默认行为
                     pass
+            elif cmd == "respond":
+                # Scout 交互确认流程：用户回复字段确认问题
+                payload = msg.get("payload", {})
+                user_input = payload.get("user_input", "")
+                orch = _shared_orchestrator
+                if orch is None:
+                    await ws.send_json({"type": "error", "message": "No active orchestrator"})
+                else:
+                    try:
+                        result = orch.respond(user_input)
+                        await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
+                    except Exception as e:
+                        await ws.send_json({"type": "error", "message": str(e)})
             else:
                 await ws.send_json({"type": "error", "message": f"Unknown command: {cmd}"})
 

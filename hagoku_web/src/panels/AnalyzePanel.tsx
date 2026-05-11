@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { LogView, type LogLine } from "../components/LogView";
 import { InputBar } from "../components/InputBar";
+import { ScoutConfirmPanel, type ScoutPendingData } from "../components/ScoutConfirmPanel";
 import { FileText } from "lucide-react";
 
 const MAX_LOG_LINES = 500;
@@ -33,8 +34,11 @@ export default function AnalyzePanel() {
   const { send } = useWebSocket();
   const status = useWorkspaceStore((s) => s.status);
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
+  const currentProject = useWorkspaceStore((s) => s.currentProject);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [dataPath, setDataPath] = useState("");
+  const [phase, setPhase] = useState<"full" | "scout_first">("full");
+  const [pendingScout, setPendingScout] = useState<ScoutPendingData | null>(null);
 
   // Shared agent-status sync (no duplicated logic)
   useAgentStatusSync();
@@ -51,6 +55,10 @@ export default function AnalyzePanel() {
       for (const msg of batch) {
         if (msg.type === "event" && msg.data) {
           const d = msg.data;
+          // Intercept user_input_requested — populate ScoutConfirmPanel
+          if (d.event_type === "user_input_requested" && d.agent === "scout") {
+            setPendingScout(d.data as unknown as ScoutPendingData);
+          }
           const emoji = agentEmoji(d.agent);
           next = [
             ...next.slice(-(MAX_LOG_LINES - 1)),
@@ -78,6 +86,25 @@ export default function AnalyzePanel() {
     });
   }, [batch]);
 
+  const handleScoutConfirm = useCallback(
+    (confirmedTypes: Record<string, string>) => {
+      if (!pendingScout) return;
+      send("respond", {
+        user_input: {
+          agent: "scout",
+          phase: "confirm_fields",
+          confirmed: confirmedTypes,
+          data_path: pendingScout.data_path,
+          query: pendingScout.query,
+          context: pendingScout.context,
+        },
+        project_name: currentProject ?? "default",
+      });
+      setPendingScout(null);
+    },
+    [send, pendingScout, currentProject]
+  );
+
   const handleSend = useCallback(
     (text: string) => {
       if (!dataPath.trim()) {
@@ -101,14 +128,30 @@ export default function AnalyzePanel() {
           timestamp: new Date().toISOString(),
         },
       ]);
-      send("analyze", { data_path: dataPath, query: text, project_name: "default", phase: "full" });
+      send("analyze", { data_path: dataPath, query: text, project_name: currentProject ?? "default", phase });
     },
-    [send, dataPath],
+    [send, dataPath, currentProject, phase],
   );
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Analyze" />
+      {/* Mode toggle */}
+      <div className="px-3 pt-2 pb-1 flex gap-1">
+        {(["full", "scout_first"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPhase(p)}
+            className={`px-2 py-0.5 text-ui-xs rounded border transition-colors cursor-pointer
+              ${phase === p
+                ? "bg-app-accent border-app-accent text-white"
+                : "bg-app-bg-secondary border-app-border text-app-text-muted hover:text-app-text"
+              }`}
+          >
+            {p === "full" ? "Full Run" : "Step by Step"}
+          </button>
+        ))}
+      </div>
       <div className="px-3 py-2 border-b border-app-border flex items-center gap-2">
         <FileText size={14} className="text-app-accent shrink-0" />
         <input
@@ -125,6 +168,15 @@ export default function AnalyzePanel() {
         />
       </div>
       <div className="relative flex-1">
+        {pendingScout && (
+          <div className="p-3 border-b border-app-border">
+            <ScoutConfirmPanel
+              data={pendingScout}
+              onConfirm={handleScoutConfirm}
+              onSkip={() => setPendingScout(null)}
+            />
+          </div>
+        )}
         <LogView lines={logs} />
         {status === "running" && (
           <div className="absolute inset-0 bg-app-bg/80 flex items-center justify-center z-10">

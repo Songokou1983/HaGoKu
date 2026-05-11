@@ -13,23 +13,36 @@ import { useWorkspaceStore } from "../stores/workspace";
 export function useAgentStatusSync() {
   const { onMessage } = useWebSocket();
   const setAgentStatus = useWorkspaceStore((s) => s.setAgentStatus);
+  const setStatus = useWorkspaceStore((s) => s.setStatus);
 
   useEffect(() => {
     return onMessage((msg: WSMessage) => {
       if (msg.type !== "event" || !msg.data) return;
 
       const { agent, event_type } = msg.data;
+      const agentKey = agent?.toLowerCase() ?? "";
+
       switch (event_type) {
+        case "run_started":
+          setStatus("running");
+          break;
+        case "run_completed":
+        case "run_failed":
+          setStatus("idle");
+          break;
         case "agent_started":
-          setAgentStatus(agent, "running");
+          setAgentStatus(agentKey, "running");
           break;
         case "agent_completed":
-          setAgentStatus(agent, "done");
+          setAgentStatus(agentKey, "done");
           break;
         case "agent_failed":
-          setAgentStatus(agent, "error");
+          setAgentStatus(agentKey, "error");
+          break;
+        case "user_input_requested":
+          setAgentStatus(agentKey, "waiting_input");
           break;
       }
     });
-  }, [onMessage, setAgentStatus]);
+  }, [onMessage, setAgentStatus, setStatus]);
 }

@@ -196,7 +196,11 @@ class ReporterAgent(InteractionMixin):
             # 更新记忆
             self._update_own_memory(effective_project_name, headline, len(key_findings), results)
 
-            self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"生成 {len(sections)} 个章节"})
+            self._emit(EventType.AGENT_COMPLETED, {
+    "result_summary": f"生成 {len(sections)} 个章节",
+    "output_path": str(output_path) if output_path else "",
+    "project_name": effective_project_name,
+})
 
             return report
 
@@ -297,7 +301,9 @@ class ReporterAgent(InteractionMixin):
         )
 
         self._emit(EventType.AGENT_COMPLETED, {
-            "result_summary": f"报告生成完成：{len(report.sections)} 个章节"
+            "result_summary": f"报告生成完成：{len(report.sections)} 个章节",
+            "output_path": str(output_path) if output_path else "",
+            "project_name": data.get("project_id", "default"),
         })
 
         return self._done(

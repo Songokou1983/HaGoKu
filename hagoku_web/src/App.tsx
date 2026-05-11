@@ -1,7 +1,8 @@
 import { DockviewReact, type DockviewApi } from "dockview";
 import "dockview/dist/styles/dockview.css";
-import { useRef, useCallback, useMemo } from "react";
+import { useRef, useCallback, useMemo, useEffect } from "react";
 import { useWorkspaceStore, type PanelId } from "./stores/workspace";
+import { useWebSocket } from "./hooks/useWebSocket";
 import ProjectPanel from "./panels/ProjectPanel";
 import AnalyzePanel from "./panels/AnalyzePanel";
 import ReportPanel from "./panels/ReportPanel";
@@ -87,6 +88,18 @@ export default function App() {
   const apiRef = useRef<DockviewApi | null>(null);
   const togglePanel = useWorkspaceStore((s) => s.togglePanel);
   const panels = useWorkspaceStore((s) => s.panels);
+  const { onMessage } = useWebSocket();
+  const setLastError = useWorkspaceStore((s) => s.setLastError);
+  const lastError = useWorkspaceStore((s) => s.lastError);
+
+  useEffect(() => {
+    return onMessage((msg) => {
+      if (msg.type === "error") {
+        setLastError((msg as { type: "error"; message: string }).message);
+        setTimeout(() => setLastError(null), 5000);
+      }
+    });
+  }, [onMessage, setLastError]);
 
   const initialPanels = useMemo(
     () =>
@@ -122,6 +135,16 @@ export default function App() {
         overflow: "hidden",
       }}
     >
+      {/* Global error toast */}
+      {lastError && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2
+                        bg-app-error/90 text-white text-ui-sm rounded shadow-lg
+                        flex items-center gap-2">
+          <span>{lastError}</span>
+          <button onClick={() => setLastError(null)} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
       {/* Toggle bar — auto-sized row */}
       <div className="flex items-center gap-1 px-2 py-1 bg-app-bg-secondary border-b border-app-border select-none max-md:flex-wrap">
         {PANEL_CONFIGS.map((cfg) => {

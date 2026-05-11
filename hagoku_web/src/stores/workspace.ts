@@ -19,11 +19,19 @@ interface WorkspaceStore {
   status: "idle" | "running" | "done";
   agents: Record<string, AgentStatus>;
   connectionStatus: ConnectionStatus;
+  projects: string[];
+  currentProject: string | null;
+  reportFiles: { name: string; url: string; mtime: number }[];
+  lastError: string | null;
 
   togglePanel: (id: PanelId) => void;
   setStatus: (s: "idle" | "running" | "done") => void;
   setAgentStatus: (agent: string, s: AgentStatus) => void;
   setConnectionStatus: (s: ConnectionStatus) => void;
+  setProjects: (projects: string[]) => void;
+  setCurrentProject: (name: string | null) => void;
+  setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
+  setLastError: (msg: string | null) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
@@ -38,6 +46,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   status: "idle",
   agents: {},
   connectionStatus: "connecting",
+  projects: [],
+  currentProject: null,
+  reportFiles: [],
+  lastError: null,
 
   togglePanel: (id) =>
     set((s) => ({
@@ -53,4 +65,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
       agents: { ...s.agents, [agent]: st },
     })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
+  setProjects: (projects) => set({ projects }),
+  setCurrentProject: (currentProject) => set({ currentProject }),
+  setReportFiles: (reportFiles) => set({ reportFiles }),
+  setLastError: (lastError) => set({ lastError }),
 }));

@@ -1,57 +1,78 @@
 import { FileText } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
 
-const MAX_REPORTS = 100;
-
 export default function ReportPanel() {
-  const [content, setContent] = useState<string[]>([]);
+  const currentProject = useWorkspaceStore((s) => s.currentProject);
+  const reportFiles = useWorkspaceStore((s) => s.reportFiles);
+  const setReportFiles = useWorkspaceStore((s) => s.setReportFiles);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useAgentStatusSync();
-
   const batch = useBatchEvents();
 
   useEffect(() => {
     if (batch.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- batch events from external WS, functional update is correct
-    setContent((prev) => {
-      let next = prev;
-      for (const msg of batch) {
-        if (msg.type === "event" && msg.data) {
-          const d = msg.data;
-          if (
-            d.agent === "reporter" &&
-            d.event_type === "agent_completed"
-          ) {
-            next = [
-              ...next.slice(-(MAX_REPORTS - 1)),
-              `[${new Date(d.timestamp).toLocaleTimeString()}] Report ready: ${JSON.stringify(d.data).slice(0, 200)}`,
-            ];
-          }
+    for (const msg of batch) {
+      if (msg.type === "event" && msg.data) {
+        const d = msg.data;
+        if (d.agent === "reporter" && d.event_type === "agent_completed") {
+          const proj = d.data?.project_name ?? currentProject ?? "default";
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch triggers intentional loading state
+          setLoading(true);
+           
+          setError(null);
+          fetch(`/api/reports/${proj}`)
+            .then((r) => r.json())
+            .then((data) => setReportFiles(data.reports as { name: string; url: string; mtime: number }[]))
+            .catch(() => setError("报告加载失败"))
+            .finally(() => setLoading(false));
         }
       }
-      return next;
-    });
-  }, [batch]);
+    }
+  }, [batch, currentProject, setReportFiles]);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Reports" />
       <div className="flex-1 overflow-auto p-3">
-        {content.length === 0 ? (
+        {loading && (
+          <div className="flex items-center justify-center py-4 gap-2">
+            <div className="w-4 h-4 border border-app-accent border-t-transparent rounded-full animate-spin" />
+            <span className="text-ui-sm text-app-text-muted">加载中…</span>
+          </div>
+        )}
+        {error && (
+          <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded">
+            {error}
+          </div>
+        )}
+        {reportFiles.length === 0 && !loading ? (
           <EmptyState icon={<FileText size={32} />} message="No reports yet" />
         ) : (
-          content.map((c, i) => (
-            <div
-              key={i}
-              className="mb-2 p-2 bg-app-bg-secondary border border-app-border rounded text-ui-base font-mono text-app-success whitespace-pre-wrap break-words"
-            >
-              {c}
-            </div>
-          ))
+          <div className="space-y-2">
+            {reportFiles.map((f) => (
+              <a
+                key={f.name}
+                href={f.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded
+                           flex items-center gap-2 hover:border-app-accent transition-colors cursor-pointer"
+              >
+                <FileText size={14} className="text-app-accent shrink-0" />
+                <span className="text-ui-base text-app-text flex-1 truncate">{f.name}</span>
+                <span className="text-ui-xs text-app-text-muted shrink-0">
+                  {new Date(f.mtime * 1000).toLocaleString()}
+                </span>
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>

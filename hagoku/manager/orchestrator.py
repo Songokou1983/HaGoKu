@@ -165,7 +165,7 @@ class Orchestrator:
         if project_name is None:
             project_name = Path(data_path).stem.replace(" ", "_")
 
-        self.event_bus.emit(EventType.RUN_STARTED, "Manager", {
+        self.event_bus.emit(EventType.RUN_STARTED, "manager", {
             "query": query,
             "project": project_name,
         })
@@ -182,7 +182,7 @@ class Orchestrator:
         if progress_path:
             n = self.memory.import_progress_yaml(project_name, Path(progress_path))
             if n > 0:
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"📄 导入了 {n} 条进度定义",
                 })
 
@@ -194,7 +194,7 @@ class Orchestrator:
 
         # 1.5 解析用户查询 — 理解用户真正想问什么
         parsed_intent = self._parse_user_query(query)
-        self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+        self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
             "thought": f"🔍 理解你的问题：{self._describe_intent(parsed_intent)}",
         })
 
@@ -218,7 +218,7 @@ class Orchestrator:
         if resume:
             state = self.memory.get_resume_state(project_name)
             if state and state["stage"] in ("cleaned", "analyzed", "reported"):
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"⏩ 从 {state['stage']} 阶段恢复，跳过 Scout 和 Cleaner",
                 })
                 # 恢复上下文
@@ -234,7 +234,7 @@ class Orchestrator:
         # ── Scout 交互确认阶段 ──────────────────────────────────
         # phase="scout_first" 时只跑 Scout，返回 pending_items 供用户确认
         if phase == "scout_first":
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "🔍 正在识别数据字段，请稍候...",
             })
             scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
@@ -257,18 +257,18 @@ class Orchestrator:
             # Scout（使用缓存上下文或重新跑）
             if scout_context is not None:
                 context = scout_context
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": "🔍 Scout 缓存未命中，重新识别字段...",
                 })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
                 context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner：只检测+计划，不执行清洗
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "🧹 检测数据质量，生成清洗策略...",
             })
             cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
@@ -288,7 +288,7 @@ class Orchestrator:
             else:
                 llm_message = f"数据质量：{quality_labels.get(quality, quality)}。未检测到需要清洗的问题，数据可以直接分析。这个清洗方案可以吗？或者你想做其他特殊处理？"
             if isinstance(strategy_result, dict):
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "Cleaner", {
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
                     "result_summary": f"检测完成：{len(operations)} 个计划操作",
                 })
                 return {
@@ -316,7 +316,7 @@ class Orchestrator:
             # Scout
             if scout_context is not None:
                 context = scout_context
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
@@ -324,7 +324,7 @@ class Orchestrator:
                 context = scout_agent.run(data_path, query="", project_id=project_name)
 
             # Cleaner
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "🧹 数据清洗（已确认策略）...",
             })
             cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
@@ -362,13 +362,13 @@ class Orchestrator:
 
             # Analyst：初步发现或完整分析（取决于phase）
             analyst_phase = "full" if phase == "full" else "preliminary"
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "📊 初步分析，发现数据中的规律..." if analyst_phase == "preliminary" else "📊 完整分析中...",
             })
             analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
             analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
             if isinstance(analyst_result, dict):
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "Analyst", {
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst", {
                     "result_summary": f"初步发现 {len(analyst_result.get('preliminary_findings', []))} 个，待确认",
                 })
                 findings = analyst_result.get("preliminary_findings", [])
@@ -422,7 +422,7 @@ class Orchestrator:
                     cleaned_path_str = str(cleaned_path)
                 else:
                     cleaned_path_str = ""
-                    self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                    self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
                         "verdict": "warning",
                         "detail": "数据清洗未成功，尝试使用原始数据",
                     })
@@ -436,7 +436,7 @@ class Orchestrator:
 
                 # 5. 质量检查
                 if cleaning_report:
-                    self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                    self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
                         "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
                         "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
                     })
@@ -448,7 +448,7 @@ class Orchestrator:
                     try:
                         from ..tools.data_io import load_data
                         df_clean = load_data(context["data_path"])
-                        self.event_bus.emit(EventType.QUALITY_CHECK, "Manager", {
+                        self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
                             "verdict": "warning",
                             "detail": "使用原始数据继续分析",
                         })
@@ -512,7 +512,7 @@ class Orchestrator:
             # 10. 学习 + 导出 progress.yaml
             learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
             if learned > 0:
-                self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
                 })
 
@@ -535,7 +535,7 @@ class Orchestrator:
             self.event_bus.save_to_file(events_path)
 
             # 13. 发射完成事件
-            self.event_bus.emit(EventType.RUN_COMPLETED, "Manager", {
+            self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
                 "duration": f"{duration_ms / 1000:.1f}s",
                 "token_count": sum(
                     e.data.get("token_count", 0)
@@ -558,7 +558,7 @@ class Orchestrator:
         except Exception as e:
             duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
             self.db.fail_run(run_id, duration_ms=duration_ms)
-            self.event_bus.emit(EventType.RUN_FAILED, "Manager", {"error": str(e)})
+            self.event_bus.emit(EventType.RUN_FAILED, "manager", {"error": str(e)})
             raise
 
     def _create_plan(
@@ -617,7 +617,7 @@ class Orchestrator:
         if llm_plan is not None:
             llm_plan["rule_match"] = True
             llm_plan["llm_adjusted"] = True
-            self.event_bus.emit(EventType.PLAN_ADJUSTED, "Manager", {
+            self.event_bus.emit(EventType.PLAN_ADJUSTED, "manager", {
                 "original": rule_plan.get("plan_name"),
                 "adjusted": llm_plan.get("plan_name"),
                 "reasoning": llm_plan.get("reasoning", ""),
@@ -643,7 +643,7 @@ class Orchestrator:
         if llm_plan is not None:
             llm_plan["rule_match"] = rule_plan is not None
             llm_plan["llm_generated"] = True
-            self.event_bus.emit(EventType.PLAN_CREATED, "Manager", {
+            self.event_bus.emit(EventType.PLAN_CREATED, "manager", {
                 "source": "llm",
                 "plan_name": llm_plan.get("plan_name"),
                 "reasoning": llm_plan.get("reasoning", ""),
@@ -733,7 +733,7 @@ class Orchestrator:
             return plan
 
         except Exception as e:
-            self.event_bus.emit(EventType.AGENT_THINKING, "Manager", {
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": f"LLM 计划生成失败: {e}",
             })
             return None

@@ -1,7 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
-import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
 
@@ -13,47 +13,44 @@ interface KnowledgeEntry {
 
 export default function KnowledgePanel() {
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
+  const currentProject = useWorkspaceStore((s) => s.currentProject);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useAgentStatusSync();
 
-  const batch = useBatchEvents();
-
   useEffect(() => {
-    if (batch.length === 0) return;
-    // Merge knowledge-load events — accumulate, then set once
-    const newKeys = new Set<string>();
-    for (const msg of batch) {
-      if (msg.type === "event" && msg.data) {
-        const d = msg.data;
-        if (d.agent === "analyst" && d.event_type === "tool_called") {
-          const tool = (d.data as Record<string, unknown>)?.tool as
-            | string
-            | undefined;
-          if (tool?.startsWith("load_knowledge")) {
-            const name = ((d.data as Record<string, unknown>)?.name as string) ?? "unknown";
-            newKeys.add(name);
-          }
-        }
-      }
-    }
-    if (newKeys.size > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- batch events from external WS, functional update is correct
-      setEntries((prev) => {
-        const filtered = [...newKeys].filter((k) => !prev.some((e) => e.key === k));
-        if (filtered.length === 0) return prev;
-        return [
-          ...prev,
-          ...filtered.map((key) => ({ key, title: key, tags: [] as string[] })),
-        ];
-      });
-    }
-  }, [batch]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing state when switching projects is safe and intentional
+    if (!currentProject) { setEntries([]); return; }
+     
+    setLoading(true);
+     
+    setError(null);
+    fetch(`/api/knowledge/${currentProject}`)
+      .then((r) => r.json())
+      .then((d) => setEntries(
+        (d.entries as string[]).map((k) => ({ key: k, title: k, tags: [] as string[] }))
+      ))
+      .catch(() => setError("知识库加载失败"))
+      .finally(() => setLoading(false));
+  }, [currentProject]);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="Knowledge" />
       <div className="flex-1 overflow-auto p-3">
-        {entries.length === 0 ? (
+        {loading && (
+          <div className="flex items-center justify-center py-4 gap-2">
+            <div className="w-4 h-4 border border-app-accent border-t-transparent rounded-full animate-spin" />
+            <span className="text-ui-sm text-app-text-muted">加载中…</span>
+          </div>
+        )}
+        {error && (
+          <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded">
+            {error}
+          </div>
+        )}
+        {entries.length === 0 && !loading ? (
           <EmptyState
             icon={<BookOpen size={32} />}
             message="Knowledge base empty"

@@ -13,6 +13,15 @@ interface EventTableProps {
   entries: EventEntry[];
 }
 
+const AGENT_COLORS: Record<string, string> = {
+  scout:    "text-app-accent",
+  cleaner:  "text-app-warning",
+  analyst:  "text-[#c586c0]",
+  reporter: "text-app-success",
+  manager:  "text-app-text-muted",
+  scribe:   "text-app-text-muted",
+};
+
 const colorMap: Record<EventType, string> = {
   agent_started: "#569cd6",
   agent_thinking: "#569cd6",
@@ -40,12 +49,13 @@ function eventColor(evt: EventType): string {
 }
 
 function EventRow({ entry }: { entry: EventEntry }) {
+  const agentColor = AGENT_COLORS[entry.agent?.toLowerCase() ?? ""] ?? "text-app-agent";
   return (
     <tr className="border-b border-app-border hover:bg-app-bg-secondary transition-colors duration-150">
       <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
         {new Date(entry.timestamp).toLocaleTimeString()}
       </td>
-      <td className="px-3 py-0.5 text-app-agent whitespace-nowrap">
+      <td className={`px-3 py-0.5 whitespace-nowrap ${agentColor}`}>
         {entry.agent}
       </td>
       <td

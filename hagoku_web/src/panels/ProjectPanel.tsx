@@ -1,5 +1,5 @@
 import { FolderOpen, Plus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -39,6 +39,13 @@ export default function ProjectPanel() {
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [runMeta, setRunMeta] = useState<{
+    query: string;
+    startedAt: number;
+    elapsed: string;
+    status: "running" | "done" | "failed";
+  } | null>(null);
+  const runStartedAtRef = useRef<number>(0);
 
   useAgentStatusSync();
   const batch = useBatchEvents();
@@ -65,11 +72,22 @@ export default function ProjectPanel() {
         const d = msg.data;
         if (d.event_type === "run_started" && typeof d.data?.query === "string") {
           found = `📋 ${d.data.query}`;
+          runStartedAtRef.current = Date.now();
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: tracking run start, ref avoids dep cycle
+          setRunMeta({ query: d.data.query as string, startedAt: Date.now(), elapsed: "", status: "running" });
+        }
+        if (d.event_type === "run_completed" || d.event_type === "run_failed") {
+          const elapsed = `${((Date.now() - runStartedAtRef.current) / 1000).toFixed(1)}s`;
+          setRunMeta((prev) => prev ? {
+            ...prev,
+            elapsed,
+            status: d.event_type === "run_completed" ? "done" : "failed",
+          } : null);
         }
       }
     }
     if (found) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- external event sync, functional update ensures correct merge
+       
       setSummary((prev) => (prev !== found ? found : prev));
     }
   }, [batch]);
@@ -155,6 +173,16 @@ export default function ProjectPanel() {
         </div>
 
         {/* Agent status */}
+        {runMeta && (
+          <div className={`px-3 py-1.5 border-b border-app-border text-ui-xs flex items-center gap-2
+            ${runMeta.status === "running" ? "text-app-warning" : runMeta.status === "done" ? "text-app-success" : "text-app-error"}`}>
+            <span className={runMeta.status === "running" ? "animate-pulse" : ""}>
+              {runMeta.status === "running" ? "⬤" : runMeta.status === "done" ? "✓" : "✕"}
+            </span>
+            <span className="flex-1 truncate">{runMeta.query}</span>
+            {runMeta.elapsed && <span className="shrink-0 text-app-text-muted">{runMeta.elapsed}</span>}
+          </div>
+        )}
         <div className="space-y-2">
           {agentList.map(([id, { emoji, label }]) => {
             const st = agents[id] ?? "idle";

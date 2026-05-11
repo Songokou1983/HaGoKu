@@ -39,6 +39,11 @@ export default function AnalyzePanel() {
   const [dataPath, setDataPath] = useState("");
   const [phase, setPhase] = useState<"full" | "scout_first">("full");
   const [pendingScout, setPendingScout] = useState<ScoutPendingData | null>(null);
+  const [resultSummary, setResultSummary] = useState<{
+    summary: string;
+    reportUrl: string;
+    project: string;
+  } | null>(null);
 
   // Shared agent-status sync (no duplicated logic)
   useAgentStatusSync();
@@ -86,6 +91,26 @@ export default function AnalyzePanel() {
     });
   }, [batch]);
 
+  // Listen for reporter completion to show result summary card
+  useEffect(() => {
+    if (batch.length === 0) return;
+    for (const msg of batch) {
+      if (msg.type === "event" && msg.data) {
+        const d = msg.data;
+        if (d.agent === "reporter" && d.event_type === "agent_completed") {
+          const proj = (d.data as Record<string, unknown>)?.project_name as string
+                       ?? currentProject ?? "default";
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: result summary is a discrete event, functional update not needed
+          setResultSummary({
+            summary: (d.data as Record<string, unknown>)?.result_summary as string ?? "分析完成",
+            reportUrl: `/api/reports/${proj}`,
+            project: proj,
+          });
+        }
+      }
+    }
+  }, [batch, currentProject]);
+
   const handleScoutConfirm = useCallback(
     (confirmedTypes: Record<string, string>) => {
       if (!pendingScout) return;
@@ -107,6 +132,8 @@ export default function AnalyzePanel() {
 
   const handleSend = useCallback(
     (text: string) => {
+      setResultSummary(null);
+      setLogs([]);
       if (!dataPath.trim()) {
         setLogs((prev) => [
           ...prev.slice(-(MAX_LOG_LINES - 1)),
@@ -178,6 +205,23 @@ export default function AnalyzePanel() {
           </div>
         )}
         <LogView lines={logs} />
+        {resultSummary && (
+          <div className="mt-2 mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-success rounded flex items-center justify-between gap-3">
+            <div>
+              <div className="text-ui-xs text-app-success font-semibold mb-0.5">分析完成</div>
+              <div className="text-ui-sm text-app-text">{resultSummary.summary}</div>
+            </div>
+            <a
+              href={resultSummary.reportUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 px-3 py-1 bg-app-accent hover:bg-app-accent-hover text-white
+                         text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap"
+            >
+              查看报告 →
+            </a>
+          </div>
+        )}
         {status === "running" && (
           <div className="absolute inset-0 bg-app-bg/80 flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-2">

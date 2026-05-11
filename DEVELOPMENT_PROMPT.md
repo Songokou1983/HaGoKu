@@ -1352,7 +1352,7 @@ function logReducer(state: LogLine[], action: Action): LogLine[] {
 | 3 | 🟡 P1 | `App.tsx:63-70` + 全局 | 两套颜色系统共存（hex 字面量 vs Tailwind 语义色） | ✅ 已完成 |
 | 4 | 🟡 P1 | 全部 `.tsx` | 字号用任意值（`text-[10px]`..`text-[13px]`），无比例系统 | ✅ 已完成 |
 | 5 | 🟡 P1 | `ErrorBoundary.tsx:26-54` | 完全使用 inline style，脱离设计系统，无 focus ring | ✅ 已完成 |
-| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ✅ 已完成（`_BASE_REPORT_CSS` + Python 拼接） |
+| 6 | 🟢 P2 | `hagoku/tools/reporting.py` | 7 个独立 `<style>` 块，大量重复 CSS | ⚠️ **Bug 未修（CSS 未嵌入，见 §8.6）** |
 | 7 | 🟢 P2 | 仓库根目录 | `.streamlit/config.toml` 残留（已删除 Streamlit，文件无用） | ✅ 已完成 |
 
 ---
@@ -1645,7 +1645,7 @@ cd hagoku_web && npm run lint
 | 任务三：统一颜色系统 | ✅ 已完成 | `SystemStatus` 状态灯使用 `app-success`/`app-warning`/`app-error`；`index.html` body color 统一 |
 | 任务四：字号比例系统 | ✅ 已完成 | `tailwind.config.js` 定义 `ui-xs/sm/base/md` 四级字号；组件中 `text-[11px]` → `text-ui-xs` 等 |
 | 任务五：修复 ErrorBoundary | ✅ 已完成 | 全部 inline style → Tailwind 类；`focus-visible` 无障碍环；`transition-colors` |
-| 任务六：统一 HTML 报告 CSS | ✅ 已完成 | `_BASE_REPORT_CSS` 在 `reporting.py:116`；7 个模板全部引用它（`+ _BASE_REPORT_CSS +` Python 拼接）；语法验证通过 |
+| 任务六：统一 HTML 报告 CSS | ⚠️ **Bug 未修** | `_BASE_REPORT_CSS` 已定义（第116行），7个模板内 `+ _BASE_REPORT_CSS +` 是三引号字符串内的**字面文本**，不是 Python 拼接。实测：`CSS 正确嵌入: False`，报告样式仍然缺失。修复方案见 §8.6 |
 | 任务七：清理 Streamlit 残留 | ✅ 已完成 | `.streamlit/config.toml` 已删除；第十五轮 ESLint 5 项 P0 问题已修复 |
 
 **验证结果（全部通过）：**
@@ -1665,10 +1665,15 @@ npm run lint  # ✓ 0 errors
 # pytest 非 API 测试全通过
 pytest tests/ --ignore=tests/test_api/ -q  # ✓ 100%
 
-# 报告模板语法验证
-python3 -c "from hagoku.tools.reporting import ReportGenerator; print('Import OK')"  # ✓
+# 报告 CSS 嵌入验证（任务六修复后运行，期望 True）
+python3 -c "
+from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS
+print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE)
+"  # ⚠️ 当前输出 False，任务六 Bug 未修
 ```
 
 ---
 
-*第十六轮 UI 视觉升级任务全部完成（2026-05-11）。*
+**待完成：任务六 Bug（优先级最高）**，修复方案见 §8.6，完成后用 `python3 -c "from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS; print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE)"` 验证，期望输出 `True`。
+
+*第十六轮 UI 视觉升级任务：6/7 完成，任务六待修（2026-05-11）。*

@@ -1648,8 +1648,21 @@ cd hagoku_web && npm run lint
 | 任务六：统一 HTML 报告 CSS | ⚠️ 有 Bug | `_BASE_REPORT_CSS` 已定义，但嵌入方式错误（字面文本而非 Python 拼接），报告缺失基础样式，需重新修复（见 §8.6） |
 | 任务七：清理 Streamlit 残留 | ✅ 已完成 | `.streamlit/config.toml` 已删除；第十五轮 ESLint 5 项 P0 问题已修复 |
 
+> ### ⚠️ 开发注意：必须先执行此步，再做其他任务
+>
+> **任务六有功能回归 Bug**：`reporting.py` 的 7 个报告模板当前**丢失全部基础 CSS 样式**（`body`、`table`、`.metric-cards` 等），输出的 HTML 报告严重缺失样式。此 Bug 是已有功能的回归，**优先级高于所有视觉升级任务**。
+>
+> **完成后必须运行以下命令验证，期望输出 `True`：**
+> ```bash
+> python3 -c "
+> from hagoku.tools.reporting import DEFAULT_HTML_TEMPLATE, _BASE_REPORT_CSS
+> print('CSS 正确嵌入:', _BASE_REPORT_CSS[:30].strip() in DEFAULT_HTML_TEMPLATE)
+> "
+> pytest tests/test_tools/ -q
+> ```
+
 **待完成项优先级**：
-1. 🔴 **立即修复**：任务六 Bug（报告 CSS 丢失，影响已有功能）
+1. 🔴 **立即修复**：任务六 Bug（报告 CSS 丢失，影响已有功能）→ 见 §8.6
 2. 🔴 任务一（Tailwind token）+ 任务二（字体）—— 视觉升级地基
 3. 🟡 任务三、四、五（颜色系统、字号、ErrorBoundary）
 

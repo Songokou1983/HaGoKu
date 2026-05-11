@@ -5,7 +5,16 @@
 > 记录每个项目的历史报告和核心发现
 
 ```yaml
-reports: {}
+reports:
+  test_ad_campaign:
+  - date: '2026-05-11'
+    headline: 分析完成，暂无发现
+    n_findings: 0
+    significant: false
+  - date: '2026-05-11'
+    headline: 分析完成，暂无发现
+    n_findings: 0
+    significant: false
 ```
 
 ### 项目发现对比

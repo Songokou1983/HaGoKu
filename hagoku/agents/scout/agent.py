@@ -78,16 +78,18 @@ class ScoutAgent(InteractionMixin):
         path = Path(__file__).parent / "memory.md"
         content = path.read_text(encoding="utf-8")
 
-        # 更新 fields 部分
-        fields_yaml = yaml.dump(self.memory.get("fields", {}), default_flow_style=False, allow_unicode=True)
+        # 将 fields 嵌套到 yaml 顶层 key，保证缩进正确
+        fields_yaml = yaml.dump(
+            {"fields": self.memory.get("fields") or {}},
+            default_flow_style=False,
+            allow_unicode=True,
+        ).rstrip()
 
-        # 替换 memory.md 中的 fields 部分
         pattern = r"```yaml\nfields:.*?\n```"
         if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, f"```yaml\nfields:\n{fields_yaml}```", content, flags=re.DOTALL)
+            content = re.sub(pattern, f"```yaml\n{fields_yaml}\n```", content, flags=re.DOTALL)
         else:
-            # 找到 fields: {} 行，替换
-            content = re.sub(r"fields: \{\}", f"fields:\n{fields_yaml}", content)
+            content = re.sub(r"fields:.*", fields_yaml, content)
 
         path.write_text(content, encoding="utf-8")
 
@@ -714,8 +716,8 @@ class ScoutAgent(InteractionMixin):
         if not project_id:
             return
 
-        # 更新 fields
-        if "fields" not in self.memory:
+        # 确保 fields 是 dict（YAML 中 `fields:` 无值时读出 None）
+        if not isinstance(self.memory.get("fields"), dict):
             self.memory["fields"] = {}
 
         # 合并新理解的字段

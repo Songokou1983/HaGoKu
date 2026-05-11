@@ -13,7 +13,15 @@
 > Scout 在理解字段后，将字段含义写入此文件，供后续分析使用
 
 ```yaml
-fields: {}
+fields:
+  channel: channel（分类型）
+  clicks: clicks（标识符）
+  conversions: conversions（标识符）
+  cost: cost（标识符）
+  date: date（分类型）
+  impressions: impressions（标识符）
+  revenue: revenue（标识符）
+  sessions: sessions（标识符）
 ```
 
 ### 分析历史

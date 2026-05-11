@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -13,7 +14,25 @@ from fastapi.staticfiles import StaticFiles
 
 from hagoku.api.ws_handler import ws_handler
 
-app = FastAPI(title="HaGoKu API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """初始化 Orchestrator，确保每个 uvicorn 工作进程都正确绑定 EventBus。"""
+    try:
+        from hagoku.api.ws_handler import set_orchestrator
+        from hagoku.config import HaGoKuConfig
+        from hagoku.manager.orchestrator import Orchestrator
+
+        config = HaGoKuConfig.load()
+        orchestrator = Orchestrator(config)
+        set_orchestrator(orchestrator)
+    except Exception as exc:  # 配置缺失时降级为懒初始化
+        import logging
+        logging.getLogger(__name__).warning("Orchestrator lifespan init failed: %s", exc)
+    yield
+
+
+app = FastAPI(title="HaGoKu API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,23 +78,44 @@ async def create_project(req: CreateProjectRequest):
     return {"project": name, "created": True}
 
 
-# ── GET /api/reports/{project_name} — 列出该项目的报告文件 ──
+# ── GET /api/reports/{project_name} — 列出该项目所有 run 的报告 ──
 @app.get("/api/reports/{project_name}")
 async def list_reports(project_name: str):
-    output_dir = _projects_root() / project_name / "output"
-    if not output_dir.exists():
+    project_dir = _projects_root() / project_name
+    if not project_dir.exists():
         return {"reports": []}
-    files = sorted(output_dir.glob("*.html"), key=lambda f: f.stat().st_mtime, reverse=True)
+    # 支持 runs/{run_id}/output/*.html 和 output/*.html 两种路径
+    files = sorted(
+        list(project_dir.glob("runs/*/output/*.html")) +
+        list(project_dir.glob("output/*.html")),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
     return {
         "reports": [
-            {"name": f.name, "url": f"/api/reports/{project_name}/{f.name}",
-             "mtime": int(f.stat().st_mtime)}
+            {
+                "name": f"{f.parent.parent.name}/{f.name}" if f.parent.parent.name != project_name else f.name,
+                "url": f"/api/reports/{project_name}/{f.parent.parent.name}/{f.name}"
+                       if f.parent.parent.name != project_name else f"/api/reports/{project_name}/{f.name}",
+                "mtime": int(f.stat().st_mtime),
+            }
             for f in files
         ]
     }
 
 
-# ── GET /api/reports/{project_name}/{filename} — 返回报告 HTML ──
+# ── GET /api/reports/{project_name}/{run_id}/{filename} — 返回 run 子目录报告 ──
+@app.get("/api/reports/{project_name}/{run_id}/{filename}")
+async def get_report_run(project_name: str, run_id: str, filename: str):
+    if not filename.endswith(".html") or "/" in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = _projects_root() / project_name / "runs" / run_id / "output" / filename
+    if not path.exists():
+        raise HTTPException(404, "Report not found")
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+# ── GET /api/reports/{project_name}/{filename} — 兼容旧路径 ──
 @app.get("/api/reports/{project_name}/{filename}")
 async def get_report(project_name: str, filename: str):
     if not filename.endswith(".html") or "/" in filename:

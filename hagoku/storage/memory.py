@@ -557,21 +557,37 @@ class MemoryManager:
         """
         count = 0
 
+        # context 兼容 dict 和对象两种格式
+        def _get(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
         # 1. 学习列语义（高置信度或用户确认的）
-        for sem in context.column_semantics:
-            if sem.confidence >= 0.8 or "用户" in sem.evidence or "记忆" in sem.evidence:
+        for sem in (_get(context, "column_semantics") or []):
+            confidence = _get(sem, "confidence", 0)
+            evidence = _get(sem, "evidence", "") or ""
+            inferred_type = _get(sem, "inferred_type", "unknown")
+            # 兼容 Enum 和字符串
+            if hasattr(inferred_type, "value"):
+                inferred_type = inferred_type.value
+            suggested_role = _get(sem, "suggested_role", "feature") or "feature"
+            col_name = _get(sem, "column_name", "")
+
+            if confidence >= 0.8 or "用户" in evidence or "记忆" in evidence:
                 sem_def = ColumnSemanticDef(
-                    semantic=sem.inferred_type.value,
-                    role=sem.suggested_role,
-                    confidence=sem.confidence,
-                    source="user" if "用户" in sem.evidence else "auto",
+                    semantic=str(inferred_type),
+                    role=suggested_role,
+                    confidence=confidence,
+                    source="user" if "用户" in evidence else "auto",
                 )
-                self.save_column_semantic(project_id, sem.column_name, sem_def)
+                self.save_column_semantic(project_id, col_name, sem_def)
                 count += 1
 
         # 2. 学习目标变量
-        if context.target:
-            self.save_target(project_id, context.target, source="auto")
+        target = _get(context, "target")
+        if target:
+            self.save_target(project_id, target, source="auto")
             count += 1
 
         # 3. 学习清洗偏好
@@ -585,11 +601,12 @@ class MemoryManager:
                 count += 1
 
         # 4. 学习分析模式
-        for result in results:
+        for result in (results or []):
             self.save_analysis_pattern(
-                project_id, result.analysis_type,
-                question=result.question,
-                significance=result.significance,
+                project_id,
+                _get(result, "analysis_type", "unknown"),
+                question=_get(result, "question", ""),
+                significance=_get(result, "significance", "unknown"),
                 source="auto",
             )
             count += 1

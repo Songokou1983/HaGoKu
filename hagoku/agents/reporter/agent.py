@@ -74,17 +74,18 @@ class ReporterAgent(InteractionMixin):
         path = Path(__file__).parent / "memory.md"
         content = path.read_text(encoding="utf-8")
 
+        # 将 reports 嵌套到 yaml 顶层 key，保证缩进正确
         reports_yaml = yaml.dump(
-            self.memory.get("reports", {}),
+            {"reports": self.memory.get("reports") or {}},
             default_flow_style=False,
-            allow_unicode=True
-        )
+            allow_unicode=True,
+        ).rstrip()
 
         pattern = r"```yaml\nreports:.*?```"
         if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, f"```yaml\nreports:\n{reports_yaml}```", content, flags=re.DOTALL)
+            content = re.sub(pattern, f"```yaml\n{reports_yaml}\n```", content, flags=re.DOTALL)
         else:
-            content = re.sub(r"reports: \{\}", f"reports:\n{reports_yaml}", content)
+            content = re.sub(r"reports:.*", reports_yaml, content)
 
         path.write_text(content, encoding="utf-8")
 
@@ -506,7 +507,8 @@ class ReporterAgent(InteractionMixin):
 
     def _update_own_memory(self, project_id: str, headline: str, n_findings: int, results: list[dict]) -> None:
         """更新报告记忆"""
-        if "reports" not in self.memory:
+        # 确保 reports 是 dict（YAML 中 `reports:` 无值时读出 None）
+        if not isinstance(self.memory.get("reports"), dict):
             self.memory["reports"] = {}
 
         if project_id not in self.memory["reports"]:

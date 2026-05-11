@@ -73,6 +73,9 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> 
         config = HaGoKuConfig.load()
         _shared_orchestrator = Orchestrator(config)
         set_bus(_shared_orchestrator.event_bus)
+        # 订阅 WSBridge（uvicorn reload 子进程中 main() 未执行时的兜底）
+        bridge = WSBridge.get()
+        _shared_orchestrator.event_bus.subscribe(bridge.on_event)
 
     # 运行分析（同步阻塞，在 executor 线程中执行）
     _shared_orchestrator.run(
@@ -92,12 +95,17 @@ class WSBridge:
 
     def __init__(self):
         self._clients: dict[str, WebSocket] = {}  # keyed by id()
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     @classmethod
     def get(cls) -> WSBridge:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Register the asyncio event loop. Call from async context (e.g. ws_handler)."""
+        self._loop = loop
 
     def add_client(self, ws: WebSocket) -> str:
         key = str(id(ws))
@@ -119,11 +127,10 @@ class WSBridge:
 
     def on_event(self, event: Event):
         """Callback subscribed to EventBus, called from orchestrator thread."""
-        payload = _event_to_message(event)
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
+        loop = self._loop
+        if loop is None or not loop.is_running():
             return
+        payload = _event_to_message(event)
         asyncio.run_coroutine_threadsafe(self.broadcast(payload), loop)
 
 
@@ -131,6 +138,7 @@ async def ws_handler(ws: WebSocket) -> None:
     """WebSocket lifecycle handler."""
     bridge = WSBridge.get()
     bridge.add_client(ws)
+    bridge.set_loop(asyncio.get_running_loop())  # 捕获正确的 event loop
 
     bus = get_bus()
     if bus is not None:

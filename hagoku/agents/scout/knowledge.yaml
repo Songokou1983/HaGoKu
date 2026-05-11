@@ -11,3 +11,1515 @@ knowledge:
   - 高唯一值
   created_at: '2026-05-06'
   use_count: 3
+- id: d2fe9e24
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:42'
+  use_count: 0
+- id: 2fec7baf
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:43'
+  use_count: 0
+- id: c2ff40ce
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:44'
+  use_count: 0
+- id: 5c2cb4ef
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:45'
+  use_count: 0
+- id: 54dbce46
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:46'
+  use_count: 0
+- id: 130eec87
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:56:46'
+  use_count: 0
+- id: ab41168e
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:47'
+  use_count: 0
+- id: 01d659d6
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:48'
+  use_count: 0
+- id: c24016f3
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:49'
+  use_count: 0
+- id: 217b29e2
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:49'
+  use_count: 0
+- id: c44f2d9d
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:50'
+  use_count: 0
+- id: 532ecc60
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 17:58:51'
+  use_count: 0
+- id: e3674321
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:38'
+  use_count: 0
+- id: df9ce23e
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:39'
+  use_count: 0
+- id: 794fe830
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:40'
+  use_count: 0
+- id: 934c54b4
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:40'
+  use_count: 0
+- id: c45734bd
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:41'
+  use_count: 0
+- id: af62b9b6
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:02:42'
+  use_count: 0
+- id: 842ce970
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:01'
+  use_count: 0
+- id: 6c9a7ed6
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:02'
+  use_count: 0
+- id: bda60687
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:02'
+  use_count: 0
+- id: 5af4a613
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:03'
+  use_count: 0
+- id: 32ecabb9
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:04'
+  use_count: 0
+- id: 9b0854e8
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 18:03:05'
+  use_count: 0
+- id: 3a0d0b22
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:11:59'
+  use_count: 0
+- id: 81de844c
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:00'
+  use_count: 0
+- id: b749eb72
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:01'
+  use_count: 0
+- id: 9faf097e
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:02'
+  use_count: 0
+- id: 680e78d0
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:03'
+  use_count: 0
+- id: 94f1a35e
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:04'
+  use_count: 0
+- id: 821b3965
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:35'
+  use_count: 0
+- id: 063768cd
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:36'
+  use_count: 0
+- id: a0ea33a6
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:37'
+  use_count: 0
+- id: 6a9a13bc
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:38'
+  use_count: 0
+- id: 47545bdd
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:39'
+  use_count: 0
+- id: c0280abb
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:12:40'
+  use_count: 0
+- id: cfdb6116
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:07'
+  use_count: 0
+- id: 9c7ba091
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:08'
+  use_count: 0
+- id: cd1cffa4
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:09'
+  use_count: 0
+- id: 3cff0536
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:10'
+  use_count: 0
+- id: 670849e8
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:11'
+  use_count: 0
+- id: 1b488fd6
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:12'
+  use_count: 0
+- id: d13bc600
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:42'
+  use_count: 0
+- id: 24ac5572
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:42'
+  use_count: 0
+- id: 6452388b
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:43'
+  use_count: 0
+- id: f56a3eae
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:44'
+  use_count: 0
+- id: e1bb6b1e
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:45'
+  use_count: 0
+- id: e3046a1b
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:13:47'
+  use_count: 0
+- id: c8c3288b
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:54'
+  use_count: 0
+- id: 84a91763
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:55'
+  use_count: 0
+- id: 4f3d6bf7
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:55'
+  use_count: 0
+- id: 17958db0
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:57'
+  use_count: 0
+- id: 9aa25adf
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:58'
+  use_count: 0
+- id: 53b75344
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:15:59'
+  use_count: 0
+- id: 16a69733
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:28'
+  use_count: 0
+- id: 837a2ec9
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:29'
+  use_count: 0
+- id: cafc8d0c
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:30'
+  use_count: 0
+- id: 9c936e41
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:31'
+  use_count: 0
+- id: 47d4dfca
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:32'
+  use_count: 0
+- id: 88f52342
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:16:33'
+  use_count: 0
+- id: c0b47f49
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:18'
+  use_count: 0
+- id: 457def6d
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:18'
+  use_count: 0
+- id: fcbefaa7
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:19'
+  use_count: 0
+- id: c1d4e931
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:20'
+  use_count: 0
+- id: 4179a4cd
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:22'
+  use_count: 0
+- id: d5b2dd3b
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:23'
+  use_count: 0
+- id: 32a890b1
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:44'
+  use_count: 0
+- id: 515655ea
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:45'
+  use_count: 0
+- id: 2fa2bf9d
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:46'
+  use_count: 0
+- id: 2493de0d
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:47'
+  use_count: 0
+- id: 615ccab3
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:48'
+  use_count: 0
+- id: ccba6f51
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:17:49'
+  use_count: 0
+- id: d63a7ab5
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:41'
+  use_count: 0
+- id: 14dd38b6
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:42'
+  use_count: 0
+- id: 2696723f
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:43'
+  use_count: 0
+- id: 661889e5
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:44'
+  use_count: 0
+- id: 08926f0f
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:45'
+  use_count: 0
+- id: 8619d52d
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:18:46'
+  use_count: 0
+- id: 43e2a509
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:26'
+  use_count: 0
+- id: 1c12e255
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:27'
+  use_count: 0
+- id: 6d6de7f5
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:28'
+  use_count: 0
+- id: d3a3640c
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:29'
+  use_count: 0
+- id: 14653e20
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:30'
+  use_count: 0
+- id: 2947757d
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:32'
+  use_count: 0
+- id: 3972241f
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:55'
+  use_count: 0
+- id: 5d5f0bea
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:56'
+  use_count: 0
+- id: a90b81b7
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:58'
+  use_count: 0
+- id: 9f8d0c77
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:44:59'
+  use_count: 0
+- id: 5919c5b1
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:45:00'
+  use_count: 0
+- id: dfdcd9be
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:45:01'
+  use_count: 0
+- id: 5349e116
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:29'
+  use_count: 0
+- id: 5cb6b942
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:31'
+  use_count: 0
+- id: 85ffacae
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:32'
+  use_count: 0
+- id: 8ad9e3ad
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:33'
+  use_count: 0
+- id: 5c66c1ac
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:34'
+  use_count: 0
+- id: da1d42c8
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 19:46:35'
+  use_count: 0
+- id: e8f6097d
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:46'
+  use_count: 0
+- id: b0b740b0
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:47'
+  use_count: 0
+- id: 8cf26a21
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:48'
+  use_count: 0
+- id: b9e6a07e
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:49'
+  use_count: 0
+- id: 48f28092
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:50'
+  use_count: 0
+- id: 30ee7ea3
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:56:51'
+  use_count: 0
+- id: dfbe09eb
+  content: 字段名：impressions（标识符）；含义：impressions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: impressions（标识符）
+    meaning: impressions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:21'
+  use_count: 0
+- id: ac395d24
+  content: 字段名：clicks（标识符）；含义：clicks（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: clicks（标识符）
+    meaning: clicks（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:22'
+  use_count: 0
+- id: 1dc023d3
+  content: 字段名：cost（标识符）；含义：cost（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: cost（标识符）
+    meaning: cost（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:23'
+  use_count: 0
+- id: 9f9abb5f
+  content: 字段名：revenue（标识符）；含义：revenue（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: revenue（标识符）
+    meaning: revenue（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:24'
+  use_count: 0
+- id: 988edc7e
+  content: 字段名：sessions（标识符）；含义：sessions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: sessions（标识符）
+    meaning: sessions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:25'
+  use_count: 0
+- id: bb1026e3
+  content: 字段名：conversions（标识符）；含义：conversions（标识符）；数据特征：id 100%唯一值；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test_ad_campaign
+    field: conversions（标识符）
+    meaning: conversions（标识符）
+    data_pattern: id 100%唯一值
+    inferred_role: identifier
+    confidence: 0.95
+  created_at: '2026-05-11 20:57:27'
+  use_count: 0

@@ -24,13 +24,17 @@ export default function SettingsPanel() {
 
   // Mount 时从 /api/config 合并服务端默认值
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/config").then((r) => r.json()).then((d) => {
-      setCfg((prev) => ({
-        baseUrl: prev.baseUrl || d.base_url || defaults.baseUrl,
-        model: prev.model || d.model || "",
-        workspace: prev.workspace || d.workspace || "",
-      }));
+      if (!cancelled) {
+        setCfg((prev) => ({
+          baseUrl: prev.baseUrl || d.base_url || defaults.baseUrl,
+          model: prev.model || d.model || "",
+          workspace: prev.workspace || d.workspace || "",
+        }));
+      }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const handleSave = () => {
@@ -45,7 +49,7 @@ export default function SettingsPanel() {
       <div className="flex-1 overflow-auto p-4 space-y-4">
         <Field label="API Base URL" icon={<Server size={14} />}>
           <input
-            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
+            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none transition-colors duration-150"
             placeholder="http://localhost:8000"
             value={cfg.baseUrl}
             onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
@@ -62,7 +66,7 @@ export default function SettingsPanel() {
 
         <Field label="Workspace Dir" icon={<Database size={14} />}>
           <input
-            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-[#569cd6] focus:outline-none transition-colors"
+            className="w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none transition-colors duration-150"
             placeholder="./workspace"
             value={cfg.workspace}
             onChange={(e) => setCfg({ ...cfg, workspace: e.target.value })}
@@ -72,7 +76,7 @@ export default function SettingsPanel() {
         <button
           onClick={handleSave}
           className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover
-                     text-white text-ui-base rounded transition-colors"
+                     text-white text-ui-base rounded transition-colors duration-150"
         >
           <Save size={14} />
           {saved ? "Saved ✓" : "Save Settings"}

@@ -64,7 +64,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 8. **新建项目表单**：始终固定在页面底部，不可在顶部
 9. **操作按钮**：图标 + 文字双重要素，缺一不可
 10. **最小改动原则**：每次只改用户要求的那一个地方，不做额外的改动，不改变未要求的元素
-11. **每次改动前必须备份（二选一即可）**：**优先**用 Git（`git stash` / 小步 `commit`）保留可回滚点；若仍习惯 `cp` 本地快照，文件名须为 `UI_CHANGELOG_backup_YYYYMMDDHHMMSS_原文件名`（该模式已 `.gitignore`，**勿** `git add`）。每一步 UI/编排相关改动仍须记录到 `UI_CHANGELOG.md`。
+11. **每次改动前必须备份（二选一即可）**：**优先**用 Git（`git stash` / 小步 `commit`）保留可回滚点；若仍习惯 `cp` 本地快照，文件名须为 `UI_CHANGELOG_backup_YYYYMMDDHHMMSS_原文件名`（该模式已 `.gitignore`，**勿** `git add`）。堆积后可运行 `python3 scripts/clean_ui_changelog_backups.py` 查看列表，`--older-than N --apply` 按修改时间清理（见 [DEV.md](DEV.md)）。每一步 UI/编排相关改动仍须记录到 `UI_CHANGELOG.md`。
 
 ---
 

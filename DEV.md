@@ -54,6 +54,23 @@ hagoku-api   # http://localhost:8000
 cd hagoku_web && npm run dev   # http://localhost:5173
 ```
 
+## 本地 UI 快照（`UI_CHANGELOG_backup_*`）
+
+改 UI / 编排前若用 `cp … UI_CHANGELOG_backup_时间戳_原文件名` 留底，这些文件已被 **`.gitignore`** 忽略，**不要** `git add`。正式历史以 **Git 提交**为准。
+
+```bash
+# 仅列出（默认 dry-run）
+python3 scripts/clean_ui_changelog_backups.py
+
+# 只列出「超过 30 天未修改」的快照（仍不删除）
+python3 scripts/clean_ui_changelog_backups.py --older-than 30
+
+# 删除上面筛出的文件（先 dry-run 再执行）
+python3 scripts/clean_ui_changelog_backups.py --older-than 30 --apply
+```
+
+脚本会跳过 `.git`、`.venv`、`node_modules` 等目录；删除前务必确认列表无误。
+
 ## 环境变量
 
 | 变量 | 说明 | 默认值 |
@@ -97,6 +114,7 @@ EOF
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见问题排查 | 开发者 |
 | [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | 单轮任务传递模板（转发前填写；规范以 PROJECT.md 为准） | 派活人、协作者 |
 | **DEV.md**（本文件） | 快速上手 | 新贡献者 |
+| `scripts/clean_ui_changelog_backups.py` | 列出 / 清理 `UI_CHANGELOG_backup_*` 本地快照 | 维护本地仓库时 |
 
 ---
 

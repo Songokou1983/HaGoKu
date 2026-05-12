@@ -178,6 +178,8 @@ with sync_playwright() as p:
    - `cleaning_first` → `cleaner_strategy`
    - `analyst_first` → `analyst_preliminary`
 
+7. 本地 `UI_CHANGELOG_backup_*` 快照是否误加入暂存区？（应被 `.gitignore`；清理命令见 [DEV.md](../DEV.md)「本地 UI 快照」。）
+
 ---
 
 ## 不要做的清单

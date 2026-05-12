@@ -1,5 +1,7 @@
 # UI 改动日志
 
+> 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
+
 ## 2026-05-12 — 口径对齐第二轮（端口 / 文档 / 依赖）
 
 - **LLM 默认 `base_url`**：统一为 `http://localhost:8080/v1`（与 `hagoku-api` 默认 **8000** 区分），更新 `hagoku/config.py`、`.env.example`、`PROJECT.md`、`README.md`、`DEV.md`、`hagoku/cli.py`、`hagoku/tools/health.py`、`tests/test_pipeline/test_pipeline.py`。

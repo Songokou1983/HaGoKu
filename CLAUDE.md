@@ -20,7 +20,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 | | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册（架构/看板/向量/审查） | 涉及架构变更时 |
 | | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 已知 bug 及修复 | 遇到问题时 |
 | | [README.md](README.md) | 用户手册（安装、命令参考） | 回答用户问题 |
-| | [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | 单轮任务传递模板（转发给协作者前填写） | 派活、协作开发 |
+| | [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | **四阶段路线图跟踪** + 单轮任务模板；审查约定见该文件 | 派活、协作开发、PR 审查 |
 
 ### Agent 角色速查
 

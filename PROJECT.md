@@ -434,33 +434,37 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 ## 交付物规划
 
+> **Checklist 审计（2026-05-12）**：勾选以当前仓库**可运行能力**为准。备注中的「增强」表示主干已有、体验或覆盖仍可持续迭代，不等同于未动工。
+
 ### MVP — 让灵魂先跑起来
 
 - [x] 项目立项
-- [ ] 统计护栏框架（强制级 + 警告级）
-- [ ] Analyst：回归 + 假设检验 + 效应量 + 模型诊断
-- [ ] Cleaner：缺失机制检验 + 清洗影响评估
-- [ ] Scout：语义推断 + 用户确认交互
+- [x] 统计护栏框架（强制级 + 警告级 + 提示级；`hagoku/guardrails/statistical.py`）
+- [x] Analyst：回归 + 假设检验 + 效应量 + 模型诊断（`hagoku/tools/analysis.py`、`hagoku/agents/analyst/`；方法覆盖随场景扩展）
+- [x] Cleaner：缺失机制检验 + 清洗影响评估（含 Little's MCAR 等；`hagoku/agents/cleaner/`）
+- [x] Scout：语义推断 + 用户确认交互（推断在 Scout Agent；**Web** 为流程内暂停与自然语言回复；CLI 支持分阶段调试）
 - [x] Reporter：双轨输出（默认 HTML：`default` 模板，要点速览 + 完整证据）
-- [ ] 仲裁器：规则引擎 + 基础调度
-- [ ] 项目管理 + SQLite 元数据库 + 输出管理
-- [ ] CLI + 终端实时输出
-- [ ] 本地 LLM 适配
-- [ ] 1 个端到端示例
+- [x] 仲裁器：规则引擎 + 基础调度（`KEYWORD_MAP` / `PLAN_TEMPLATES` + LLM 计划，`hagoku/manager/orchestrator.py`）
+- [x] 项目管理 + SQLite 元数据库 + 输出管理（`hagoku/storage/database.py`、`OutputManager`、`hagoku project` / `history` 等）
+- [x] CLI + 终端实时输出（`hagoku/cli.py`、`TerminalDisplay`）
+- [x] 本地 LLM 适配（OpenAI-compatible；配置见 `~/.hagoku/.env` 与 `hagoku/config.py`）
+- [x] 端到端示例（`examples/` 脚本与数据；`hagoku demo` / `hagoku run --demo`）
 
 ### V2 — 洞察可见，分析可持续
 
-- [x] FastAPI + WebSocket API（hagoku/api/）
-- [x] React Web UI（hagoku_web/，Vite + Zustand + 固定视图导航，非 dockview）
-- [ ] 每个检验配诊断图
-- [ ] 执行回放 (replay)
-- [ ] 报告导出 HTML/PDF
-- [ ] 人工介入决策点
-- [ ] 更多报告模板
-- [ ] 外部数据库直连（PostgreSQL/MySQL）
-- [ ] 持续性分析：resume、diff、历史查询
-- [ ] 数据源管理（多源注册 + 画像）
-- [ ] Scribe 知识自动提炼（LLM 辅助语义匹配）
+- [x] FastAPI + WebSocket API（`hagoku/api/`）
+- [x] React Web UI（`hagoku_web/`，Vite + Zustand + 固定视图导航，非 dockview）
+- [ ] 每个检验配诊断图（报告与 Analyst 已产出部分图表；**尚未**做到「每一检验一键固定诊断图」全覆盖）
+- [x] 执行回放（**CLI**：`hagoku replay`；**Web**：无独立回放页，**事件**视图可辅助复盘）
+- [x] 报告导出 HTML（主路径）
+- [ ] 报告导出 PDF（CLI 当前 `html` / `md` / `json`；印刷级 PDF 未接主路径）
+- [x] 人工介入决策点（Web：流水线暂停点 + WebSocket `respond` / `unblock`；CLI：`--interactive` 等）
+- [x] 更多报告模板（内置如 `business_analysis`、`academic`、`ab_test` 等 **7** 种 + `default` 双轨）
+- [ ] 外部数据库直连（**产品级**：连接管理、向导、与项目绑定；代码层有 `load_sql(..., engine=postgres|mysql)` 工具能力）
+- [x] 持续性分析：resume、`diff_runs`、历史查询（`Orchestrator` + `HaGoKuDB` + `hagoku history`；**Web 展示可增强**）
+- [x] 数据源管理 — 项目级多文件（`hagoku project add` 等）
+- [ ] 多源注册 + 跨源统一画像（企业式数据目录）
+- [ ] Scribe 知识自动提炼（LLM 辅助语义匹配）（`knowledge.yaml` 仍以规则与人工维护为主）
 
 ### V3 — 分析可扩展
 
@@ -506,13 +510,13 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 #### P0：立即实施（低风险高回报）
 
-1. **双层 LLM**（从备选路线 2）：
+1. **双层 LLM**（从备选路线 2）— **✅ 已实施**：
    - 增加 `HAGOKYU_LLM_MODEL_DEEP` / `HAGOKYU_LLM_MODEL_QUICK` 环境变量
    - Scout（类型推断/语义分析）→ 快速模型；Analyst（假设检验/回归推理）→ 深度模型
    - Reporter（格式化渲染）→ 快速模型；仲裁器（计划决策）→ 深度模型
    - 预期收益：降低 ~40% token 消耗 + 响应延迟
 
-2. **结构化输出解析器**（从备选路线 3）：
+2. **结构化输出解析器**（从备选路线 3）— **✅ 已实施**：
    - 新增 `hagoku/guardrails/parsers.py`：`parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`
    - 护栏从"检查 LLM 是否输出"升级为"解析 + 校验"
    - Reporter 用解析器验证 Analyst 输出的结构完整性
@@ -536,8 +540,8 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 | 优先级 | 演进项 | 实施成本 | 收益 | 风险 |
 |--------|---------|---------|------|------|
-| 🔴 P0 | 双层 LLM | 🟢 低 | 🟢 高（降本 40%） | 无 |
-| 🔴 P0 | 结构化解析器 | 🟢 低 | 🟢 高（护栏更可靠） | 无 |
+| 🔴 P0 | 双层 LLM（✅） | 🟢 低 | 🟢 高（降本 40%） | 无 |
+| 🔴 P0 | 结构化解析器（✅） | 🟢 低 | 🟢 高（护栏更可靠） | 无 |
 | 🟡 P1 | LangGraph 工作流 | 🟡 中 | 🟢 高（可视化+条件路由） | 🟡 中（迁移风险） |
 | 🟡 P1 | AgentState TypedDict | 🟡 中 | 🟡 中（类型安全） | 低 |
 | 🟢 P2 | 反思循环升级 | 🟢 低 | 🟡 中（经验自动化） | 低 |

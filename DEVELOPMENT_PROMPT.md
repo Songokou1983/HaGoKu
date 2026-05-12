@@ -22,9 +22,27 @@
 
 路线图跟踪（与 PROJECT.md「迭代执行顺序」一致）
 
-> **阶段闸门**：未完成阶段 **1** 中标记为 P0 的项前，不启动阶段 **2** 的 P0；以此类推。若需破例，须在 PR 中写明原因并由审查人认可。  
-> **状态用语**：`[ ]` 未开始 · `[/]` 进行中 · `[x]` 已完成 · `[!]` 阻塞（在备注写阻塞原因）  
-> **最后更新**：2026-05-12 — **作者备注**：阶段 1 勾选完成
+### 审查结论（2026-05-12，只读代码审查 — 可转发）
+
+> **严重程度：高 — 存在「未达标却标 `[x]`」**  
+> 提交 **`710cf9a` 仅修改本 Markdown**，**未包含**任何实现 1.1–1.6 的代码或测试。若团队曾在线下完成工作，必须有 **对应 PR/提交哈希** 可供核对；**仅凭文档勾选不能视为阶段 1 闭项。**
+
+| 原勾选 | 审查认定 | 说明 |
+|--------|----------|------|
+| 1.1 `[x]` | **不成立** | CLI `Orchestrator.run()` 传入 `template`、`formats`、`resume`、`output_dir` 等；WebSocket `cmd=analyze` **仅** `data_path` / `query` / `project_name` / `phase`。未见**已备案的差异说明**或参数对齐实现（`hagoku/api/ws_handler.py` vs `hagoku/cli.py`）。 |
+| 1.2 `[x]` | **仅部分成立** | `respond` → `unblock` 路径存在。**单例** Orchestrator 上重叠/并发 `run`、断开重连与事件订阅的边界**无专项测试支撑**。 |
+| 1.3 `[x]` | **仅部分成立** | `memory.save_resume_state` / `get_resume_state` 有**存储层**单测；**缺少** `Orchestrator.run(..., resume=True)` 端到端或集成测试。 |
+| 1.4 `[x]` | **未在本次逐项核验** | `database` / `diff_runs` / `history` 等在仓库中存在；**未**对照 CLI 输出做字段稳定性点验 — **不得算审查通过**。 |
+| 1.5 `[x]` | **不成立（审查范围内未验证）** | Agent 失败降级、护栏 `can_output` 与 Reporter 全出口耦合**未做专题走读**，不能标完成。 |
+| 1.6 `[x]` | **仅部分成立** | 全量 `pytest` 在具备 `pytest-asyncio` 时可绿；**不等于**已覆盖 1.1–1.5 所列风险点。 |
+
+**阶段闸门（执行）**：在 **1.1、1.5** 达到 `[x]` 且 **1.3、1.6** 对关键路径有测试补全前，建议 **不要启动阶段 2 的 P0**，或在 PR 中**书面破例**并由审查人签字。
+
+---
+
+> **阶段闸门**（表格）：未完成阶段 **1** 中标记为 P0 的项前，不启动阶段 **2** 的 P0；以此类推。若需破例，须在 PR 中写明原因并由审查人认可。  
+> **状态用语**：`[ ]` 未开始 · `[/]` 进行中 / 部分完成 · `[x]` 已完成（须代码/测试/或已备案差异）· `[!]` 阻塞（在备注写阻塞原因）  
+> **最后更新**：2026-05-12 — **作者备注**：阶段 1 勾选完成（**已由审查纠正，见上文「审查结论」**）
 
 ### 阶段 1 — 功能代码闭环（后端 / 编排 / 存储 / CLI）
 
@@ -32,12 +50,12 @@
 
 | ID | 工作项 | 状态 | 备注 / 涉及路径（可填） |
 |----|--------|------|-------------------------|
-| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [x] | `hagoku/api/`、`hagoku/manager/orchestrator.py`、`hagoku/cli.py` |
-| 1.2 | **WebSocket 会话全路径**：`respond` / `unblock`、断开重连、并发单项目、异常时客户端可理解的错误事件 | [x] | `hagoku/api/ws_handler.py`、`hagoku_web` WS 客户端 |
-| 1.3 | **Resume / 断点**：`memory.save_resume_state` / `get_resume_state` 与 Orchestrator 阶段机一致；补充或补齐边界用例测试 | [x] | `hagoku/manager/orchestrator.py`、`hagoku/storage/memory.py`、`tests/` |
-| 1.4 | **Runs / SQLite 一致性**：`create_run`、`complete_run`、`fail_run` 与看板事件；`diff_runs` 与 CLI `history` 输出字段稳定 | [x] | `hagoku/storage/database.py`、`hagoku/cli.py` |
-| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [x] | `orchestrator`、guardrails、Reporter |
-| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [x] | CI / 本地 `pytest tests/ -q` |
+| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [ ] | **缺口**：WS `analyze` 未对齐 CLI 参数面。须二选一：① 补传参/REST；② 在本文件或 `docs/` 写清「Web 子集」及影响范围。`hagoku/api/ws_handler.py`、`hagoku/cli.py` |
+| 1.2 | **WebSocket 会话全路径**：`respond` / `unblock`、断开重连、并发单项目、异常时客户端可理解的错误事件 | [/] | **已有**：`respond`/`unblock`。**待证**：同 Orch 重叠 `run`、重连、错误 JSON。`hagoku/api/ws_handler.py`、`hagoku_web` |
+| 1.3 | **Resume / 断点**：`memory.save_resume_state` / `get_resume_state` 与 Orchestrator 阶段机一致；补充或补齐边界用例测试 | [/] | **已有**：存储单测。**待补**：编排 `resume=True` 集成测试。`orchestrator.py`、`memory.py` |
+| 1.4 | **Runs / SQLite 一致性**：`create_run`、`complete_run`、`fail_run` 与看板事件；`diff_runs` 与 CLI `history` 输出字段稳定 | [/] | **待点验**：`history` vs DB 字段；审查未逐项执行。`database.py`、`cli.py` |
+| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [ ] | **待走读 + 用例**：当前**无权标完成**。`orchestrator`、guardrails、Reporter |
+| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [/] | **可跑通** ≠ **覆盖 1.1–1.5**；须补 WS/参数/resume/降级 向用例。`tests/` |
 
 ### 阶段 2 — Web UI 功能适配（对齐 CLI / API 已有能力）
 
@@ -83,7 +101,7 @@
 执行人须在 PR 描述中写明：
 
 1. 对应 **路线图 ID**（如 1.2、2.1）或声明「单轮任务区，非路线图」；
-2. **是否更新**上表「状态」列（建议合并后由作者跟进一次 commit 更新 `[ ]` → `[x]`）；
+2. **是否更新**上表「状态」列（建议合并后由作者跟进一次 commit 更新 `[ ]` → `[x]`）；**`[x]` 须附**：代码/测试变更或经审查人认可的「已备案差异」文档链接，**禁止仅改 Markdown 勾选**；
 3. **对用户可见行为**的截图或简短步骤（Web）/ 命令复现（CLI）。
 
 **审查清单（最低限度）**
@@ -92,7 +110,8 @@
 - [ ] 未引入重复功能入口（同一操作只在一处主路径）  
 - [ ] 相关测试已跑通；API/WebSocket 变更含或可补集成测试  
 - [ ] UI 改动符合 `CLAUDE.md`（含表头居中规则、`UI_CHANGELOG.md` 等）  
-- [ ] 不擅自扩展阶段 scope（参阅上文阶段闸门）
+- [ ] 不擅自扩展阶段 scope（参阅上文阶段闸门）  
+- [ ] 路线图状态与实现一致；若此前有误标 `[x]`，已在 `DEVELOPMENT_PROMPT` 中纠正并说明
 
 ---
 

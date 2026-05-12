@@ -2,14 +2,32 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-13 — Analyst 暂停：结构化 `analyst_review`（与 Scout/Cleaner 同权）
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：完整流水线在 Analyst 完成后暂停时改用 **`analyst_review_pause_payload`**（`message` 为空、结果表结构化），**不再**调用 `_generate_pause_message("analyst")` 用 LLM 生成整段「台词」。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：解析并渲染 **`analyst_review`** 工作流表（表头居中、表体左对齐）；与 Cleaner 共用 **「确认继续」** 与空 **Enter**；占位与底部提示与清洗暂停一致。
+- **`docs/AGENT_INTERACTION_CONTRACT.md`**、**`tests/test_product/test_agent_interaction_contract.py`**：C2 扩展至 Analyst；新增契约测试。
+
+### 涉及文件
+
+- `hagoku/manager/orchestrator.py`（备份：`hagoku/manager/UI_CHANGELOG_backup_20260513061101_orchestrator_analyst_review.py`）
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`hagoku_web/src/panels/UI_CHANGELOG_backup_20260513061101_AnalyzePanel_analyst_review.tsx`）
+- `docs/AGENT_INTERACTION_CONTRACT.md`
+- `tests/test_product/test_agent_interaction_contract.py`
+
+---
+
 ## 2026-05-12 — Scout 暂停：结构化 `field_review` + Web 真表格（非 Markdown 气泡）
 
 ### 变更概要
 
-- **`hagoku/manager/orchestrator.py`**：Scout 字段暂停后对用户回复调用 **`apply_scout_user_field_reply_to_context`**，将 `Code=…`、`code means …`、`Code是/就是/为…` 等**解析写入 `column_descriptions`** 并清除对应 `needs_user_input`；纯「确认」类短句不写库、不追加 `[用户补充]`。`user_input_received` 载荷增加 **`applied_field_updates`**。
-- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`user_input_requested` 若含 `field_review`，插入 **`workflow` 角色**卡片并渲染 **HTML `<table>`**（表头 `text-center`，表体左对齐）；`message` 仅在有内容时追加为普通 agent 气泡，不设预设「Agent 台词」。**交互**：当前暂停点与表格消息 id 对齐时可点选行高亮、**「插入纠错」**写入 `字段名=`、**「确认无误」**或空内容 **Enter** 发送确认（与编排层空字符串一致）；输入区在有点选时轻微强调边框。收到 **`user_input_received`** 且含 **`applied_field_updates`** 时插入一条**系统**提示（事实反馈，非拟人 Agent）。
+- **`hagoku/manager/orchestrator.py`**：Scout 字段暂停后 **`apply_scout_user_field_reply_to_context`**（`Code=…`、`means`、中文连接词等写入 `column_descriptions`，纯确认不写库；`user_input_received` 带 **`applied_field_updates`**）。Cleaner 暂停 **`cleaning_review_pause_payload`**：`rows_removed`、**`_cleaning_quality_display`**（不再甩 `unknown`）、`impact_rate` 以报告为准并兼容编排传入兜底；**不再**调用会触发写死 fallback 的 `_generate_pause_message("cleaner")`。**根因**：`CleaningOp` 无 `.get`，Cleaner 分支曾抛错后**每次**落入 `_fallback_pause_message` 固定中文。另：**`_normalize_cleaning_operation`** 统一 `CleaningOp`/dict 供 prompt 回退路径。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`user_input_requested` 若含 `field_review`，插入 **`workflow` 角色**卡片并渲染 **HTML `<table>`**（表头 `text-center`，表体左对齐）；`message` 仅在有内容时追加为普通 agent 气泡，不设预设「Agent 台词」。**交互**：当前暂停点与表格消息 id 对齐时可点选行高亮、**「插入纠错」**写入 `字段名=`、**「确认无误」**或空内容 **Enter** 发送确认（与编排层空字符串一致）；输入区在有点选时轻微强调边框。收到 **`user_input_received`** 且含 **`applied_field_updates`** 时插入一条**系统**提示（事实反馈，非拟人 Agent）。**Cleaner**：解析 **`cleaning_review`** 工作流表；**「确认继续」**或空 **Enter** 与 Scout 同权；卡片去掉流程说教句，事实行用 `abbr`/`title` 区分删行影响率与列级「影响行」；Scout 表头缩为单行事实。
 - **`tests/test_manager/test_scout_field_review_payload.py`**：`scout_field_review_pause_payload` 形状契约测试。
 - **`tests/test_manager/test_scout_user_reply_apply.py`**：用户纠错句写入 `context` 的契约测试。
+- **`tests/test_manager/test_cleaning_review_payload.py`**：`cleaning_review_pause_payload` / `_normalize_cleaning_operation` 契约测试。
 
 ### 涉及文件
 
@@ -17,6 +35,7 @@
 - `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`hagoku_web/src/panels/UI_CHANGELOG_backup_*_AnalyzePanel_field_review.tsx`）
 - `tests/test_manager/test_scout_field_review_payload.py`
 - `tests/test_manager/test_scout_user_reply_apply.py`
+- `tests/test_manager/test_cleaning_review_payload.py`
 
 ---
 

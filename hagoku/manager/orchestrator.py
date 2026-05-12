@@ -298,6 +298,167 @@ def apply_scout_user_field_reply_to_context(context: dict[str, Any], user_reply:
     return applied
 
 
+def _normalize_cleaning_operation(op: Any) -> dict[str, Any]:
+    """CleaningOp / dict 统一为 dict，供 prompt 与 cleaning_review 载荷使用。"""
+    if op is None:
+        return {}
+    if isinstance(op, dict):
+        return op
+    if hasattr(op, "to_dict") and callable(getattr(op, "to_dict")):
+        try:
+            return dict(op.to_dict())  # type: ignore[arg-type]
+        except Exception:
+            pass
+    col = getattr(op, "column", "") or ""
+    strat = getattr(op, "strategy", "")
+    if hasattr(strat, "value"):
+        strat = strat.value
+    reason = getattr(op, "reason", "") or ""
+    ra = int(getattr(op, "rows_affected", 0) or 0)
+    return {"column": str(col), "strategy": str(strat), "reason": str(reason), "rows_affected": ra}
+
+
+def _cleaning_quality_display(
+    report: Any,
+    *,
+    impact_rate: float,
+    t_orig: int,
+    t_after: int,
+    fallback_label: str,
+) -> str:
+    """CleaningReport 无标准 data_quality 字段；避免把用户晾在 unknown 上。"""
+    raw = (fallback_label or "").strip()
+    if raw and raw.lower() != "unknown":
+        return raw
+    if t_orig <= 0:
+        return "—"
+    if t_after < t_orig:
+        return "有删行"
+    if impact_rate > 0.12:
+        return "高影响（删行计）"
+    if impact_rate > 0.04:
+        return "中影响（删行计）"
+    br = str(getattr(report, "bias_risk", "") or "").lower()
+    if br in ("high", "medium"):
+        return f"偏差风险 {br}"
+    return "—"
+
+
+def cleaning_review_pause_payload(
+    cleaning_report: Any,
+    *,
+    data_quality: str,
+    impact_rate: float,  # 与编排层传入一致；当前以报告内 impact_rate 为准
+) -> dict[str, Any]:
+    """Cleaner 暂停：结构化清洗结果表；`message` 留空，避免编排层写死「Agent 台词」。"""
+    if cleaning_report is None:
+        return {
+            "message": "",
+            "cleaning_review": {
+                "data_quality": "—",
+                "impact_rate": float(impact_rate or 0.0),
+                "total_rows_original": 0,
+                "total_rows_after": 0,
+                "rows_removed": 0,
+                "bias_risk": "unknown",
+                "n_ops": 0,
+                "warnings": [],
+                "rows": [],
+            },
+        }
+    ops_raw: list[Any] = list(getattr(cleaning_report, "operations", None) or [])
+    rows: list[dict[str, Any]] = []
+    for op in ops_raw[:120]:
+        d = _normalize_cleaning_operation(op)
+        col = str(d.get("column", "") or "")
+        strat = str(d.get("strategy", "") or "")
+        reason = str(d.get("reason", "") or "")
+        if len(reason) > 400:
+            reason = reason[:397] + "…"
+        rows.append({
+            "column": col,
+            "strategy": strat,
+            "reason": reason,
+            "rows_affected": int(d.get("rows_affected", 0) or 0),
+        })
+    t_orig = int(getattr(cleaning_report, "total_rows_original", 0) or 0)
+    t_after = int(getattr(cleaning_report, "total_rows_after", 0) or 0)
+    bias = str(getattr(cleaning_report, "bias_risk", "unknown") or "unknown")
+    warnings = getattr(cleaning_report, "warnings", None) or []
+    if not isinstance(warnings, list):
+        warnings = []
+    warn_strs = [str(w) for w in warnings[:8] if str(w).strip()]
+    rep_impact = float(getattr(cleaning_report, "impact_rate", 0) or float(impact_rate or 0.0))
+    rows_removed = max(0, t_orig - t_after)
+    dq = _cleaning_quality_display(
+        cleaning_report,
+        impact_rate=rep_impact,
+        t_orig=t_orig,
+        t_after=t_after,
+        fallback_label=str(data_quality or ""),
+    )
+    return {
+        "message": "",
+        "cleaning_review": {
+            "data_quality": dq,
+            "impact_rate": rep_impact,
+            "total_rows_original": t_orig,
+            "total_rows_after": t_after,
+            "rows_removed": rows_removed,
+            "bias_risk": bias,
+            "n_ops": len(ops_raw),
+            "warnings": warn_strs,
+            "rows": rows,
+        },
+    }
+
+
+def analyst_review_pause_payload(findings: list[Any]) -> dict[str, Any]:
+    """Analyst 暂停：结构化统计结果摘要表；`message` 留空，避免用 LLM 冒充「Agent 对话」。"""
+    rows_out: list[dict[str, Any]] = []
+    sig_n = 0
+    seq = findings if isinstance(findings, list) else []
+    for item in seq[:80]:
+        d: dict[str, Any]
+        if isinstance(item, dict):
+            d = item
+        elif hasattr(item, "to_dict") and callable(getattr(item, "to_dict")):
+            try:
+                raw = item.to_dict()  # type: ignore[union-attr]
+                d = dict(raw) if isinstance(raw, dict) else {}
+            except Exception:
+                d = {}
+        else:
+            d = {}
+        sig = str(d.get("significance") or "")
+        if sig == "significant":
+            sig_n += 1
+        rid = str(d.get("result_id") or "")
+        q = str(d.get("question") or "")
+        if len(q) > 320:
+            q = q[:317] + "…"
+        at = str(d.get("analysis_type") or "")
+        plain = str(d.get("conclusion_plain") or "")
+        if len(plain) > 240:
+            plain = plain[:237] + "…"
+        rows_out.append({
+            "result_id": rid,
+            "analysis_type": at,
+            "question": q,
+            "significance": sig,
+            "conclusion_plain": plain,
+        })
+    n_tot = len(seq)
+    return {
+        "message": "",
+        "analyst_review": {
+            "n_findings": n_tot,
+            "n_significant": sig_n,
+            "rows": rows_out,
+        },
+    }
+
+
 class RuleEngine:
     """Manager 的规则引擎，覆盖 80% 常见决策"""
 
@@ -448,8 +609,9 @@ class Orchestrator:
 
     def _generate_pause_message(self, agent: str, results: dict[str, Any]) -> str:
         """
-        Cleaner / Analyst 等：用 llm_quick 生成暂停说明；失败则规则回退。
-        Scout 字段核对见 `scout_field_review_pause_payload`，不在此生成整段「台词」。
+        遗留路径：用 llm_quick 生成暂停说明；失败则规则回退。
+        Scout / Cleaner / Analyst 主线暂停均使用结构化载荷（`scout_field_review_pause_payload`、
+        `cleaning_review_pause_payload`、`analyst_review_pause_payload`），不在此生成面向用户的整段「台词」。
         """
         try:
             from openai import OpenAI
@@ -503,12 +665,13 @@ class Orchestrator:
             )
         elif agent == "cleaner":
             ops = results.get("operations", [])
+            norm_ops = [_normalize_cleaning_operation(op) for op in ops]
             quality = results.get("data_quality", "unknown")
             impact = results.get("impact_rate", 0)
             return (
                 f"我是 Cleaner Agent，刚刚检测了数据质量。\n"
                 f"数据质量评级：{quality}，清洗影响率：{impact:.1%}\n"
-                f"计划执行的清洗操作（共 {len(ops)} 个）：{[op.get('reason', '') for op in ops[:5]]}\n"
+                f"计划执行的清洗操作（共 {len(norm_ops)} 个）：{[op.get('reason', '') for op in norm_ops[:5]]}\n"
                 f"请向用户简要说明清洗计划，并询问是否可以继续执行。"
             )
         elif agent == "analyst":
@@ -531,10 +694,8 @@ class Orchestrator:
             return f"共 {n_rows} 行 × {len(cols)} 列 — 请确认字段业务含义；无误回「确认」。"
         elif agent == "cleaner":
             ops = results.get("operations", [])
-            return (
-                f"数据质量检测完成，计划 {len(ops)} 个清洗操作。"
-                f"可以继续执行清洗吗？或者你有特别想保留/排除的处理方式？"
-            )
+            n = len([_normalize_cleaning_operation(o) for o in ops])
+            return f"清洗阶段：共 {n} 条操作已记录，请查看结构化摘要并回复。"
         elif agent == "analyst":
             return "统计分析完成，已找到若干发现。可以生成完整报告了吗？"
         return f"{agent} 完成，是否继续？"
@@ -899,7 +1060,11 @@ class Orchestrator:
                     "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
                     "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
                 }
-                cleaner_msg = self._generate_pause_message("cleaner", cleaner_results)
+                cleaner_msg = cleaning_review_pause_payload(
+                    cleaning_report,
+                    data_quality=str(cleaner_results["data_quality"]),
+                    impact_rate=float(cleaner_results["impact_rate"] or 0.0),
+                )
                 user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
                 if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
@@ -966,11 +1131,10 @@ class Orchestrator:
                 return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
             # ── 暂停：分析结果待用户确认后再记 Analyst 完成 ──
-            analyst_results = {
-                "findings": results if isinstance(results, list) else [],
-            }
-            analyst_msg = self._generate_pause_message("analyst", analyst_results)
-            user_reply_analyst = self._pause_and_wait("analyst", analyst_msg)
+            analyst_pause = analyst_review_pause_payload(
+                results if isinstance(results, list) else [],
+            )
+            user_reply_analyst = self._pause_and_wait("analyst", analyst_pause)
             if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
                 return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
             if user_reply_analyst:

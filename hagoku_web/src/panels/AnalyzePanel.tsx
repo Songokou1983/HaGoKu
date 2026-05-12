@@ -79,6 +79,275 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
   };
 }
 
+/** Cleaner 核对：后端 `cleaning_review` 结构化载荷（非 Agent 台词） */
+interface CleaningReviewPayload {
+  data_quality: string;
+  impact_rate: number;
+  total_rows_original: number;
+  total_rows_after: number;
+  rows_removed: number;
+  bias_risk: string;
+  n_ops: number;
+  warnings: string[];
+  rows: Array<{
+    column: string;
+    strategy: string;
+    reason: string;
+    rows_affected: number;
+  }>;
+}
+
+function parseCleaningReview(raw: unknown): CleaningReviewPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const rowsRaw = o.rows;
+  if (!Array.isArray(rowsRaw)) return null;
+  const rows: CleaningReviewPayload["rows"] = [];
+  for (const item of rowsRaw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    rows.push({
+      column: String(r.column ?? ""),
+      strategy: String(r.strategy ?? ""),
+      reason: String(r.reason ?? ""),
+      rows_affected: typeof r.rows_affected === "number" && Number.isFinite(r.rows_affected) ? r.rows_affected : 0,
+    });
+  }
+  const wRaw = o.warnings;
+  const warnings: string[] = Array.isArray(wRaw)
+    ? wRaw.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim())
+    : [];
+  const ir = o.impact_rate;
+  const impact = typeof ir === "number" && Number.isFinite(ir) ? ir : 0;
+  const nOps = typeof o.n_ops === "number" && Number.isFinite(o.n_ops) ? o.n_ops : rows.length;
+  const tOrig = typeof o.total_rows_original === "number" && Number.isFinite(o.total_rows_original)
+    ? o.total_rows_original
+    : 0;
+  const tAfter = typeof o.total_rows_after === "number" && Number.isFinite(o.total_rows_after)
+    ? o.total_rows_after
+    : 0;
+  const rrRaw = o.rows_removed;
+  const rowsRemoved =
+    typeof rrRaw === "number" && Number.isFinite(rrRaw) ? rrRaw : Math.max(0, tOrig - tAfter);
+  return {
+    data_quality: String(o.data_quality ?? "—"),
+    impact_rate: impact,
+    total_rows_original: tOrig,
+    total_rows_after: tAfter,
+    rows_removed: rowsRemoved,
+    bias_risk: String(o.bias_risk ?? "unknown"),
+    n_ops: nOps,
+    warnings,
+    rows,
+  };
+}
+
+/** Analyst 结果核对：后端 `analyst_review` 结构化载荷（非 Agent 台词） */
+interface AnalystReviewPayload {
+  n_findings: number;
+  n_significant: number;
+  rows: Array<{
+    result_id: string;
+    analysis_type: string;
+    question: string;
+    significance: string;
+    conclusion_plain: string;
+  }>;
+}
+
+function parseAnalystReview(raw: unknown): AnalystReviewPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (!Array.isArray(o.rows)) return null;
+  const rowsRaw = o.rows;
+  const rows: AnalystReviewPayload["rows"] = [];
+  for (const item of rowsRaw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    rows.push({
+      result_id: String(r.result_id ?? ""),
+      analysis_type: String(r.analysis_type ?? ""),
+      question: String(r.question ?? ""),
+      significance: String(r.significance ?? ""),
+      conclusion_plain: String(r.conclusion_plain ?? ""),
+    });
+  }
+  const nf = o.n_findings;
+  const nFindings = typeof nf === "number" && Number.isFinite(nf) ? nf : rows.length;
+  const ns = o.n_significant;
+  const nSig =
+    typeof ns === "number" && Number.isFinite(ns)
+      ? ns
+      : rows.filter((x) => x.significance === "significant").length;
+  return { n_findings: nFindings, n_significant: nSig, rows };
+}
+
+function significanceShort(s: string): string {
+  if (s === "significant") return "显著";
+  if (s === "not_significant") return "未显著";
+  return s.trim() || "—";
+}
+
+function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
+  return (
+    <div
+      className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
+        motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
+    >
+      <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-0.5">
+        <div className="font-medium text-app-text">Analyst</div>
+        <div className="text-app-text-muted">
+          共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表；可补充说明或留空确认继续
+        </div>
+      </div>
+      <table className="w-full text-ui-sm border-collapse table-fixed">
+        <caption className="sr-only">统计分析结果摘要</caption>
+        <colgroup>
+          <col className="w-[9%]" />
+          <col className="w-[11%]" />
+          <col className="w-[28%]" />
+          <col className="w-[10%]" />
+          <col className="w-[42%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-app-bg border-b border-app-border">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              ID
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              类型
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              研究问题
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              显著性
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              简要结论
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
+                （无结构化结果行）
+              </td>
+            </tr>
+          ) : (
+            data.rows.map((r, i) => (
+              <tr key={`${r.result_id}-${i}`} className="border-b border-app-border last:border-b-0">
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.result_id || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.analysis_type || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">
+                  {r.question || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border">
+                  {significanceShort(r.significance)}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top break-words">{r.conclusion_plain || "—"}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
+  const pct = `${(100 * data.impact_rate).toFixed(1)}%`;
+  const rowLine =
+    data.rows_removed > 0
+      ? `${data.total_rows_original} → ${data.total_rows_after} 行（已删 ${data.rows_removed}）`
+      : `${data.total_rows_original} 行（行数未变）`;
+  const qual = data.data_quality && data.data_quality !== "—" ? `${data.data_quality} · ` : "";
+  return (
+    <div
+      className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
+        motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
+    >
+      <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-1">
+        <div className="font-medium text-app-text">Cleaner</div>
+        <div className="text-app-text-muted">
+          {rowLine} · {qual}偏差 {data.bias_risk} · {data.n_ops} 条 · 删行影响率{" "}
+          <abbr
+            title="该比例来自报告中的删行/整行替换；Winsorize 等只改单元值、不删行时常为 0%。「影响行」列为各列被改写取值的行数。"
+            className="cursor-help underline decoration-dotted decoration-app-text-muted/50 underline-offset-2"
+          >
+            {pct}
+          </abbr>
+        </div>
+        {data.warnings.length > 0 && (
+          <ul className="list-disc pl-4 text-app-warning">
+            {data.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <table className="w-full text-ui-sm border-collapse table-fixed">
+        <caption className="sr-only">清洗操作摘要</caption>
+        <colgroup>
+          <col className="w-[16%]" />
+          <col className="w-[18%]" />
+          <col className="w-[10%]" />
+          <col className="w-[56%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-app-bg border-b border-app-border">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              列
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              策略
+            </th>
+            <th
+              scope="col"
+              title="该列被改写取值的行数（与删行影响率含义不同）"
+              className="px-2 py-2 font-medium text-center border-r border-app-border align-middle cursor-help"
+            >
+              影响行
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              说明
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
+                （无单独逐条操作记录）
+              </td>
+            </tr>
+          ) : (
+            data.rows.map((r, i) => (
+              <tr key={`${r.column}-${i}`} className="border-b border-app-border last:border-b-0">
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.column}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.strategy}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border tabular-nums">
+                  {r.rows_affected}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top break-words">{r.reason}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function FieldReviewTable({
   data,
   interactive = false,
@@ -96,7 +365,7 @@ function FieldReviewTable({
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
-        共 {String(data.n_rows)} 行 × {data.n_cols} 列。请核对下表（三列）；可点选某行再在下框编辑；无误点「确认无误」或空回车，有错只写错的列（例 Code=产品编码）。
+        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · Scout 字段核对
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
         <caption className="sr-only">字段理解核对</caption>
@@ -170,6 +439,8 @@ interface ConvoMessage {
   text: string;
   timestamp: string;
   fieldReview?: FieldReviewPayload;
+  cleaningReview?: CleaningReviewPayload;
+  analystReview?: AnalystReviewPayload;
 }
 
 interface ProjectFile {
@@ -272,6 +543,24 @@ function ConvoFeed({
             </div>
           );
         }
+        if (m.role === "workflow" && m.cleaningReview) {
+          return (
+            <div key={m.id} className="flex justify-start w-full">
+              <div className="w-full max-w-full">
+                <CleaningReviewTable data={m.cleaningReview} />
+              </div>
+            </div>
+          );
+        }
+        if (m.role === "workflow" && m.analystReview) {
+          return (
+            <div key={m.id} className="flex justify-start w-full">
+              <div className="w-full max-w-full">
+                <AnalystReviewTable data={m.analystReview} />
+              </div>
+            </div>
+          );
+        }
         return (
           <div
             key={m.id}
@@ -326,6 +615,8 @@ export default function AnalyzePanel() {
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
   /** 当前暂停点是否对应「字段表」工作流（用于行点选、空回车确认） */
   const [activeFieldReviewId, setActiveFieldReviewId] = useState<string | null>(null);
+  const [activeCleaningReviewId, setActiveCleaningReviewId] = useState<string | null>(null);
+  const [activeAnalystReviewId, setActiveAnalystReviewId] = useState<string | null>(null);
   const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
 
   // File / project state
@@ -425,6 +716,8 @@ export default function AnalyzePanel() {
         if (d.event_type === "user_input_requested") {
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const fr = parseFieldReview(dataObj.field_review);
+          const cr = parseCleaningReview(dataObj.cleaning_review);
+          const ar = parseAnalystReview(dataObj.analyst_review);
           if (fr) {
             const wfId = uid();
             setActiveFieldReviewId(wfId);
@@ -442,6 +735,38 @@ export default function AnalyzePanel() {
           } else {
             setActiveFieldReviewId(null);
             setSelectedReviewField(null);
+          }
+          if (cr) {
+            const cid = uid();
+            setActiveCleaningReviewId(cid);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: cid,
+                role: "workflow",
+                text: "",
+                timestamp: d.timestamp,
+                cleaningReview: cr,
+              },
+            ]);
+          } else {
+            setActiveCleaningReviewId(null);
+          }
+          if (ar) {
+            const aid = uid();
+            setActiveAnalystReviewId(aid);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: aid,
+                role: "workflow",
+                text: "",
+                timestamp: d.timestamp,
+                analystReview: ar,
+              },
+            ]);
+          } else {
+            setActiveAnalystReviewId(null);
           }
           const raw = dataObj.message;
           const agentMsg = typeof raw === "string" ? raw.trim() : "";
@@ -484,6 +809,8 @@ export default function AnalyzePanel() {
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
             setSelectedReviewField(null);
+            setActiveCleaningReviewId(null);
+            setActiveAnalystReviewId(null);
             setPhase("setup");
             setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
             setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
@@ -501,6 +828,10 @@ export default function AnalyzePanel() {
             setGuardrailsBlocked(true);
             if (gr.runId) setBlockedRunId(gr.runId);
             setWaitingAgent(null);
+            setActiveFieldReviewId(null);
+            setActiveCleaningReviewId(null);
+            setActiveAnalystReviewId(null);
+            setSelectedReviewField(null);
             setPhase("done");
           }
         }
@@ -527,7 +858,9 @@ export default function AnalyzePanel() {
       if (!waitingAgent) return;
       const outgoing = raw.trim();
       const allowEmptyConfirm =
-        Boolean(activeFieldReviewId) && waitingAgent === "scout";
+        (Boolean(activeFieldReviewId) && waitingAgent === "scout") ||
+        (Boolean(activeCleaningReviewId) && waitingAgent === "cleaner") ||
+        (Boolean(activeAnalystReviewId) && waitingAgent === "analyst");
       if (!outgoing && !allowEmptyConfirm) return;
       const displayBubble = outgoing || "确认";
       setMessages((prev) => [
@@ -543,9 +876,11 @@ export default function AnalyzePanel() {
       setReplyText("");
       setWaitingAgent(null);
       setActiveFieldReviewId(null);
+      setActiveCleaningReviewId(null);
+      setActiveAnalystReviewId(null);
       setSelectedReviewField(null);
     },
-    [send, waitingAgent, activeFieldReviewId],
+    [send, waitingAgent, activeFieldReviewId, activeCleaningReviewId, activeAnalystReviewId],
   );
 
   const handleReply = useCallback(() => {
@@ -564,6 +899,8 @@ export default function AnalyzePanel() {
     setWaitingAgent(null);
     setReplyText("");
     setActiveFieldReviewId(null);
+    setActiveCleaningReviewId(null);
+    setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
     setPhase("running");
     send("analyze", {
@@ -582,6 +919,8 @@ export default function AnalyzePanel() {
     setWaitingAgent(null);
     setReplyText("");
     setActiveFieldReviewId(null);
+    setActiveCleaningReviewId(null);
+    setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
@@ -617,9 +956,16 @@ export default function AnalyzePanel() {
   const canStart = !!currentProject && !!dataPath && connectionStatus === "connected";
   const scoutFieldReviewOpen =
     Boolean(activeFieldReviewId) && waitingAgent === "scout";
+  const cleanerCleaningReviewOpen =
+    Boolean(activeCleaningReviewId) && waitingAgent === "cleaner";
+  const analystReviewOpen =
+    Boolean(activeAnalystReviewId) && waitingAgent === "analyst";
   const canSendReply =
     !!waitingAgent &&
-    (replyText.trim().length > 0 || scoutFieldReviewOpen);
+    (replyText.trim().length > 0 ||
+      scoutFieldReviewOpen ||
+      cleanerCleaningReviewOpen ||
+      analystReviewOpen);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
@@ -812,6 +1158,19 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
+              {(cleanerCleaningReviewOpen || analystReviewOpen) && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    确认继续
+                  </button>
+                </div>
+              )}
               {scoutFieldReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
@@ -867,7 +1226,11 @@ export default function AnalyzePanel() {
                   placeholder={
                     scoutFieldReviewOpen
                       ? "补充或纠错；留空可按 Enter 或点「确认无误」"
-                      : "输入回复，Enter 发送 · Shift+Enter 换行"
+                      : cleanerCleaningReviewOpen
+                        ? "对清洗的补充说明；留空可按 Enter 或点「确认继续」"
+                        : analystReviewOpen
+                          ? "对统计结果的补充或关注点；留空可按 Enter 或点「确认继续」"
+                          : "输入回复，Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
                   className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
@@ -875,7 +1238,11 @@ export default function AnalyzePanel() {
                              focus:outline-none transition-colors
                              ${selectedReviewField && scoutFieldReviewOpen
                                ? "border-app-accent ring-1 ring-app-accent/30"
-                               : "border-app-accent/50 focus:border-app-accent"}`}
+                               : cleanerCleaningReviewOpen
+                                 ? "border-app-success/50 ring-1 ring-app-success/20"
+                                 : analystReviewOpen
+                                   ? "border-app-accent/60 ring-1 ring-app-accent/25"
+                                   : "border-app-accent/50 focus:border-app-accent"}`}
                 />
                 <button
                   type="button"
@@ -893,7 +1260,9 @@ export default function AnalyzePanel() {
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
                   ? "表格行可点选高亮 · Enter /「确认无误」= 确认上表 · Shift+Enter 换行"
-                  : "Enter 发送 · Shift+Enter 换行"}
+                  : cleanerCleaningReviewOpen || analystReviewOpen
+                    ? "Enter /「确认继续」= 进入后续步骤 · Shift+Enter 换行"
+                    : "Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>
           )}

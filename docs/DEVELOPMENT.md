@@ -38,7 +38,7 @@
 ### 分析流程与人机互动（与 Web UI 对齐）
 
 - **不是聊天机器人**：用户不是在空框里随便问；主路径是 **Orchestrator 锁定的流水线**（Scout → Cleaner → Analyst → Reporter）。
-- **规定暂停点**：在关键阶段结束后编排会 **暂停**，经 WebSocket 下发 **`USER_INPUT_REQUESTED`**（或等价事件）；前端展示 **LLM 根据当次结果生成的说明与提问**（非固定文案）。
+- **规定暂停点**：在关键阶段结束后编排会 **暂停**，经 WebSocket 下发 **`USER_INPUT_REQUESTED`**（或等价事件）；前端优先渲染 **结构化工作流卡片**（`field_review` / `cleaning_review` / `analyst_review`），**不**用固定长模板冒充对话；若事件仍带短 `message`，可为 LLM 依当次结果生成（非必填）。
 - **用户回复**：用户在分析页用 **自然语言** 回复；前端发送 **`respond`**，后端 **`unblock`** 继续执行。不要用「固定表单卡片」理解当前 Web 产品（CLI 分阶段测试仍可独立存在）。
 - **体验原则**：Agent **主动引导**；进度展示应对应真实阶段（流水线状态 + 日志/事件），而非装饰性假状态。
 
@@ -109,7 +109,12 @@ print('ALL 3 PHASES OK')
 # 护栏 / API / WebSocket（改 orchestrator、ws_handler、server 或 wsGuardrails 时建议跑）
 .venv/bin/python -m pytest tests/test_api/ -q
 .venv/bin/python -m pytest tests/test_web/test_ws_guardrails_parity.py -q
+
+# Agent 互动与暂停路径（产品契约；改 orchestrator / AnalyzePanel 暂停与用户输入时必跑）
+.venv/bin/python -m pytest tests/test_product/test_agent_interaction_contract.py -q
 ```
+
+> 契约全文：[AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md)（与 [PROJECT.md](../PROJECT.md)「互动与成长：原则优先级与验收」一致）。
 
 ### UI 手动测试步骤
 1. 浏览器打开 http://localhost:5173

@@ -46,7 +46,12 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 - **进度监控**：跟踪每个 Agent 的状态，检测失败并降级
 - **规则兜底**：80% 的常见场景有预定义规则覆盖，LLM 仅处理新场景
 
----
+### 人机互动理念（Web / 全流程）
+
+- **不是「静态聊天框」**：产品形态接近**有流程的协作**——流水线顺序固定（Scout → Cleaner → Analyst → Reporter），但在**规定暂停点**由 Agent **主动打断、说明当前发现、并向用户提问**；用户用自然语言回复后继续执行。
+- **话术动态、流程静态**：各暂停点展示给用户的文字由 **LLM 根据当次运行结果生成**；**不**用固定模板冒充「对话」。系统只锁定「何时暂停」，**不**锁定「暂停时说什么」。
+- **无用户模式分级**：不提供「快速 / 普通 / 资深」等自主度档位；互动深度由**流程中的暂停与回复**体现，与「始终可对话、Agent 主动引导」一致。
+- **Web UI 当前形态**（`hagoku_web/`）：**固定侧栏/顶栏视图切换**（项目、分析、报告、知识、事件等），**不再使用 dockview 可拖拽多 Tab**。分析页：**「开始分析」**进入流程；**流水线状态** + **对话气泡**承载 Agent 消息；用户通过 **WebSocket `respond`** 提交回复。报告页：默认 HTML **双轨**（要点速览 / 数据与完整证据）。
 
 ---
 
@@ -67,7 +72,7 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 {项目名}/report_{日期}.html
 ```
 
-5 个预设模板：`business_analysis`（默认）、`academic`、`ab_test`、`executive_brief`、`data_audit`。模板管呈现风格，AI 管内容生成。
+内置模板名（`ReportGenerator` / `hagoku run --template`）：**`default`** 为当前默认，即 **双轨 HTML**（要点速览 + 数据与完整证据）；另有 `business_analysis`、`academic`、`ab_test`、`executive_brief`、`data_audit`、`brief` 等，版式可能仍为单栏，与 `default` 不同。未指定 `--template` 时使用 `default`。模板管呈现风格，AI 管内容生成。
 
 ---
 
@@ -421,7 +426,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | 🛡 免疫 | **Great Expectations** | 数据验证 | Cleaner |
 | 🏃 脚 | **subprocess + 白名单** | 安全代码执行 | Analyst |
 | 📊 数据 | **Pandas** + **DuckDB** + **PyArrow** | 数据处理 + SQL 查询 + Parquet | 全体 |
-| 🖥 界面 | **Click** + **FastAPI** + **React** | CLI + Web UI（dockview 面板布局） | 用户交互 |
+| 🖥 界面 | **Click** + **FastAPI** + **React** | CLI + Web UI（Vite SPA：固定导航 + 多视图面板） | 用户交互 |
 
 **12 组选型，HaGoKu 自己只写编排逻辑。**
 
@@ -436,7 +441,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 - [ ] Analyst：回归 + 假设检验 + 效应量 + 模型诊断
 - [ ] Cleaner：缺失机制检验 + 清洗影响评估
 - [ ] Scout：语义推断 + 用户确认交互
-- [ ] Reporter：双轨输出（吸引力层 + 核心价值层）
+- [x] Reporter：双轨输出（默认 HTML：`default` 模板，要点速览 + 完整证据）
 - [ ] 仲裁器：规则引擎 + 基础调度
 - [ ] 项目管理 + SQLite 元数据库 + 输出管理
 - [ ] CLI + 终端实时输出
@@ -446,7 +451,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 ### V2 — 洞察可见，分析可持续
 
 - [x] FastAPI + WebSocket API（hagoku/api/）
-- [x] React Web UI（hagoku_web/，dockview 面板布局）
+- [x] React Web UI（hagoku_web/，Vite + Zustand + 固定视图导航，非 dockview）
 - [ ] 每个检验配诊断图
 - [ ] 执行回放 (replay)
 - [ ] 报告导出 HTML/PDF
@@ -493,7 +498,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 - **三级统计护栏**（强制/警告/提示）—— TA 无统计分析需求
 - **知识系统三层架构**（kb/ → knowledge.yaml → LLM 兜底）—— TA 无领域知识注入
 - **双轨报告输出**（吸引力层 + 核心价值层 HTML）—— TA 输出文本决策
-- **用户三模式**（快速/普通/资深自主度控制）—— TA 全自动
+- **流程内人机暂停 + 动态话术**（非三档位用户模式）—— TA 全自动批量跑、无同类「可解释暂停」产品化体验
 - **规则引擎 80% 覆盖**（KEYWORD_MAP + PLAN_TEMPLATES）—— TA 无规则引擎
 - **数据血缘追踪**（Parquet → Artifact → lineage）—— TA 无数据链路
 
@@ -577,7 +582,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 | 命令 | 用途 |
 |------|------|
-| `hagoku run <file> -q "问题"` | 完整分析（`--mode quick/standard/expert`） |
+| `hagoku run <file> -q "问题"` | 端到端分析流程（无 `--mode` / 无用户模式档位） |
 | `hagoku demo` | 列出内置演示数据集 |
 | `hagoku profile <file>` | 数据画像 |
 

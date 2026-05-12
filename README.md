@@ -68,7 +68,7 @@ cd hagoku_web && npm run dev
 # React 开发服务器运行在 http://localhost:5173
 ```
 
-**UI 功能：** 可拖拽面板布局 → 项目管理 → 分析（WebSocket 实时事件流）→ 报告查看 → 知识库导航 → 事件监控
+**UI 功能：** 固定导航切换视图 → **项目**（卡片式项目库、描述与数据文件）→ **分析**（「开始分析」、流水线进度、Agent 对话气泡与暂停回复、WebSocket 实时事件）→ **报告**（按项目列出 HTML 等）→ **知识**（方法类知识库）→ **事件**（原始事件流）
 
 ### CLI
 
@@ -134,7 +134,7 @@ hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 |------|------|
 | `--demo ad_campaign` | 使用内置演示数据集 |
 | `--format html --format md` | 输出格式（可多选） |
-| `--template academic` | 报告模板（business_analysis/academic/ab_test/executive_brief/data_audit） |
+| `--template academic` | 报告模板（`default` 为双轨 HTML 默认；另有 business_analysis / academic / …） |
 | `--interactive` | 交互模式：分析完后继续调整 |
 | `--resume` | 从上次断点继续分析 |
 | `--schema schema.yaml` | 外部 schema 文件路径 |
@@ -192,15 +192,15 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 
 ## 报告模板
 
-5 个预设模板：
-
 | 模板 | 风格 | 适用场景 |
 |------|------|----------|
-| `business_analysis` | 商业分析 | 含建议行动区（默认） |
+| `default` | 通用双轨 HTML | **未指定 `--template` 时使用**；「要点速览」+「数据与完整证据」 |
+| `business_analysis` | 商业分析 | 含建议行动区等 |
 | `academic` | APA 风格、表格化 | 学术论文 / 正式报告 |
 | `ab_test` | A/B 测试 | 含 verdict 判定 |
 | `executive_brief` | 高管简报 | 极简关键信息 |
 | `data_audit` | 数据审计 | 详细清洗操作表 |
+| `brief` | 极简摘要 | 快速浏览 |
 
 ---
 
@@ -228,10 +228,10 @@ llm:
   model: "Qwen3.6-35B-A3B"
   temperature: 0.6
 manager:
-  mode: "balanced"   # balanced(规则+AI) / rule(纯规则) / ai(AI优先)
+  cleaning_impact_warning: 0.3   # 清洗影响率超过该比例时在护栏中重点提示（与「编排模式」无关）
 ```
 
-环境变量：`HAGOKYU_LLM_BASE_URL`、`HAGOKYU_LLM_API_KEY`、`HAGOKYU_LLM_MODEL`、`HAGOKYU_MANAGER_MODE`、`HAGOKYU_EMBEDDING_BASE_URL`、`HAGOKYU_EMBEDDING_API_KEY`、`HAGOKYU_EMBEDDING_MODEL`
+环境变量：`HAGOKYU_LLM_BASE_URL`、`HAGOKYU_LLM_API_KEY`、`HAGOKYU_LLM_MODEL`、`HAGOKYU_LLM_MODEL_DEEP`、`HAGOKYU_LLM_MODEL_QUICK`、`HAGOKYU_EMBEDDING_BASE_URL`、`HAGOKYU_EMBEDDING_API_KEY`、`HAGOKYU_EMBEDDING_MODEL`、`HAGOKYU_WORK_DIR`、`HAGOKYU_PROJECT_DIR`（可选）
 
 ---
 
@@ -243,7 +243,7 @@ manager:
 - **清洗**: PyOD, cleanlab, Great Expectations, ydata-profiling
 - **报告**: Jinja2, Plotly, Matplotlib
 - **Agent**: CrewAI, Instructor, Pydantic
-- **编排**: Click（CLI）+ FastAPI + React（dockview 面板布局）
+- **编排与界面**: Click（CLI）+ FastAPI + React + Vite（固定导航多视图 SPA，非 dockview）
 
 ---
 

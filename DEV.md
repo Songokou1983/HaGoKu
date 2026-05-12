@@ -62,8 +62,8 @@ cd hagoku_web && npm run dev   # http://localhost:5173
 | `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | `Qwen3.6-35B-A3B` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
-| `HAGOKYU_MANAGER_MODE` | 编排模式 | `balanced` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
+| `HAGOKYU_PROJECT_DIR` | 项目根目录（可选，覆盖默认 `~/ .hagoku/projects`） | — |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |

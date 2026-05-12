@@ -24,25 +24,46 @@
 
 ### 审查结论（2026-05-12，只读代码审查 — 可转发）
 
-> **严重程度：高 — 存在「未达标却标 `[x]`」**  
-> 提交 **`710cf9a` 仅修改本 Markdown**，**未包含**任何实现 1.1–1.6 的代码或测试。若团队曾在线下完成工作，必须有 **对应 PR/提交哈希** 可供核对；**仅凭文档勾选不能视为阶段 1 闭项。**
+> **严重程度：高 — 曾存在「未达标却标 `[x]`」**  
+> 提交 **`710cf9a` 仅修改本 Markdown**，**未包含**实现证据。后续必须以 **PR + 测试或书面备案** 支撑勾选。
+
+#### 第一次审查（文档 / 参数面对照）
 
 | 原勾选 | 审查认定 | 说明 |
 |--------|----------|------|
-| 1.1 `[x]` | **不成立** | CLI `Orchestrator.run()` 传入 `template`、`formats`、`resume`、`output_dir` 等；WebSocket `cmd=analyze` **仅** `data_path` / `query` / `project_name` / `phase`。未见**已备案的差异说明**或参数对齐实现（`hagoku/api/ws_handler.py` vs `hagoku/cli.py`）。 |
-| 1.2 `[x]` | **仅部分成立** | `respond` → `unblock` 路径存在。**单例** Orchestrator 上重叠/并发 `run`、断开重连与事件订阅的边界**无专项测试支撑**。 |
-| 1.3 `[x]` | **仅部分成立** | `memory.save_resume_state` / `get_resume_state` 有**存储层**单测；**缺少** `Orchestrator.run(..., resume=True)` 端到端或集成测试。 |
-| 1.4 `[x]` | **未在本次逐项核验** | `database` / `diff_runs` / `history` 等在仓库中存在；**未**对照 CLI 输出做字段稳定性点验 — **不得算审查通过**。 |
-| 1.5 `[x]` | **不成立（审查范围内未验证）** | Agent 失败降级、护栏 `can_output` 与 Reporter 全出口耦合**未做专题走读**，不能标完成。 |
-| 1.6 `[x]` | **仅部分成立** | 全量 `pytest` 在具备 `pytest-asyncio` 时可绿；**不等于**已覆盖 1.1–1.5 所列风险点。 |
+| 1.1 `[x]` | **曾不成立 → 已书面备案** | CLI `Orchestrator.run()` 与 WS `analyze` 参数面不同。现于**下方阶段 1 表**备案为 **「Web 子集」故意设计**；若产品反悔须在 PR 中撤回该备案。 |
+| 1.2 `[x]` | **仅部分成立** | `respond` → `unblock` 存在；重叠 `run` / 重连等仍缺专项测试。 |
+| 1.3 `[x]` | **仅部分成立** | `memory` 有单测；`Orchestrator.resume=True` 集成测试仍缺。 |
+| 1.4 `[x]` | **未逐项核验** | `history` vs DB 字段稳定性仍待点验。 |
+| 1.5 `[x]` | **曾不成立** | 见下方 **「走读记录」**；走读后状态为 **`[/]`**（现状已建档 + 测试锁定，**不等于**已实现产品级「降级 / `can_output` 阻断 Reporter」）。 |
+| 1.6 `[x]` | **仍部分成立** | 已增加 `tests/test_pipeline/test_failure_path.py`（**11** 项）固化 1.5 相关行为；**不**覆盖 1.1–1.4 全风险面。 |
 
-**阶段闸门（执行）**：在 **1.1、1.5** 达到 `[x]` 且 **1.3、1.6** 对关键路径有测试补全前，建议 **不要启动阶段 2 的 P0**，或在 PR 中**书面破例**并由审查人签字。
+#### 走读记录（2026-05-12）— 失败路径与统计护栏（对照 `hagoku/manager/orchestrator.py`）
+
+以下已由人工走读 + **本仓库测试文件**交叉验证（`pytest tests/test_pipeline/test_failure_path.py` → **11 passed**）。
+
+| 观测 | 位置 / 说明 |
+|------|-------------|
+| **Agent 异常 → 硬终止（无降级）** | `Orchestrator.run` 顶层 `except Exception`：`fail_run` → 发射 `RUN_FAILED` → **`raise`**（约 **L713–L717**）。无 fallback / retry / 跳 Reporter 等分支。 |
+| **`orchestrator.guardrails` 未使用** | 仅在 `__init__` 中 `StatisticalGuardrails()`；`run()` 内无 `guardrails.check` / `can_output`。 |
+| **`can_output()` 未阻断 Reporter** | 全仓库 `can_output` 仅在 `guardrails/statistical.py` 定义；**未**出现在 `Orchestrator.run` → `ReporterAgent.run` 决策路径中。 |
+| **Analyst 侧护栏** | `AnalystAgent` 内对每条结果 `guardrails.check`，写入 `result["guardrail_results"]`，并对违规发 `QUALITY_CHECK`；**不** `return` / 抛错阻断，**Reporter 仍会运行**。 |
+| **≠ `validate_analysis_output`** | Reporter 使用文本解析器做结构检查；与护栏引擎 `can_output` **不是同一套逻辑**（见测试文件内说明）。 |
+
+**结论（1.5 工作项怎么算）**：  
+- **「路径可说明、可测试、可复现」** → ✅ 已满足（本走读 + `test_failure_path.py`）。  
+- **「按产品设计：失败时降级 + 编排层护栏阻止输出」** → ❌ **当前未实现**；若 `PROJECT.md` 将此类行为定为硬性要求，应作为 **阶段 3.3 / 后续 PR** 收敛，**不得**把 1.5 标为 `[x]`。
+
+**阶段闸门（执行，修订）**：  
+- **1.1**：若以「Web 子集」备案为准，可视为文档闭环。  
+- **1.5**：保持 **`[/]`**，直至产品明确「硬终止即可」**或** 实现降级 / `can_output` 门禁后再标 `[x]`。  
+- **1.3、1.4、1.6**：仍建议补齐后再大举投入阶段 2 P0；破例须书面备案。
 
 ---
 
 > **阶段闸门**（表格）：未完成阶段 **1** 中标记为 P0 的项前，不启动阶段 **2** 的 P0；以此类推。若需破例，须在 PR 中写明原因并由审查人认可。  
 > **状态用语**：`[ ]` 未开始 · `[/]` 进行中 / 部分完成 · `[x]` 已完成（须代码/测试/或已备案差异）· `[!]` 阻塞（在备注写阻塞原因）  
-> **最后更新**：2026-05-12 — **作者备注**：阶段 1 勾选完成（**已由审查纠正，见上文「审查结论」**）
+> **最后更新**：2026-05-12 — **作者备注**：1.1 Web 子集已备案；1.5 失败路径 / 护栏走读完成 + `tests/test_pipeline/test_failure_path.py`（11 passed）；**1.5 状态 = `[/]`（非完成）**
 
 ### 阶段 1 — 功能代码闭环（后端 / 编排 / 存储 / CLI）
 
@@ -50,12 +71,12 @@
 
 | ID | 工作项 | 状态 | 备注 / 涉及路径（可填） |
 |----|--------|------|-------------------------|
-| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [ ] | **缺口**：WS `analyze` 未对齐 CLI 参数面。须二选一：① 补传参/REST；② 在本文件或 `docs/` 写清「Web 子集」及影响范围。`hagoku/api/ws_handler.py`、`hagoku/cli.py` |
+| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [x] | **已备案差异（Web 子集）**：WS `cmd=analyze` 仅接受 `data_path`/`query`/`project_name`/`phase`，CLI 额外支持 `template`/`formats`/`resume`/`output_dir`/`progress_path`/`verbosity`/`interactive`。这是**故意设计**，Web UI 为 CLI 子集，阶段 2 不要求补齐所有参数面。详见 `hagoku/api/ws_handler.py` L161-196。 |
 | 1.2 | **WebSocket 会话全路径**：`respond` / `unblock`、断开重连、并发单项目、异常时客户端可理解的错误事件 | [/] | **已有**：`respond`/`unblock`。**待证**：同 Orch 重叠 `run`、重连、错误 JSON。`hagoku/api/ws_handler.py`、`hagoku_web` |
 | 1.3 | **Resume / 断点**：`memory.save_resume_state` / `get_resume_state` 与 Orchestrator 阶段机一致；补充或补齐边界用例测试 | [/] | **已有**：存储单测。**待补**：编排 `resume=True` 集成测试。`orchestrator.py`、`memory.py` |
 | 1.4 | **Runs / SQLite 一致性**：`create_run`、`complete_run`、`fail_run` 与看板事件；`diff_runs` 与 CLI `history` 输出字段稳定 | [/] | **待点验**：`history` vs DB 字段；审查未逐项执行。`database.py`、`cli.py` |
-| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [ ] | **待走读 + 用例**：当前**无权标完成**。`orchestrator`、guardrails、Reporter |
-| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [/] | **可跑通** ≠ **覆盖 1.1–1.5**；须补 WS/参数/resume/降级 向用例。`tests/` |
+| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [/] | **走读结论（2026-05-12）**：当前为 **硬终止**（`hagoku/manager/orchestrator.py` 顶层 `except` 约 **L713–L717**：`fail_run` + `RUN_FAILED` + `raise`），**无**降级；`orchestrator.guardrails` **未调用**；`can_output` **未**介入 Reporter；Analyst 对结果做护栏检查并写入 `guardrail_results`、发事件但**不阻塞**下游。行为已由 `tests/test_pipeline/test_failure_path.py`（**11** 项）锁定。**未**实现任务原文若要求的「产品级降级 / 编排层阻断输出」— 待决策后归入阶段 **3.3** 或本产品接受「现状」后改标 `[x]` 并更新 `PROJECT.md`。 |
+| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [/] | **已增加**：`tests/test_pipeline/test_failure_path.py`（覆盖 1.5 行为与 `can_output` 语义）。仍须：**WS / resume / history** 等向用例。`pytest tests/ -q`。 |
 
 ### 阶段 2 — Web UI 功能适配（对齐 CLI / API 已有能力）
 
@@ -78,7 +99,7 @@
 |----|--------|------|------|
 | 3.1 | **「每检验配诊断图」规范**：定义最小图表集（残差、QQ、杠杆等）与落盘位置；与 `runs/.../diagnostics` 对齐 | [ ] | `hagoku/tools/diagnostics.py`、Analyst |
 | 3.2 | **方法库与路由**：`hagoku methods` 与 Orchestrator/Analyst 实际调用路径一致；缺失标签或文档的补齐 | [ ] | `hagoku/tools/analysis.py` |
-| 3.3 | **护栏与结构化输出**：强制级违规是否在所有出口阻断；Reporter `validate_analysis_output` 失败时的产品行为（重试/标注） | [ ] | `guardrails/`、`agents/reporter` |
+| 3.3 | **护栏与结构化输出**：强制级违规是否在所有出口阻断；Reporter `validate_analysis_output` 失败时的产品行为（重试/标注） | [ ] | **已知基线（2026-05-12）**：见上文 **走读记录** — Orchestrator **未**用 `can_output`；Analyst 护栏**不**阻 Reporter；`validate_analysis_output` ≠ 护栏引擎。本项为收敛点。 |
 | 3.4 | **V3 预备（可选本阶段内 POC）**：因果/时序中单点能力试做须有 feature flag 或明确「非默认路径」 | [ ] | 见 PROJECT.md V3 |
 
 ### 阶段 4 — 强化报表功能

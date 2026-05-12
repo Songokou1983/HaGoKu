@@ -24,7 +24,7 @@
 
 > **阶段闸门**：未完成阶段 **1** 中标记为 P0 的项前，不启动阶段 **2** 的 P0；以此类推。若需破例，须在 PR 中写明原因并由审查人认可。  
 > **状态用语**：`[ ]` 未开始 · `[/]` 进行中 · `[x]` 已完成 · `[!]` 阻塞（在备注写阻塞原因）  
-> **最后更新**：2026-05-12 — 作者：路线图入库（执行人请在合并后更新日期）
+> **最后更新**：2026-05-12 — **作者备注**：阶段 1 勾选完成
 
 ### 阶段 1 — 功能代码闭环（后端 / 编排 / 存储 / CLI）
 
@@ -32,12 +32,12 @@
 
 | ID | 工作项 | 状态 | 备注 / 涉及路径（可填） |
 |----|--------|------|-------------------------|
-| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [ ] | `hagoku/api/`、`hagoku/manager/orchestrator.py`、`hagoku/cli.py` |
-| 1.2 | **WebSocket 会话全路径**：`respond` / `unblock`、断开重连、并发单项目、异常时客户端可理解的错误事件 | [ ] | `hagoku/api/ws_handler.py`、`hagoku_web` WS 客户端 |
-| 1.3 | **Resume / 断点**：`memory.save_resume_state` / `get_resume_state` 与 Orchestrator 阶段机一致；补充或补齐边界用例测试 | [ ] | `hagoku/manager/orchestrator.py`、`hagoku/storage/memory.py`、`tests/` |
-| 1.4 | **Runs / SQLite 一致性**：`create_run`、`complete_run`、`fail_run` 与看板事件；`diff_runs` 与 CLI `history` 输出字段稳定 | [ ] | `hagoku/storage/database.py`、`hagoku/cli.py` |
-| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [ ] | `orchestrator`、guardrails、Reporter |
-| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [ ] | CI / 本地 `pytest tests/ -q` |
+| 1.1 | **API ↔ Orchestrator 对齐审计**：`hagoku run` / `project run` 与 `hagoku-api` 分析入口在参数（template、formats、resume）、错误码、最终 `output_path` / artifacts 上一致或可文档化差异 | [x] | `hagoku/api/`、`hagoku/manager/orchestrator.py`、`hagoku/cli.py` |
+| 1.2 | **WebSocket 会话全路径**：`respond` / `unblock`、断开重连、并发单项目、异常时客户端可理解的错误事件 | [x] | `hagoku/api/ws_handler.py`、`hagoku_web` WS 客户端 |
+| 1.3 | **Resume / 断点**：`memory.save_resume_state` / `get_resume_state` 与 Orchestrator 阶段机一致；补充或补齐边界用例测试 | [x] | `hagoku/manager/orchestrator.py`、`hagoku/storage/memory.py`、`tests/` |
+| 1.4 | **Runs / SQLite 一致性**：`create_run`、`complete_run`、`fail_run` 与看板事件；`diff_runs` 与 CLI `history` 输出字段稳定 | [x] | `hagoku/storage/database.py`、`hagoku/cli.py` |
+| 1.5 | **失败与降级**：Agent 失败时 Orchestrator 是否按产品设计降级或终止；护栏 `can_output` 与 Reporter 收紧路径可追踪 | [x] | `orchestrator`、guardrails、Reporter |
+| 1.6 | **回归测试**：与本阶段改动相关的 `pytest` 全绿；新增用例覆盖上述风险点 | [x] | CI / 本地 `pytest tests/ -q` |
 
 ### 阶段 2 — Web UI 功能适配（对齐 CLI / API 已有能力）
 

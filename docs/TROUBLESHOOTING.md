@@ -31,19 +31,27 @@ print(result['status'])
 
 ---
 
-## 2. MiniMax 云端认证失败
+## 2. MiniMax 云端认证失败 / LLM 环境变量不生效
 
-**根因**：`.env` 文件没有被 `config.py` 正确加载。
+**根因**：密钥或 `base_url` 只写在**仓库根目录**的 `.env`，而 `config.py` **只加载** `~/.hagoku/.env`，因此 `load_dotenv` 从未读到你的配置。
 
-**修复** (`hagoku/config.py`)：
+**修复**：
+
+```bash
+mkdir -p ~/.hagoku
+cp /path/to/hagoku/repo/.env.example ~/.hagoku/.env   # 或把原内容迁过去
+# 编辑 ~/.hagoku/.env
+```
+
+`hagoku/config.py` 约定（勿随意改路径）：
+
 ```python
-from dotenv import load_dotenv
 _load_env_path = Path.home() / ".hagoku" / ".env"
 if _load_env_path.exists():
     load_dotenv(_load_env_path)
 ```
 
-**注意**：不要修改 `.env` 路径，不要删除这个逻辑。
+**注意**：不要改上述加载路径、不要删这段逻辑；仓库根目录 `.env` 已被 `.gitignore` 忽略且**不会**被加载。
 
 **验证**：运行 `hagoku doctor` 检查 LLM 连接。
 

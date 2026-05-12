@@ -15,9 +15,9 @@ python3 -m venv .venv && source .venv/bin/activate
 # 安装
 pip install -e ".[dev]"
 
-# 配置 LLM
-cp .env.example .env
-# 编辑 .env 填入 API 地址和密钥（MiniMax 云端，`~/.hagoku/.env`）
+# 配置 LLM（唯一生效路径：~/.hagoku/.env）
+mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env
+# 编辑 ~/.hagoku/.env 填入 API 地址和密钥
 
 # 验证
 pytest tests/ -q

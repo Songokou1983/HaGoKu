@@ -6,7 +6,8 @@
 - **README.md / docs/DEVELOPMENT.md / DEV.md**：Web UI 描述、手动测试步骤、`report --template` 说明、配置示例与环境变量表与上述一致；移除已不生效的 `HAGOKYU_MANAGER_MODE` / `manager.mode` 编排档位描述。
 - **`.env.example`**：删除 `HAGOKYU_MANAGER_MODE` 占位行。
 - **`DEVELOPMENT_PROMPT.md`**：改为**可重复填写的任务传递模板**（非废弃），并指向 `PROJECT.md` 等现行口径；历史长文已移除以防误导。
-- **文档索引**：`PROJECT.md` / `DEV.md` / `CLAUDE.md` 的文档表补充 `DEVELOPMENT_PROMPT.md` 条目。
+- **`.gitignore` / `.env.example` / 文档**：明确 `~/.hagoku/.env` 为唯一加载路径；停止跟踪仓库根 `.env`。
+- **README / PROJECT / DEV / TROUBLESHOOTING**：安装与排错说明与上述一致。
 
 ## 2026-05-09 — WebUI 优化（第二轮）
 

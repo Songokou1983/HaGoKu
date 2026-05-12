@@ -220,10 +220,17 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 
 ## 配置
 
-首次运行自动创建 `~/.hagoku/config.yaml`，也支持环境变量覆盖：
+首次运行自动创建 `~/.hagoku/config.yaml`，也支持环境变量覆盖。
 
-```yaml
-llm:
+**环境变量文件（与仓库根目录无关）**：后端 `hagoku/config.py` **只读取** `~/.hagoku/.env`（若存在）。可从仓库内 `.env.example` 生成：
+
+```bash
+mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env
+# 再编辑 ~/.hagoku/.env
+```
+
+`config.yaml` 示例：
+
   base_url: "http://localhost:8000/v1"
   model: "Qwen3.6-35B-A3B"
   temperature: 0.6

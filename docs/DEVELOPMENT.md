@@ -169,7 +169,7 @@ with sync_playwright() as p:
 - ❌ 不要修改 `~/.llama-proxy/` 下的任何文件
 - ❌ 不要用 `pm2 restart` 或 `pm2 stop` 操作 llama-proxy
 - ❌ 不要自己新建 llama.cpp 模型服务
-- ❌ 不要把 `.env` 路径改成其他位置
+- ❌ 不要改 `config.py` 里 **`~/.hagoku/.env`** 的加载逻辑（本地密钥只放该文件；勿指望仓库根目录 `.env`）
 - ❌ 不要在 UI 代码里用 `time.sleep` 阻塞
 - ❌ 不要在 UI 代码里用相对导入（用 `from hagoku.xxx`）
 - ❌ 不要在 Playwright 里尝试完美模拟 Streamlit 按钮点击（不可能）

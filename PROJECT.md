@@ -559,7 +559,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 
-> `.env.example` 提供模板，复制为 `.env` 后修改。环境变量优先于配置文件。
+> 环境变量：`hagoku/config.py` **只加载** `~/.hagoku/.env`（不存在则跳过）。请用仓库内 [`.env.example`](.env.example) 作为模板：`mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env` 后编辑。勿在仓库根目录依赖 `.env`（不会被加载）。环境变量优先于 `config.yaml`。
 
 ---
 

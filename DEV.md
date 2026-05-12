@@ -30,6 +30,7 @@ pytest tests/ -q
 ```bash
 # 测试
 pytest tests/ -q                    # 全部测试
+pytest tests/test_web/test_ws_guardrails_parity.py -q  # 与 hagoku_web/src/utils/wsGuardrails.ts 同步的解析契约
 pytest tests/test_agents/ -q       # 单模块
 
 # 代码质量

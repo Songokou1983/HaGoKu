@@ -26,16 +26,28 @@ export function useAgentStatusSync() {
         case "run_started":
           setStatus("running");
           break;
-        case "run_completed":
+        case "run_completed": {
+          const payload = msg.data?.data as Record<string, unknown> | undefined;
+          if (payload?.cancelled === true) {
+            useWorkspaceStore.setState({ status: "idle", agents: {} });
+          } else {
+            setStatus("idle");
+          }
+          break;
+        }
         case "run_failed":
           setStatus("idle");
           break;
         case "agent_started":
           setAgentStatus(agentKey, "running");
           break;
-        case "agent_completed":
-          setAgentStatus(agentKey, "done");
+        case "agent_completed": {
+          const inner = msg.data?.data as Record<string, unknown> | undefined;
+          const skipped = inner?.skipped === true;
+          const isReporter = (agentKey ?? "").includes("report");
+          setAgentStatus(agentKey, isReporter && skipped ? "skipped" : "done");
           break;
+        }
         case "agent_failed":
           setAgentStatus(agentKey, "error");
           break;

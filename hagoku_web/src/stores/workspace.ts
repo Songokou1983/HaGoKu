@@ -27,6 +27,8 @@ interface WorkspaceStore {
   setCurrentProject: (name: string | null) => void;
   setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
   setLastError: (msg: string | null) => void;
+  /** 分析重置：全局运行状态 + Agent 状态条（与项目卡片「进行中」一致） */
+  resetRunUiState: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
@@ -50,4 +52,5 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   setCurrentProject: (currentProject) => set({ currentProject }),
   setReportFiles: (reportFiles) => set({ reportFiles }),
   setLastError: (lastError) => set({ lastError }),
+  resetRunUiState: () => set({ status: "idle", agents: {} }),
 }));

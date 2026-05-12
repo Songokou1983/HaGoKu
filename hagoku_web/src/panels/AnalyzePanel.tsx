@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { guardrailsRunCompletedInfo } from "../utils/wsGuardrails";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -7,7 +8,7 @@ import { PanelHeader } from "../components/PanelHeader";
 import {
   Loader2, WifiOff, Search, Sparkles, BarChart2, FileText,
   ArrowRight, FolderOpen, Upload, ChevronDown, CheckCircle2, X,
-  PlayCircle, RotateCcw, Clock,
+  PlayCircle, RotateCcw, Clock, ShieldAlert, MessageSquarePlus,
 } from "lucide-react";
 
 // ── Agent pipeline definition ─────────────────────────────────
@@ -19,7 +20,7 @@ const PIPELINE_AGENTS = [
 ] as const;
 
 type AgentKey = typeof PIPELINE_AGENTS[number]["key"];
-type AgentRunState = "idle" | "running" | "done" | "error";
+type AgentRunState = "idle" | "running" | "done" | "error" | "skipped";
 
 // Map raw WS event agent names → pipeline keys
 function resolveAgentKey(raw: string): AgentKey | null {
@@ -32,13 +33,143 @@ function resolveAgentKey(raw: string): AgentKey | null {
 }
 
 // ── Types ────────────────────────────────────────────────────
-type SessionPhase = "setup" | "query" | "running" | "done";
+type SessionPhase = "setup" | "running" | "done";
+
+/** Scout 字段核对：后端 `field_review` 结构化载荷（非 Agent 台词） */
+interface FieldReviewPayload {
+  n_rows: number | string;
+  n_cols: number;
+  rows: Array<{
+    field_name: string;
+    understanding_name: string;
+    meaning: string;
+    needs_attention?: boolean;
+  }>;
+}
+
+function parseFieldReview(raw: unknown): FieldReviewPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const rowsRaw = o.rows;
+  if (!Array.isArray(rowsRaw) || rowsRaw.length === 0) return null;
+  const rows: FieldReviewPayload["rows"] = [];
+  for (const item of rowsRaw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    rows.push({
+      field_name: String(r.field_name ?? ""),
+      understanding_name: String(r.understanding_name ?? "—"),
+      meaning: String(r.meaning ?? ""),
+      needs_attention: Boolean(r.needs_attention),
+    });
+  }
+  if (rows.length === 0) return null;
+  const nCols = typeof o.n_cols === "number" && Number.isFinite(o.n_cols) ? o.n_cols : rows.length;
+  const nRowsRaw = o.n_rows;
+  const nRows: number | string =
+    typeof nRowsRaw === "number" && Number.isFinite(nRowsRaw)
+      ? nRowsRaw
+      : typeof nRowsRaw === "string"
+        ? nRowsRaw
+        : "?";
+  return {
+    n_rows: nRows,
+    n_cols: nCols,
+    rows,
+  };
+}
+
+function FieldReviewTable({
+  data,
+  interactive = false,
+  selectedField = null,
+  onSelectField,
+}: {
+  data: FieldReviewPayload;
+  interactive?: boolean;
+  selectedField?: string | null;
+  onSelectField?: (fieldName: string) => void;
+}) {
+  return (
+    <div
+      className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
+        motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
+    >
+      <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
+        共 {String(data.n_rows)} 行 × {data.n_cols} 列。请核对下表（三列）；可点选某行再在下框编辑；无误点「确认无误」或空回车，有错只写错的列（例 Code=产品编码）。
+      </div>
+      <table className="w-full text-ui-sm border-collapse table-fixed">
+        <caption className="sr-only">字段理解核对</caption>
+        <colgroup>
+          <col className="w-[18%]" />
+          <col className="w-[22%]" />
+          <col className="w-[60%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-app-bg border-b border-app-border">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              字段名
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              理解名称
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              含义理解
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((r, i) => {
+            const sel = interactive && selectedField === r.field_name;
+            return (
+              <tr
+                key={`${r.field_name}-${i}`}
+                tabIndex={interactive ? 0 : undefined}
+                onClick={
+                  interactive && onSelectField
+                    ? () => onSelectField(r.field_name)
+                    : undefined
+                }
+                onKeyDown={
+                  interactive && onSelectField
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelectField(r.field_name);
+                        }
+                      }
+                    : undefined
+                }
+                className={`border-b border-app-border last:border-b-0
+                  ${interactive ? "cursor-pointer motion-safe:transition-colors motion-safe:duration-150 hover:bg-app-accent/5" : ""}
+                  ${sel ? "bg-app-accent/10 ring-1 ring-inset ring-app-accent/35" : ""}`}
+              >
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.field_name}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">
+                  {r.needs_attention ? (
+                    <span className="text-app-warning">{r.understanding_name}</span>
+                  ) : (
+                    r.understanding_name
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top break-words">{r.meaning}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 interface ConvoMessage {
   id: string;
-  role: "system" | "user" | "agent";
+  role: "system" | "user" | "agent" | "workflow";
   text: string;
   timestamp: string;
+  fieldReview?: FieldReviewPayload;
 }
 
 interface ProjectFile {
@@ -72,6 +203,7 @@ function PipelineBar({ states, elapsed }: {
           state === "running" ? "bg-app-accent/15 border-app-accent text-app-accent" :
           state === "done"    ? "bg-app-success/10 text-app-success" :
           state === "error"   ? "bg-app-error/10 text-app-error" :
+          state === "skipped" ? "bg-app-warning/10 text-app-warning" :
           "text-app-text-muted";
         return (
           <div
@@ -88,6 +220,8 @@ function PipelineBar({ states, elapsed }: {
                 ? <CheckCircle2 size={13} />
                 : state === "error"
                 ? <X size={13} />
+                : state === "skipped"
+                ? <ShieldAlert size={13} />
                 : <Clock size={13} className="opacity-40" />}
               <Icon size={12} />
             </div>
@@ -104,7 +238,17 @@ function PipelineBar({ states, elapsed }: {
 }
 
 // ── Conversation feed ─────────────────────────────────────────
-function ConvoFeed({ messages }: { messages: ConvoMessage[] }) {
+function ConvoFeed({
+  messages,
+  activeFieldReviewId,
+  selectedReviewField,
+  onSelectReviewField,
+}: {
+  messages: ConvoMessage[];
+  activeFieldReviewId: string | null;
+  selectedReviewField: string | null;
+  onSelectReviewField: (fieldName: string) => void;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -112,24 +256,41 @@ function ConvoFeed({ messages }: { messages: ConvoMessage[] }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-      {messages.map((m) => (
-        <div
-          key={m.id}
-          className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-        >
+      {messages.map((m) => {
+        if (m.role === "workflow" && m.fieldReview) {
+          const live = Boolean(activeFieldReviewId && m.id === activeFieldReviewId);
+          return (
+            <div key={m.id} className="flex justify-start w-full">
+              <div className="w-full max-w-full">
+                <FieldReviewTable
+                  data={m.fieldReview}
+                  interactive={live}
+                  selectedField={live ? selectedReviewField : null}
+                  onSelectField={live ? onSelectReviewField : undefined}
+                />
+              </div>
+            </div>
+          );
+        }
+        return (
           <div
-            className={`max-w-[85%] px-3 py-2 rounded-lg text-ui-sm leading-relaxed
-              ${m.role === "user"
-                ? "bg-app-accent text-white rounded-br-sm"
-                : m.role === "agent"
-                ? "bg-app-bg-secondary border border-app-border text-app-text rounded-bl-sm"
-                : "bg-transparent text-app-text-muted text-ui-xs italic"
-              }`}
+            key={m.id}
+            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            {m.text}
+            <div
+              className={`max-w-[85%] px-3 py-2 rounded-lg text-ui-sm leading-relaxed
+                ${m.role === "user"
+                  ? "bg-app-accent text-white rounded-br-sm"
+                  : m.role === "agent"
+                  ? "bg-app-bg-secondary border border-app-border text-app-text rounded-bl-sm whitespace-pre-wrap"
+                  : "bg-transparent text-app-text-muted text-ui-xs italic whitespace-pre-wrap"
+                }`}
+            >
+              {m.text}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <div ref={bottomRef} />
     </div>
   );
@@ -144,10 +305,10 @@ export default function AnalyzePanel() {
   const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
   const projects = useWorkspaceStore((s) => s.projects);
   const setActiveView = useWorkspaceStore((s) => s.setActiveView);
+  const resetRunUiState = useWorkspaceStore((s) => s.resetRunUiState);
 
   // Session state machine
   const [phase, setPhase] = useState<SessionPhase>("setup");
-  const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<ConvoMessage[]>([]);
   const [agentStates, setAgentStates] = useState<Record<AgentKey, AgentRunState>>({
     scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle",
@@ -160,7 +321,12 @@ export default function AnalyzePanel() {
   const [waitingAgent, setWaitingAgent] = useState<AgentKey | null>(null);
   const [replyText, setReplyText] = useState("");
   const [resultReportUrl, setResultReportUrl] = useState<string | null>(null);
+  const [guardrailsBlocked, setGuardrailsBlocked] = useState(false);
+  const [blockedRunId, setBlockedRunId] = useState<string | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
+  /** 当前暂停点是否对应「字段表」工作流（用于行点选、空回车确认） */
+  const [activeFieldReviewId, setActiveFieldReviewId] = useState<string | null>(null);
+  const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
 
   // File / project state
   const [dataPath, setDataPath] = useState("");
@@ -173,7 +339,6 @@ export default function AnalyzePanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
-  const queryRef = useRef<HTMLTextAreaElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -216,14 +381,10 @@ export default function AnalyzePanel() {
         const d = msg.data;
         const agentKey = resolveAgentKey(d.agent);
 
-        // Agent lifecycle → update pipeline
+        // Agent lifecycle → update pipeline（不在此插入固定「台词」）
         if (d.event_type === "agent_started" && agentKey) {
           agentStartTimes.current[agentKey] = Date.now();
           setAgentStates((prev) => ({ ...prev, [agentKey]: "running" }));
-          setMessages((prev) => [
-            ...prev,
-            { id: uid(), role: "system", text: `${PIPELINE_AGENTS.find(p => p.key === agentKey)?.label ?? agentKey} 开始工作…`, timestamp: d.timestamp },
-          ]);
         }
         if (d.event_type === "agent_completed" && agentKey) {
           const elapsed = Math.round((Date.now() - (agentStartTimes.current[agentKey] ?? Date.now())) / 1000);
@@ -232,88 +393,202 @@ export default function AnalyzePanel() {
         }
         if (d.event_type === "agent_failed" && agentKey) {
           setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
-          setMessages((prev) => [
-            ...prev,
-            { id: uid(), role: "system", text: `${agentKey} 遇到问题，尝试继续…`, timestamp: d.timestamp },
-          ]);
+          const detail = (d.data as Record<string, unknown>)?.error;
+          if (typeof detail === "string" && detail.trim()) {
+            setMessages((prev) => [
+              ...prev,
+              { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp },
+            ]);
+          }
         }
 
-        // Agent paused waiting for user — show LLM-generated message as chat bubble
+        // Reporter skipped (guardrails blocked) → set skipped state
+        if (d.agent === "reporter" && d.event_type === "agent_completed") {
+          const data = d.data as Record<string, unknown>;
+          const elapsed = Math.round((Date.now() - (agentStartTimes.current["reporter"] ?? Date.now())) / 1000);
+          if (data?.skipped === true) {
+            setAgentStates((prev) => ({ ...prev, reporter: "skipped" }));
+            setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
+            setWaitingAgent(null);
+            setPhase("done");
+          } else {
+            setAgentStates((prev) => ({ ...prev, reporter: "done" }));
+            setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
+            const proj = data?.project_name as string ?? currentProject ?? "default";
+            setResultReportUrl(`/api/reports/${proj}`);
+            setWaitingAgent(null);
+            setPhase("done");
+          }
+        }
+
+        // 暂停点：结构化 field_review 用工作流卡片展示；message 仅作补充（不设预设 Agent 台词）
         if (d.event_type === "user_input_requested") {
-          const agentMsg = (d.data as Record<string, unknown>)?.message as string ?? "请确认后继续。";
+          const dataObj = (d.data ?? {}) as Record<string, unknown>;
+          const fr = parseFieldReview(dataObj.field_review);
+          if (fr) {
+            const wfId = uid();
+            setActiveFieldReviewId(wfId);
+            setSelectedReviewField(null);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: wfId,
+                role: "workflow",
+                text: "",
+                timestamp: d.timestamp,
+                fieldReview: fr,
+              },
+            ]);
+          } else {
+            setActiveFieldReviewId(null);
+            setSelectedReviewField(null);
+          }
+          const raw = dataObj.message;
+          const agentMsg = typeof raw === "string" ? raw.trim() : "";
+          if (agentMsg) {
+            setMessages((prev) => [
+              ...prev,
+              { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp },
+            ]);
+          }
           const pausedAgent = resolveAgentKey(d.agent) ?? "scout";
-          setMessages((prev) => [
-            ...prev,
-            { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp },
-          ]);
           setWaitingAgent(pausedAgent);
           setPhase("running");
           setTimeout(() => replyInputRef.current?.focus(), 100);
         }
 
-        // Reporter done → show report
-        if (d.agent === "reporter" && d.event_type === "agent_completed") {
-          const proj = (d.data as Record<string, unknown>)?.project_name as string ?? currentProject ?? "default";
-          setResultReportUrl(`/api/reports/${proj}`);
-          setWaitingAgent(null);
-          setPhase("done");
+        // Scout：用户原话已被后端写入 column_descriptions 时，给一条事实性系统提示（非拟人 Agent）
+        if (d.event_type === "user_input_received" && agentKey === "scout") {
+          const inner = (d.data ?? {}) as Record<string, unknown>;
+          const applied = inner.applied_field_updates;
+          if (Array.isArray(applied) && applied.length > 0) {
+            const lines = applied.filter((x): x is string => typeof x === "string");
+            if (lines.length > 0) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: uid(),
+                  role: "system",
+                  text: `已把你的说明写入字段理解（后续步骤会使用）：${lines.join("；")}`,
+                  timestamp: d.timestamp,
+                },
+              ]);
+            }
+          }
+        }
+
+        // Run completed with guardrails blocked（说明走底部 CTA，不插固定对话文案）
+        if (d.event_type === "run_completed") {
+          const runPayload = (d.data ?? {}) as Record<string, unknown>;
+          if (runPayload.cancelled === true) {
+            setWaitingAgent(null);
+            setActiveFieldReviewId(null);
+            setSelectedReviewField(null);
+            setPhase("setup");
+            setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
+            setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
+            setResultReportUrl(null);
+            setGuardrailsBlocked(false);
+            setBlockedRunId(null);
+            continue;
+          }
+          const gr = guardrailsRunCompletedInfo({
+            event_type: d.event_type,
+            agent: d.agent,
+            data: d.data as Record<string, unknown> | undefined,
+          });
+          if (gr.guardrailsBlocked) {
+            setGuardrailsBlocked(true);
+            if (gr.runId) setBlockedRunId(gr.runId);
+            setWaitingAgent(null);
+            setPhase("done");
+          }
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch]);
 
-  const handleReply = useCallback(() => {
-    const text = replyText.trim();
-    if (!text || !waitingAgent) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: uid(), role: "user", text, timestamp: new Date().toISOString() },
-    ]);
-    send("respond", { text });
-    setReplyText("");
-    setWaitingAgent(null);
-  }, [send, replyText, waitingAgent]);
+  const onSelectReviewField = useCallback((name: string) => {
+    setSelectedReviewField((s) => (s === name ? null : name));
+  }, []);
 
+  const appendFieldCorrection = useCallback(() => {
+    if (!selectedReviewField) return;
+    setReplyText((prev) => {
+      const line = `${selectedReviewField}=`;
+      if (!prev.trim()) return line;
+      return `${prev.replace(/\s+$/, "")}\n${line}`;
+    });
+    requestAnimationFrame(() => replyInputRef.current?.focus());
+  }, [selectedReviewField]);
+
+  const submitUserReply = useCallback(
+    (raw: string) => {
+      if (!waitingAgent) return;
+      const outgoing = raw.trim();
+      const allowEmptyConfirm =
+        Boolean(activeFieldReviewId) && waitingAgent === "scout";
+      if (!outgoing && !allowEmptyConfirm) return;
+      const displayBubble = outgoing || "确认";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "user",
+          text: displayBubble,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      send("respond", { text: outgoing });
+      setReplyText("");
+      setWaitingAgent(null);
+      setActiveFieldReviewId(null);
+      setSelectedReviewField(null);
+    },
+    [send, waitingAgent, activeFieldReviewId],
+  );
+
+  const handleReply = useCallback(() => {
+    submitUserReply(replyText);
+  }, [submitUserReply, replyText]);
+
+  /** 与 PROJECT.md「人机互动」一致：不在此步插入固定 Agent 话术；由编排层在暂停点生成说明。 */
   const handleStartSession = useCallback(() => {
     if (!currentProject || !dataPath) return;
-    setPhase("query");
-    setTimeout(() => queryRef.current?.focus(), 100);
-    setMessages([
-      {
-        id: uid(),
-        role: "agent",
-        text: `项目「${currentProject}」已就绪，数据文件已加载。\n\n请告诉我您想分析什么？`,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-  }, [currentProject, dataPath]);
-
-  const handleSubmitQuery = useCallback(() => {
-    const q = query.trim();
-    if (!q) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: uid(), role: "user", text: q, timestamp: new Date().toISOString() },
-      { id: uid(), role: "agent", text: "收到，正在启动分析流程…", timestamp: new Date().toISOString() },
-    ]);
+    setMessages([]);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-    setPhase("running");
-    setQuery("");
-    send("analyze", { data_path: dataPath, query: q, project_name: currentProject ?? "default", phase: "full" });
-  }, [query, send, dataPath, currentProject]);
-
-  const handleReset = useCallback(() => {
-    setPhase("setup");
-    setMessages([]);
-    setQuery("");
+    setGuardrailsBlocked(false);
+    setBlockedRunId(null);
+    setResultReportUrl(null);
     setWaitingAgent(null);
     setReplyText("");
+    setActiveFieldReviewId(null);
+    setSelectedReviewField(null);
+    setPhase("running");
+    send("analyze", {
+      data_path: dataPath,
+      query: "",
+      project_name: currentProject ?? "default",
+      phase: "full",
+    });
+  }, [send, dataPath, currentProject]);
+
+  const handleReset = useCallback(() => {
+    send("cancel_analysis", {});
+    resetRunUiState();
+    setPhase("setup");
+    setMessages([]);
+    setWaitingAgent(null);
+    setReplyText("");
+    setActiveFieldReviewId(null);
+    setSelectedReviewField(null);
     setResultReportUrl(null);
+    setGuardrailsBlocked(false);
+    setBlockedRunId(null);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-  }, []);
+  }, [send, resetRunUiState]);
 
   const handleUpload = useCallback(async (file: File) => {
     if (!currentProject) return;
@@ -340,10 +615,27 @@ export default function AnalyzePanel() {
 
   const selectedFileName = dataPath ? dataPath.split("/").pop() ?? dataPath : null;
   const canStart = !!currentProject && !!dataPath && connectionStatus === "connected";
+  const scoutFieldReviewOpen =
+    Boolean(activeFieldReviewId) && waitingAgent === "scout";
+  const canSendReply =
+    !!waitingAgent &&
+    (replyText.trim().length > 0 || scoutFieldReviewOpen);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
-      <PanelHeader title="分析" />
+      <PanelHeader title="分析">
+        {phase !== "setup" && (
+          <button
+            type="button"
+            onClick={handleReset}
+            className="flex items-center gap-1 px-2 py-0.5 border border-app-border rounded text-ui-xs normal-case tracking-normal font-medium text-app-text
+              hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
+          >
+            <RotateCcw size={12} />
+            重置分析
+          </button>
+        )}
+      </PanelHeader>
 
       {/* ── Connection overlay ── */}
       {connectionStatus === "disconnected" && (
@@ -478,7 +770,7 @@ export default function AnalyzePanel() {
             <div className="text-center space-y-2">
               <div className="text-ui-sm text-app-text-muted">项目和数据文件已就绪</div>
               <div className="text-ui-xs text-app-text-muted opacity-60">
-                Agent 将引导您完成整个分析流程
+                需要暂停确认时会在对话区提示，并在下方出现输入框
               </div>
             </div>
           )}
@@ -510,11 +802,57 @@ export default function AnalyzePanel() {
           )}
 
           {/* Conversation feed */}
-          <ConvoFeed messages={messages} />
+          <ConvoFeed
+            messages={messages}
+            activeFieldReviewId={activeFieldReviewId}
+            selectedReviewField={selectedReviewField}
+            onSelectReviewField={onSelectReviewField}
+          />
 
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
-            <div className="px-3 pb-2 shrink-0">
+            <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
+              {scoutFieldReviewOpen && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    确认无误
+                  </button>
+                  <button
+                    type="button"
+                    onClick={appendFieldCorrection}
+                    disabled={!selectedReviewField}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
+                      ${selectedReviewField
+                        ? "border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors"
+                        : "border-app-border text-app-text-muted cursor-not-allowed opacity-60"}`}
+                  >
+                    <MessageSquarePlus size={14} />
+                    插入纠错
+                  </button>
+                  {selectedReviewField && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReviewField(null)}
+                      className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-ui-xs text-app-text-muted
+                        hover:text-app-text cursor-pointer motion-safe:transition-colors"
+                    >
+                      <X size={14} />
+                      取消点选
+                    </button>
+                  )}
+                  {selectedReviewField && (
+                    <span className="text-ui-xs text-app-text-muted">
+                      已点选字段：<span className="font-mono text-app-text">{selectedReviewField}</span>
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={replyInputRef}
@@ -523,69 +861,45 @@ export default function AnalyzePanel() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (replyText.trim()) handleReply();
+                      if (canSendReply) submitUserReply(replyText);
                     }
                   }}
-                  placeholder="回复 Agent，或直接回车确认继续…"
+                  placeholder={
+                    scoutFieldReviewOpen
+                      ? "补充或纠错；留空可按 Enter 或点「确认无误」"
+                      : "输入回复，Enter 发送 · Shift+Enter 换行"
+                  }
                   rows={2}
-                  className="flex-1 bg-app-bg-secondary border border-app-accent/50 rounded px-3 py-2
+                  className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
                              text-ui-sm text-app-text placeholder-app-text-muted resize-none
-                             focus:outline-none focus:border-app-accent transition-colors"
+                             focus:outline-none transition-colors
+                             ${selectedReviewField && scoutFieldReviewOpen
+                               ? "border-app-accent ring-1 ring-app-accent/30"
+                               : "border-app-accent/50 focus:border-app-accent"}`}
                 />
                 <button
+                  type="button"
                   onClick={handleReply}
-                  disabled={!replyText.trim()}
-                  className={`px-4 py-2 rounded text-ui-sm font-medium transition-colors shrink-0
-                    ${replyText.trim()
+                  disabled={!canSendReply}
+                  className={`px-4 py-2 rounded text-ui-sm font-medium transition-colors shrink-0 flex items-center gap-1.5
+                    ${canSendReply
                       ? "bg-app-accent hover:bg-app-accent-hover text-white cursor-pointer"
                       : "bg-app-bg-secondary border border-app-border text-app-text-muted cursor-not-allowed"}`}
                 >
+                  <ArrowRight size={14} />
                   发送
                 </button>
               </div>
               <div className="mt-1 text-ui-xs text-app-text-muted">
-                Enter 发送 · Shift+Enter 换行 · 直接确认可直接按 Enter
+                {scoutFieldReviewOpen
+                  ? "表格行可点选高亮 · Enter /「确认无误」= 确认上表 · Shift+Enter 换行"
+                  : "Enter 发送 · Shift+Enter 换行"}
               </div>
-            </div>
-          )}
-
-          {/* Query input (shown in query phase) */}
-          {phase === "query" && (
-            <div className="px-3 pb-3 shrink-0">
-              <div className="flex gap-2 items-end">
-                <textarea
-                  ref={queryRef}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (query.trim()) handleSubmitQuery();
-                    }
-                  }}
-                  placeholder="例如：广告投入对销售额有没有显著影响？"
-                  rows={2}
-                  className="flex-1 bg-app-bg-secondary border border-app-border rounded px-3 py-2
-                             text-ui-sm text-app-text placeholder-app-text-muted resize-none
-                             focus:outline-none focus:border-app-accent transition-colors"
-                />
-                <button
-                  onClick={handleSubmitQuery}
-                  disabled={!query.trim()}
-                  className={`px-4 py-2 rounded text-ui-sm font-medium transition-colors shrink-0
-                    ${query.trim()
-                      ? "bg-app-accent hover:bg-app-accent-hover text-white cursor-pointer"
-                      : "bg-app-bg-secondary border border-app-border text-app-text-muted cursor-not-allowed"}`}
-                >
-                  发送
-                </button>
-              </div>
-              <div className="mt-1 text-ui-xs text-app-text-muted">Enter 发送 · Shift+Enter 换行</div>
             </div>
           )}
 
           {/* Done: report link + reset */}
-          {phase === "done" && resultReportUrl && (
+          {phase === "done" && resultReportUrl && !guardrailsBlocked && (
             <div className="mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-success rounded flex items-center justify-between gap-3 shrink-0">
               <div>
                 <div className="text-ui-xs text-app-success font-semibold mb-0.5">分析完成</div>
@@ -596,6 +910,36 @@ export default function AnalyzePanel() {
                   className="px-3 py-1.5 bg-app-accent hover:bg-app-accent-hover text-white text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1">
                   查看报告 <ArrowRight size={12} />
                 </a>
+                <button onClick={handleReset}
+                  className="px-3 py-1.5 border border-app-border text-app-text-muted hover:text-app-text text-ui-xs rounded cursor-pointer transition-colors flex items-center gap-1">
+                  <RotateCcw size={12} /> 再次分析
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Done: guardrails blocked — different UI */}
+          {phase === "done" && guardrailsBlocked && (
+            <div className="mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-warning rounded flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <div className="text-ui-xs text-app-warning font-semibold mb-0.5 flex items-center gap-1">
+                  <ShieldAlert size={12} />
+                  报告未生成
+                </div>
+                <div className="text-ui-sm text-app-text">统计护栏未通过，请查看说明</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {blockedRunId && currentProject && (
+                  <a
+                    href={`/api/reports/${currentProject}/${blockedRunId}/GUARDRAILS_BLOCKED.md`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-app-warning hover:bg-app-warning-hover text-white text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1"
+                  >
+                    <ShieldAlert size={12} />
+                    查看护栏说明
+                  </a>
+                )}
                 <button onClick={handleReset}
                   className="px-3 py-1.5 border border-app-border text-app-text-muted hover:text-app-text text-ui-xs rounded cursor-pointer transition-colors flex items-center gap-1">
                   <RotateCcw size={12} /> 再次分析

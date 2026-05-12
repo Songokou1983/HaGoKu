@@ -105,6 +105,10 @@ print('ALL 3 PHASES OK')
 
 # pytest
 .venv/bin/python -m pytest tests/ -q
+
+# 护栏 / API / WebSocket（改 orchestrator、ws_handler、server 或 wsGuardrails 时建议跑）
+.venv/bin/python -m pytest tests/test_api/ -q
+.venv/bin/python -m pytest tests/test_web/test_ws_guardrails_parity.py -q
 ```
 
 ### UI 手动测试步骤
@@ -112,8 +116,9 @@ print('ALL 3 PHASES OK')
 2. **项目** 页选择或创建项目，确认描述与数据文件
 3. **分析** 页：选择项目与数据 → **开始分析**（必要时先输入/补充研究问题）
 4. 观察 **流水线进度** 与 **对话区**：在暂停点应出现 Agent 引导语，用自然语言 **回复** 后继续
-5. **报告** 页：切换项目，打开最新 HTML（默认双轨：要点速览 + 完整证据）
-6. **事件** 页（可选）：查看原始 WebSocket 事件流
+5. **报告** 页：切换项目，**按 run** 查看。**正常完成**：打开 HTML（默认双轨：要点速览 + 完整证据）。**强制级护栏未通过**：应看到说明（或链到 `GUARDRAILS_BLOCKED.md` 全文），**不**把「双轨 HTML 成功预览」当成该次的默认交付态。
+6. **事件** 页（可选）：查看 WebSocket 事件流；若存在护栏拦截，`run_completed` 等在列表/标签上应与「成功完成」区分（含 `run_id` 以便对照报告与 API）。
+7. **护栏拦截整条路径**（有可调触发数据时）：分析页终态、项目卡状态、`GET .../runs` 与 `.../detail` 的 `guardrails_blocked` 应与实际是否产出正式 HTML 一致。契约与清单见 [DEVELOPMENT_PROMPT.md](../DEVELOPMENT_PROMPT.md)「护栏 × 沟通」。
 
 > 下列「Scout 字段确认卡片」等描述适用于 **早期 PROTOTYPE / CLI 分阶段**，**当前 Web 主线以对话式暂停为准**。详见 [PROJECT.md](../PROJECT.md)「人机互动理念」。
 
@@ -158,7 +163,12 @@ with sync_playwright() as p:
    .venv/bin/python -m pytest tests/ -q
    ```
 
-5. orchestrator 3 个阶段是否都返回正确 status？
+5. 若改动 `hagoku_web/src/utils/wsGuardrails.ts`：是否已同步 `tests/test_web/test_ws_guardrails_parity.py` 并通过？
+   ```bash
+   .venv/bin/python -m pytest tests/test_web/test_ws_guardrails_parity.py -q
+   ```
+
+6. orchestrator 3 个阶段是否都返回正确 status？
    - `scout_first` → `scout_done`
    - `cleaning_first` → `cleaner_strategy`
    - `analyst_first` → `analyst_preliminary`

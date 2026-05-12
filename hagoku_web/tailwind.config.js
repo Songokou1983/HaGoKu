@@ -16,8 +16,11 @@ export default {
         "app-accent-hover":  '#2563EB',
         "app-border":        '#374151',
         "app-error":         '#EF4444',
+        "app-error-hover":   '#DC2626',
         "app-success":       '#10B981',
+        "app-success-hover":  '#059669',
         "app-warning":       '#F59E0B',
+        "app-warning-hover": '#D97706',
         // Status badge backgrounds
         "app-running":       '#1a3a5c',
         "app-done":          '#1a3a1a',

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 # The WebSocket handler reads from this to subscribe.
 _shared_bus: EventBus | None = None
 _shared_orchestrator: "Orchestrator | None" = None
+
+# 同一进程内只允许一条分析线程占用共享 Orchestrator（避免并发 run()）
+_analysis_busy_lock = threading.Lock()
+_analysis_in_progress = False
 
 
 def set_bus(bus: EventBus) -> None:
@@ -84,6 +89,16 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> 
         project_name=project_name,
         phase=phase,
     )
+
+
+def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str) -> None:
+    """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
+    global _analysis_in_progress
+    try:
+        _run_analysis(data_path, query, project_name, phase)
+    finally:
+        with _analysis_busy_lock:
+            _analysis_in_progress = False
 
 
 # ── WS ↔ EventBus bridge ──────────────────────────────────────
@@ -173,6 +188,17 @@ async def ws_handler(ws: WebSocket) -> None:
                     })
                     continue
 
+                global _analysis_in_progress
+                with _analysis_busy_lock:
+                    if _analysis_in_progress:
+                        await ws.send_json({
+                            "type": "error",
+                            "cmd": "analyze",
+                            "message": "已有分析进行中，请等待结束或点击「重置分析」。",
+                        })
+                        continue
+                    _analysis_in_progress = True
+
                 # 发送初始 ack
                 await ws.send_json({
                     "type": "ack",
@@ -185,15 +211,33 @@ async def ws_handler(ws: WebSocket) -> None:
                     loop = asyncio.get_running_loop()
                     loop.run_in_executor(
                         None,
-                        _run_analysis,
+                        _run_analysis_task,
                         data_path,
                         query,
                         project_name,
                         phase,
                     )
                 except RuntimeError:
-                    # 没有运行中的事件循环，使用默认行为
-                    pass
+                    with _analysis_busy_lock:
+                        _analysis_in_progress = False
+            elif cmd == "cancel_analysis":
+                orch = _shared_orchestrator
+                if orch is None:
+                    await ws.send_json({
+                        "type": "error",
+                        "cmd": "cancel_analysis",
+                        "message": "当前没有可取消的分析任务",
+                    })
+                else:
+                    try:
+                        orch.request_cancel()
+                        await ws.send_json({
+                            "type": "ack",
+                            "cmd": "cancel_analysis",
+                            "message": "已请求中止分析",
+                        })
+                    except Exception as e:
+                        await ws.send_json({"type": "error", "message": str(e)})
             elif cmd == "respond":
                 # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})

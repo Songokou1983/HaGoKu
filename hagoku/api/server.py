@@ -117,15 +117,19 @@ async def list_reports(project_name: str):
     }
 
 
-# ── GET /api/reports/{project_name}/{run_id}/{filename} — 返回 run 子目录报告 ──
+# ── GET /api/reports/{project_name}/{run_id}/{filename} — 返回 run 子目录报告或护栏说明 ──
 @app.get("/api/reports/{project_name}/{run_id}/{filename}")
 async def get_report_run(project_name: str, run_id: str, filename: str):
-    if not filename.endswith(".html") or "/" in filename:
+    if "/" in filename:
         raise HTTPException(400, "Invalid filename")
     path = _projects_root() / project_name / "runs" / run_id / "output" / filename
     if not path.exists():
-        raise HTTPException(404, "Report not found")
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+        raise HTTPException(404, "File not found")
+    if filename.endswith(".html"):
+        return HTMLResponse(path.read_text(encoding="utf-8"))
+    # 其他文件（GUARDRAILS_BLOCKED.md 等）按文本返回
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(path.read_text(encoding="utf-8"))
 
 
 # ── GET /api/reports/{project_name}/{filename} — 兼容旧路径 ──
@@ -224,17 +228,31 @@ async def get_project_detail(project_name: str):
     last_query = ""
     last_run_at = ""
     last_status = "none"
+    last_guardrails_blocked = False
     if run_dirs:
-        meta_file = run_dirs[0] / "run_meta.json"
+        latest = run_dirs[0]
+        out_dir = latest / "output"
+        last_guardrails_blocked = (out_dir / "GUARDRAILS_BLOCKED.md").exists()
+        html_exists = (out_dir / "report.html").exists()
+        last_run_at = latest.name
+        meta_file = latest / "run_meta.json"
         if meta_file.exists():
             try:
                 meta = _json.loads(meta_file.read_text(encoding="utf-8"))
                 last_query = meta.get("query", "")
-                last_run_at = run_dirs[0].name  # e.g. 20260511_175523
                 output_path = meta.get("output_path", "")
-                last_status = "completed" if (output_path and Path(output_path).exists()) else "unknown"
+                if output_path:
+                    op = Path(output_path)
+                    if op.exists() and op.suffix.lower() == ".html":
+                        html_exists = True
             except Exception:
-                last_run_at = run_dirs[0].name
+                pass
+        if last_guardrails_blocked:
+            last_status = "guardrails_blocked"
+        elif html_exists:
+            last_status = "completed"
+        else:
+            last_status = "unknown"
 
     db_path = Path(os.path.expanduser("~/.hagoku/hagoku.db"))
     data_path = ""
@@ -264,6 +282,7 @@ async def get_project_detail(project_name: str):
         "last_query": last_query,
         "last_run_at": last_run_at,
         "last_status": last_status,
+        "last_guardrails_blocked": last_guardrails_blocked,
     }
 
 
@@ -285,19 +304,43 @@ async def get_project_runs(project_name: str):
             continue
         try:
             meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+            rid = meta.get("run_id", run_dir.name)
             output_path = meta.get("output_path", "")
-            has_report = bool(output_path and Path(output_path).exists())
+            out = run_dir / "output"
+            guardrails_blocked = (out / "GUARDRAILS_BLOCKED.md").exists()
+            html_exists = (out / "report.html").exists()
+            if output_path:
+                op = Path(output_path)
+                if op.exists() and op.suffix.lower() == ".html":
+                    html_exists = True
+            if guardrails_blocked:
+                status = "guardrails_blocked"
+            elif html_exists:
+                status = "completed"
+            else:
+                status = "unknown"
+            report_url = None
+            if html_exists:
+                fname = "report.html"
+                if not (out / "report.html").exists() and output_path:
+                    op = Path(output_path)
+                    if op.exists():
+                        fname = op.name
+                report_url = f"/api/reports/{project_name}/{rid}/{fname}"
+            guardrails_notice_url = (
+                f"/api/reports/{project_name}/{rid}/GUARDRAILS_BLOCKED.md"
+                if guardrails_blocked else None
+            )
             runs.append({
-                "run_id": meta.get("run_id", run_dir.name),
+                "run_id": rid,
                 "query": meta.get("query", ""),
-                "status": "completed" if has_report else "unknown",
-                "report_url": (
-                    f"/api/reports/{project_name}/{meta.get('run_id', run_dir.name)}/{Path(output_path).name}"
-                    if has_report else None
-                ),
+                "status": status,
+                "report_url": report_url,
+                "guardrails_notice_url": guardrails_notice_url,
+                "guardrails_blocked": guardrails_blocked,
             })
         except Exception:
-            runs.append({"run_id": run_dir.name, "query": "", "status": "unknown", "report_url": None})
+            runs.append({"run_id": run_dir.name, "query": "", "status": "unknown", "report_url": None, "guardrails_blocked": False})
 
     return {"runs": runs}
 
@@ -324,6 +367,42 @@ async def list_project_files(project_name: str):
                     "mtime": int(f.stat().st_mtime),
                 })
     return {"files": files}
+
+
+# ── GET /api/projects/{project_name}/kanban/tasks — Scribe 看板任务（Web 流程引导）─
+@app.get("/api/projects/{project_name}/kanban/tasks")
+async def list_project_kanban_tasks(project_name: str):
+    """
+    返回当前项目 kanban.db 中的任务。
+    每次分析 run 会 init_pipeline 再挂一组 Scout→Reporter 任务；只取**时间上新的一组**（至多 4 条）避免列表无限变长。
+    """
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.is_dir():
+        raise HTTPException(404, "Project not found")
+    db_path = proj_dir / "kanban.db"
+    if not db_path.exists():
+        return {"tasks": []}
+
+    from hagoku.storage.kanban import KanbanDB
+
+    kb = KanbanDB.get_instance(proj_dir)
+    rows = kb.list_tasks()
+    if not rows:
+        return {"tasks": []}
+    rows.sort(key=lambda t: str(t.get("created_at") or ""), reverse=True)
+    latest = rows[:4]
+    latest.sort(key=lambda t: str(t.get("created_at") or ""))
+    tasks = [
+        {
+            "id": r["id"],
+            "agent": r["agent"],
+            "title": r["title"],
+            "description": (r.get("description") or ""),
+            "status": r["status"],
+        }
+        for r in latest
+    ]
+    return {"tasks": tasks}
 
 
 # ── POST /api/projects/{project_name}/upload — 上传数据文件 ───

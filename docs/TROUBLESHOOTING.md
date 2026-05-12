@@ -153,3 +153,22 @@ scout_ctx = DataContext.from_dict({
 ```
 
 **验证**：运行 3 阶段流程测试（见 [docs/DEVELOPMENT.md §测试方法](docs/DEVELOPMENT.md#测试方法)）。
+
+---
+
+## 8. 护栏拦截后 Web 仍像「成功完成」或报告页误判
+
+**根因（历史）**：`RUN_COMPLETED` 未带 `run_id` 等字段、或 REST `runs`/`detail` 在仅有 `GUARDRAILS_BLOCKED.md` 时仍按「已完成 HTML」推断，会导致 CTA、报告预览或项目卡误导。
+
+**修复方向（已合入主线，若复现请对照）**：
+- 编排：`RUN_COMPLETED` 的 `data` 含 `guardrails_blocked`、`run_id`、`project`（见 `hagoku/manager/orchestrator.py`）。
+- API：`GET .../runs` 与 `.../detail` 优先护栏元数据再判 HTML（见 `hagoku/api/server.py`）。
+- 前端：分析/报告/事件/项目态与 `hagoku_web/src/utils/wsGuardrails.ts` 一致。
+
+**验证（不依赖手动点完整 UI）**：
+```bash
+.venv/bin/python -m pytest tests/test_api/test_server.py tests/test_api/test_ws_handler.py -q
+.venv/bin/python -m pytest tests/test_web/test_ws_guardrails_parity.py -q
+```
+
+**手动步骤**：见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)「UI 手动测试步骤」第 5–7 步。

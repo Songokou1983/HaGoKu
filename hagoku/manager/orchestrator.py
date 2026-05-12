@@ -58,6 +58,245 @@ KEYWORD_MAP: dict[str, str] = {
     r"画像|概况|什么数据|什么样|描述|概览": "数据画像",
 }
 
+# WebSocket「重置 / 取消」暂停时使用的哨兵（用户正常回复不会使用此串）
+HAGOKU_CANCEL_PAUSE_TOKEN = "__HAGOKU_CANCEL__"
+
+# Scout 兜底曾生成「列名（统计类型）」——对用户无信息增量，展示前过滤
+_SCOUT_TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
+    "分类型",
+    "数值型",
+    "时间型",
+    "文本型",
+    "布尔型",
+    "标识符",
+    "未知类型",
+)
+
+
+def _scout_description_is_meaningful_for_user(col: str, desc: str) -> bool:
+    """判断 column_descriptions 是否像业务含义；排除「BU（分类型）」式占位。"""
+    d = (desc or "").strip()
+    c = (col or "").strip()
+    if not d or d == c:
+        return False
+    for suf in _SCOUT_TYPE_ECHO_SUFFIXES:
+        for o, cl in (("（", "）"), ("(", ")")):
+            if d == f"{c}{o}{suf}{cl}":
+                return False
+    return True
+
+
+def _md_table_cell(s: str) -> str:
+    """Markdown 表单元格：去换行、转义竖线。"""
+    return (s or "").replace("|", "｜").replace("\n", " ").strip()
+
+
+def _scout_display_name_cell(
+    col: str,
+    desc: str,
+    display_names: dict[str, Any] | None,
+) -> str:
+    """表格第二列：理解名称（优先 Scout 解析的 column_display_names）。"""
+    dmap = display_names if isinstance(display_names, dict) else {}
+    v = dmap.get(col)
+    if isinstance(v, str) and v.strip():
+        return _md_table_cell(v.strip())
+    if not desc:
+        return "—"
+    core = desc.split("（例：", 1)[0].strip()
+    for p in ("多为", "常见于"):
+        if core.startswith(p):
+            core = core[len(p) :].strip()
+    short = core.split("。", 1)[0].strip() if core else ""
+    if not short:
+        short = col
+    if len(short) > 14:
+        short = short[:12] + "…"
+    return _md_table_cell(short)
+
+
+def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
+    """Scout 暂停：结构化字段表（供前端 HTML 渲染）；`message` 留空，不冒充 Agent 长文。"""
+    cols = context.get("column_semantics") or []
+    if not cols:
+        return {"message": "共 0 列 — 无法生成字段表。", "field_review": None}
+    descs = context.get("column_descriptions") or {}
+    display_names = context.get("column_display_names") or {}
+    n_rows = context.get("n_rows", "?")
+    n_c = len(cols)
+    noise_prefixes = ("初步推断：", "当前理解：", "系统暂理解为：")
+    rows: list[dict[str, Any]] = []
+    for s in cols:
+        name = str(s.get("column_name", ""))
+        d_raw = str(descs.get(name, "") or "").strip()
+        d = d_raw if _scout_description_is_meaningful_for_user(name, d_raw) else ""
+        for p in noise_prefixes:
+            if d.startswith(p):
+                d = d[len(p) :].strip()
+        uncertain = bool(s.get("needs_user_input"))
+        dname = _scout_display_name_cell(name, d, display_names)
+        if len(d) > 400:
+            d = d[:397] + "…"
+        mean = d if d else "（待补充）"
+        rows.append({
+            "field_name": name,
+            "understanding_name": dname,
+            "meaning": mean,
+            "needs_attention": uncertain,
+        })
+    return {
+        "message": "",
+        "field_review": {
+            "n_rows": n_rows,
+            "n_cols": n_c,
+            "rows": rows,
+        },
+    }
+
+
+# 用户仅表示「确认」、无字段纠错时，不写 column_descriptions、不污染 query 补充段
+_SCOUT_PURE_CONFIRM_RE = re.compile(
+    r"^(确认|好的|是|没问题|对的|正确|已通过|pass|ok|okay|yes|y|thanks|thx)[\s!！。.]*$",
+    re.I,
+)
+
+
+def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
+    t = (user_reply or "").strip()
+    if not t:
+        return True
+    return bool(_SCOUT_PURE_CONFIRM_RE.match(t))
+
+
+def _known_scout_columns(context: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for s in context.get("column_semantics") or []:
+        n = str(s.get("column_name", "")).strip()
+        if n and n not in seen:
+            out.append(n)
+            seen.add(n)
+    for k in (context.get("column_descriptions") or {}).keys():
+        kn = str(k).strip()
+        if kn and kn not in seen:
+            out.append(kn)
+            seen.add(kn)
+    return out
+
+
+def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
+    raw = (token or "").strip().strip("`\"'“”‘’")
+    if not raw:
+        return None
+    rl = raw.lower()
+    for c in columns:
+        if c.lower() == rl:
+            return c
+    rl2 = rl.replace("_", "")
+    for c in columns:
+        if c.lower().replace("_", "") == rl2:
+            return c
+    return None
+
+
+def _parse_scout_field_assignments(line: str) -> tuple[str | None, str | None]:
+    """`Code=店铺`、`Code：店铺`、`Code: 店铺`（全角半角）。"""
+    m = re.match(r"^\s*([^\s=:=：]+?)\s*[=＝:：]\s*(.+)\s*$", line)
+    if not m:
+        return None, None
+    return m.group(1).strip(), m.group(2).strip()
+
+
+def _parse_scout_means_clauses(text: str) -> list[tuple[str, str]]:
+    """`code means store number`、一行内多个 `A means x, B means y`。"""
+    out: list[tuple[str, str]] = []
+    for m in re.finditer(r"(?i)\b([a-z0-9_]+)\s+means\s+([^,;，；\n]+)", text):
+        col_t = m.group(1).strip()
+        mean = m.group(2).strip().rstrip(".,;，；")
+        if col_t and mean:
+            out.append((col_t, mean))
+    return out
+
+
+def _parse_scout_column_prefixed_line(line: str, columns: list[str]) -> tuple[str | None, str | None]:
+    """`Code是店铺编号`、`Code 表示 周`、`Code means x`（列名在句首，且列为真实列名）。"""
+    s = line.strip()
+    if not s:
+        return None, None
+    for col in sorted(set(columns), key=len, reverse=True):
+        if len(s) < len(col) + 1:
+            continue
+        if s[: len(col)].lower() != col.lower():
+            continue
+        tail = s[len(col) :].strip()
+        if not tail:
+            return None, None
+        m = re.match(
+            r"(?is)^(means|is|are|[:=：]|是|就是|为|表示|指的是|意为)\s*(.+)$",
+            tail,
+        )
+        if not m:
+            continue
+        mean = (m.group(2) or "").strip().rstrip(".,;，；")
+        if mean:
+            return col, mean
+    return None, None
+
+
+def apply_scout_user_field_reply_to_context(context: dict[str, Any], user_reply: str) -> list[str]:
+    """
+    将用户在 Scout 字段核对暂停点的说明写入 context（column_descriptions、needs_user_input）。
+
+    不调 LLM：结构化行（Col=…）+ 常见英文 means / 句首列名 + 中文「是/表示」。
+    返回简短人类可读记录（如 ``Code←店铺编号``），供事件或日志；无写入则返回 []。
+    """
+    raw = (user_reply or "").strip()
+    if not raw or _scout_reply_is_pure_confirm(raw):
+        return []
+
+    columns = _known_scout_columns(context)
+    if not columns:
+        return []
+
+    descs: dict[str, Any] = context.setdefault("column_descriptions", {})
+    applied: list[str] = []
+    seen_col: set[str] = set()
+
+    def _apply_one(canonical: str, meaning: str) -> None:
+        if not canonical or not meaning or canonical in seen_col:
+            return
+        seen_col.add(canonical)
+        descs[canonical] = meaning
+        for s in context.get("column_semantics") or []:
+            if str(s.get("column_name", "")) == canonical:
+                s["needs_user_input"] = False
+        applied.append(f"{canonical}←{meaning}")
+
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    if not lines:
+        lines = [raw]
+
+    for line in lines:
+        handled = False
+        lt, rt = _parse_scout_field_assignments(line)
+        if lt and rt:
+            c = _resolve_scout_column_token(lt, columns)
+            if c:
+                _apply_one(c, rt)
+                handled = True
+        if handled:
+            continue
+        pc, pm = _parse_scout_column_prefixed_line(line, columns)
+        if pc and pm:
+            _apply_one(pc, pm)
+            continue
+        for col_t, mean in _parse_scout_means_clauses(line):
+            c = _resolve_scout_column_token(col_t, columns)
+            if c:
+                _apply_one(c, mean)
+
+    return applied
+
 
 class RuleEngine:
     """Manager 的规则引擎，覆盖 80% 常见决策"""
@@ -112,6 +351,9 @@ class Orchestrator:
         self._pause_event: threading.Event = threading.Event()
         self._user_response: str | None = None
         self._is_paused: bool = False
+        # 用户请求中止本轮分析（WebSocket cancel_analysis）
+        self._cancel_lock = threading.Lock()
+        self._cancel_requested_flag = False
 
     @property
     def llm_deep(self) -> Any:
@@ -135,26 +377,79 @@ class Orchestrator:
         self._is_paused = False
         self._pause_event.set()
 
-    def _pause_and_wait(self, agent: str, message: str, timeout: float = 300.0) -> str:
+    def _pause_and_wait(self, agent: str, payload: str | dict[str, Any], timeout: float = 300.0) -> str:
         """
         发射 user_input_requested 事件，然后阻塞当前线程直到用户回复。
+        payload 可为 str（仅 message）或 dict（可含 message、field_review 等，由前端渲染）。
         timeout: 秒，超时后自动用空字符串恢复（防止永久阻塞）。
         """
         self._pause_event.clear()
         self._user_response = None
         self._is_paused = True
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, agent, {
-            "message": message,
-            "agent": agent,
-        })
+        if isinstance(payload, str):
+            data: dict[str, Any] = {"message": payload, "agent": agent}
+        else:
+            data = dict(payload)
+            data["agent"] = agent
+            if "message" not in data:
+                data["message"] = ""
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, agent, data)
         self._pause_event.wait(timeout=timeout)
         self._is_paused = False
         return self._user_response or ""
 
+    def request_cancel(self) -> None:
+        """前端「重置分析」：在暂停点打断；非暂停时长任务结束后在检查点退出。"""
+        with self._cancel_lock:
+            self._cancel_requested_flag = True
+        if self._is_paused:
+            self.unblock(HAGOKU_CANCEL_PAUSE_TOKEN)
+
+    def _is_cancel_requested(self) -> bool:
+        with self._cancel_lock:
+            return self._cancel_requested_flag
+
+    def _finish_run_cancelled(
+        self,
+        run_id: str,
+        project_name: str,
+        run_start: datetime,
+        run_dir: Path,
+    ) -> dict[str, Any]:
+        duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
+        now = datetime.now().isoformat()
+        self.db.update_run(
+            run_id,
+            status="cancelled",
+            completed_at=now,
+            duration_ms=duration_ms,
+        )
+        self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+            "thought": "分析已由用户中止。",
+        })
+        self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
+            "duration": f"{duration_ms / 1000:.1f}s",
+            "cancelled": True,
+            "run_id": run_id,
+            "project": project_name,
+        })
+        try:
+            events_path = run_dir / "events.jsonl"
+            self.event_bus.save_to_file(events_path)
+        except Exception:
+            pass
+        return {
+            "status": "cancelled",
+            "message": "分析已中止",
+            "run_id": run_id,
+            "project": project_name,
+            "duration_ms": duration_ms,
+        }
+
     def _generate_pause_message(self, agent: str, results: dict[str, Any]) -> str:
         """
-        用 llm_quick 根据 Agent 的实际结果生成自然语言暂停消息。
-        如果 LLM 调用失败则回退到规则拼接。
+        Cleaner / Analyst 等：用 llm_quick 生成暂停说明；失败则规则回退。
+        Scout 字段核对见 `scout_field_review_pause_payload`，不在此生成整段「台词」。
         """
         try:
             from openai import OpenAI
@@ -163,27 +458,25 @@ class Orchestrator:
                 api_key=self.config.llm.api_key,
             )
             context_str = self._format_results_for_prompt(agent, results)
+            system_content = (
+                "你是 HaGoKu 数据分析助手中的一个 Agent。"
+                "你的工作刚刚完成了一个阶段，现在需要向用户汇报发现，并询问是否继续。"
+                "要求：语言简洁友好，不超过 5 句话，最后一句是一个具体的确认或引导性问题。"
+                "不要使用 Markdown 标题，可以用短破折号列举要点。"
+            )
             resp = client.chat.completions.create(
                 model=self.config.llm.model_quick or self.config.llm.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "你是 HaGoKu 数据分析助手中的一个 Agent。"
-                            "你的工作刚刚完成了一个阶段，现在需要向用户汇报发现，并询问是否继续。"
-                            "要求：语言简洁友好，不超过 5 句话，最后一句是一个具体的确认或引导性问题。"
-                            "不要使用 Markdown 标题，可以用短破折号列举要点。"
-                        ),
-                    },
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": context_str},
                 ],
                 max_tokens=300,
                 temperature=0.3,
             )
-            return resp.choices[0].message.content.strip()
+            body = resp.choices[0].message.content.strip()
         except Exception:
-            # LLM 失败时的规则回退
-            return self._fallback_pause_message(agent, results)
+            body = self._fallback_pause_message(agent, results)
+        return body
 
     def _format_results_for_prompt(self, agent: str, results: dict[str, Any]) -> str:
         """将 agent 结果格式化为 LLM prompt 的输入文本。"""
@@ -192,12 +485,21 @@ class Orchestrator:
             n_rows = results.get("n_rows", "?")
             n_cols = results.get("n_cols", len(cols))
             uncertain = [c["column_name"] for c in cols if c.get("needs_user_input")]
-            roles = {c["column_name"]: c.get("semantic_type", "unknown") for c in cols[:10]}
+            per_col = []
+            for c in cols:
+                nm = c.get("column_name", "")
+                role = c.get("suggested_role") or c.get("semantic_type") or "—"
+                per_col.append(
+                    f"  - {nm}: inferred_type={c.get('inferred_type')} role={role} "
+                    f"needs_user_input={bool(c.get('needs_user_input'))} evidence={c.get('evidence', '')}"
+                )
+            col_block = "\n".join(per_col) if per_col else "（无列）"
             return (
                 f"我是 Scout Agent，刚刚分析了数据集（{n_rows} 行 × {n_cols} 列）。\n"
-                f"识别到的字段语义角色：{roles}\n"
-                f"需要用户确认的字段：{uncertain if uncertain else '无，所有字段已自动识别'}\n"
-                f"请向用户简要汇报你的发现，并询问他们是否同意这些字段角色，或者有其他补充说明。"
+                f"逐列推断如下：\n{col_block}\n"
+                f"需要用户重点确认的列名：{uncertain if uncertain else '（无，均已高置信自动识别）'}\n"
+                "请写**最多 2 句**日常中文开场：只表达「已读完、请看下方各列」即可。"
+                "不要数据类型、统计角色、置信度、依据；不要复述清单也不要写「逐项核对下表」类话术（清单另附）。"
             )
         elif agent == "cleaner":
             ops = results.get("operations", [])
@@ -226,10 +528,7 @@ class Orchestrator:
         if agent == "scout":
             cols = results.get("column_semantics", [])
             n_rows = results.get("n_rows", "?")
-            return (
-                f"我分析了数据集（{n_rows} 行，{len(cols)} 个字段）。"
-                f"已识别字段语义角色。请确认理解无误，或告诉我需要调整的地方？"
-            )
+            return f"共 {n_rows} 行 × {len(cols)} 列 — 请确认字段业务含义；无误回「确认」。"
         elif agent == "cleaner":
             ops = results.get("operations", [])
             return (
@@ -239,6 +538,30 @@ class Orchestrator:
         elif agent == "analyst":
             return "统计分析完成，已找到若干发现。可以生成完整报告了吗？"
         return f"{agent} 完成，是否继续？"
+
+    def _mandatory_guardrails_block_report(self, results: list[dict[str, Any]]) -> tuple[bool, str]:
+        """逐条检查 Analyst 结果：任一强制级护栏未通过则不应调用 Reporter。
+
+        Returns:
+            (True, markdown_body) 若应阻止正式报告；否则 (False, "").
+        """
+        if not results:
+            return False, ""
+        sections: list[str] = []
+        for i, result in enumerate(results):
+            grs = self.guardrails.check(result)
+            if self.guardrails.can_output(grs):
+                continue
+            label = str(result.get("question") or result.get("result_id") or f"结果 {i + 1}")
+            sections.append(f"## {label}\n\n{self.guardrails.format_report(grs)}")
+        if not sections:
+            return False, ""
+        header = (
+            "# 统计护栏：强制级未通过\n\n"
+            "按产品约定，**未生成正式 HTML 报告**（Reporter 已跳过）。\n\n"
+            "---\n\n"
+        )
+        return True, header + "\n\n---\n\n".join(sections)
 
     def run(
         self,
@@ -276,7 +599,8 @@ class Orchestrator:
             cleaning_operations: 用户确认的清洗操作（Cleaner 直接执行，不重新规划）
 
         Returns:
-            运行结果摘要
+            运行结果摘要。`status` 可能为 `completed` / `guardrails_blocked`（强制级护栏未通过，已跳过 Reporter）/
+            `scout_confirm` / `cleaner_strategy` / `analyst_preliminary` 等阶段返回值。
         """
         run_start = datetime.now()
 
@@ -307,6 +631,9 @@ class Orchestrator:
 
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
+
+        with self._cancel_lock:
+            self._cancel_requested_flag = False
 
         # 创建数据库记录
         self.db.create_project(project_name, data_path=data_path)
@@ -527,25 +854,46 @@ class Orchestrator:
             # Scout + Cleaner（如果不是 resume）
             if context is None:
                 # 3. Scout: 数据侦察
-                context = scout.run(data_path, query, project_id=project_name)
+                context = scout.run(
+                    data_path, query, project_id=project_name, emit_completed=False
+                )
+                if context.get("error"):
+                    raise RuntimeError(str(context["error"]))
 
-                # ── 暂停：Scout 完成，LLM 生成发现摘要，等待用户确认 ──
-                scout_msg = self._generate_pause_message("scout", context)
+                if self._is_cancel_requested():
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+                # ── 暂停：字段理解待用户确认；确认后再记 Scout 完成（AGENT_COMPLETED / 看板 done）──
+                scout_msg = scout_field_review_pause_payload(context)
                 user_reply_scout = self._pause_and_wait("scout", scout_msg)
-                # 将用户回复追加到 query context（供后续 Agent 参考）
+                if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                applied_scout = apply_scout_user_field_reply_to_context(context, user_reply_scout or "")
                 if user_reply_scout:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {
                         "reply": user_reply_scout,
+                        "applied_field_updates": applied_scout,
                     })
-                    query = f"{query}\n[用户补充] {user_reply_scout}".strip()
+                    if not _scout_reply_is_pure_confirm(user_reply_scout):
+                        query = f"{query}\n[用户补充] {user_reply_scout}".strip()
+                n_sem = len(context.get("column_semantics", []))
+                self.event_bus.emit(
+                    EventType.AGENT_COMPLETED,
+                    "scout",
+                    {"result_summary": f"理解 {n_sem} 个字段（用户已确认）"},
+                )
 
                 # 4. Cleaner: 数据清洗
                 df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     impact_warning=self.config.manager.cleaning_impact_warning,
+                    emit_completed=False,
                 )
 
-                # ── 暂停：Cleaner 完成，LLM 生成清洗报告摘要，等待用户确认 ──
+                if self._is_cancel_requested():
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+                # ── 暂停：清洗结果待用户确认后再记 Cleaner 完成 ──
                 cleaner_results = {
                     "operations": cleaning_report.operations if cleaning_report else [],
                     "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
@@ -553,13 +901,19 @@ class Orchestrator:
                 }
                 cleaner_msg = self._generate_pause_message("cleaner", cleaner_results)
                 user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                 if user_reply_cleaner:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
                         "reply": user_reply_cleaner,
                     })
                     query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
-
-                # 保存清洗后数据（如有）
+                ir = cleaning_report.impact_rate if cleaning_report else 0.0
+                self.event_bus.emit(
+                    EventType.AGENT_COMPLETED,
+                    "cleaner",
+                    {"result_summary": f"影响率 {ir:.1%}（用户已确认）"},
+                )
                 if df_clean is not None:
                     cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
                     save_data(df_clean, cleaned_path)
@@ -604,20 +958,115 @@ class Orchestrator:
                     raise RuntimeError(
                         "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
                     )
-            results, business_metrics = analyst.run(df_clean, context, plan)
+            results, business_metrics = analyst.run(
+                df_clean, context, plan, emit_completed=False
+            )
 
-            # ── 暂停：Analyst 完成，LLM 生成初步发现摘要，等待用户确认生成报告 ──
+            if self._is_cancel_requested():
+                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+            # ── 暂停：分析结果待用户确认后再记 Analyst 完成 ──
             analyst_results = {
                 "findings": results if isinstance(results, list) else [],
             }
             analyst_msg = self._generate_pause_message("analyst", analyst_results)
             user_reply_analyst = self._pause_and_wait("analyst", analyst_msg)
+            if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
+                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
             if user_reply_analyst:
                 self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
                     "reply": user_reply_analyst,
                 })
+            n_res = len(results) if isinstance(results, list) else 0
+            self.event_bus.emit(
+                EventType.AGENT_COMPLETED,
+                "analyst",
+                {"result_summary": f"完成 {n_res} 项分析（用户已确认）"},
+            )
 
-            # 7. Reporter: 生成报告
+            # 7. 统计护栏（编排层）：强制级未通过则跳过 Reporter
+            blocked, blocked_md = self._mandatory_guardrails_block_report(
+                results if isinstance(results, list) else [],
+            )
+            if blocked:
+                notice_path = run_dir / "output" / "GUARDRAILS_BLOCKED.md"
+                notice_path.parent.mkdir(parents=True, exist_ok=True)
+                notice_path.write_text(blocked_md, encoding="utf-8")
+                output_path = str(notice_path)
+                self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
+                    "verdict": "fail",
+                    "detail": "强制级统计护栏未通过，已跳过 Reporter（未生成正式 HTML 报告）",
+                })
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "reporter", {
+                    "result_summary": "已跳过：强制级护栏未通过",
+                    "skipped": True,
+                })
+                # 保存 findings（便于审计）
+                for result in results:
+                    self.db.save_finding({
+                        "id": result["result_id"],
+                        "run_id": run_id,
+                        "analysis_type": result["analysis_type"],
+                        "question": result["question"],
+                        "conclusion_plain": result.get("conclusion_plain", ""),
+                        "conclusion_statistical": result.get("conclusion_statistical", ""),
+                        "p_value": result.get("p_value"),
+                        "effect_size": result.get("effect_size"),
+                        "effect_type": result.get("effect_type", ""),
+                        "confidence_interval": result.get("confidence_interval"),
+                        "significance": result.get("significance", ""),
+                    })
+                run_meta = {
+                    "run_id": run_id,
+                    "project": project_name,
+                    "query": query,
+                    "plan": plan,
+                    "n_results": len(results),
+                    "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
+                    "output_path": output_path,
+                    "guardrails_blocked": True,
+                }
+                self.output_mgr.save_run_meta(run_dir, run_meta)
+                duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
+                self.db.complete_run(run_id, duration_ms=duration_ms, output_path=output_path)
+                learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
+                if learned > 0:
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
+                    })
+                self.memory.save_resume_state(
+                    project_name, "analyzed",
+                    cleaned_path=cleaned_path_str,
+                    context=context, run_id=run_id,
+                )
+                self.output_mgr.create_latest_symlink(run_dir)
+                if self.project_mgr.exists(project_name):
+                    self.project_mgr.record_run(project_name)
+                events_path = run_dir / "events.jsonl"
+                self.event_bus.save_to_file(events_path)
+                self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
+                    "duration": f"{duration_ms / 1000:.1f}s",
+                    "token_count": sum(
+                        e.data.get("token_count", 0)
+                        for e in self.event_bus.events
+                        if e.event_type == EventType.TOOL_RESULT and "token_count" in e.data
+                    ),
+                    "output_path": output_path,
+                    "guardrails_blocked": True,
+                    "run_id": run_id,
+                    "project": project_name,
+                })
+                return {
+                    "status": "guardrails_blocked",
+                    "message": "统计护栏强制级未通过，已跳过 Reporter。说明见 GUARDRAILS_BLOCKED.md",
+                    "run_id": run_id,
+                    "project": project_name,
+                    "output_path": output_path,
+                    "n_results": len(results),
+                    "duration_ms": duration_ms,
+                }
+
+            # 7b. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
             reporter.run(
                 results=results,
@@ -698,6 +1147,8 @@ class Orchestrator:
                     if e.event_type == EventType.TOOL_RESULT and "token_count" in e.data
                 ),
                 "output_path": output_path,
+                "run_id": run_id,
+                "project": project_name,
             })
 
             return {

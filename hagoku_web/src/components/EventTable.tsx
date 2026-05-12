@@ -8,6 +8,8 @@ export interface EventEntry {
   agent: string;
   event: EventType;
   detail: string;
+  /** `run_completed` 且强制护栏拦截 */
+  guardrailsBlocked?: boolean;
 }
 
 interface EventTableProps {
@@ -37,16 +39,21 @@ const eventColorClass: Record<string, string> = {
 
 function EventRow({ entry }: { entry: EventEntry }) {
   const agentColor = AGENT_COLORS[entry.agent?.toLowerCase() ?? ""] ?? "text-app-agent";
+  const gr = entry.guardrailsBlocked === true;
+  const eventCls = gr
+    ? "text-app-warning font-medium"
+    : (eventColorClass[entry.event] ?? "text-app-text-muted");
+  const eventLabel = gr ? "run_completed（护栏未过）" : entry.event;
   return (
-    <tr className="border-b border-app-border hover:bg-app-bg-secondary transition-colors duration-150">
+    <tr className={`border-b border-app-border hover:bg-app-bg-secondary transition-colors duration-150 ${gr ? "bg-app-warning/5" : ""}`}>
       <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
         {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
       </td>
-      <td className={`px-3 py-0.5 whitespace-nowrap ${agentColor}`}>
+      <td className={`px-3 py-0.5 whitespace-nowrap ${gr ? "text-app-warning" : agentColor}`}>
         {entry.agent}
       </td>
-      <td className={`px-3 py-0.5 whitespace-nowrap ${eventColorClass[entry.event] ?? "text-app-text-muted"}`}>
-        {entry.event}
+      <td className={`px-3 py-0.5 whitespace-nowrap ${eventCls}`}>
+        {eventLabel}
       </td>
       <td className="px-3 py-0.5 text-app-text-muted max-w-[300px] truncate max-md:hidden">
         {entry.detail}

@@ -217,6 +217,10 @@ def run(
                 orch=orch,
                 verbosity=verbosity,
             )
+    elif result["status"] == "guardrails_blocked":
+        if verbosity != "quiet":
+            click.echo("\n⚠️ 统计护栏（强制级）未通过，已跳过正式报告生成。", err=False)
+            click.echo(f"   说明文件: {result.get('output_path', '')}")
     else:
         click.echo("\n❌ 分析未能完成", err=True)
         click.echo("   请检查数据质量，或使用 -v verbose 查看详细信息", err=True)
@@ -276,6 +280,9 @@ def demo_cmd(dataset: str | None, query: str | None) -> None:
 
     if result["status"] == "completed":
         click.echo(f"\n✅ 报告: {result['output_path']}")
+    elif result["status"] == "guardrails_blocked":
+        click.echo("\n⚠️ 统计护栏（强制级）未通过，已跳过正式报告。", err=False)
+        click.echo(f"   说明文件: {result.get('output_path', '')}")
     else:
         click.echo("❌ 分析未能完成", err=True)
         raise SystemExit(1)
@@ -835,6 +842,9 @@ def project_run(
 
     if result["status"] == "completed":
         click.echo(f"\n✅ 分析完成！报告: {result['output_path']}")
+    elif result["status"] == "guardrails_blocked":
+        click.echo("\n⚠️ 统计护栏（强制级）未通过，已跳过正式报告。", err=False)
+        click.echo(f"   说明文件: {result.get('output_path', '')}")
     else:
         click.echo("\n❌ 分析未能完成", err=True)
         raise SystemExit(1)
@@ -1045,6 +1055,10 @@ def _run_refinement_loop(
             if new_result["status"] == "completed":
                 click.echo(f"\n✅ 调整完成！报告: {new_result['output_path']}")
                 # 更新结果用于下次 refinement
+                result.update(new_result)
+            elif new_result["status"] == "guardrails_blocked":
+                click.echo("\n⚠️ 调整完成，但护栏阻止正式报告: ", err=False)
+                click.echo(f"   {new_result.get('output_path', '')}", err=False)
                 result.update(new_result)
             else:
                 click.echo("\n⚠️ 调整失败，报告保持不变")

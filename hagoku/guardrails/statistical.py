@@ -634,8 +634,8 @@ class StatisticalGuardrails:
                 lines.append(f"  • {v.message}")
 
         if self.can_output(results):
-            lines.append("\n✅ 报告可正常输出（问题已标注，供你参考）")
+            lines.append("\n✅ 强制级护栏通过，可生成正式报告")
         else:
-            lines.append("\n⚠️ 存在严重问题，报告将标注但不阻止输出")
+            lines.append("\n🚫 存在强制级违规：按产品规则不应输出正式报告（编排层将跳过 Reporter）")
 
         return "\n".join(lines)

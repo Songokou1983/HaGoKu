@@ -1,7 +1,7 @@
 import {
   FolderOpen, Plus, Loader2, BarChart3, Clock,
   CheckCircle2, Circle, AlertCircle, XCircle, Activity,
-  Pencil, Trash2, Check, X,
+  Pencil, Trash2, Check, X, ShieldAlert,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
@@ -17,7 +17,8 @@ interface ProjectDetail {
   run_count: number;
   last_query: string;
   last_run_at: string;
-  last_status: "completed" | "unknown" | "none";
+  last_status: "completed" | "unknown" | "none" | "guardrails_blocked";
+  last_guardrails_blocked?: boolean;
 }
 
 function fmtRunId(id: string): string {
@@ -27,13 +28,18 @@ function fmtRunId(id: string): string {
 }
 
 
-type PStatus = "running" | "completed" | "none" | "unknown";
+type PStatus = "running" | "completed" | "none" | "unknown" | "guardrails_blocked";
 
 const STATUS_CONFIG: Record<PStatus, { dot: string; label: string; icon: React.ReactNode }> = {
   running:   { dot: "bg-app-warning animate-pulse", label: "分析中", icon: <Activity   size={11} /> },
   completed: { dot: "bg-app-success",               label: "已完成", icon: <CheckCircle2 size={11} /> },
   unknown:   { dot: "bg-app-text-muted",            label: "未知",   icon: <AlertCircle  size={11} /> },
   none:      { dot: "bg-app-text-muted/50",         label: "未开始", icon: <Circle       size={11} /> },
+  guardrails_blocked: {
+    dot: "bg-app-warning",
+    label: "护栏未过",
+    icon: <ShieldAlert size={11} />,
+  },
 };
 
 function ProjectCard({
@@ -157,7 +163,9 @@ function ProjectCard({
           {/* Status dot */}
           <span className={`flex items-center gap-1 text-ui-xs shrink-0 ${
             status === "running"   ? "text-app-warning" :
-            status === "completed" ? "text-app-success"  : "text-app-text-muted"
+            status === "completed" ? "text-app-success"  :
+            status === "guardrails_blocked" ? "text-app-warning" :
+            "text-app-text-muted"
           }`}>
             <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
             {cfg.label}
@@ -250,7 +258,11 @@ export default function ProjectPanel() {
     fetch("/api/projects")
       .then((r) => r.json())
       .then((d) => setProjects(d.projects as string[]))
-      .catch(() => setLoadError("加载失败，请检查服务"))
+      .catch(() =>
+        setLoadError(
+          "无法连接后端：请在另一终端运行 hagoku-api（默认 http://127.0.0.1:8000），再刷新本页。",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [setProjects]);
 

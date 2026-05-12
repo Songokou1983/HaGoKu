@@ -14,6 +14,14 @@
 
 ```yaml
 fields:
+  BU: BU（分类型）
+  Bos1: Bos1（数值型）
+  Bos2: Bos2（数值型）
+  Bos3: Bos3（数值型）
+  Code: Code（未知类型）
+  Inc1: Inc1（数值型）
+  Inc2: Inc2（数值型）
+  Period: Period（数值型）
   channel: channel（分类型）
   clicks: clicks（标识符）
   conversions: conversions（标识符）

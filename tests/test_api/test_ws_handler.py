@@ -1,9 +1,9 @@
 """WebSocket Handler 集成测试"""
 
+import asyncio
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from hagoku.api.ws_handler import (
     WSBridge,
@@ -79,18 +79,19 @@ class TestWSBridge:
         # 移除后再次移除不应报错
         bridge.remove_client(mock_ws)
 
-    @pytest.mark.asyncio
-    async def test_broadcast_to_client(self):
+    def test_broadcast_to_client(self):
         """测试广播消息到客户端"""
-        bridge = WSBridge.get()
-        mock_ws = AsyncMock()
-        bridge.add_client(mock_ws)
 
-        msg = {"type": "event", "data": {"test": "data"}}
-        await bridge.broadcast(msg)
+        async def _run():
+            bridge = WSBridge.get()
+            mock_ws = AsyncMock()
+            bridge.add_client(mock_ws)
+            msg = {"type": "event", "data": {"test": "data"}}
+            await bridge.broadcast(msg)
+            mock_ws.send_json.assert_called_once_with(msg)
+            bridge.remove_client(mock_ws)
 
-        mock_ws.send_json.assert_called_once_with(msg)
-        bridge.remove_client(mock_ws)  # 清理
+        asyncio.run(_run())
 
 
 class TestEventSerialization:
@@ -98,8 +99,6 @@ class TestEventSerialization:
 
     def test_event_to_message(self):
         """测试 Event 转换为 WS 消息格式"""
-        from datetime import datetime
-
         event = Event(
             event_id="abc123",
             event_type=EventType.AGENT_STARTED,
@@ -116,110 +115,245 @@ class TestEventSerialization:
         assert msg["data"]["agent"] == "scout"
 
 
+class TestGuardrailsWSPayloadContract:
+    """Web 前端依赖的护栏相关 WS 载荷（与 Orchestrator 发射字段对齐）"""
+
+    def test_run_completed_guardrails_blocked_payload(self):
+        event = Event(
+            event_id="e-gr",
+            event_type=EventType.RUN_COMPLETED,
+            timestamp=datetime.now(),
+            agent="manager",
+            data={
+                "duration": "1.2s",
+                "token_count": 0,
+                "output_path": "/home/x/.hagoku/projects/p1/runs/20260514_abc/output/GUARDRAILS_BLOCKED.md",
+                "guardrails_blocked": True,
+                "run_id": "20260514_abc",
+                "project": "p1",
+            },
+        )
+        msg = _event_to_message(event)
+        inner = msg["data"]["data"]
+        assert inner["guardrails_blocked"] is True
+        assert inner["run_id"] == "20260514_abc"
+        assert inner["project"] == "p1"
+        assert "GUARDRAILS_BLOCKED.md" in inner["output_path"]
+
+    def test_run_completed_completed_payload_has_run_id(self):
+        event = Event(
+            event_id="e-ok",
+            event_type=EventType.RUN_COMPLETED,
+            timestamp=datetime.now(),
+            agent="manager",
+            data={
+                "duration": "3.0s",
+                "token_count": 1,
+                "output_path": "/path/report.html",
+                "run_id": "20260514_ok",
+                "project": "p1",
+            },
+        )
+        msg = _event_to_message(event)
+        inner = msg["data"]["data"]
+        assert inner.get("guardrails_blocked") is not True
+        assert inner["run_id"] == "20260514_ok"
+        assert inner["project"] == "p1"
+
+    def test_run_completed_cancelled_payload(self):
+        event = Event(
+            event_id="e-cancel",
+            event_type=EventType.RUN_COMPLETED,
+            timestamp=datetime.now(),
+            agent="manager",
+            data={
+                "duration": "0.1s",
+                "cancelled": True,
+                "run_id": "20260514_cancel",
+                "project": "p1",
+            },
+        )
+        msg = _event_to_message(event)
+        inner = msg["data"]["data"]
+        assert inner["cancelled"] is True
+        assert inner["run_id"] == "20260514_cancel"
+
+    def test_reporter_agent_completed_skipped_payload(self):
+        event = Event(
+            event_id="e-skip",
+            event_type=EventType.AGENT_COMPLETED,
+            timestamp=datetime.now(),
+            agent="reporter",
+            data={
+                "result_summary": "已跳过：强制级护栏未通过",
+                "skipped": True,
+            },
+        )
+        msg = _event_to_message(event)
+        inner = msg["data"]["data"]
+        assert inner["skipped"] is True
+
+
 class TestAnalyzeCommand:
     """测试 analyze 命令处理"""
 
-    @pytest.mark.asyncio
-    async def test_analyze_missing_data_path_returns_error(self):
+    def test_analyze_missing_data_path_returns_error(self):
         """测试 analyze 命令缺少 data_path 时返回错误"""
-        mock_ws = AsyncMock()
-        mock_ws.receive_text = AsyncMock(
-            side_effect=[
-                json.dumps({"cmd": "analyze", "payload": {"query": "test"}}),
-                Exception("Connection closed")
-            ]
-        )
 
-        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
-            try:
-                await ws_handler(mock_ws)
-            except Exception:
-                pass
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({"cmd": "analyze", "payload": {"query": "test"}}),
+                    Exception("Connection closed"),
+                ]
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                try:
+                    await ws_handler(mock_ws)
+                except Exception:
+                    pass
+            calls = mock_ws.send_json.call_args_list
+            error_call = [c for c in calls if c[0][0].get("type") == "error"]
+            assert len(error_call) > 0
+            assert "data_path" in error_call[0][0][0].get("message", "")
 
-        # 验证返回了错误消息
-        calls = mock_ws.send_json.call_args_list
-        error_call = [c for c in calls if c[0][0].get("type") == "error"]
-        assert len(error_call) > 0
-        assert "data_path" in error_call[0][0][0].get("message", "")
+            import hagoku.api.ws_handler as wh
 
-    @pytest.mark.asyncio
-    async def test_analyze_with_valid_data_path_sends_ack(self):
+            wh._analysis_in_progress = False
+
+        asyncio.run(_run())
+
+    def test_analyze_with_valid_data_path_sends_ack(self):
         """测试 analyze 命令有 data_path 时返回 ack"""
-        mock_ws = AsyncMock()
-        mock_ws.receive_text = AsyncMock(
-            side_effect=[
-                json.dumps({
-                    "cmd": "analyze",
-                    "payload": {
-                        "data_path": "/tmp/test.csv",
-                        "query": "test query"
-                    }
-                }),
-                # 模拟第二次接收时连接关闭
-                Exception("Connection closed")
-            ]
-        )
 
-        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
-            try:
-                await ws_handler(mock_ws)
-            except Exception:
-                pass
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({
+                        "cmd": "analyze",
+                        "payload": {
+                            "data_path": "/tmp/test.csv",
+                            "query": "test query",
+                        },
+                    }),
+                    Exception("Connection closed"),
+                ]
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                try:
+                    await ws_handler(mock_ws)
+                except Exception:
+                    pass
+            calls = mock_ws.send_json.call_args_list
+            ack_call = [c for c in calls if c[0][0].get("type") == "ack"]
+            assert len(ack_call) > 0
 
-        # 验证返回了 ack
-        calls = mock_ws.send_json.call_args_list
-        ack_call = [c for c in calls if c[0][0].get("type") == "ack"]
-        assert len(ack_call) > 0
+            import hagoku.api.ws_handler as wh
+
+            wh._analysis_in_progress = False
+
+        asyncio.run(_run())
+
+
+class TestCancelAnalysisCommand:
+    """cancel_analysis 与共享 Orchestrator"""
+
+    def test_cancel_analysis_calls_request_cancel(self):
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_orch = MagicMock()
+            mock_orch.request_cancel = MagicMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({"cmd": "cancel_analysis"}),
+                    Exception("Connection closed"),
+                ],
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                with patch("hagoku.api.ws_handler._shared_orchestrator", mock_orch):
+                    try:
+                        await ws_handler(mock_ws)
+                    except Exception:
+                        pass
+            mock_orch.request_cancel.assert_called_once()
+            acks = [c for c in mock_ws.send_json.call_args_list if c[0][0].get("cmd") == "cancel_analysis"]
+            assert len(acks) == 1
+            assert acks[0][0][0].get("type") == "ack"
+
+        asyncio.run(_run())
+
+    def test_cancel_analysis_without_orchestrator_returns_error(self):
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({"cmd": "cancel_analysis"}),
+                    Exception("Connection closed"),
+                ],
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                with patch("hagoku.api.ws_handler._shared_orchestrator", None):
+                    try:
+                        await ws_handler(mock_ws)
+                    except Exception:
+                        pass
+            errs = [c for c in mock_ws.send_json.call_args_list if c[0][0].get("type") == "error"]
+            assert len(errs) >= 1
+            assert errs[0][0][0].get("cmd") == "cancel_analysis"
+
+        asyncio.run(_run())
 
 
 class TestPingCommand:
     """测试 ping 命令处理"""
 
-    @pytest.mark.asyncio
-    async def test_ping_returns_pong(self):
+    def test_ping_returns_pong(self):
         """测试 ping 命令返回 pong"""
-        mock_ws = AsyncMock()
-        mock_ws.receive_text = AsyncMock(
-            side_effect=[
-                json.dumps({"cmd": "ping"}),
-                Exception("Connection closed")
-            ]
-        )
 
-        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
-            try:
-                await ws_handler(mock_ws)
-            except Exception:
-                pass
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({"cmd": "ping"}),
+                    Exception("Connection closed"),
+                ]
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                try:
+                    await ws_handler(mock_ws)
+                except Exception:
+                    pass
+            calls = mock_ws.send_json.call_args_list
+            pong_call = [c for c in calls if c[0][0].get("type") == "pong"]
+            assert len(pong_call) > 0
 
-        # 验证返回了 pong
-        calls = mock_ws.send_json.call_args_list
-        pong_call = [c for c in calls if c[0][0].get("type") == "pong"]
-        assert len(pong_call) > 0
+        asyncio.run(_run())
 
 
 class TestUnknownCommand:
     """测试未知命令处理"""
 
-    @pytest.mark.asyncio
-    async def test_unknown_command_returns_error(self):
+    def test_unknown_command_returns_error(self):
         """测试未知命令返回错误"""
-        mock_ws = AsyncMock()
-        mock_ws.receive_text = AsyncMock(
-            side_effect=[
-                json.dumps({"cmd": "unknown_cmd"}),
-                Exception("Connection closed")
-            ]
-        )
 
-        with patch("hagoku.api.ws_handler.get_bus", return_value=None):
-            try:
-                await ws_handler(mock_ws)
-            except Exception:
-                pass
+        async def _run():
+            mock_ws = AsyncMock()
+            mock_ws.receive_text = AsyncMock(
+                side_effect=[
+                    json.dumps({"cmd": "unknown_cmd"}),
+                    Exception("Connection closed"),
+                ]
+            )
+            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
+                try:
+                    await ws_handler(mock_ws)
+                except Exception:
+                    pass
+            calls = mock_ws.send_json.call_args_list
+            error_call = [c for c in calls if c[0][0].get("type") == "error"]
+            assert len(error_call) > 0
+            assert "Unknown command" in error_call[0][0][0].get("message", "")
 
-        # 验证返回了错误
-        calls = mock_ws.send_json.call_args_list
-        error_call = [c for c in calls if c[0][0].get("type") == "error"]
-        assert len(error_call) > 0
-        assert "Unknown command" in error_call[0][0][0].get("message", "")
+        asyncio.run(_run())

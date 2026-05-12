@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .._scribe.agent import ScribeAgent
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -24,6 +25,115 @@ from ...tools.profiling import generate_profile
 from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as scout_knowledge
+
+# 与编排层展示过滤一致：不把「列名（统计类型）」当业务含义
+_TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
+    "分类型",
+    "数值型",
+    "时间型",
+    "文本型",
+    "布尔型",
+    "标识符",
+    "未知类型",
+)
+
+
+def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
+    d = (desc or "").strip()
+    c = (col or "").strip()
+    if not d or d == c:
+        return False
+    for suf in _TYPE_ECHO_SUFFIXES:
+        for o, cl in (("（", "）"), ("(", ")")):
+            if d == f"{c}{o}{suf}{cl}":
+                return False
+    return True
+
+
+def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
+    """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    s = re.sub(r"^[\-\*\•]\s*", "", s)
+    s = re.sub(r"^\d+[\.)]\s*", "", s)
+    if "：" in s:
+        left, right = s.split("：", 1)
+    elif ":" in s:
+        idx = s.find(":")
+        left, right = s[:idx], s[idx + 1 :]
+        if len(left.strip()) > 64:
+            return None
+    else:
+        return None
+    col = left.strip().strip("`").strip()
+    desc = right.strip()
+    if not col or not desc:
+        return None
+    return col, desc
+
+
+def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
+    """把样本值格式化成人类可读短串（去掉 np.float64 等噪音）。"""
+    try:
+        vals = df[col].dropna().unique()
+    except Exception:
+        return ""
+    if len(vals) == 0:
+        return ""
+    parts: list[str] = []
+    for v in vals[:limit]:
+        try:
+            if hasattr(v, "item") and callable(getattr(v, "item", None)):
+                v = v.item()  # numpy scalar → Python
+        except Exception:
+            pass
+        if isinstance(v, float):
+            av = abs(v)
+            if av != 0 and (av >= 1e6 or av < 1e-5):
+                parts.append(f"{v:.3e}")
+            else:
+                s = f"{v:.6g}".rstrip("0").rstrip(".")
+                parts.append(s or "0")
+        elif isinstance(v, (int, np.integer)):
+            parts.append(str(int(v)))
+        else:
+            s = str(v).strip()
+            if len(s) > 20:
+                s = s[:17] + "…"
+            parts.append(s)
+    return ", ".join(parts)
+
+
+def _heuristic_column_business_hint(column_name: str, sample_preview: str) -> str:
+    """LLM 未给出可用描述时的短保底：不出现统计类型词。"""
+    c = (column_name or "").strip()
+    low = c.lower()
+    sp = (sample_preview or "").strip().replace("\n", " ")
+    if len(sp) > 56:
+        sp = sp[:53] + "…"
+
+    parts: list[str] = []
+    if low == "bu" or re.search(r"\bbu\b", low):
+        parts.append("多为事业部/业务线")
+    if "code" in low:
+        parts.append("多为业务或主数据编码")
+    if "period" in low:
+        parts.append("多为账期/统计周期")
+    if re.search(r"\binc\d*\b", low) or low.startswith("inc"):
+        parts.append("多为收入侧指标")
+    if re.search(r"\bbos\d*\b", low) or low.startswith("bos"):
+        parts.append("多为支出/成本侧指标")
+    if "date" in low or "time" in low:
+        parts.append("多为日期/时间")
+    if "id" in low and len(low) <= 32:
+        parts.append("多为标识字段")
+
+    core = "；".join(parts) if parts else "含义待你确认"
+
+    if sp:
+        return f"{core}（例：{sp}）"
+    return core
 
 
 class ScoutAgent(InteractionMixin):
@@ -104,9 +214,14 @@ class ScoutAgent(InteractionMixin):
         query: str = "",
         project_id: str | None = None,
         memory_project: dict | None = None,
+        *,
+        emit_completed: bool = True,
     ) -> dict:
         """
         执行数据侦察
+
+        Args:
+            emit_completed: 为 False 时不发 AGENT_COMPLETED（编排层在用户确认字段理解后再发）。
 
         Returns:
             DataContext dict
@@ -162,9 +277,10 @@ class ScoutAgent(InteractionMixin):
             # 10. 更新自身记忆
             self._update_own_memory(context, project_id)
 
-            self._emit(EventType.AGENT_COMPLETED, {
-                "result_summary": f"理解 {len(context['column_semantics'])} 个字段"
-            })
+            if emit_completed:
+                self._emit(EventType.AGENT_COMPLETED, {
+                    "result_summary": f"理解 {len(context['column_semantics'])} 个字段"
+                })
 
             return context
 
@@ -233,12 +349,9 @@ class ScoutAgent(InteractionMixin):
             # 提取样本值（用于 LLM 理解字段含义）
             sample_values = {}
             for col in df.columns:
-                try:
-                    vals = df[col].dropna().unique()
-                    if len(vals) > 0:
-                        sample_values[col] = ", ".join(str(v) for v in vals[:3])
-                except Exception:
-                    pass
+                prev = _format_sample_preview(df, col, limit=3)
+                if prev:
+                    sample_values[col] = prev
             context["_sample_values"] = sample_values
 
             self._context = context
@@ -534,13 +647,7 @@ class ScoutAgent(InteractionMixin):
             if col in context["column_descriptions"]:
                 continue  # 已有描述不覆盖
 
-            sample_val = ""
-            try:
-                vals = df[col].dropna().unique()
-                if len(vals) > 0:
-                    sample_val = str(list(vals[:5])).strip("[]")
-            except Exception:
-                pass
+            sample_val = _format_sample_preview(df, col)
 
             field_specs.append(
                 f"[{col}] 类型={sem['inferred_type']} 置信={sem['confidence']:.0%} "
@@ -565,64 +672,67 @@ class ScoutAgent(InteractionMixin):
             knowledge_hint = ""
 
         system_prompt = (
-            "你是专业数据分析师，为每个字段生成一句中文自然语言描述（20字以内）。"
-            + (f"\n\n{knowledge_hint}" if knowledge_hint else "")
-            + "\n\n输出格式：字段名：描述"
+            "你是专业数据分析师，为每个字段写一句**业务向**的中文（建议 12–28 字）。\n"
+            "要求：结合列名、示例猜测「这列在业务里可能表示什么」；面向业务同事。\n"
+            "禁止：写「数值型/分类型/未知类型」等统计用词；禁止只输出「字段名（类型）」或只重复英文列名。\n"
+            "若不确定，也要写「可能表示…」并点出你从样本里看到的现象（如金额大小、是否像编码）。\n"
+            + (f"\n{knowledge_hint}" if knowledge_hint else "")
+            + "\n\n每行**严格**使用格式：`字段名：理解名称｜含义理解`（全角冒号、全角竖线「｜」）。\n"
+            "「理解名称」≤12 字，为后续表格第二列的简短业务称呼；「含义理解」为第三列的一句话（可含（例：…）样本片段）。\n"
+            "不要 Markdown 表格，不要编号；每行只写一列字段。"
         )
+        max_out = min(max(self.llm_config.max_tokens, 512), 1600)
 
         client = self._create_llm_client()
         result = ""
         try:
             response = client.chat.completions.create(
-                model=self.llm_config.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"为以下字段生成描述：\n{field_block}"},
                 ],
                 temperature=0.3,
-                max_tokens=500,
+                max_tokens=max_out,
             )
             result = response.choices[0].message.content or ""
         except Exception:
             result = ""
 
+        known_cols = {sem["column_name"] for sem in context["column_semantics"]}
         # 解析 LLM 输出
         for line in result.split("\n"):
-            line = line.strip()
-            if not line or "：" not in line:
+            parsed = _parse_llm_field_desc_line(line)
+            if not parsed:
                 continue
-            col_name, desc_text = line.split("：", 1)
-            col_name = col_name.strip()
-            desc_text = desc_text.strip()
-
-            # 检查列名是否在上下文中
+            col_name, desc_text = parsed
+            if col_name not in known_cols:
+                continue
             if col_name in context["column_descriptions"]:
                 continue
+            if _description_is_user_facing_meaningful(col_name, desc_text):
+                if "｜" in desc_text:
+                    left, sep, right = desc_text.partition("｜")
+                    short_guess = left.strip()
+                    long_guess = right.strip()
+                    if sep and short_guess and long_guess:
+                        context.setdefault("column_display_names", {})[col_name] = short_guess
+                        desc_text = long_guess
+                context["column_descriptions"][col_name] = desc_text
 
-            # 找到对应的 sem
-            for sem in context["column_semantics"]:
-                if sem["column_name"] == col_name and sem["inferred_type"] != "unknown":
-                    context["column_descriptions"][col_name] = desc_text
-                    break
-
-        # 兜底：未生成描述的字段
-        type_map = {
-            "numeric": "数值型",
-            "categorical": "分类型",
-            "datetime": "时间型",
-            "id": "标识符",
-            "text": "文本型",
-            "boolean": "布尔型",
-            "unknown": "未知类型",
-        }
+        # 仍为空的列：用语义缩写 + 样本做短保底
+        context.setdefault("_field_desc_auto_columns", [])
         for sem in context["column_semantics"]:
             col = sem["column_name"]
-            if col not in context["column_descriptions"]:
-                type_ch = type_map.get(sem["inferred_type"], sem["inferred_type"])
-                context["column_descriptions"][col] = f"{col}（{type_ch}）"
+            raw = str(context["column_descriptions"].get(col, "") or "").strip()
+            if _description_is_user_facing_meaningful(col, raw):
+                continue
+            sample_val = _format_sample_preview(df, col)
+            context["column_descriptions"][col] = _heuristic_column_business_hint(col, sample_val)
+            context["_field_desc_auto_columns"].append(col)
 
     def _generate_confirmation_message(self, column_semantics: list, context: dict) -> str:
-        """用 LLM 生成字段确认的完整消息（三列：字段名、中文名、含义理解）"""
+        """用 LLM 生成字段确认的 Markdown 表（字段名｜理解名称｜含义理解）。"""
         # 构建字段列表给 LLM
         field_info = []
         for s in column_semantics:
@@ -636,7 +746,7 @@ class ScoutAgent(InteractionMixin):
         system_prompt = """你是一个数据分析助手，正在帮助用户理解数据字段的含义。
 
 你的任务是：
-1. 为每个字段生成三列信息：字段名（原始列名）、中文名（后续分析用的简短名称）、含义理解（业务含义）
+1. 为每个字段生成三列信息：**字段名**（原始列名）、**理解名称**（后续展示用的简短业务称呼）、**含义理解**（业务含义一句话）
 2. 确认完成后，告知用户如何继续：
    - 如果所有字段理解正确 → 用户可以输入"确认"继续下一步
    - 如果某个字段理解有误 → 用户会告诉你正确含义
@@ -644,8 +754,8 @@ class ScoutAgent(InteractionMixin):
 
 重要规则：
 - **字段名照抄原始列名**，不要翻译
-- **中文名要简短**，后续分析时会用到
-- **含义理解要详细**，说明这个字段在业务中的具体含义"""
+- **理解名称要简短**（建议 ≤12 字），后续分析表格第二列会用到
+- **含义理解**说明这个字段在业务中的具体含义"""
 
         user_prompt = f"""请为以下字段生成理解：
 
@@ -654,7 +764,7 @@ class ScoutAgent(InteractionMixin):
 数据概况：{context.get('n_rows', 0)} 行，{context.get('n_cols', 0)} 列
 
 只输出一个 Markdown 表格，不要任何说明文字。表格格式：
-| 字段名 | 中文名 | 含义理解 |
+| 字段名 | 理解名称 | 含义理解 |
 | --- | --- | --- |"""
 
         client = self._create_llm_client()
@@ -683,7 +793,7 @@ class ScoutAgent(InteractionMixin):
 
 确认流程：
 - 如果所有字段理解正确 → 输入"确认"继续
-- 如果某个字段理解有误 → 直接告诉我正确的含义，如"Inc1的中文名=销售额"
+- 如果某个字段理解有误 → 直接告诉我正确的含义，如"Inc1=销售额"或「理解名称｜含义理解」
 - 如果某字段完全不理解 → 告诉我这个字段是什么意思"""
 
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
@@ -695,21 +805,25 @@ class ScoutAgent(InteractionMixin):
             # 只学习高置信度且不需要用户确认的推断
             if sem.get("confidence", 0) < 0.85 or sem.get("needs_user_input"):
                 continue
-            if sem["column_name"] in context.get("column_descriptions", {}):
-                desc = context["column_descriptions"][sem["column_name"]]
-                # 检查是否已存在相似条目（通过 recall 确认）
-                existing = scout_knowledge.recall(f"{sem['column_name']} {desc}", top_k=1)
-                if existing and existing[0]["similarity"] > 0.9:
-                    continue  # 已有相似条目，跳过
-                scout_knowledge.learn(
-                    field=desc,
-                    meaning=desc,
-                    data_pattern=f"{sem['inferred_type']} {sem['evidence']}",
-                    inferred_role=sem.get("suggested_role", "feature"),
-                    confidence=sem.get("confidence", 0.85),
-                    tags=[sem["inferred_type"], sem.get("suggested_role", "feature")],
-                    metadata={"project": project_id},
-                )
+            col_name = sem["column_name"]
+            if col_name in context.get("_field_desc_auto_columns", []):
+                continue
+            if col_name not in context.get("column_descriptions", {}):
+                continue
+            desc = context["column_descriptions"][col_name]
+            # 检查是否已存在相似条目（通过 recall 确认）
+            existing = scout_knowledge.recall(f"{col_name} {desc}", top_k=1)
+            if existing and existing[0]["similarity"] > 0.9:
+                continue  # 已有相似条目，跳过
+            scout_knowledge.learn(
+                field=desc,
+                meaning=desc,
+                data_pattern=f"{sem['inferred_type']} {sem['evidence']}",
+                inferred_role=sem.get("suggested_role", "feature"),
+                confidence=sem.get("confidence", 0.85),
+                tags=[sem["inferred_type"], sem.get("suggested_role", "feature")],
+                metadata={"project": project_id},
+            )
 
     def _update_own_memory(self, context: dict, project_id: str | None) -> None:
         """更新自身记忆中的字段定义"""

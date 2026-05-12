@@ -1523,3 +1523,591 @@ knowledge:
     confidence: 0.95
   created_at: '2026-05-11 20:57:27'
   use_count: 0
+- id: c03c9bdd
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:18'
+  use_count: 0
+- id: 37f23e50
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:19'
+  use_count: 0
+- id: bd09c2ec
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:20'
+  use_count: 0
+- id: 82f2bf1d
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:21'
+  use_count: 0
+- id: 067bfd76
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:22'
+  use_count: 0
+- id: db2668d7
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 12:37:23'
+  use_count: 0
+- id: e6f57cc1
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:07'
+  use_count: 0
+- id: dae616c7
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:08'
+  use_count: 0
+- id: 2902e930
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:09'
+  use_count: 0
+- id: 8f217fc5
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:10'
+  use_count: 0
+- id: 1f8142e5
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:11'
+  use_count: 0
+- id: adb5fcdc
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:14:12'
+  use_count: 0
+- id: 02d50d21
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:15'
+  use_count: 0
+- id: 462b061b
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:16'
+  use_count: 0
+- id: 09fc509f
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:16'
+  use_count: 0
+- id: 77d5101a
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:17'
+  use_count: 0
+- id: c5eced4b
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:18'
+  use_count: 0
+- id: ef57c3fa
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:18:19'
+  use_count: 0
+- id: 0e8e9153
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:20:55'
+  use_count: 0
+- id: 36c6f476
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:20:56'
+  use_count: 0
+- id: b9ae3980
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:20:57'
+  use_count: 0
+- id: de5921cf
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:20:58'
+  use_count: 0
+- id: 7b956f96
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:20:59'
+  use_count: 0
+- id: 32f7ce09
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:21:00'
+  use_count: 0
+- id: 105ca1c0
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:30:56'
+  use_count: 0
+- id: 7274c67a
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:30:58'
+  use_count: 0
+- id: ffe6f23f
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:30:59'
+  use_count: 0
+- id: 7a1f3185
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:31:00'
+  use_count: 0
+- id: f8164c29
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:31:01'
+  use_count: 0
+- id: 5bf77056
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:31:02'
+  use_count: 0
+- id: b98a4985
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:34'
+  use_count: 0
+- id: e722e9a6
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:35'
+  use_count: 0
+- id: f87ed716
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:36'
+  use_count: 0
+- id: b704ae0a
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:37'
+  use_count: 0
+- id: a3426c85
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:38'
+  use_count: 0
+- id: 8e20d680
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:35:40'
+  use_count: 0
+- id: 7a0a50e0
+  content: 字段名：Period（数值型）；含义：Period（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Period（数值型）
+    meaning: Period（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:47'
+  use_count: 0
+- id: 7f66abac
+  content: 字段名：Inc1（数值型）；含义：Inc1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc1（数值型）
+    meaning: Inc1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:48'
+  use_count: 0
+- id: 7ed80ec2
+  content: 字段名：Inc2（数值型）；含义：Inc2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Inc2（数值型）
+    meaning: Inc2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:49'
+  use_count: 0
+- id: d42a4595
+  content: 字段名：Bos1（数值型）；含义：Bos1（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos1（数值型）
+    meaning: Bos1（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:50'
+  use_count: 0
+- id: f52f42c3
+  content: 字段名：Bos2（数值型）；含义：Bos2（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos2（数值型）
+    meaning: Bos2（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:51'
+  use_count: 0
+- id: c8056ab5
+  content: 字段名：Bos3（数值型）；含义：Bos3（数值型）；数据特征：numeric 数值类型；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: Bos3（数值型）
+    meaning: Bos3（数值型）
+    data_pattern: numeric 数值类型
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-12 15:52:52'
+  use_count: 0

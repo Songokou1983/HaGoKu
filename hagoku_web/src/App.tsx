@@ -41,6 +41,16 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   settings:  <SettingsPanel />,
 };
 
+/** 固定顺序，保证切换侧栏时面板不卸载（避免分析页 local state 被重置） */
+const PANEL_ORDER: PanelId[] = [
+  "projects",
+  "analyze",
+  "report",
+  "knowledge",
+  "events",
+  "settings",
+];
+
 function SystemStatus() {
   const status = useWorkspaceStore((s) => s.status);
   const agents = useWorkspaceStore((s) => s.agents);
@@ -157,7 +167,7 @@ export default function App() {
       </aside>
 
       {/* ── Main content ── */}
-      <main className="overflow-hidden relative">
+      <main className="overflow-hidden relative h-full min-h-0">
         {/* Global error toast */}
         {lastError && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2
@@ -173,7 +183,19 @@ export default function App() {
             </button>
           </div>
         )}
-        {PANEL_MAP[activeView]}
+        {PANEL_ORDER.map((id) => (
+          <div
+            key={id}
+            className={
+              activeView === id
+                ? "h-full min-h-0 overflow-hidden"
+                : "hidden"
+            }
+            aria-hidden={activeView !== id}
+          >
+            {PANEL_MAP[id]}
+          </div>
+        ))}
       </main>
     </div>
   );

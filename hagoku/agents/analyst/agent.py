@@ -152,6 +152,8 @@ class AnalystAgent(InteractionMixin):
         plan: dict,
         project_id: str | None = None,
         phase: str = "full",
+        *,
+        emit_completed: bool = True,
     ) -> tuple[list[dict], list[dict]]:
         """
         执行统计分析
@@ -162,6 +164,7 @@ class AnalystAgent(InteractionMixin):
             plan: 分析计划
             project_id: 项目 ID
             phase: "full"=完整分析, "preliminary"=初步发现
+            emit_completed: 为 False 时 full 阶段结束时不再发 AGENT_COMPLETED（由编排层在用户确认后再发）。
 
         Returns:
             phase="full": (分析结果列表, 商业指标列表)
@@ -264,7 +267,8 @@ class AnalystAgent(InteractionMixin):
         # 学习：将分析场景和方法写入知识库
         self._learn_from_results(results, focus, n, context, project_id)
 
-        self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"完成 {len(results)} 项分析"})
+        if emit_completed:
+            self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"完成 {len(results)} 项分析"})
 
         return results, business_metrics
 

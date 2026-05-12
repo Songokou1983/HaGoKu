@@ -34,7 +34,7 @@ export interface EventData {
 }
 
 /** Agent lifecycle status used in the global store */
-export type AgentStatus = "idle" | "running" | "done" | "error" | "waiting_input";
+export type AgentStatus = "idle" | "running" | "done" | "error" | "waiting_input" | "skipped";
 
 /** Connection states for the shared WebSocket */
 export type ConnectionStatus =

@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { EventTable, type EventEntry } from "../components/EventTable";
 import type { EventType } from "../types/events";
+import { guardrailsRunCompletedInfo, guardrailsRunCompletedLogDetail } from "../utils/wsGuardrails";
 
 const MAX_ENTRIES = 500;
 
@@ -38,12 +39,23 @@ export default function EventPanel() {
         if (msg.type !== "event" || !msg.data) continue;
 
         const d = msg.data;
+        const inner = (d.data ?? {}) as Record<string, unknown>;
+        const gr = guardrailsRunCompletedInfo({
+          event_type: d.event_type,
+          agent: d.agent,
+          data: inner,
+        });
+        let detail = detailSnippet(inner);
+        if (gr.guardrailsBlocked) {
+          detail = guardrailsRunCompletedLogDetail();
+        }
         const entry: EventEntry = {
           id: d.event_id,
           timestamp: d.timestamp,
           agent: d.agent,
           event: d.event_type as EventType,
-          detail: detailSnippet(d.data),
+          detail,
+          guardrailsBlocked: gr.guardrailsBlocked,
         };
         next = [entry, ...next.slice(0, MAX_ENTRIES - 1)];
       }

@@ -2,6 +2,247 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-12 — Scout 暂停：结构化 `field_review` + Web 真表格（非 Markdown 气泡）
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：Scout 字段暂停后对用户回复调用 **`apply_scout_user_field_reply_to_context`**，将 `Code=…`、`code means …`、`Code是/就是/为…` 等**解析写入 `column_descriptions`** 并清除对应 `needs_user_input`；纯「确认」类短句不写库、不追加 `[用户补充]`。`user_input_received` 载荷增加 **`applied_field_updates`**。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`user_input_requested` 若含 `field_review`，插入 **`workflow` 角色**卡片并渲染 **HTML `<table>`**（表头 `text-center`，表体左对齐）；`message` 仅在有内容时追加为普通 agent 气泡，不设预设「Agent 台词」。**交互**：当前暂停点与表格消息 id 对齐时可点选行高亮、**「插入纠错」**写入 `字段名=`、**「确认无误」**或空内容 **Enter** 发送确认（与编排层空字符串一致）；输入区在有点选时轻微强调边框。收到 **`user_input_received`** 且含 **`applied_field_updates`** 时插入一条**系统**提示（事实反馈，非拟人 Agent）。
+- **`tests/test_manager/test_scout_field_review_payload.py`**：`scout_field_review_pause_payload` 形状契约测试。
+- **`tests/test_manager/test_scout_user_reply_apply.py`**：用户纠错句写入 `context` 的契约测试。
+
+### 涉及文件
+
+- `hagoku/manager/orchestrator.py`（若本轮有改，以当次备份为准）
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`hagoku_web/src/panels/UI_CHANGELOG_backup_*_AnalyzePanel_field_review.tsx`）
+- `tests/test_manager/test_scout_field_review_payload.py`
+- `tests/test_manager/test_scout_user_reply_apply.py`
+
+---
+
+## 2026-05-12 — Scout：字段说明不再是「列名抄一遍+类型」
+
+### 变更概要
+
+- **`scout/agent.py`**：字段描述 LLM 提示改为**业务含义向**、禁止统计类型词与「列名（类型）」式输出；去掉原先「未生成则写入 `列名（数值型）`」的兜底（无描述则视为待用户补充）。
+- **`orchestrator.py`**：`_scout_field_digest_for_user` 展示前用 `_scout_description_is_meaningful_for_user` 过滤旧占位串，避免再把「BU（分类型）」当成有效理解。
+- **`tests/test_agents/test_agents.py`**：`TestScoutUserFacingDescriptionFilter` 契约测试。
+
+### 涉及文件
+
+- `hagoku/agents/scout/agent.py`（备份：`hagoku/agents/scout/UI_CHANGELOG_backup_20260512190000_scout_descriptions.py`）
+- `hagoku/manager/orchestrator.py`（备份：`hagoku/manager/UI_CHANGELOG_backup_20260512190000_orchestrator_scout_desc_filter.py`）
+- `tests/test_agents/test_agents.py`
+
+---
+
+## 2026-05-12 — Scout 暂停：固定三列表格（字段名｜理解名称｜含义理解）
+
+### 变更概要
+
+- **`orchestrator._scout_field_digest_for_user`**：暂停文案改为 **Markdown 三列表**；单元格转义竖线；可选 `column_display_names`；拿不准列在「理解名称」标「（待核）」。
+- **`scout` 批量描述 LLM**：要求每行 `字段名：理解名称｜含义理解`；解析时拆入 `column_display_names` 与 `column_descriptions`。
+- **`_generate_confirmation_message`**：表头改为 **理解名称**（原「中文名」）。
+- **测试**：表工具函数 + 竖线拆分单测。
+
+### 涉及文件
+
+- `hagoku/manager/orchestrator.py`，`hagoku/agents/scout/agent.py`，`tests/test_agents/test_agents.py`
+
+---
+
+## 2026-05-12 — Scout 暂停：去「小说化」+ 样本可读 + 单行清单
+
+### 变更概要
+
+- **`orchestrator.py`**：Scout 暂停**不再调用开场 LLM**，只发**一行说明 + 每列一行**（`*`/`·` + `列名 — 描述`）；去掉与清单重复的引言与逐列套话。
+- **`scout/agent.py`**：样本 `_format_sample_preview` 去掉 `np.float64` 噪音；**保底推断句缩短**，不再带「初步推断…纠正」长尾巴；`_field_desc_auto_columns` 标记自动句，知识库不学习。
+- **`tests/test_agents/test_agents.py`**：调整保底句断言。
+
+### 涉及文件
+
+- `hagoku/manager/orchestrator.py`，`hagoku/agents/scout/agent.py`，`tests/test_agents/test_agents.py`
+
+---
+
+## 2026-05-12 — Scout：字段描述解析 + 业务向保底推断
+
+### 变更概要
+
+- **`scout/agent.py`**：LLM 批量描述行解析兼容**半角/全角冒号**、列表前缀与反引号；输出 `max_tokens` 提高到至多 1600；优先 `model_quick`。
+- 对仍无可用描述的列写入 **`_heuristic_column_business_hint`**（列名缩写 + 样本片段，明确写「初步推断」），避免暂停清单整屏「请补充」；**不写**统计类型占位。
+- 知识库学习跳过以 **`初步推断：`** 开头的描述，避免把保底句当经验固化。
+- **`orchestrator.py`**：清单底部提示改为「有错只改不对的几列」。
+- **`tests/test_agents/test_agents.py`**：解析与保底句单测。
+
+### 涉及文件
+
+- `hagoku/agents/scout/agent.py`（备份：`hagoku/agents/scout/UI_CHANGELOG_backup_20260512193000_scout_parse_heuristic.py`）
+- `hagoku/manager/orchestrator.py`（备份：`hagoku/manager/UI_CHANGELOG_backup_20260512193000_orchestrator_digest_footer.py`）
+- `tests/test_agents/test_agents.py`
+
+---
+
+## 2026-05-12 — Scout 暂停：对话区可读性（换行 + 清单分段）
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：Agent / 系统气泡增加 **`whitespace-pre-wrap`**，后端消息里的换行在界面上按行展示，不再挤成一段。
+- **`orchestrator.py`**：Scout 暂停的 LLM 约束改为**短开场、不与逐列清单重复**；`_scout_field_digest_for_user` 改为列与列之间空行分段，去掉与引言重复的标题句；回退话术缩短。引言与清单之间多一空行。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260512182000_AnalyzePanel_convo_prewrap.tsx`）
+- `hagoku/manager/orchestrator.py`（备份：`hagoku/manager/UI_CHANGELOG_backup_20260512182000_orchestrator_scout_readability.py`）
+
+---
+
+## 2026-05-12 — 分析页：「重置分析」+ WS cancel / 编排中止
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：标题栏在非 `setup` 阶段显示 **图标 + 文案**「重置分析」；点击后清空本会话状态、同步 `resetRunUiState()`，并 `send("cancel_analysis")`。
+- **`workspace.ts`** / **`useAgentStatusSync.ts`**：`run_completed` 且 `cancelled: true` 时清空全局 `agents`，避免项目列表仍显示「进行中」。
+- **`hagoku/api/ws_handler.py`**：新增命令 `cancel_analysis` → `Orchestrator.request_cancel()`；`analyze` 在单进程内串行（`_analysis_in_progress`），避免并发 `run()`。
+- **`hagoku/manager/orchestrator.py`**：暂停哨兵 `HAGOKU_CANCEL_PAUSE_TOKEN`、步骤间取消检查、`runs.status=cancelled` 与带 `cancelled` 的 `RUN_COMPLETED`。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260512174500_AnalyzePanel_reset.tsx`）
+- `hagoku_web/src/stores/workspace.ts`（备份：`UI_CHANGELOG_backup_20260512174500_workspace_reset.ts`）
+- `hagoku_web/src/hooks/useAgentStatusSync.ts`（备份：`UI_CHANGELOG_backup_20260512174500_useAgentStatusSync_reset.ts`）
+- `hagoku/api/ws_handler.py`（备份：`hagoku/api/UI_CHANGELOG_backup_20260512174500_ws_handler_cancel.py`）
+- `hagoku/manager/orchestrator.py`（备份：`hagoku/manager/UI_CHANGELOG_backup_20260512174500_orchestrator_cancel.py`）
+- `tests/test_api/test_ws_handler.py`
+
+---
+
+## 2026-05-12 — 分析页：去掉「看板流程」条展示
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：移除看板任务列表 UI 及对 `/kanban/tasks` 的拉取与轮询；流程只靠流水线条 + 对话区。开始前的说明改为简短操作提示。**`GET /api/projects/.../kanban/tasks` 仍保留**（可供他处或调试）。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260512154000_AnalyzePanel_no_kanban_strip.tsx`）
+
+---
+
+## 2026-05-12 — 分析页：看板驱动引导 + 去掉对话区固定套话
+
+### 变更概要
+
+- **`hagoku/api/server.py`**：新增 `GET /api/projects/{name}/kanban/tasks`，从项目 `kanban.db` 只读返回当前**最新一轮**流水线任务（至多 4 条：按 `created_at` 取最新组，再按时间正序），字段含 Scribe 写入的 `title` / `description` / `status`。
+- **`AnalyzePanel.tsx`**：分析进行中展示 **看板流程** 列表（文案来自 API，非前端杜撰台词）；对话区仅在 **`user_input_requested`** 带 `message` 时追加 Agent 气泡、**`agent_failed`** 仅展示后端 `error` 字符串；护栏拦截不再插入固定 system 气泡（仍用底部 CTA）。输入框 `placeholder` 取自当前 `blocked` 任务的 description/title。轮询 + WS 批次后刷新看板。
+- **`tests/test_api/test_server.py`**：`TestKanbanTasksEndpoint` 契约测试。
+
+### 涉及文件
+
+- `hagoku/api/server.py`（备份：`UI_CHANGELOG_backup_20260512153000_server_kanban.py`）
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260512153000_AnalyzePanel_kanban_guide.tsx`）
+- `tests/test_api/test_server.py`
+
+---
+
+## 2026-05-12 — 分析页：「开始分析」对齐编排暂停点（去掉固定欢迎话术）
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：点击「开始分析」不再进入「先问研究问题」第二步、也不再插入固定 Agent 气泡（与 `PROJECT.md`「暂停点话术由 LLM 生成、不用固定模板冒充对话」一致）；改为直接 `send("analyze", …, query: "", phase: "full")`，由 Scout 完成后经 `user_input_requested` 等方式推送首条互动文案。已移除 `query` 阶段与对应输入框。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260512152000_AnalyzePanel_start_flow.tsx`）
+
+---
+
+## 2026-05-12 — 侧栏切换：保持各面板挂载（分析态不丢）
+
+### 变更概要
+
+- **`App.tsx`**：主区同时挂载全部面板，仅对当前 `activeView` 使用 `h-full overflow-hidden`，其余 `hidden`，避免切换「项目 / 报告」等再回「分析」时 **`AnalyzePanel` 卸载导致会话状态重置**。
+
+### 涉及文件
+
+- `hagoku_web/src/App.tsx`（备份：`UI_CHANGELOG_backup_20260512151000_App.tsx`）
+
+---
+
+## 2026-05-12 — 项目页：API 未就绪时的提示文案
+
+### 变更概要
+
+- **`ProjectPanel.tsx`**：`GET /api/projects` 失败（常见原因：未启动 `hagoku-api`）时，将「加载失败，请检查服务」改为明确提示先启动后端（默认 8000）再刷新。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/ProjectPanel.tsx`（备份：`UI_CHANGELOG_backup_20260512150605_ProjectPanel.tsx`）
+
+---
+
+## 2026-05-14 — 报告页 / 运行日志：护栏拦截（P1）
+
+### 变更概要
+
+- **`ReportPanel.tsx`**：并行拉取 `/api/projects/{project}/runs` 与 `/api/reports/{project}`；**按运行**列表展示：护栏拦截 run 用橙色卡片 + **图标+文字**「查看护栏说明」（`guardrails_notice_url`）；成功 run 链到 `report_url`。无 run 元数据时仍回退仅 HTML 列表。`run_completed` / Reporter 完成时刷新。
+- **`EventTable.tsx` / `EventPanel.tsx`**：`run_completed` 且 `guardrails_blocked` 时独立样式（`run_completed（护栏未过）`、浅橙背景、详情说明文案）。
+- **`utils/wsGuardrails.ts`**：`run_completed` / `run_id` 回退解析等（`AnalyzePanel` / `EventPanel` 共用）；Python 镜像契约见 `tests/test_web/test_ws_guardrails_parity.py`。
+
+### 涉及文件
+
+- `hagoku_web/src/utils/wsGuardrails.ts`
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260514_AnalyzePanel_wsutil.tsx`）
+- `tests/test_web/test_ws_guardrails_parity.py`
+- `tests/test_web/__init__.py`
+- `hagoku_web/src/panels/ReportPanel.tsx`（备份：`UI_CHANGELOG_backup_20260514_ReportPanel.tsx`）
+- `hagoku_web/src/components/EventTable.tsx`（备份：`UI_CHANGELOG_backup_20260514_EventTable.tsx`）
+- `hagoku_web/src/panels/EventPanel.tsx`（备份：`UI_CHANGELOG_backup_20260514_EventPanel.tsx`）
+
+---
+
+## 2026-05-13 — 护栏拦截 × 用户沟通（P0 实施）
+
+### 背景
+对齐 `PROJECT.md`「统计护栏 → 产品原则」：强制级护栏未通过时不出正式双轨 HTML，但必须给用户说明。
+
+### 变更概要
+
+**API 层（`hagoku/api/server.py`）**：
+- `GET /api/reports/{project}/{run_id}/{filename}`：扩展支持 `.md` 文件（原本只支持 `.html`），使前端可读到 `GUARDRAILS_BLOCKED.md`
+- `GET /api/projects/{project}/runs`：返回字段新增 `guardrails_blocked: boolean`（检测 `runs/{run_id}/output/GUARDRAILS_BLOCKED.md` 是否存在）
+- `GET /api/projects/{project}/detail`：返回字段新增 `last_guardrails_blocked: boolean`
+
+**前端（`hagoku_web/src/panels/AnalyzePanel.tsx`）**：
+- 新增 `guardrailsBlocked`、`blockedRunId` 状态
+- 处理 `run_completed` + `guardrails_blocked: true` 事件 → 进入护栏拦截终态
+- 处理 `agent_completed` + `skipped: true`（Reporter 跳过）→ 流水线 Reporter 步骤显示 "skipped" 状态（ShieldAlert 图标）
+- 护栏拦截终态 UI：橙色边框/警告色（`border-app-warning`），非绿色成功
+- 护栏说明气泡：灰色 system 气泡文案 "⚠️ 统计护栏未通过，未生成正式 HTML 报告。请查看护栏说明了解详情。"
+- **CTA 按钮**：橙色 `查看护栏说明` 按钮（ShieldAlert 图标 + 文字），链接到 `/api/reports/{project}/{run_id}/GUARDRAILS_BLOCKED.md`
+- 不显示「查看报告」成功链接
+
+**Tailwind 主题（`hagoku_web/tailwind.config.js`）**：
+- 新增 `app-warning-hover: #D97706`、`app-success-hover: #059669`、`app-error-hover: #DC2626`
+
+### 2026-05-13（续）— 审查修复：`run_id`、API `status`、全局面板同步
+
+- **`hagoku/manager/orchestrator.py`**：`RUN_COMPLETED` 增加 `run_id`、`project`（护栏拦截与正常完成两条路径）。
+- **`hagoku/api/server.py`**：`detail` / `runs` 优先根据 `GUARDRAILS_BLOCKED.md` 判定 `guardrails_blocked`，再以 `report.html` 等判定 `completed`；`runs` 条目增加 `guardrails_notice_url`（可选）。
+- **`hagoku_web`**：`AnalyzePanel` 新分析前重置护栏态；`run_completed` 使用 `run_id` 或从 `output_path` 解析；`useAgentStatusSync` 将 Reporter `skipped` 映射为 store `skipped`（`types/events.ts` 扩展 `AgentStatus`）；`ProjectPanel` 展示 `last_status: guardrails_blocked`（「护栏未过」）。
+- **`README.md`**：护栏小节补充 Web 行为一句。
+
+### 涉及文件
+- `hagoku/manager/orchestrator.py`
+- `hagoku/api/server.py`
+- `hagoku_web/src/panels/AnalyzePanel.tsx`（备份：`UI_CHANGELOG_backup_20260513_AnalyzePanel.tsx`、`UI_CHANGELOG_backup_20260513120000_AnalyzePanel.tsx`）
+- `hagoku_web/src/hooks/useAgentStatusSync.ts`
+- `hagoku_web/src/types/events.ts`
+- `hagoku_web/tailwind.config.js`
+- `hagoku_web/src/panels/ProjectPanel.tsx`（备份：`UI_CHANGELOG_backup_20260513120500_ProjectPanel.tsx`）
+- `UI_CHANGELOG_backup_20260513_AnalyzePanel.tsx`（首轮 AnalyzePanel 修改前）
+- `UI_CHANGELOG_backup_20260513120500_ProjectPanel.tsx`（审查修复：`ProjectPanel` 展示 `last_status: guardrails_blocked`）
+
 ## 2026-05-12 — 口径对齐第二轮（端口 / 文档 / 依赖）
 
 - **LLM 默认 `base_url`**：统一为 `http://localhost:8080/v1`（与 `hagoku-api` 默认 **8000** 区分），更新 `hagoku/config.py`、`.env.example`、`PROJECT.md`、`README.md`、`DEV.md`、`hagoku/cli.py`、`hagoku/tools/health.py`、`tests/test_pipeline/test_pipeline.py`。

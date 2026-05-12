@@ -109,6 +109,8 @@ class CleanerAgent(InteractionMixin):
         user_operations: list[dict[str, Any]] | None = None,
         impact_warning: float = 0.10,
         phase: str = "full",
+        *,
+        emit_completed: bool = True,
     ) -> tuple[pd.DataFrame, CleaningReport, dict]:
         """
         执行数据清洗
@@ -120,6 +122,7 @@ class CleanerAgent(InteractionMixin):
             user_operations: 用户指定的清洗操作（覆盖自动策略）
             impact_warning: 影响率阈值
             phase: "full"=完整执行, "strategy_only"=只检测+计划
+            emit_completed: 为 False 时不发 AGENT_COMPLETED（编排层在用户确认清洗方案后再发）。
 
         Returns:
             (清洗后的 DataFrame, 清洗报告, 清洗摘要)
@@ -248,7 +251,8 @@ class CleanerAgent(InteractionMixin):
                 "bias_risk": report.bias_risk,
             }
 
-            self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"影响率 {report.impact_rate:.1%}"})
+            if emit_completed:
+                self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"影响率 {report.impact_rate:.1%}"})
 
             return df_clean, report, summary
 

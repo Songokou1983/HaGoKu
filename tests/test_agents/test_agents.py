@@ -80,6 +80,63 @@ class TestScoutAgent:
         assert len(uncertain) == 0
 
 
+class TestScoutUserFacingDescriptionFilter:
+    """编排层展示给用户前，过滤 Scout 的「列名（类型）」占位描述。"""
+
+    def test_type_echo_is_not_meaningful(self):
+        from hagoku.manager.orchestrator import _scout_description_is_meaningful_for_user
+
+        assert not _scout_description_is_meaningful_for_user("BU", "BU（分类型）")
+        assert not _scout_description_is_meaningful_for_user("Code", "Code（未知类型）")
+        assert not _scout_description_is_meaningful_for_user("Period", "Period（数值型）")
+        assert not _scout_description_is_meaningful_for_user("x", "x")
+
+    def test_business_text_is_meaningful(self):
+        from hagoku.manager.orchestrator import _scout_description_is_meaningful_for_user
+
+        assert _scout_description_is_meaningful_for_user("BU", "事业部")
+        assert _scout_description_is_meaningful_for_user("BU", "BU（事业部）")
+        assert _scout_description_is_meaningful_for_user("Period", "月份或账期")
+
+
+class TestScoutFieldDescriptionParsing:
+    def test_parse_fullwidth_and_ascii_colon(self):
+        from hagoku.agents.scout.agent import _parse_llm_field_desc_line
+
+        assert _parse_llm_field_desc_line("BU：事业部划分") == ("BU", "事业部划分")
+        assert _parse_llm_field_desc_line("Code: 产品编码") == ("Code", "产品编码")
+        assert _parse_llm_field_desc_line("- Period: 2024-01") == ("Period", "2024-01")
+        assert _parse_llm_field_desc_line("`Inc1`: 收入项") == ("Inc1", "收入项")
+
+    def test_partition_understanding_pipe(self):
+        desc = "事业部｜多为事业部/业务线（例：B01, B02）"
+        left, sep, right = desc.partition("｜")
+        assert sep
+        assert left == "事业部"
+        assert "多为" in right
+
+    def test_heuristic_hint_not_empty(self):
+        from hagoku.agents.scout.agent import _heuristic_column_business_hint
+
+        h = _heuristic_column_business_hint("BU", "North, South")
+        assert "例" in h
+        assert "事业部" in h or "业务" in h
+        assert "初步推断" not in h
+
+
+class TestScoutPauseMarkdownTableHelpers:
+    def test_md_table_cell_escapes_pipe(self):
+        from hagoku.manager.orchestrator import _md_table_cell
+
+        assert _md_table_cell("a|b") == "a｜b"
+
+    def test_display_name_derived_from_meaning(self):
+        from hagoku.manager.orchestrator import _scout_display_name_cell
+
+        s = _scout_display_name_cell("BU", "多为事业部/业务线（例：B01）", {})
+        assert "事业" in s or "业务" in s
+
+
 class TestAnalystAgent:
     @pytest.fixture
     def event_bus(self):

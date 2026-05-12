@@ -1,10 +1,19 @@
-import { FileText, Loader2, FolderOpen, ChevronDown, CheckCircle2 } from "lucide-react";
+import { FileText, Loader2, FolderOpen, ChevronDown, CheckCircle2, ShieldAlert, ArrowRight } from "lucide-react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
+
+interface ProjectRun {
+  run_id: string;
+  query: string;
+  status: string;
+  report_url: string | null;
+  guardrails_blocked: boolean;
+  guardrails_notice_url: string | null;
+}
 
 export default function ReportPanel() {
   const currentProject = useWorkspaceStore((s) => s.currentProject);
@@ -17,12 +26,12 @@ export default function ReportPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [runs, setRuns] = useState<ProjectRun[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useAgentStatusSync();
   const batch = useBatchEvents();
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -33,45 +42,69 @@ export default function ReportPanel() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const loadReports = useCallback((proj: string) => {
-    setLoading(true);
-    setError(null);
-    fetch(`/api/reports/${proj}`)
+  const loadReportsOnly = useCallback(
+    (proj: string) =>
+      fetch(`/api/reports/${proj}`)
+        .then((r) => r.json())
+        .then((data) => setReportFiles(data.reports as { name: string; url: string; mtime: number }[]))
+        .catch(() => setReportFiles([])),
+    [setReportFiles],
+  );
+
+  const loadRunsOnly = useCallback((proj: string) => {
+    return fetch(`/api/projects/${proj}/runs`)
       .then((r) => r.json())
-      .then((data) => setReportFiles(data.reports as { name: string; url: string; mtime: number }[]))
-      .catch(() => setError("报告加载失败"))
-      .finally(() => setLoading(false));
-  }, [setReportFiles]);
+      .then((data: { runs?: ProjectRun[] }) => setRuns(data.runs ?? []))
+      .catch(() => setRuns([]));
+  }, []);
+
+  const refreshPanel = useCallback(
+    async (proj: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await Promise.all([loadReportsOnly(proj), loadRunsOnly(proj)]);
+      } catch {
+        setError("报告加载失败");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadReportsOnly, loadRunsOnly],
+  );
 
   useEffect(() => {
     if (!currentProject) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadReports(currentProject);
-  }, [currentProject, loadReports]);
+    void refreshPanel(currentProject);
+  }, [currentProject, refreshPanel]);
 
   useEffect(() => {
-    if (batch.length === 0) return;
+    if (batch.length === 0 || !currentProject) return;
+    let need = false;
     for (const msg of batch) {
-      if (msg.type === "event" && msg.data) {
-        const d = msg.data;
-        if (d.agent === "reporter" && d.event_type === "agent_completed") {
-          const proj = ((d.data?.project_name as string) || currentProject || "default") as string;
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          loadReports(proj);
-        }
+      if (msg.type !== "event" || !msg.data) continue;
+      const d = msg.data;
+      if (
+        d.event_type === "run_completed" ||
+        (d.agent === "reporter" && d.event_type === "agent_completed")
+      ) {
+        need = true;
+        break;
       }
     }
-  }, [batch, currentProject, loadReports]);
+    if (need) void refreshPanel(currentProject);
+  }, [batch, currentProject, refreshPanel]);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="报告" />
 
-      {/* ── Project selector ── */}
       <div className="px-3 py-2 border-b border-app-border bg-app-bg-secondary shrink-0">
         <div className="text-ui-xs text-app-text-muted mb-1">查看项目</div>
         <div className="relative" ref={dropdownRef}>
           <button
+            type="button"
             onClick={() => setShowDropdown((v) => !v)}
             className="w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border border-app-border rounded
                        text-ui-sm text-app-text hover:border-app-accent transition-colors cursor-pointer"
@@ -89,8 +122,12 @@ export default function ReportPanel() {
               ) : (
                 projects.map((p) => (
                   <button
+                    type="button"
                     key={p}
-                    onClick={() => { setCurrentProject(p); setShowDropdown(false); }}
+                    onClick={() => {
+                      setCurrentProject(p);
+                      setShowDropdown(false);
+                    }}
                     className={`w-full text-left px-3 py-1.5 text-ui-sm font-mono hover:bg-app-bg cursor-pointer
                       ${p === currentProject ? "text-app-accent" : "text-app-text"}`}
                   >
@@ -101,7 +138,11 @@ export default function ReportPanel() {
               )}
               <div className="border-t border-app-border">
                 <button
-                  onClick={() => { setShowDropdown(false); setActiveView("projects"); }}
+                  type="button"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    setActiveView("projects");
+                  }}
                   className="w-full text-left px-3 py-1.5 text-ui-xs text-app-accent hover:bg-app-bg cursor-pointer"
                 >
                   + 新建项目 →
@@ -112,13 +153,9 @@ export default function ReportPanel() {
         </div>
       </div>
 
-      {/* ── Report list ── */}
       <div className="flex-1 overflow-auto p-3">
         {!currentProject ? (
-          <EmptyState
-            icon={<FolderOpen size={32} />}
-            message="请先选择一个项目以查看报告"
-          />
+          <EmptyState icon={<FolderOpen size={32} />} message="请先选择一个项目以查看报告" />
         ) : (
           <>
             {loading && (
@@ -131,25 +168,89 @@ export default function ReportPanel() {
               <div className="mb-2 px-2 py-1 bg-app-status-error text-app-error text-ui-xs rounded flex items-center gap-2">
                 <span className="flex-1">{error}</span>
                 <button
-                  onClick={() => currentProject && loadReports(currentProject)}
+                  type="button"
+                  onClick={() => currentProject && void refreshPanel(currentProject)}
                   className="underline cursor-pointer hover:no-underline"
                 >
                   重试
                 </button>
               </div>
             )}
-            {reportFiles.length === 0 && !loading ? (
-              <EmptyState icon={<FileText size={32} />} message="运行分析后，报告会出现在这里" />
-            ) : (
+
+            {!loading && runs.length > 0 && (
+              <div className="space-y-2 mb-4">
+                <div className="text-ui-xs text-app-text-muted font-medium">按运行</div>
+                {runs.map((run) => {
+                  if (run.guardrails_blocked && run.guardrails_notice_url) {
+                    return (
+                      <div
+                        key={run.run_id}
+                        className="p-3 bg-app-bg-secondary border border-app-warning rounded flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <ShieldAlert size={16} className="text-app-warning shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <div className="text-ui-sm font-medium text-app-warning">护栏未过 · {run.run_id}</div>
+                            {run.query ? (
+                              <div className="text-ui-xs text-app-text-muted truncate">{run.query}</div>
+                            ) : null}
+                            <div className="text-ui-xs text-app-text-muted mt-0.5">未生成正式 HTML 报告</div>
+                          </div>
+                        </div>
+                        <a
+                          href={run.guardrails_notice_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 px-3 py-1.5 bg-app-warning hover:bg-app-warning-hover text-white text-ui-xs rounded transition-colors whitespace-nowrap flex items-center justify-center gap-1"
+                        >
+                          <ShieldAlert size={12} />
+                          查看护栏说明
+                        </a>
+                      </div>
+                    );
+                  }
+                  if (run.status === "completed" && run.report_url) {
+                    return (
+                      <a
+                        key={run.run_id}
+                        href={run.report_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors"
+                      >
+                        <FileText size={14} className="text-app-accent shrink-0" />
+                        <span className="text-ui-sm text-app-text flex-1 truncate">
+                          报告 · {run.run_id}
+                          {run.query ? ` — ${run.query}` : ""}
+                        </span>
+                        <ArrowRight size={12} className="text-app-text-muted shrink-0" />
+                      </a>
+                    );
+                  }
+                  return (
+                    <div
+                      key={run.run_id}
+                      className="p-3 bg-app-bg-secondary border border-app-border rounded text-ui-xs text-app-text-muted"
+                    >
+                      <span className="font-mono">{run.run_id}</span>
+                      {run.query ? ` · ${run.query}` : ""}
+                      <span className="block mt-1">暂无 HTML 报告（状态：{run.status}）</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loading && runs.length === 0 && reportFiles.length > 0 && (
               <div className="space-y-2">
+                <div className="text-ui-xs text-app-text-muted font-medium">历史 HTML（无 run 元数据时）</div>
                 {reportFiles.map((f) => (
                   <a
                     key={f.name}
                     href={f.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded
-                               flex items-center gap-2 hover:border-app-accent transition-colors duration-150 cursor-pointer"
+                    className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors duration-150"
                   >
                     <FileText size={14} className="text-app-accent shrink-0" />
                     <span className="text-ui-base text-app-text flex-1 truncate">{f.name}</span>
@@ -159,6 +260,10 @@ export default function ReportPanel() {
                   </a>
                 ))}
               </div>
+            )}
+
+            {!loading && runs.length === 0 && reportFiles.length === 0 && (
+              <EmptyState icon={<FileText size={32} />} message="运行分析后，报告或护栏说明会出现在这里" />
             )}
           </>
         )}

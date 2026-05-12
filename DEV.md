@@ -94,6 +94,7 @@ EOF
 | [CLAUDE.md](CLAUDE.md) | AI 编码助手上下文 | Claude Code |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 详细设计手册（架构/看板/向量/审查） | 开发者 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见问题排查 | 开发者 |
+| [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | 单轮任务传递模板（转发前填写；规范以 PROJECT.md 为准） | 派活人、协作者 |
 | **DEV.md**（本文件） | 快速上手 | 新贡献者 |
 
 ---

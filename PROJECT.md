@@ -573,6 +573,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | [CLAUDE.md](CLAUDE.md) | AI 编码助手上下文 | Claude Code |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 详细设计手册（架构/看板/向量/审查） | 开发者 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见问题排查 | 开发者 |
+| [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | 单轮开发任务传递模板（填写后转发给 AI/协作者；真相同步以本表为准） | 派活人、协作者 |
 
 ---
 

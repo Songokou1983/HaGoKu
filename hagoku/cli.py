@@ -71,7 +71,7 @@ WELCOME_SCREEN = """
 🚀 快速开始：
    hagoku demo                            # 查看示例数据
    hagoku run --demo ad_campaign -q "哪个渠道roi最高"
-   hagoku quick --demo conversion
+   hagoku run --demo conversion -q "分析转化漏斗"
 
 📂 完整命令：
    hagoku run <file> -q "问题"          # 运行分析

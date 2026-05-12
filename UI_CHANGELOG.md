@@ -5,6 +5,7 @@
 - **PROJECT.md**：新增「人机互动理念」；删除/替换残留「用户三模式」叙述；CLI 表与模板默认说明对齐代码（`default` 双轨、无 `--mode`）；技术选型与 V2 交付物改为当前 **非 dockview** 的固定导航 SPA。
 - **README.md / docs/DEVELOPMENT.md / DEV.md**：Web UI 描述、手动测试步骤、`report --template` 说明、配置示例与环境变量表与上述一致；移除已不生效的 `HAGOKYU_MANAGER_MODE` / `manager.mode` 编排档位描述。
 - **`.env.example`**：删除 `HAGOKYU_MANAGER_MODE` 占位行。
+- **`DEVELOPMENT_PROMPT.md`**：清空历史任务正文，改为「已停用」指针页，避免与现行文档冲突。
 
 ## 2026-05-09 — WebUI 优化（第二轮）
 

@@ -4,7 +4,6 @@ import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
-import { ScoutConfirmPanel, type ScoutPendingData } from "../components/ScoutConfirmPanel";
 import {
   Loader2, WifiOff, Search, Sparkles, BarChart2, FileText,
   ArrowRight, FolderOpen, Upload, ChevronDown, CheckCircle2, X,
@@ -30,21 +29,6 @@ function resolveAgentKey(raw: string): AgentKey | null {
   if (s.includes("analys"))   return "analyst";
   if (s.includes("report"))   return "reporter";
   return null;
-}
-
-// Human-readable event descriptions
-function describeEvent(agent: string, eventType: string): string {
-  const key = resolveAgentKey(agent);
-  const label = PIPELINE_AGENTS.find(p => p.key === key)?.label ?? agent;
-  switch (eventType) {
-    case "agent_started":         return `${label} 开始工作…`;
-    case "agent_completed":       return `${label} 完成`;
-    case "agent_failed":          return `${label} 遇到问题`;
-    case "user_input_requested":  return `${label} 需要您确认`;
-    case "analysis_started":      return "分析流程启动";
-    case "analysis_completed":    return "🎉 分析完成！";
-    default:                      return `${label}：${eventType.replace(/_/g, " ")}`;
-  }
 }
 
 // ── Types ────────────────────────────────────────────────────
@@ -172,8 +156,11 @@ export default function AnalyzePanel() {
     scout: 0, cleaner: 0, analyst: 0, reporter: 0,
   });
   const agentStartTimes = useRef<Record<string, number>>({});
-  const [pendingScout, setPendingScout] = useState<ScoutPendingData | null>(null);
+  // Track which agent is waiting for user reply
+  const [waitingAgent, setWaitingAgent] = useState<AgentKey | null>(null);
+  const [replyText, setReplyText] = useState("");
   const [resultReportUrl, setResultReportUrl] = useState<string | null>(null);
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
   // File / project state
   const [dataPath, setDataPath] = useState("");
@@ -233,6 +220,10 @@ export default function AnalyzePanel() {
         if (d.event_type === "agent_started" && agentKey) {
           agentStartTimes.current[agentKey] = Date.now();
           setAgentStates((prev) => ({ ...prev, [agentKey]: "running" }));
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "system", text: `${PIPELINE_AGENTS.find(p => p.key === agentKey)?.label ?? agentKey} 开始工作…`, timestamp: d.timestamp },
+          ]);
         }
         if (d.event_type === "agent_completed" && agentKey) {
           const elapsed = Math.round((Date.now() - (agentStartTimes.current[agentKey] ?? Date.now())) / 1000);
@@ -241,53 +232,48 @@ export default function AnalyzePanel() {
         }
         if (d.event_type === "agent_failed" && agentKey) {
           setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "system", text: `${agentKey} 遇到问题，尝试继续…`, timestamp: d.timestamp },
+          ]);
         }
 
-        // Scout confirmation request
-        if (d.event_type === "user_input_requested" && d.agent === "scout") {
-          setPendingScout(d.data as unknown as ScoutPendingData);
+        // Agent paused waiting for user — show LLM-generated message as chat bubble
+        if (d.event_type === "user_input_requested") {
+          const agentMsg = (d.data as Record<string, unknown>)?.message as string ?? "请确认后继续。";
+          const pausedAgent = resolveAgentKey(d.agent) ?? "scout";
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp },
+          ]);
+          setWaitingAgent(pausedAgent);
+          setPhase("running");
+          setTimeout(() => replyInputRef.current?.focus(), 100);
         }
 
         // Reporter done → show report
         if (d.agent === "reporter" && d.event_type === "agent_completed") {
           const proj = (d.data as Record<string, unknown>)?.project_name as string ?? currentProject ?? "default";
           setResultReportUrl(`/api/reports/${proj}`);
+          setWaitingAgent(null);
           setPhase("done");
         }
-
-        // Human-readable conversation entry
-        const human = describeEvent(d.agent, d.event_type);
-        setMessages((prev) => [
-          ...prev,
-          { id: uid(), role: "agent", text: human, timestamp: d.timestamp },
-        ]);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch]);
 
-  const handleScoutConfirm = useCallback(
-    (confirmedTypes: Record<string, string>) => {
-      if (!pendingScout) return;
-      send("respond", {
-        user_input: {
-          agent: "scout",
-          phase: "confirm_fields",
-          confirmed: confirmedTypes,
-          data_path: pendingScout.data_path,
-          query: pendingScout.query,
-          context: pendingScout.context,
-        },
-        project_name: currentProject ?? "default",
-      });
-      setPendingScout(null);
-      setMessages((prev) => [
-        ...prev,
-        { id: uid(), role: "user", text: "已确认字段含义", timestamp: new Date().toISOString() },
-      ]);
-    },
-    [send, pendingScout, currentProject],
-  );
+  const handleReply = useCallback(() => {
+    const text = replyText.trim();
+    if (!text || !waitingAgent) return;
+    setMessages((prev) => [
+      ...prev,
+      { id: uid(), role: "user", text, timestamp: new Date().toISOString() },
+    ]);
+    send("respond", { text });
+    setReplyText("");
+    setWaitingAgent(null);
+  }, [send, replyText, waitingAgent]);
 
   const handleStartSession = useCallback(() => {
     if (!currentProject || !dataPath) return;
@@ -322,7 +308,8 @@ export default function AnalyzePanel() {
     setPhase("setup");
     setMessages([]);
     setQuery("");
-    setPendingScout(null);
+    setWaitingAgent(null);
+    setReplyText("");
     setResultReportUrl(null);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
@@ -525,14 +512,40 @@ export default function AnalyzePanel() {
           {/* Conversation feed */}
           <ConvoFeed messages={messages} />
 
-          {/* Scout confirmation */}
-          {pendingScout && (
+          {/* Agent reply input — shown when any agent is waiting */}
+          {waitingAgent && (
             <div className="px-3 pb-2 shrink-0">
-              <ScoutConfirmPanel
-                data={pendingScout}
-                onConfirm={handleScoutConfirm}
-                onSkip={() => setPendingScout(null)}
-              />
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={replyInputRef}
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (replyText.trim()) handleReply();
+                    }
+                  }}
+                  placeholder="回复 Agent，或直接回车确认继续…"
+                  rows={2}
+                  className="flex-1 bg-app-bg-secondary border border-app-accent/50 rounded px-3 py-2
+                             text-ui-sm text-app-text placeholder-app-text-muted resize-none
+                             focus:outline-none focus:border-app-accent transition-colors"
+                />
+                <button
+                  onClick={handleReply}
+                  disabled={!replyText.trim()}
+                  className={`px-4 py-2 rounded text-ui-sm font-medium transition-colors shrink-0
+                    ${replyText.trim()
+                      ? "bg-app-accent hover:bg-app-accent-hover text-white cursor-pointer"
+                      : "bg-app-bg-secondary border border-app-border text-app-text-muted cursor-not-allowed"}`}
+                >
+                  发送
+                </button>
+              </div>
+              <div className="mt-1 text-ui-xs text-app-text-muted">
+                Enter 发送 · Shift+Enter 换行 · 直接确认可直接按 Enter
+              </div>
             </div>
           )}
 

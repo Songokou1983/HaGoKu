@@ -195,16 +195,18 @@ async def ws_handler(ws: WebSocket) -> None:
                     # 没有运行中的事件循环，使用默认行为
                     pass
             elif cmd == "respond":
-                # Scout 交互确认流程：用户回复字段确认问题
+                # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})
-                user_input = payload.get("user_input", "")
+                user_text = payload.get("text", payload.get("user_input", ""))
                 orch = _shared_orchestrator
                 if orch is None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})
+                elif not orch._is_paused:
+                    await ws.send_json({"type": "error", "message": "No agent is waiting for input"})
                 else:
                     try:
-                        result = orch.respond(user_input)
-                        await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
+                        orch.unblock(str(user_text))
+                        await ws.send_json({"type": "ack", "cmd": "respond", "message": "已收到回复，继续分析…"})
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})
             else:

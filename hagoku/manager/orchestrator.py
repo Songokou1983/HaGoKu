@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,11 @@ class Orchestrator:
         set_analysis_config(self.config.analysis)
         set_cleaning_config(self.config.cleaning)
 
+        # 交互式暂停机制（分析线程用 Event 等待用户回复）
+        self._pause_event: threading.Event = threading.Event()
+        self._user_response: str | None = None
+        self._is_paused: bool = False
+
     @property
     def llm_deep(self) -> Any:
         """深度推理客户端（懒初始化）"""
@@ -120,6 +126,119 @@ class Orchestrator:
         if self._llm_quick is None:
             self._llm_quick = create_quick_client(self.config)
         return self._llm_quick
+
+    # ── 交互式暂停 / 恢复 ─────────────────────────────────────
+
+    def unblock(self, user_response: str) -> None:
+        """前端用户发送回复后，ws_handler 调用此方法解除线程阻塞。"""
+        self._user_response = user_response
+        self._is_paused = False
+        self._pause_event.set()
+
+    def _pause_and_wait(self, agent: str, message: str, timeout: float = 300.0) -> str:
+        """
+        发射 user_input_requested 事件，然后阻塞当前线程直到用户回复。
+        timeout: 秒，超时后自动用空字符串恢复（防止永久阻塞）。
+        """
+        self._pause_event.clear()
+        self._user_response = None
+        self._is_paused = True
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, agent, {
+            "message": message,
+            "agent": agent,
+        })
+        self._pause_event.wait(timeout=timeout)
+        self._is_paused = False
+        return self._user_response or ""
+
+    def _generate_pause_message(self, agent: str, results: dict[str, Any]) -> str:
+        """
+        用 llm_quick 根据 Agent 的实际结果生成自然语言暂停消息。
+        如果 LLM 调用失败则回退到规则拼接。
+        """
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                base_url=self.config.llm.base_url,
+                api_key=self.config.llm.api_key,
+            )
+            context_str = self._format_results_for_prompt(agent, results)
+            resp = client.chat.completions.create(
+                model=self.config.llm.model_quick or self.config.llm.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是 HaGoKu 数据分析助手中的一个 Agent。"
+                            "你的工作刚刚完成了一个阶段，现在需要向用户汇报发现，并询问是否继续。"
+                            "要求：语言简洁友好，不超过 5 句话，最后一句是一个具体的确认或引导性问题。"
+                            "不要使用 Markdown 标题，可以用短破折号列举要点。"
+                        ),
+                    },
+                    {"role": "user", "content": context_str},
+                ],
+                max_tokens=300,
+                temperature=0.3,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            # LLM 失败时的规则回退
+            return self._fallback_pause_message(agent, results)
+
+    def _format_results_for_prompt(self, agent: str, results: dict[str, Any]) -> str:
+        """将 agent 结果格式化为 LLM prompt 的输入文本。"""
+        if agent == "scout":
+            cols = results.get("column_semantics", [])
+            n_rows = results.get("n_rows", "?")
+            n_cols = results.get("n_cols", len(cols))
+            uncertain = [c["column_name"] for c in cols if c.get("needs_user_input")]
+            roles = {c["column_name"]: c.get("semantic_type", "unknown") for c in cols[:10]}
+            return (
+                f"我是 Scout Agent，刚刚分析了数据集（{n_rows} 行 × {n_cols} 列）。\n"
+                f"识别到的字段语义角色：{roles}\n"
+                f"需要用户确认的字段：{uncertain if uncertain else '无，所有字段已自动识别'}\n"
+                f"请向用户简要汇报你的发现，并询问他们是否同意这些字段角色，或者有其他补充说明。"
+            )
+        elif agent == "cleaner":
+            ops = results.get("operations", [])
+            quality = results.get("data_quality", "unknown")
+            impact = results.get("impact_rate", 0)
+            return (
+                f"我是 Cleaner Agent，刚刚检测了数据质量。\n"
+                f"数据质量评级：{quality}，清洗影响率：{impact:.1%}\n"
+                f"计划执行的清洗操作（共 {len(ops)} 个）：{[op.get('reason', '') for op in ops[:5]]}\n"
+                f"请向用户简要说明清洗计划，并询问是否可以继续执行。"
+            )
+        elif agent == "analyst":
+            findings = results.get("findings", results.get("results", []))
+            n = len(findings) if isinstance(findings, list) else 0
+            sig = [f for f in (findings if isinstance(findings, list) else []) if f.get("significance") == "significant"]
+            return (
+                f"我是 Analyst Agent，刚刚完成了统计分析。\n"
+                f"共找到 {n} 个分析结果，其中 {len(sig)} 个统计显著。\n"
+                f"主要发现摘要：{[f.get('question', '') for f in sig[:3]]}\n"
+                f"请向用户汇报核心发现，并询问他们想深入了解哪个方向，或者是否可以生成报告。"
+            )
+        return f"我是 {agent} Agent，刚刚完成了工作。请告诉用户进度并询问是否继续。"
+
+    def _fallback_pause_message(self, agent: str, results: dict[str, Any]) -> str:
+        """LLM 不可用时的规则拼接回退消息。"""
+        if agent == "scout":
+            cols = results.get("column_semantics", [])
+            n_rows = results.get("n_rows", "?")
+            return (
+                f"我分析了数据集（{n_rows} 行，{len(cols)} 个字段）。"
+                f"已识别字段语义角色。请确认理解无误，或告诉我需要调整的地方？"
+            )
+        elif agent == "cleaner":
+            ops = results.get("operations", [])
+            return (
+                f"数据质量检测完成，计划 {len(ops)} 个清洗操作。"
+                f"可以继续执行清洗吗？或者你有特别想保留/排除的处理方式？"
+            )
+        elif agent == "analyst":
+            return "统计分析完成，已找到若干发现。可以生成完整报告了吗？"
+        return f"{agent} 完成，是否继续？"
 
     def run(
         self,
@@ -406,14 +525,38 @@ class Orchestrator:
         try:
             # Scout + Cleaner（如果不是 resume）
             if context is None:
-                # 3. Scout: 数据侦察（Scout 自己会和用户对话确认字段）
+                # 3. Scout: 数据侦察
                 context = scout.run(data_path, query, project_id=project_name)
+
+                # ── 暂停：Scout 完成，LLM 生成发现摘要，等待用户确认 ──
+                scout_msg = self._generate_pause_message("scout", context)
+                user_reply_scout = self._pause_and_wait("scout", scout_msg)
+                # 将用户回复追加到 query context（供后续 Agent 参考）
+                if user_reply_scout:
+                    self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {
+                        "reply": user_reply_scout,
+                    })
+                    query = f"{query}\n[用户补充] {user_reply_scout}".strip()
 
                 # 4. Cleaner: 数据清洗
                 df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                 )
+
+                # ── 暂停：Cleaner 完成，LLM 生成清洗报告摘要，等待用户确认 ──
+                cleaner_results = {
+                    "operations": cleaning_report.operations if cleaning_report else [],
+                    "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
+                    "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
+                }
+                cleaner_msg = self._generate_pause_message("cleaner", cleaner_results)
+                user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                if user_reply_cleaner:
+                    self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
+                        "reply": user_reply_cleaner,
+                    })
+                    query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
 
                 # 保存清洗后数据（如有）
                 if df_clean is not None:
@@ -461,6 +604,17 @@ class Orchestrator:
                         "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
                     )
             results, business_metrics = analyst.run(df_clean, context, plan)
+
+            # ── 暂停：Analyst 完成，LLM 生成初步发现摘要，等待用户确认生成报告 ──
+            analyst_results = {
+                "findings": results if isinstance(results, list) else [],
+            }
+            analyst_msg = self._generate_pause_message("analyst", analyst_results)
+            user_reply_analyst = self._pause_and_wait("analyst", analyst_msg)
+            if user_reply_analyst:
+                self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
+                    "reply": user_reply_analyst,
+                })
 
             # 7. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")

@@ -80,6 +80,7 @@ class ReportData:
         # 双轨新增
         headline: str | None = None,
         metric_cards: list[dict[str, Any]] | None = None,
+        executive_summary: str | None = None,
     ) -> None:
         self.project_name = project_name
         self.query = query
@@ -91,6 +92,7 @@ class ReportData:
         # 双轨新增
         self.headline = headline
         self.metric_cards = metric_cards or []
+        self.executive_summary = (executive_summary or "").strip() or None
         self.generated_at = datetime.now()
 
     def to_dict(self) -> dict[str, Any]:
@@ -104,6 +106,7 @@ class ReportData:
             "cleaning_summary": self.cleaning_summary,
             "headline": self.headline,
             "metric_cards": self.metric_cards,
+            "executive_summary": self.executive_summary,
             "generated_at": self.generated_at.isoformat(),
         }
 
@@ -155,6 +158,22 @@ h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
 .guardrail-warn { background: #fef7e0; }
 .guardrail-fail { background: #fce8e6; }
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-align: center; }
+.headline-box { font-size: 1.15rem; font-weight: 600; color: var(--primary); margin: 1rem 0; padding: 1rem 1.25rem; background: var(--surface); border-radius: 8px; border-left: 4px solid var(--primary); line-height: 1.5; }
+.report-toc { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin: 1.25rem 0; padding: 0.65rem 1rem; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
+.report-toc .toc-label { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.25rem; }
+.report-toc a { color: var(--primary); font-weight: 600; text-decoration: none; font-size: 0.95rem; }
+.report-toc a:hover { text-decoration: underline; }
+.track { margin: 2rem 0; padding: 1.25rem 0 0; }
+.track-summary { border-top: 2px solid var(--primary); padding-top: 1.25rem; }
+.track-evidence { border-top: 2px solid var(--border); padding-top: 1.25rem; margin-top: 2rem; }
+.track-hint { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1.25rem; line-height: 1.5; }
+.exec-summary { white-space: pre-wrap; font-size: 0.98rem; line-height: 1.75; margin: 1rem 0; padding: 1rem 1.25rem; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+.finding-compact { background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem; margin: 0.75rem 0; border-left: 4px solid var(--success); }
+.finding-compact.warning { border-left-color: var(--warning); }
+.finding-compact.error { border-left-color: var(--error); }
+.finding-compact .fc-headline { font-weight: 600; margin-bottom: 0.35rem; color: var(--text); }
+.finding-compact .fc-plain { font-size: 0.95rem; color: var(--text-secondary); line-height: 1.6; }
+.finding-compact .fc-meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; }
 """
 
 
@@ -194,20 +213,55 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </header>
 
-    {% if report.headline %}
-    <div class="headline-box">{{ report.headline }}</div>
-    {% endif %}
+    <nav class="report-toc" aria-label="报告导航">
+        <span class="toc-label">跳转：</span>
+        <a href="#track-summary">要点速览</a>
+        <a href="#track-evidence">数据与完整证据</a>
+    </nav>
 
-    {% if report.metric_cards %}
-    <div class="metric-cards">
-    {% for card in report.metric_cards %}
-        <div class="metric-card">
-            <div class="value">{{ card.value }}{% if card.trend %} <span class="trend-{{ card.trend }}">{{ '↑' if card.trend == 'up' else '↓' }}</span>{% endif %}</div>
-            <div class="label">{{ card.label }}</div>
+    <section id="track-summary" class="track track-summary" aria-labelledby="h-summary">
+        <h2 id="h-summary">要点速览</h2>
+        <p class="track-hint">快速阅读：结论摘要与关键数字。统计细节见下方「数据与完整证据」。</p>
+
+        {% if report.headline %}
+        <div class="headline-box">{{ report.headline }}</div>
+        {% endif %}
+
+        {% if report.metric_cards %}
+        <div class="metric-cards">
+        {% for card in report.metric_cards %}
+            <div class="metric-card">
+                <div class="value">{{ card.value }}{% if card.trend %} <span class="trend-{{ card.trend }}">{{ '↑' if card.trend == 'up' else '↓' }}</span>{% endif %}</div>
+                <div class="label">{{ card.label }}</div>
+            </div>
+        {% endfor %}
         </div>
-    {% endfor %}
-    </div>
-    {% endif %}
+        {% endif %}
+
+        {% if report.executive_summary %}
+        <div class="exec-summary">{{ report.executive_summary }}</div>
+        {% endif %}
+
+        {% if report.findings_summary %}
+        {% for finding in report.findings_summary %}
+        <div class="finding-compact {% if finding.get('significance') == 'not_significant' %}warning{% elif finding.get('significance') == 'marginal' %}warning{% endif %}">
+            {% if finding.get('headline') %}
+            <div class="fc-headline">{{ finding.headline }}</div>
+            {% endif %}
+            {% if finding.get('conclusion_plain') %}
+            <div class="fc-plain">{{ finding.conclusion_plain }}</div>
+            {% elif finding.get('question') %}
+            <div class="fc-plain">{{ finding.question }}</div>
+            {% endif %}
+            <div class="fc-meta">{% if finding.get('significance') == 'significant' %}判定：达到预设显著性水平{% elif finding.get('significance') == 'marginal' %}判定：边际显著{% elif finding.get('significance') == 'not_significant' %}判定：未达常规显著水平{% else %}判定：详见下方完整证据{% endif %}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </section>
+
+    <section id="track-evidence" class="track track-evidence" aria-labelledby="h-evidence">
+        <h2 id="h-evidence">数据、过程与完整证据</h2>
+        <p class="track-hint">可追溯：样本与清洗、图表及逐项统计结果。</p>
 
     {% if report.data_summary %}
     <div class="section">
@@ -342,6 +396,8 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         {% endfor %}
     </div>
     {% endfor %}
+
+    </section>
 
     <footer>
         HaGoKu — 用数学的力量，挖出数据背后真正的信息
@@ -983,9 +1039,30 @@ class ReportGenerator:
             "",
         ]
 
-        # 数据概况
+        lines.append("## 要点速览")
+        lines.append("")
+        if report.headline:
+            lines.append(f"**结论摘要：** {report.headline}")
+            lines.append("")
+        if report.executive_summary:
+            lines.append(report.executive_summary)
+            lines.append("")
+        if report.metric_cards:
+            for card in report.metric_cards:
+                lines.append(f"- **{card.get('label', '')}**：{card.get('value', '')}")
+            lines.append("")
+        if report.findings_summary:
+            for finding in report.findings_summary:
+                q = finding.get("question") or finding.get("headline") or ""
+                plain = finding.get("conclusion_plain") or ""
+                sig = finding.get("significance") or ""
+                lines.append(f"- ({sig}) {q} {plain}".strip())
+            lines.append("")
+
+        lines.append("## 数据、过程与完整证据")
+        lines.append("")
         if report.data_summary:
-            lines.append("## 📊 数据概况")
+            lines.append("### 📊 数据概况")
             lines.append("")
             lines.append(f"- 样本量: {report.data_summary.get('n_rows', 'N/A')}")
             lines.append(f"- 变量数: {report.data_summary.get('n_cols', 'N/A')}")
@@ -994,7 +1071,7 @@ class ReportGenerator:
 
         # 清洗摘要
         if report.cleaning_summary:
-            lines.append("## 🧹 数据清洗")
+            lines.append("### 🧹 数据清洗")
             lines.append("")
             lines.append(
                 f"原始 {report.cleaning_summary.get('total_rows_original', 'N/A')} 行"

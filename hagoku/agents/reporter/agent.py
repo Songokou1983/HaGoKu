@@ -108,7 +108,6 @@ class ReporterAgent(InteractionMixin):
         formats: list[str] | None = None,
         template: str | None = None,
         template_dir: str | None = None,
-        user_mode: str = "standard",
     ) -> ReportData:
         """
         生成分析报告
@@ -128,19 +127,11 @@ class ReporterAgent(InteractionMixin):
             # 3. 生成 metric cards
             metric_cards = self._generate_metric_cards(results, context)
 
-            # 4. 构建章节
-            sections = []
+            # 3b. 要点速览（双轨之「摘要轨」，由 HTML 模板单独呈现）
+            executive_summary = self._generate_overall_plain(results)
 
-            # 核心发现
-            if key_findings:
-                sections.append(ReportSection(
-                    title="🎯 核心发现",
-                    content=self._summarize_findings(key_findings),
-                    findings=key_findings,
-                    level=2,
-                    headline=headline,
-                    plain_explanation=self._generate_overall_plain(results),
-                ))
+            # 4. 构建章节（仅「证据轨」：图表、商业指标、逐项分析；不含重复的核心发现块）
+            sections = []
 
             # 商业指标
             if business_metrics:
@@ -183,7 +174,7 @@ class ReporterAgent(InteractionMixin):
                 findings_summary=key_findings,
                 headline=headline,
                 metric_cards=metric_cards,
-                user_mode=user_mode or "standard",
+                executive_summary=executive_summary,
             )
 
             # 生成文件
@@ -216,7 +207,7 @@ class ReporterAgent(InteractionMixin):
                 findings_summary=[],
                 headline="报告生成失败",
                 metric_cards=[],
-                user_mode=user_mode or "standard",
+                executive_summary=None,
             )
 
     # ── 交互式接口 ────────────────────────────────────────
@@ -410,16 +401,6 @@ class ReporterAgent(InteractionMixin):
             findings.append(finding)
 
         return findings
-
-    def _summarize_findings(self, findings: list[dict]) -> str:
-        """总结发现"""
-        if not findings:
-            return "未发现显著结果。"
-
-        n_sig = sum(1 for f in findings if f.get("significance") == "significant")
-        n_total = len(findings)
-
-        return f"在 {n_total} 项分析中，{n_sig} 项达到统计显著水平（p < 0.05）。"
 
     def _generate_overall_plain(self, results: list[dict]) -> str:
         """生成整体人话解读"""

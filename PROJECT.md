@@ -547,6 +547,12 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 ## 环境变量配置
 
+### 硬性约定（重新规定）
+
+1. **唯一读取的 dotenv 文件**：`~/.hagoku/.env`（由 `hagoku/config.py` 在导入时加载；文件不存在则跳过）。
+2. **仓库内**：只维护 **`.env.example`** 作模板；**不在仓库根目录**放置或依赖 `.env`（且 `.gitignore` 已忽略根目录 `.env`，避免误提交）。
+3. **首次配置**：`mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env`，再编辑 `~/.hagoku/.env`。环境变量覆盖 `~/.hagoku/config.yaml` 中的同名逻辑（以 `config.py` 的 `_merge_env` 为准）。
+
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `HAGOKYU_LLM_BASE_URL` | LLM 服务地址 | `http://localhost:8000/v1` |
@@ -558,8 +564,6 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | 同 `HAGOKYU_LLM_API_KEY` |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
-
-> 环境变量：`hagoku/config.py` **只加载** `~/.hagoku/.env`（不存在则跳过）。请用仓库内 [`.env.example`](.env.example) 作为模板：`mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env` 后编辑。勿在仓库根目录依赖 `.env`（不会被加载）。环境变量优先于 `config.yaml`。
 
 ---
 

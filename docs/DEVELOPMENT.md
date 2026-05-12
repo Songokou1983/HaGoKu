@@ -54,7 +54,8 @@
 
 ### Python 后端测试（主要依赖这个）
 ```bash
-cd /home/son_goku/hagoku
+# 在仓库根目录（含 pyproject.toml）执行，已激活 .venv
+cd /path/to/<repo-root>
 
 # 3 阶段流程测试
 .venv/bin/python -c "
@@ -126,11 +127,11 @@ with sync_playwright() as p:
     page.goto('http://localhost:5173', timeout=60000)
     page.wait_for_load_state('domcontentloaded')
     # 注意：按钮点击无法正确触发，只能测试导航和页面结构
-    page.locator('text=互动分析').first.evaluate('(el) => el.click()')
+    page.get_by_text("分析", exact=True).first.click()
 "
 ```
 
-> **已知限制**：Streamlit 按钮无法用 Playwright 触发，详见 [TROUBLESHOOTING.md §1](TROUBLESHOOTING.md#1-ui-按钮-playwright-无法触发)。
+> **说明**：旧版 Streamlit 的 Playwright 限制见 [TROUBLESHOOTING.md §1](TROUBLESHOOTING.md#1-ui-自动化测试playwright)；当前 React 侧栏通常为可点击，完整分析流可结合后端集成测试。
 
 ---
 
@@ -145,7 +146,7 @@ with sync_playwright() as p:
 2. `column_semantics` 是否正确传递？
    ```bash
    grep -n "column_semantics" hagoku/manager/orchestrator.py
-   grep -n "scout_data.get" hagoku/agent/scout.py
+   grep -n "column_semantics" hagoku/agents/scout/agent.py
    ```
 
 3. SQLite 线程安全是否完整？
@@ -172,7 +173,7 @@ with sync_playwright() as p:
 - ❌ 不要改 `config.py` 里 **`~/.hagoku/.env`** 的加载逻辑（本地密钥只放该文件；勿指望仓库根目录 `.env`）
 - ❌ 不要在 UI 代码里用 `time.sleep` 阻塞
 - ❌ 不要在 UI 代码里用相对导入（用 `from hagoku.xxx`）
-- ❌ 不要在 Playwright 里尝试完美模拟 Streamlit 按钮点击（不可能）
+- ❌ 不要用已删除的 Streamlit 前提推断当前 React UI 的行为（排错以 React 为准）
 - ❌ 不要在 commit message 里写 "various fixes" 或 "update"
 
 ---

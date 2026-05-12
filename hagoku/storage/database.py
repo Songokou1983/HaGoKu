@@ -287,9 +287,13 @@ class HaGoKuDB:
         project_id: str,
         query: str = "",
         plan: dict | None = None,
-        manager_mode: str = "local_weak",
+        manager_mode: str = "balanced",
     ) -> dict[str, Any] | None:
-        """创建分析运行"""
+        """创建分析运行。
+
+        ``manager_mode`` 为写入 runs 表的内部编排元数据（计划生成策略标签），
+        **并非**已移除的「用户三档位 / HAGOKYU_MANAGER_MODE」产品开关。
+        """
         plan_str = json.dumps(plan, ensure_ascii=False) if plan else ""
         now = datetime.now().isoformat()
         self.conn.execute(

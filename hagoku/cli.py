@@ -478,7 +478,7 @@ def doctor_cmd() -> None:
         click.echo("💡 快速配置 LLM:")
         click.echo("   hagoku config                    # 查看当前配置")
         click.echo("   # 或设置环境变量:")
-        click.echo("   export HAGOKYU_LLM_BASE_URL=http://localhost:8000/v1")
+        click.echo("   export HAGOKYU_LLM_BASE_URL=http://localhost:8080/v1")
 
 
 @cli.command()

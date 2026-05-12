@@ -20,7 +20,7 @@ class LLMConfig(BaseModel):
     """LLM 连接配置 — 只需三个参数"""
 
     model: str = "Qwen3.6-35B-A3B"  # 模型名称
-    base_url: str = "http://localhost:8080/v1"  # API 地址
+    base_url: str = "http://localhost:8080/v1"  # OpenAI 兼容 LLM（与 `hagoku-api` 默认端口 8000 区分）
     api_key: str = "none"  # API Key（本地模型填 none）
 
     def __repr__(self) -> str:

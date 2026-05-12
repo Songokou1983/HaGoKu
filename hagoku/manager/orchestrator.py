@@ -319,6 +319,7 @@ class Orchestrator:
 
         # 2. 创建分析计划
         plan = self._create_plan(query, parsed_intent=parsed_intent)
+        # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
         # 初始化 Agent（传入 scribe 用于看板 block/unblock）

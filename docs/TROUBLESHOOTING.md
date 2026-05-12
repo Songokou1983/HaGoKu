@@ -4,17 +4,21 @@
 
 ---
 
-## 1. UI 按钮 Playwright 无法触发
+## 1. UI 自动化测试（Playwright）
 
-**根因**：Streamlit 1.57+ 使用 React 合成事件系统，Playwright 的 DOM click 事件无法触发 Streamlit 内部的 widget 处理。
+### 当前 Web（React + Vite，`hagoku_web/`）
 
-**现象**：按钮 DOM 显示被点击，但 `session_state` 不变化，页面不更新。
+**侧栏导航**文案为「分析」「项目」等。可用例如：
 
-**修复**：UI 按钮测试必须手动在浏览器操作。自动化测试用 Python 直接调 orchestrator（见下方验证命令）。
+```python
+page.get_by_text("分析", exact=True).first.click()
+# 或 page.locator("text=分析").first.click()
+```
 
-**验证**：
+标准 `page.click()` 对多数 React 控件可用；若元素不可点，先 `wait_for_load_state`、检查是否被遮挡。**暂停与回复**依赖 WebSocket 与后端状态，完整流程建议辅以直接调用 `Orchestrator` 的集成测试：
+
 ```bash
-cd /home/son_goku/hagoku
+cd /path/to/<repo-root>
 .venv/bin/python -c "
 from hagoku.manager.orchestrator import Orchestrator
 from hagoku.config import HaGoKuConfig
@@ -25,9 +29,13 @@ print(result['status'])
 "
 ```
 
-**已确认**：
-- `locator('text=互动分析').first.evaluate('(el) => el.click()')` → 侧边栏导航 **可以** 工作
-- `page.click()` 和 `page.mouse.click()` → Streamlit 按钮 **不能** 工作
+### 历史：旧版 Streamlit（`hagoku-ui`，已移除）
+
+**根因**：Streamlit 1.57+ 使用 React 合成事件系统，Playwright 的 DOM click 无法触发部分 Streamlit widget。
+
+**现象**：按钮 DOM 显示被点击，但 `session_state` 不变化，页面不更新。
+
+**结论**：该限制仅针对已删除的 Streamlit 界面；当前仓库主线不再使用 Streamlit。
 
 ---
 

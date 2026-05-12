@@ -506,35 +506,35 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 #### P0：立即实施（低风险高回报）
 
-1. **双层 LLM**（从模式 2 借鉴）：
+1. **双层 LLM**（从备选路线 2）：
    - 增加 `HAGOKYU_LLM_MODEL_DEEP` / `HAGOKYU_LLM_MODEL_QUICK` 环境变量
    - Scout（类型推断/语义分析）→ 快速模型；Analyst（假设检验/回归推理）→ 深度模型
    - Reporter（格式化渲染）→ 快速模型；仲裁器（计划决策）→ 深度模型
    - 预期收益：降低 ~40% token 消耗 + 响应延迟
 
-2. **结构化输出解析器**（从模式 3 借鉴）：
+2. **结构化输出解析器**（从备选路线 3）：
    - 新增 `hagoku/guardrails/parsers.py`：`parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`
    - 护栏从"检查 LLM 是否输出"升级为"解析 + 校验"
    - Reporter 用解析器验证 Analyst 输出的结构完整性
 
 #### P1：下个迭代
 
-3. **LangGraph 工作流**（从模式 1 借鉴）：
+3. **LangGraph 工作流**（从备选路线 1）：
    - 引入 `langgraph` 依赖，用 `StateGraph` 替代手写 Agent 循环
    - 条件边实现：降级路由（Analyst 失败 → 简化分析）
    - 获得 LangGraph 内置 checkpoint/resume 能力
 
-4. **AgentState TypedDict**（从模式 5 借鉴）：
+4. **AgentState TypedDict**（从备选路线 5）：
    - 创建 `AnalysisPipelineState(TypedDict)`，定义所有 Agent 的输出槽位
    - 每个 Agent 输出写入指定字段，获得类型安全 + 可维护性
 
 #### P2：V2 配套升级
 
-5. **Scribe 反思循环升级**（从模式 6 借鉴）：
+5. **Scribe 反思循环升级**（从备选路线 6）：
    - 每次分析后，Scribe 用快速 LLM 回顾结果 → 自动写入 memory.md 的"失败教训"区域
    - 使 knowledge.yaml 自动积累从"人工格式"升级为"LLM 驱动"
 
-| 优先级 | 借鉴模式 | 实施成本 | 收益 | 风险 |
+| 优先级 | 演进项 | 实施成本 | 收益 | 风险 |
 |--------|---------|---------|------|------|
 | 🔴 P0 | 双层 LLM | 🟢 低 | 🟢 高（降本 40%） | 无 |
 | 🔴 P0 | 结构化解析器 | 🟢 低 | 🟢 高（护栏更可靠） | 无 |
@@ -555,7 +555,7 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `HAGOKYU_LLM_BASE_URL` | LLM 服务地址 | `http://localhost:8000/v1` |
+| `HAGOKYU_LLM_BASE_URL` | LLM（OpenAI 兼容）服务地址；**勿与** `hagoku-api` 的 HTTP 端口混淆 | `http://localhost:8080/v1` |
 | `HAGOKYU_LLM_API_KEY` | LLM API 密钥 | `none` |
 | `HAGOKYU_LLM_MODEL` | LLM 模型名（默认，所有 Agent 共用） | `Qwen3.6-35B-A3B` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |

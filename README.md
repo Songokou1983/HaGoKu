@@ -24,14 +24,15 @@ HaGoKu 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（
 ## 安装要求
 
 - **Python**: 3.10+
-- **LLM**: 需要一个 OpenAI-compatible API 服务（默认 `http://localhost:8000/v1`，Qwen3.6-35B）
+- **后端 API**：`hagoku-api` 默认监听 **http://localhost:8000**（HaGoKu 的 HTTP/WebSocket，**不是** LLM 地址）。
+- **LLM**：需要单独的 **OpenAI-compatible 推理服务**（如本地 vLLM / llama.cpp 代理等）。`~/.hagoku/.env` 中 `HAGOKYU_LLM_BASE_URL` 默认示例如 [`hagoku/config.py`](hagoku/config.py)、[`.env.example`](.env.example)（常见本机约定 `http://localhost:8080/v1`，**避免占用 8000** 以免与 `hagoku-api` 冲突）。
 
 ## 安装步骤
 
 ```bash
-# 1. 克隆项目
+# 1. 克隆项目（以下 <repo-root> 为克隆后的仓库根目录，与 pyproject.toml、hagoku/、hagoku_web/ 同级）
 git clone <repo-url>
-cd hagoku
+cd <repo-root>
 
 # 2. 创建虚拟环境（推荐）
 python3 -m venv .venv
@@ -192,10 +193,12 @@ Agent 之间不直接对话，通过看板交换信息。每个项目有 `kanban
 
 ## 报告模板
 
+版式上以 **`default`** 为双轨 HTML（要点速览 / 数据与完整证据）；其余内置模板为 **风格化** 单栏或专用结构，数据仍可走同一套 Reporter 字段，但页面导航不一定与 `default` 相同。详见 [PROJECT.md](PROJECT.md)「报告设计」。
+
 | 模板 | 风格 | 适用场景 |
 |------|------|----------|
 | `default` | 通用双轨 HTML | **未指定 `--template` 时使用**；「要点速览」+「数据与完整证据」 |
-| `business_analysis` | 商业分析 | 含建议行动区等 |
+| `business_analysis` | 商业分析 | 含建议行动区等（单页纵向结构，非 `default` 同款双轨导航） |
 | `academic` | APA 风格、表格化 | 学术论文 / 正式报告 |
 | `ab_test` | A/B 测试 | 含 verdict 判定 |
 | `executive_brief` | 高管简报 | 极简关键信息 |
@@ -229,9 +232,9 @@ mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env
 # 再编辑 ~/.hagoku/.env
 ```
 
-`config.yaml` 示例：
+`config.yaml` 示例（`base_url` 为 **LLM** OpenAI 兼容端点，勿填成 `hagoku-api` 的根 URL）：
 
-  base_url: "http://localhost:8000/v1"
+  base_url: "http://localhost:8080/v1"
   model: "Qwen3.6-35B-A3B"
   temperature: 0.6
 manager:
@@ -268,7 +271,7 @@ pytest tests/ -q
 A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，并重启 `hagoku-api`。
 
 **Q: LLM 连接失败？**
-A: 确认 LLM 服务已启动（默认 `http://localhost:8000/v1`），并检查 `~/.hagoku/config.yaml` 中的 `base_url` 和 `model` 是否正确。
+A: 确认 LLM 推理服务已启动，且 `~/.hagoku/.env` 或 `config.yaml` 中的 `base_url`（如 `http://localhost:8080/v1`）与 `model` 指向该服务，**不要**误填 `hagoku-api` 的 `http://localhost:8000`。
 
 **Q: 项目文件存放在哪里？**
 A: 默认 `~/.hagoku/projects/`，可在 Settings 面板修改「项目文件夹」路径。

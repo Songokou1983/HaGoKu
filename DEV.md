@@ -7,7 +7,7 @@
 ## 环境搭建
 
 ```bash
-git clone <repo-url> && cd hagoku
+git clone <repo-url> && cd <repo-root>
 
 # 虚拟环境
 python3 -m venv .venv && source .venv/bin/activate
@@ -57,7 +57,7 @@ cd hagoku_web && npm run dev   # http://localhost:5173
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `HAGOKYU_LLM_BASE_URL` | LLM API 地址 | `http://localhost:8000/v1` |
+| `HAGOKYU_LLM_BASE_URL` | LLM API 地址（OpenAI 兼容；勿与 `hagoku-api` 端口 8000 混淆） | `http://localhost:8080/v1` |
 | `HAGOKYU_LLM_API_KEY` | LLM API 密钥 | — |
 | `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | `Qwen3.6-35B-A3B` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |

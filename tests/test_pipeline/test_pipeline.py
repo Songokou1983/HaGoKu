@@ -11,7 +11,7 @@ from hagoku.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConf
 class TestLLMConfig:
     def test_defaults(self):
         config = LLMConfig()
-        assert config.base_url == "http://localhost:8000/v1"
+        assert config.base_url == "http://localhost:8080/v1"
         assert config.model == "Qwen3.6-35B-A3B"
         assert config.temperature == 0.6
 

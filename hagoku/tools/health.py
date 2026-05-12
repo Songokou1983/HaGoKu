@@ -63,7 +63,7 @@ def check_llm(config: Any) -> HealthCheckResult:
             detail=f"❌ LLM 服务连接超时: {base_url}",
             suggestions=[
                 "检查 LLM 服务是否正在运行",
-                "确认 base_url 配置正确（默认: http://localhost:8000/v1）",
+                "确认 base_url 配置正确（默认: http://localhost:8080/v1）",
                 "如果是远程服务，检查网络连接",
             ],
         )
@@ -86,7 +86,7 @@ def check_llm(config: Any) -> HealthCheckResult:
         detail=f"❌ 无法连接到 LLM 服务: {base_url}",
         suggestions=[
             "检查 LLM 服务是否正在运行",
-            "确认 base_url 配置正确（默认: http://localhost:8000/v1）",
+            "确认 base_url 配置正确（默认: http://localhost:8080/v1）",
             "如果是本地模型（如 vLLM/llama.cpp），确认服务已启动",
             "使用 `hagoku config` 查看当前配置，或设置 HAGOKYU_LLM_BASE_URL 环境变量",
         ],

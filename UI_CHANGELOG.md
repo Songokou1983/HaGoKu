@@ -1,5 +1,15 @@
 # UI 改动日志
 
+## 2026-05-12 — 口径对齐第二轮（端口 / 文档 / 依赖）
+
+- **LLM 默认 `base_url`**：统一为 `http://localhost:8080/v1`（与 `hagoku-api` 默认 **8000** 区分），更新 `hagoku/config.py`、`.env.example`、`PROJECT.md`、`README.md`、`DEV.md`、`hagoku/cli.py`、`hagoku/tools/health.py`、`tests/test_pipeline/test_pipeline.py`。
+- **克隆路径**：`README.md` / `DEV.md` 改为 `<repo-root>`，避免与包目录 `hagoku/` 混淆。
+- **Playwright / 排错**：`docs/TROUBLESHOOTING.md`、`docs/DEVELOPMENT.md` 按当前 React 侧栏（「分析」）与历史 Streamlit 分段说明。
+- **`manager_mode`（runs 表）**：`hagoku/storage/database.py` 默认改为 `balanced`，文档串说明其为内部编排元数据，非已移除的用户档位；`hagoku/manager/orchestrator.py` 保留对应注释。
+- **报告模板**：`README.md` 标明仅 `default` 为双轨导航版式，`business_analysis` 等为风格化结构。
+- **`PROJECT.md` 路线图**：「从模式 N 借鉴」改为「备选路线 N」；表头「借鉴模式」→「演进项」。
+- **前端**：移除未引用的 `ScoutConfirmPanel.tsx`；`npm uninstall dockview` 清除未使用依赖。（若需回滚该组件，请从 Git 历史中恢复。）
+
 ## 2026-05-12 — 文档同步（Web UI 与人机互动理念）
 
 - **PROJECT.md**：新增「人机互动理念」；删除/替换残留「用户三模式」叙述；CLI 表与模板默认说明对齐代码（`default` 双轨、无 `--mode`）；技术选型与 V2 交付物改为当前 **非 dockview** 的固定导航 SPA。

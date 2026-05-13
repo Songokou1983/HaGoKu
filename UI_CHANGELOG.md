@@ -2,6 +2,20 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-14 — WebSocket：开发环境走 Vite 代理 + 回复失败可见
+
+### 变更概要
+
+- **`hagoku_web/src/hooks/useWebSocket.ts`**：`import.meta.env.DEV` 下默认 `ws(s)://{当前页面 host}/ws`，经 Vite 代理到后端；`send()` 返回是否已写出。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`respond` 未发出时插入系统提示；处理 WS `error` / `ack(respond)`，对「无暂停 / 无编排器」类错误恢复 `waitingAgent` 与 `gateOpen`。
+
+### 涉及文件
+
+- `hagoku_web/src/hooks/useWebSocket.ts`
+- `hagoku_web/src/panels/AnalyzePanel.tsx`
+
+---
+
 ## 2026-05-14 — AnalyzePanel：闸门暂停保留字段审查卡片锚点
 
 ### 变更概要

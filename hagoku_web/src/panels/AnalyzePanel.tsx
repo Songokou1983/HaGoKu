@@ -653,6 +653,8 @@ export default function AnalyzePanel() {
   const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
   /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
   const [gateOpen, setGateOpen] = useState(false);
+  /** 最近一次 respond：WS 报错「无暂停」等时恢复等待态 */
+  const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
 
   // File / project state
   const [dataPath, setDataPath] = useState("");
@@ -703,6 +705,31 @@ export default function AnalyzePanel() {
   useEffect(() => {
     if (batch.length === 0) return;
     for (const msg of batch) {
+      if (msg.type === "ack" && msg.cmd === "respond") {
+        replySnapshotRef.current = null;
+        continue;
+      }
+      if (msg.type === "error") {
+        const detail = typeof msg.message === "string" ? msg.message.trim() : "";
+        const iso = new Date().toISOString();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "system",
+            text: detail || "服务器返回错误",
+            timestamp: iso,
+          },
+        ]);
+        const snap = replySnapshotRef.current;
+        const recoverable = /No agent is waiting|No active orchestrator/i.test(detail);
+        if (recoverable && snap) {
+          setWaitingAgent(snap.agent);
+          setGateOpen(snap.gate);
+          replySnapshotRef.current = null;
+        }
+        continue;
+      }
       if (msg.type === "event" && msg.data) {
         const d = msg.data;
         const agentKey = resolveAgentKey(d.agent);
@@ -933,6 +960,21 @@ export default function AnalyzePanel() {
         (Boolean(activeAnalystReviewId) && waitingAgent === "analyst");
       if (!outgoing && !allowEmptyConfirm) return;
       const displayBubble = outgoing || "确认";
+      replySnapshotRef.current = { agent: waitingAgent, gate: gateOpen };
+      const sent = send("respond", { text: outgoing });
+      if (!sent) {
+        replySnapshotRef.current = null;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "system",
+            text: "当前未连接到服务器，回复未发出。请确认右上角连接状态后重试。",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -942,7 +984,6 @@ export default function AnalyzePanel() {
           timestamp: new Date().toISOString(),
         },
       ]);
-      send("respond", { text: outgoing });
       setReplyText("");
       setWaitingAgent(null);
       setGateOpen(false);
@@ -951,7 +992,7 @@ export default function AnalyzePanel() {
       setActiveAnalystReviewId(null);
       setSelectedReviewField(null);
     },
-    [send, waitingAgent, activeFieldReviewId, activeCleaningReviewId, activeAnalystReviewId],
+    [send, waitingAgent, gateOpen, activeFieldReviewId, activeCleaningReviewId, activeAnalystReviewId],
   );
 
   const handleReply = useCallback(() => {

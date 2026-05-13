@@ -4,8 +4,17 @@ import type { WSMessage, ConnectionStatus } from "../types/events";
 
 type Listener = (msg: WSMessage) => void;
 
-const BASE_URL =
-  import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:8000/ws`;
+function defaultWsUrl(): string {
+  const raw = import.meta.env.VITE_WS_URL;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  // 开发：与页面同源走 Vite `server.proxy['/ws']` → 后端 8000，避免直连 8000 被环境拦住时 send 静默失败
+  if (import.meta.env.DEV) return `${proto}//${window.location.host}/ws`;
+  // 生产默认仍对齐 README（API 在 hostname:8000）；同源反代部署请用 VITE_WS_URL 指到 /ws
+  return `${proto}//${window.location.hostname}:8000/ws`;
+}
+
+const BASE_URL = defaultWsUrl();
 
 /** Global singleton WebSocket + listener registry */
 let _ws: WebSocket | null = null;
@@ -132,10 +141,12 @@ export function useWebSocket() {
     };
   }, []);
 
-  const send = useCallback((cmd: string, payload?: unknown) => {
+  const send = useCallback((cmd: string, payload?: unknown): boolean => {
     if (_ws?.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify({ cmd, payload }));
+      return true;
     }
+    return false;
   }, []);
 
   return { status, send, onMessage };

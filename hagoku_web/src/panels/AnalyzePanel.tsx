@@ -972,7 +972,8 @@ export default function AnalyzePanel() {
       const allowEmptyConfirm =
         (Boolean(activeFieldReviewId) && waitingAgent === "scout") ||
         (Boolean(activeCleaningReviewId) && waitingAgent === "cleaner") ||
-        (Boolean(activeAnalystReviewId) && waitingAgent === "analyst");
+        (Boolean(activeAnalystReviewId) && waitingAgent === "analyst") ||
+        (gateOpen && waitingAgent === "scout");
       if (!outgoing && !allowEmptyConfirm) return;
       const displayBubble = outgoing || "确认";
       replySnapshotRef.current = { agent: waitingAgent, gate: gateOpen };
@@ -1096,7 +1097,8 @@ export default function AnalyzePanel() {
     (replyText.trim().length > 0 ||
       scoutFieldReviewOpen ||
       cleanerCleaningReviewOpen ||
-      analystReviewOpen);
+      analystReviewOpen ||
+      (gateOpen && waitingAgent === "scout"));
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
@@ -1390,7 +1392,6 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {!gateOpen && (
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={replyInputRef}
@@ -1409,7 +1410,9 @@ export default function AnalyzePanel() {
                         ? "对清洗的补充说明；留空可按 Enter 或点「确认继续」"
                         : analystReviewOpen
                           ? "对统计结果的补充或关注点；留空可按 Enter 或点「确认继续」；亦可点「同意进入报告」留下明确确认记录"
-                          : "输入回复，Enter 发送 · Shift+Enter 换行"
+                          : gateOpen && waitingAgent === "scout"
+                            ? "可点上方按钮，或输入如「确认进清洗」「还有补充」后发送 · Shift+Enter 换行"
+                            : "输入回复，Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
                   className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
@@ -1436,7 +1439,6 @@ export default function AnalyzePanel() {
                   发送
                 </button>
               </div>
-              )}
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
                   ? "表格行可点选高亮 · Enter /「确认无误」= 确认上表 · Shift+Enter 换行"
@@ -1444,6 +1446,8 @@ export default function AnalyzePanel() {
                     ? "Enter /「确认继续」= 进入后续步骤 · Shift+Enter 换行"
                     : analystReviewOpen
                       ? "Enter /「确认继续」= 进入后续步骤 ·「同意进入报告」= 明确确认统计三要素后进入报告 · Shift+Enter 换行"
+                      : gateOpen && waitingAgent === "scout"
+                        ? "闸门：点按钮或输入文字后发送 · Enter 发送 · Shift+Enter 换行"
                     : "Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>

@@ -156,45 +156,42 @@ export default function SettingsPanel() {
           </p>
         </Field>
 
-        <div className="rounded border border-app-border bg-app-bg-secondary/30 px-3 py-2.5 space-y-3">
-          <p className="text-ui-xs text-app-text-muted leading-relaxed">
-            <span className="text-app-text font-medium">双层模型</span>：快速步（Scout / Cleaner / Reporter）与深度步（Analyst）可用不同模型名，以平衡速度/成本与推理质量。
-            下面三项是<strong className="text-app-text">三个模型名</strong>；后两项留空时，会自动与「默认模型」相同。
-          </p>
+        <p className="text-ui-xs text-app-text-muted leading-relaxed">
+          三个模型名对应三条环境变量；快/深若与默认用同一推理模型，三格填相同名称即可（保存时若快/深留空，会按默认模型写入）。
+        </p>
 
-          <Field label="默认模型（必填）" icon={<Cpu size={14} />}>
-            <input
-              className={inputClass}
-              placeholder="例如 Qwen2.5-7B-Instruct"
-              autoComplete="off"
-              value={llm.model}
-              onChange={(e) => setLlm({ ...llm, model: e.target.value })}
-            />
-            <p className="mt-1 text-ui-xs text-app-text-muted">对应环境变量 HAGOKYU_LLM_MODEL；后两格不填时全流程都用它。</p>
-          </Field>
+        <Field label="默认模型" icon={<Cpu size={14} />}>
+          <input
+            className={inputClass}
+            placeholder="例如 Qwen2.5-7B-Instruct"
+            autoComplete="off"
+            value={llm.model}
+            onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+          />
+          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL，必填。</p>
+        </Field>
 
-          <Field label="快速模型（选填）" icon={<Zap size={14} />}>
-            <input
-              className={inputClass}
-              placeholder="留空 = 与默认模型相同"
-              autoComplete="off"
-              value={llm.model_quick}
-              onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
-            />
-            <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_QUICK；用于 Scout、Cleaner、Reporter。</p>
-          </Field>
+        <Field label="快速模型（Scout / Cleaner / Reporter）" icon={<Zap size={14} />}>
+          <input
+            className={inputClass}
+            placeholder="与上相同则填同一模型名"
+            autoComplete="off"
+            value={llm.model_quick}
+            onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
+          />
+          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_QUICK。</p>
+        </Field>
 
-          <Field label="深度模型（选填）" icon={<BrainCircuit size={14} />}>
-            <input
-              className={inputClass}
-              placeholder="留空 = 与默认模型相同"
-              autoComplete="off"
-              value={llm.model_deep}
-              onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
-            />
-            <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_DEEP；用于 Analyst。</p>
-          </Field>
-        </div>
+        <Field label="深度模型（Analyst）" icon={<BrainCircuit size={14} />}>
+          <input
+            className={inputClass}
+            placeholder="与上相同则填同一模型名"
+            autoComplete="off"
+            value={llm.model_deep}
+            onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
+          />
+          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_DEEP。</p>
+        </Field>
 
         <Field label="项目数据目录（只读）" icon={<FolderOpen size={14} />}>
           <input className={`${inputClass} opacity-80 cursor-not-allowed`} readOnly value={projectsRoot} />

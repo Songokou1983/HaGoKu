@@ -183,6 +183,8 @@ class TestConfigEndpoints:
         assert "HAGOKYU_LLM_MODEL" in text
         assert "test-model-x" in text
         assert "HAGOKYU_LLM_API_KEY" in text
+        assert "HAGOKYU_LLM_MODEL_QUICK" in text
+        assert "HAGOKYU_LLM_MODEL_DEEP" in text
 
     def test_post_llm_400_when_missing_model(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"

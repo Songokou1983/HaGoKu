@@ -157,16 +157,6 @@ def _dotenv_set(path: Path, key: str, value: str) -> None:
     set_key(str(path), key, value, quote_mode="always")
 
 
-def _dotenv_unset(path: Path, key: str) -> None:
-    try:
-        from dotenv import unset_key
-
-        if path.exists():
-            unset_key(str(path), key)
-    except Exception:
-        pass
-
-
 # ── GET /api/config — 读取当前前端可见配置 ───────────────────
 @app.get("/api/config")
 async def get_config():
@@ -176,12 +166,15 @@ async def get_config():
         cfg = HaGoKuConfig.load()
         ak = (cfg.llm.api_key or "").strip()
         api_key_configured = bool(ak and ak.lower() != "none")
+        m = (cfg.llm.model or "").strip()
+        mq_eff = ((cfg.llm.model_quick or m) or "").strip() or m
+        md_eff = ((cfg.llm.model_deep or m) or "").strip() or m
         return {
             "llm": {
                 "base_url": cfg.llm.base_url or "",
-                "model": cfg.llm.model or "",
-                "model_quick": cfg.llm.model_quick or "",
-                "model_deep": cfg.llm.model_deep or "",
+                "model": m,
+                "model_quick": mq_eff,
+                "model_deep": md_eff,
                 "api_key_configured": api_key_configured,
             },
             "projects_root": str(_projects_root()),
@@ -227,16 +220,10 @@ async def post_llm_config(req: LlmConfigBody):
         _dotenv_set(path, "HAGOKYU_LLM_MODEL", model)
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKYU_LLM_API_KEY", req.api_key.strip())
-        mq = req.model_quick.strip()
-        if mq:
-            _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", mq)
-        else:
-            _dotenv_unset(path, "HAGOKYU_LLM_MODEL_QUICK")
-        md = req.model_deep.strip()
-        if md:
-            _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", md)
-        else:
-            _dotenv_unset(path, "HAGOKYU_LLM_MODEL_DEEP")
+        mq = req.model_quick.strip() or model
+        md = req.model_deep.strip() or model
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", mq)
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", md)
         from dotenv import dotenv_values
 
         vals = dotenv_values(path) or {}

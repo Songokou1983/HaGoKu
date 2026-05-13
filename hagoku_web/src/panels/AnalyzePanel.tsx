@@ -755,6 +755,21 @@ export default function AnalyzePanel() {
           }
         }
 
+        // 进度提示：后端在长时间步骤会发 agent_thinking；此前对话区空白易被误认为「无回复」
+        if (d.event_type === "agent_thinking") {
+          const raw = (d.data as Record<string, unknown> | undefined)?.thought;
+          if (typeof raw === "string") {
+            const t = raw.trim();
+            if (t) {
+              const short = t.length > 220 ? `${t.slice(0, 217)}…` : t;
+              setMessages((prev) => [
+                ...prev,
+                { id: uid(), role: "system", text: short, timestamp: d.timestamp },
+              ]);
+            }
+          }
+        }
+
         // Reporter skipped (guardrails blocked) → set skipped state
         if (d.agent === "reporter" && d.event_type === "agent_completed") {
           const data = d.data as Record<string, unknown>;

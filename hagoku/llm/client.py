@@ -32,6 +32,7 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
             OpenAI(
                 base_url=llm_config.base_url,
                 api_key=llm_config.api_key,
+                timeout=120.0,
             ),
             mode=instructor.Mode.JSON,
         )
@@ -43,6 +44,7 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
         return OpenAI(
             base_url=llm_config.base_url,
             api_key=llm_config.api_key,
+            timeout=120.0,
         )
 
 

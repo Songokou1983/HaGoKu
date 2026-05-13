@@ -657,6 +657,10 @@ class ScoutAgent(InteractionMixin):
         if not field_specs:
             return
 
+        self._emit(EventType.AGENT_THINKING, {
+            "thought": "正在调用模型生成字段业务含义（列数较多时可能需数十秒）…",
+        })
+
         field_block = "\n".join(field_specs)
 
         # 检索相关字段知识（用于增强 LLM 上下文）
@@ -682,12 +686,13 @@ class ScoutAgent(InteractionMixin):
             "不要 Markdown 表格，不要编号；每行只写一列字段。"
         )
         max_out = min(max(self.llm_config.max_tokens, 512), 1600)
+        model_name = self.llm_config.model_quick or self.llm_config.model
 
         client = self._create_llm_client()
         result = ""
         try:
             response = client.chat.completions.create(
-                model=model,
+                model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"为以下字段生成描述：\n{field_block}"},
@@ -850,6 +855,7 @@ class ScoutAgent(InteractionMixin):
         return OpenAI(
             base_url=self.llm_config.base_url,
             api_key=self.llm_config.api_key,
+            timeout=120.0,
         )
 
     # ── 对话接口（供 UI 调用） ──────────────────────────────

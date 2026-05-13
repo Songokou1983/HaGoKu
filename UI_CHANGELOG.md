@@ -2,6 +2,22 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-14 — Scout：字段描述 LLM 模型名修复 + 分析页展示思考事件
+
+### 变更概要
+
+- **`hagoku/agents/scout/agent.py`**：`_generate_field_descriptions` 中误用未定义变量 `model`，导致请求未发出；改为 `model_quick or model`；补充「正在调用模型…」thinking；自建 OpenAI 客户端增加 `timeout`。
+- **`hagoku/llm/client.py`**：结构化 LLM 工厂为 `OpenAI` 增加 **120s** 超时，避免推理服务无响应时无限挂起。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：将 `agent_thinking` 以系统提示展示在对话区，避免仅管道转圈、聊天区空白。
+
+### 涉及文件
+
+- `hagoku/agents/scout/agent.py`
+- `hagoku/llm/client.py`
+- `hagoku_web/src/panels/AnalyzePanel.tsx`
+
+---
+
 ## 2026-05-14 — WebSocket：开发环境走 Vite 代理 + 回复失败可见
 
 ### 变更概要

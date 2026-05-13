@@ -2,13 +2,61 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-14 — AnalyzePanel：闸门暂停保留字段审查卡片锚点
+
+### 变更概要
+
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`user_input_requested` 仅含 `gate`、不含 `field_review` 时**不再**清空 `activeFieldReviewId` / `activeFieldReviewRevision`，避免「还有补充」回到 Scout 字段对齐后无法按 `interaction_revision` 原地更新同一张卡片。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/AnalyzePanel.tsx`
+
+---
+
+## 2026-05-14 — 多轮对齐：文档同步（转发包）
+
+### 变更概要
+
+- **`docs/INTERACTION_MULTITURN_PLAN.md`**：§2 改为「前后对照 + 剩余缺口」；§4 验收勾选与 §5 Phase 0–2 **落地状态**同步。
+- **`docs/AGENT_INTERACTION_CONTRACT.md`**：新增 **C4**（Scout 多轮 + `interaction_revision`）；§2 锚点表、§3 pytest 说明、§4 缺口表述更新。
+- **`DEVELOPMENT_PROMPT.md`**：**阶段 2.8** 表（2.8.0→`[/]`、2.8.4→`[/]`）与 **最后更新**作者备注同步审查结论。
+- **`docs/DEVELOPMENT.md`**：人机互动小节补充 **Scout 已落地 / 仍缺口** 一句。
+
+### 涉及文件
+
+- `docs/INTERACTION_MULTITURN_PLAN.md`
+- `docs/AGENT_INTERACTION_CONTRACT.md`
+- `DEVELOPMENT_PROMPT.md`
+- `docs/DEVELOPMENT.md`
+
+---
+
+## 2026-05-13 — 互动场景夹具（可执行剧本，对照编排 + Web 分析页）
+
+### 变更概要
+
+- 新增 **`tests/fixtures/interaction_scenarios/full_web_pause_flow.json`**：按 WebSocket `event` 形状写出「三次结构化暂停 + 收尾」时间线；`steps[].note` 给人读，`gap` 标出与「话术动态」之间的差距。
+- 新增 **`hagoku/devtools/interaction_scenarios.py`** 校验器、**`scripts/simulate_interaction_scenario.py`**（`--validate-all` / `--script`）、**`tests/test_product/test_interaction_scenarios.py`**。
+- **`docs/AGENT_INTERACTION_CONTRACT.md`** 增加 §5 指向上述资产。
+
+### 涉及文件
+
+- `tests/fixtures/interaction_scenarios/full_web_pause_flow.json`
+- `hagoku/devtools/__init__.py`、`hagoku/devtools/interaction_scenarios.py`
+- `scripts/simulate_interaction_scenario.py`
+- `tests/test_product/test_interaction_scenarios.py`
+- `docs/AGENT_INTERACTION_CONTRACT.md`
+
+---
+
 ## 2026-05-13 — Analyst 暂停：结构化 `analyst_review`（与 Scout/Cleaner 同权）
 
 ### 变更概要
 
-- **`hagoku/manager/orchestrator.py`**：完整流水线在 Analyst 完成后暂停时改用 **`analyst_review_pause_payload`**（`message` 为空、结果表结构化），**不再**调用 `_generate_pause_message("analyst")` 用 LLM 生成整段「台词」。
-- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：解析并渲染 **`analyst_review`** 工作流表（表头居中、表体左对齐）；与 Cleaner 共用 **「确认继续」** 与空 **Enter**；占位与底部提示与清洗暂停一致。
-- **`docs/AGENT_INTERACTION_CONTRACT.md`**、**`tests/test_product/test_agent_interaction_contract.py`**：C2 扩展至 Analyst；新增契约测试。
+- **`hagoku/manager/orchestrator.py`**：完整流水线在 Analyst 完成后暂停时改用 **`analyst_review_pause_payload`**（`message` 为空、结果表结构化），**不再**调用 `_generate_pause_message("analyst")` 用 LLM 生成整段「台词」。**（续）**载荷每行含 **`p_value`**、**`effect_summary`**、**`confidence_interval`**（与「精、准、狠」三要素一致）。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：解析并渲染 **`analyst_review`** 工作流表（表头居中、表体左对齐）；表列含 **p 值 / 效应量 / 置信区间**；Cleaner 仅 **「确认继续」**，Analyst 另增 **「同意进入报告」**（图标+文字，写入用户回复事件）。
+- **`docs/AGENT_INTERACTION_CONTRACT.md`**、**`tests/test_product/test_agent_interaction_contract.py`**：C2 扩展至 Analyst；契约测试覆盖三要素字段。
 
 ### 涉及文件
 

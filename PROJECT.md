@@ -62,7 +62,7 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 3. **用户输入必须进状态**：自然语言纠错须写入 `context` / 后续可见载体（见 `apply_scout_user_field_reply_to_context` 等），**不得**仅拼进 `query` 却不在数据上下文中留下痕迹。  
 4. **成长（当前工程含义）**：指 **Scribe 双记忆 + knowledge 注入 + 看板/context 可追溯** 的累积；**不等于**「前端拟人聊天人设」。若产品上要 **同阶段多轮对话式成长**，须在编排层引入 **显式状态图/循环边**（对比 `PROJECT.md` 中 TradingAgents / LangGraph 对照节），单线程「每暂停点只 `respond` 一次」不足以单独承载该愿景——**这是编排形态缺口，不是 PROJECT 写错**。
 
-**可执行契约**：`docs/AGENT_INTERACTION_CONTRACT.md`；**回归测试**：`tests/test_product/test_agent_interaction_contract.py`（`pytest` 必须通过）。
+**可执行契约**：`docs/AGENT_INTERACTION_CONTRACT.md`（含 **C4** Scout 多轮）；**回归测试**：`tests/test_product/test_agent_interaction_contract.py`（`pytest` 必须通过）。**多轮对齐式互动**的分期方案、**已落地 / 仍缺口**对照见 **`docs/INTERACTION_MULTITURN_PLAN.md`**（与上条「编排形态缺口」衔接；路线图勾选见 `DEVELOPMENT_PROMPT.md` 阶段 2.8）。
 
 ---
 

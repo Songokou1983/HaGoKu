@@ -1,0 +1,302 @@
+{
+  "id": "full_web_pause_flow",
+  "version": 1,
+  "title": "Web 分析页：一次完整跑通中的三次结构化暂停（含缺口标注）",
+  "steps": [
+    {
+      "id": "run_start",
+      "note": "用户点击「开始分析」后，编排创建 run；顶栏进入 running。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-run-01",
+          "event_type": "run_started",
+          "timestamp": "2026-05-13T10:00:00",
+          "agent": "manager",
+          "parent_id": null,
+          "data": {
+            "run_id": "run-demo-1",
+            "project": "demo_project"
+          }
+        }
+      }
+    },
+    {
+      "id": "scout_start",
+      "note": "Scout 开始：流水线第一个格子应变为 running。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-scout-s",
+          "event_type": "agent_started",
+          "timestamp": "2026-05-13T10:00:01",
+          "agent": "scout",
+          "parent_id": null,
+          "data": {
+            "goal": "理解数据结构"
+          }
+        }
+      }
+    },
+    {
+      "id": "pause_scout",
+      "note": "Scout 跑完列语义后第一次暂停：分析页应插入字段核对表，并出现输入区。",
+      "gap": "理想态：除表格外，可有一条可折叠的 llm_quick 短引导（≤80 字），不得复述表格中已有单元格。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-scout-p",
+          "event_type": "user_input_requested",
+          "timestamp": "2026-05-13T10:00:03",
+          "agent": "scout",
+          "parent_id": null,
+          "data": {
+            "message": "",
+            "agent": "scout",
+            "field_review": {
+              "n_rows": 120,
+              "n_cols": 2,
+              "rows": [
+                {
+                  "field_name": "revenue",
+                  "understanding_name": "revenue",
+                  "meaning": "销售额（待补充）",
+                  "needs_attention": false
+                },
+                {
+                  "field_name": "channel",
+                  "understanding_name": "channel",
+                  "meaning": "（待补充）",
+                  "needs_attention": true
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "user_scout_reply",
+      "note": "用户点「确认无误」或输入纠错后发送 respond；此处仅叙事，真实 WS 以 ack 为主。",
+      "gap": "可在夹具中另增 {type: ack, cmd: respond} 步骤以模拟完整 RTT。"
+    },
+    {
+      "id": "scout_applied",
+      "note": "若用户纠错被写入 context，应出现系统事实气泡（applied_field_updates）。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-scout-recv",
+          "event_type": "user_input_received",
+          "timestamp": "2026-05-13T10:00:05",
+          "agent": "scout",
+          "parent_id": null,
+          "data": {
+            "reply": "channel=获客渠道",
+            "applied_field_updates": ["channel → 获客渠道"]
+          }
+        }
+      }
+    },
+    {
+      "id": "scout_done",
+      "note": "Scout 记完成：第一个格子变 done，Cleaner 随后应进入 running。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-scout-c",
+          "event_type": "agent_completed",
+          "timestamp": "2026-05-13T10:00:06",
+          "agent": "scout",
+          "parent_id": null,
+          "data": {
+            "duration": "4.2s",
+            "result_summary": "理解 2 个字段（用户已确认）"
+          }
+        }
+      }
+    },
+    {
+      "id": "cleaner_start",
+      "note": "Cleaner 开始。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-cln-s",
+          "event_type": "agent_started",
+          "timestamp": "2026-05-13T10:00:07",
+          "agent": "cleaner",
+          "parent_id": null,
+          "data": {
+            "goal": "清洗数据"
+          }
+        }
+      }
+    },
+    {
+      "id": "pause_cleaner",
+      "note": "清洗方案/结果暂停：应出现 cleaning_review 表与「确认继续」。",
+      "gap": "同上：短 LLM 引导可选，不得替代表格事实。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-cln-p",
+          "event_type": "user_input_requested",
+          "timestamp": "2026-05-13T10:00:10",
+          "agent": "cleaner",
+          "parent_id": null,
+          "data": {
+            "message": "",
+            "agent": "cleaner",
+            "cleaning_review": {
+              "data_quality": "good",
+              "impact_rate": 0.02,
+              "total_rows_original": 120,
+              "total_rows_after": 118,
+              "rows_removed": 2,
+              "bias_risk": "low",
+              "n_ops": 1,
+              "warnings": [],
+              "rows": [
+                {
+                  "column": "revenue",
+                  "strategy": "winsorize",
+                  "reason": "极端值收缩",
+                  "rows_affected": 6
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "cleaner_done",
+      "note": "用户确认后 Cleaner 完成。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-cln-c",
+          "event_type": "agent_completed",
+          "timestamp": "2026-05-13T10:00:15",
+          "agent": "cleaner",
+          "parent_id": null,
+          "data": {
+            "duration": "5.0s",
+            "result_summary": "影响率 2.0%（用户已确认）"
+          }
+        }
+      }
+    },
+    {
+      "id": "analyst_start",
+      "note": "Analyst 开始。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-an-s",
+          "event_type": "agent_started",
+          "timestamp": "2026-05-13T10:00:16",
+          "agent": "analyst",
+          "parent_id": null,
+          "data": {
+            "goal": "用统计方法挖出数据真相"
+          }
+        }
+      }
+    },
+    {
+      "id": "pause_analyst",
+      "note": "统计结果暂停：应出现 analyst_review 表（含 p 值/效应量/置信区间列）与「确认继续」「同意进入报告」。",
+      "gap": "此处最缺「LLM 依当次结果」的一句人话引导；仍须短、可关、与表不重复。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-an-p",
+          "event_type": "user_input_requested",
+          "timestamp": "2026-05-13T10:00:22",
+          "agent": "analyst",
+          "parent_id": null,
+          "data": {
+            "message": "",
+            "agent": "analyst",
+            "analyst_review": {
+              "n_findings": 1,
+              "n_significant": 1,
+              "rows": [
+                {
+                  "result_id": "a1b2c3d",
+                  "analysis_type": "regression",
+                  "question": "revenue 是否随 channel 变化？",
+                  "significance": "significant",
+                  "p_value": "0.012",
+                  "effect_summary": "r=0.41",
+                  "confidence_interval": "[0.09, 0.66]",
+                  "conclusion_plain": "存在中等强度正相关。"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "analyst_done",
+      "note": "用户确认后 Analyst 记完成，进入护栏与 Reporter。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-an-c",
+          "event_type": "agent_completed",
+          "timestamp": "2026-05-13T10:00:28",
+          "agent": "analyst",
+          "parent_id": null,
+          "data": {
+            "duration": "6.0s",
+            "result_summary": "完成 1 项分析（用户已确认）"
+          }
+        }
+      }
+    },
+    {
+      "id": "reporter_done",
+      "note": "Reporter 成功：分析页底部出现「查看报告」链接。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-rep-c",
+          "event_type": "agent_completed",
+          "timestamp": "2026-05-13T10:00:35",
+          "agent": "reporter",
+          "parent_id": null,
+          "data": {
+            "duration": "4.0s",
+            "result_summary": "报告已生成",
+            "skipped": false
+          }
+        }
+      }
+    },
+    {
+      "id": "run_done",
+      "note": "Run 结束：全局状态 done。",
+      "ws": {
+        "type": "event",
+        "data": {
+          "event_id": "ev-run-c",
+          "event_type": "run_completed",
+          "timestamp": "2026-05-13T10:00:40",
+          "agent": "manager",
+          "parent_id": null,
+          "data": {
+            "duration": "40.0s",
+            "output_path": "/tmp/report.html",
+            "run_id": "run-demo-1",
+            "project": "demo_project",
+            "guardrails_blocked": false
+          }
+        }
+      }
+    }
+  ]
+}

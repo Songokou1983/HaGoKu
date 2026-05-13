@@ -156,7 +156,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 
 # 用户仅表示「确认」、无字段纠错时，不写 column_descriptions、不污染 query 补充段
 _SCOUT_PURE_CONFIRM_RE = re.compile(
-    r"^(确认|好的|是|没问题|对的|正确|已通过|pass|ok|okay|yes|y|thanks|thx)[\s!！。.]*$",
+    r"^(确认|好的|是|没问题|对的|正确|已通过|pass|ok|okay|yes|y|thanks|thx)[\s!！。,\-\.]*$",
     re.I,
 )
 
@@ -166,6 +166,46 @@ def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
     if not t:
         return True
     return bool(_SCOUT_PURE_CONFIRM_RE.match(t))
+
+
+def _is_scout_aligned(context: dict[str, Any], user_reply: str) -> bool:
+    """判断 Scout 字段理解是否已对齐：纯确认  OR  所有字段 needs_user_input=False。"""
+    if _scout_reply_is_pure_confirm(user_reply):
+        return True
+    if not any(s.get("needs_user_input") for s in context.get("column_semantics", [])):
+        return True
+    return False
+
+
+def gate_cleaning_pause_payload() -> dict[str, Any]:
+    """跨阶段闸门：字段对齐后、进入清洗前，询问用户是否确认进入清洗阶段。"""
+    return {
+        "message": "",
+        "gate": {
+            "phase": "cleaning",
+            "prompt": "字段理解已确认。是否进入数据清洗？",
+        },
+    }
+
+
+# 闸门回复判定：纯确认 / 空 → 进下一阶段；非确认 → 回 FieldReviewLoop
+_GATE_SUPPLEMENT_RE = re.compile(
+    r"补充|还有|改|不对|不对的|纠正|修正|更正|重新|再想想|再看看",
+    re.I,
+)
+
+
+def _is_gate_confirm(user_reply: str) -> bool:
+    """闸门回复是否为「确认进入下一阶段」而非「还有补充」。"""
+    t = (user_reply or "").strip()
+    if not t:
+        return True  # 空回车 = 确认
+    if _scout_reply_is_pure_confirm(t):
+        return True
+    # 含「补充 / 还有 / 改」等词 → 拒绝闸门，回 FieldReviewLoop
+    if _GATE_SUPPLEMENT_RE.search(t):
+        return False
+    return True
 
 
 def _known_scout_columns(context: dict[str, Any]) -> list[str]:
@@ -413,6 +453,46 @@ def cleaning_review_pause_payload(
     }
 
 
+def _fmt_pause_p_value(v: Any) -> str:
+    if v is None:
+        return "—"
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        s = str(v).strip()
+        return s[:20] + ("…" if len(s) > 20 else "") if s else "—"
+    if fv < 0.0001:
+        return "<0.0001"
+    if fv < 0.001:
+        return "<0.001"
+    return f"{fv:.4g}"
+
+
+def _fmt_pause_effect_summary(effect_type: str, effect_size: Any) -> str:
+    et = (effect_type or "").strip()
+    if effect_size is None:
+        return et if et else "—"
+    try:
+        ev = float(effect_size)
+    except (TypeError, ValueError):
+        return f"{et} {effect_size}".strip() if et else str(effect_size)[:32]
+    frag = f"{ev:.4g}"
+    if et:
+        return f"{et}={frag}"
+    return frag
+
+
+def _fmt_pause_ci(ci: Any, max_len: int = 56) -> str:
+    if ci is None:
+        return "—"
+    s = str(ci).strip()
+    if not s:
+        return "—"
+    if len(s) > max_len:
+        return s[: max_len - 1] + "…"
+    return s
+
+
 def analyst_review_pause_payload(findings: list[Any]) -> dict[str, Any]:
     """Analyst 暂停：结构化统计结果摘要表；`message` 留空，避免用 LLM 冒充「Agent 对话」。"""
     rows_out: list[dict[str, Any]] = []
@@ -447,6 +527,9 @@ def analyst_review_pause_payload(findings: list[Any]) -> dict[str, Any]:
             "question": q,
             "significance": sig,
             "conclusion_plain": plain,
+            "p_value": _fmt_pause_p_value(d.get("p_value")),
+            "effect_summary": _fmt_pause_effect_summary(str(d.get("effect_type") or ""), d.get("effect_size")),
+            "confidence_interval": _fmt_pause_ci(d.get("confidence_interval")),
         })
     n_tot = len(seq)
     return {
@@ -1024,19 +1107,43 @@ class Orchestrator:
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-                # ── 暂停：字段理解待用户确认；确认后再记 Scout 完成（AGENT_COMPLETED / 看板 done）──
-                scout_msg = scout_field_review_pause_payload(context)
-                user_reply_scout = self._pause_and_wait("scout", scout_msg)
-                if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
-                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                applied_scout = apply_scout_user_field_reply_to_context(context, user_reply_scout or "")
-                if user_reply_scout:
-                    self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {
-                        "reply": user_reply_scout,
-                        "applied_field_updates": applied_scout,
-                    })
-                    if not _scout_reply_is_pure_confirm(user_reply_scout):
-                        query = f"{query}\n[用户补充] {user_reply_scout}".strip()
+                # ── 多轮对齐：Scout 字段理解子状态机 ───────────────────────────────
+                # 结构：外层循环（Scout 循环 + gate）；内层 Scout 循环负责字段对齐
+                # 对齐条件：用户纯确认  OR  所有字段 needs_user_input=False
+                # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 循环；纯确认 → 进 Cleaner
+                interaction_revision = 0
+                while True:
+                    # 内层：Scout 字段对齐循环
+                    while True:
+                        scout_msg = scout_field_review_pause_payload(context)
+                        scout_msg["interaction_revision"] = interaction_revision
+                        user_reply_scout = self._pause_and_wait("scout", scout_msg)
+                        if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
+                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                        applied_scout = apply_scout_user_field_reply_to_context(context, user_reply_scout or "")
+                        if user_reply_scout:
+                            self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {
+                                "reply": user_reply_scout,
+                                "applied_field_updates": applied_scout,
+                                "interaction_revision": interaction_revision,
+                            })
+                            if not _scout_reply_is_pure_confirm(user_reply_scout):
+                                query = f"{query}\n[用户补充] {user_reply_scout}".strip()
+                        # 对齐判定：已对齐则出内层循环、进 gate；未对齐则继续内层（revision 递增）
+                        if _is_scout_aligned(context, user_reply_scout):
+                            break
+                        interaction_revision += 1
+
+                    # ── 跨阶段闸门：字段对齐后、进入清洗前 ────────────────────────
+                    gate_msg = gate_cleaning_pause_payload()
+                    gate_reply = self._pause_and_wait("scout", gate_msg)
+                    if gate_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
+                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                    if _is_gate_confirm(gate_reply):
+                        # 确认进清洗 → 出外层循环，继续执行 Cleaner
+                        break
+                    # 「还有补充」→ 回 Scout 内层循环（context 已含上次纠错，revision 继续递增）
+
                 n_sem = len(context.get("column_semantics", []))
                 self.event_bus.emit(
                     EventType.AGENT_COMPLETED,

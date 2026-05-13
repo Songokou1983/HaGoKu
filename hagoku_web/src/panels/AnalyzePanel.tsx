@@ -142,7 +142,7 @@ function parseCleaningReview(raw: unknown): CleaningReviewPayload | null {
   };
 }
 
-/** Analyst 结果核对：后端 `analyst_review` 结构化载荷（非 Agent 台词） */
+/** Analyst 结果核对：后端 `analyst_review` 结构化载荷（非 Agent 台词）；含 p 值/效应量/置信区间与「精、准、狠」一致 */
 interface AnalystReviewPayload {
   n_findings: number;
   n_significant: number;
@@ -151,6 +151,9 @@ interface AnalystReviewPayload {
     analysis_type: string;
     question: string;
     significance: string;
+    p_value: string;
+    effect_summary: string;
+    confidence_interval: string;
     conclusion_plain: string;
   }>;
 }
@@ -169,6 +172,13 @@ function parseAnalystReview(raw: unknown): AnalystReviewPayload | null {
       analysis_type: String(r.analysis_type ?? ""),
       question: String(r.question ?? ""),
       significance: String(r.significance ?? ""),
+      p_value: typeof r.p_value === "string" ? r.p_value : String(r.p_value ?? "—"),
+      effect_summary: typeof r.effect_summary === "string"
+        ? r.effect_summary
+        : String(r.effect_summary ?? "—"),
+      confidence_interval: typeof r.confidence_interval === "string"
+        ? r.confidence_interval
+        : String(r.confidence_interval ?? "—"),
       conclusion_plain: String(r.conclusion_plain ?? ""),
     });
   }
@@ -197,17 +207,20 @@ function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
       <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-0.5">
         <div className="font-medium text-app-text">Analyst</div>
         <div className="text-app-text-muted">
-          共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表；可补充说明或留空确认继续
+          共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表（p 值、效应量、置信区间）；可补充说明或留空确认继续
         </div>
       </div>
-      <table className="w-full text-ui-sm border-collapse table-fixed">
+      <table className="w-full text-ui-sm border-collapse min-w-[720px]">
         <caption className="sr-only">统计分析结果摘要</caption>
         <colgroup>
+          <col className="w-[7%]" />
+          <col className="w-[9%]" />
+          <col className="w-[20%]" />
           <col className="w-[9%]" />
           <col className="w-[11%]" />
-          <col className="w-[28%]" />
-          <col className="w-[10%]" />
-          <col className="w-[42%]" />
+          <col className="w-[14%]" />
+          <col className="w-[8%]" />
+          <col className="w-[22%]" />
         </colgroup>
         <thead>
           <tr className="bg-app-bg border-b border-app-border">
@@ -221,6 +234,15 @@ function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
               研究问题
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              p 值
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              效应量
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              置信区间
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               显著性
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
@@ -231,7 +253,7 @@ function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
         <tbody>
           {data.rows.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
+              <td colSpan={8} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
                 （无结构化结果行）
               </td>
             </tr>
@@ -246,6 +268,15 @@ function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
                 </td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">
                   {r.question || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs tabular-nums">
+                  {r.p_value || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-words">
+                  {r.effect_summary || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-words">
+                  {r.confidence_interval || "—"}
                 </td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border">
                   {significanceShort(r.significance)}
@@ -615,9 +646,13 @@ export default function AnalyzePanel() {
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
   /** 当前暂停点是否对应「字段表」工作流（用于行点选、空回车确认） */
   const [activeFieldReviewId, setActiveFieldReviewId] = useState<string | null>(null);
+  /** 多轮对齐：当前 field_review 卡片的 interaction_revision（递增时更新同一卡片） */
+  const [activeFieldReviewRevision, setActiveFieldReviewRevision] = useState<number>(-1);
   const [activeCleaningReviewId, setActiveCleaningReviewId] = useState<string | null>(null);
   const [activeAnalystReviewId, setActiveAnalystReviewId] = useState<string | null>(null);
   const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
+  /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
+  const [gateOpen, setGateOpen] = useState(false);
 
   // File / project state
   const [dataPath, setDataPath] = useState("");
@@ -715,25 +750,42 @@ export default function AnalyzePanel() {
         // 暂停点：结构化 field_review 用工作流卡片展示；message 仅作补充（不设预设 Agent 台词）
         if (d.event_type === "user_input_requested") {
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
+          const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
           const fr = parseFieldReview(dataObj.field_review);
           const cr = parseCleaningReview(dataObj.cleaning_review);
           const ar = parseAnalystReview(dataObj.analyst_review);
+          const incomingRevision = typeof dataObj.interaction_revision === "number"
+            ? (dataObj.interaction_revision as number)
+            : Infinity; // 无 revision 时当新卡片处理（向后兼容）
           if (fr) {
-            const wfId = uid();
-            setActiveFieldReviewId(wfId);
+            // 多轮对齐：revision 递增 → 更新同一张卡片（不堆叠）
+            if (incomingRevision > activeFieldReviewRevision && activeFieldReviewId !== null) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m,
+                ),
+              );
+            } else {
+              // 新卡片
+              const wfId = uid();
+              setActiveFieldReviewId(wfId);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: wfId,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  fieldReview: fr,
+                },
+              ]);
+            }
+            setActiveFieldReviewRevision(incomingRevision);
             setSelectedReviewField(null);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: wfId,
-                role: "workflow",
-                text: "",
-                timestamp: d.timestamp,
-                fieldReview: fr,
-              },
-            ]);
-          } else {
+          } else if (!gatePayload) {
+            // 仅「闸门」暂停不带 field_review：保留上一张卡片 id/revision，供下一轮原地更新
             setActiveFieldReviewId(null);
+            setActiveFieldReviewRevision(-1);
             setSelectedReviewField(null);
           }
           if (cr) {
@@ -767,6 +819,22 @@ export default function AnalyzePanel() {
             ]);
           } else {
             setActiveAnalystReviewId(null);
+          }
+          // 跨阶段闸门：gate_to_cleaning（Scout 对齐后、进入清洗前）
+          if (gatePayload) {
+            const gateId = uid();
+            setGateOpen(true);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: gateId,
+                role: "workflow",
+                text: gatePayload.prompt ?? "是否进入下一阶段？",
+                timestamp: d.timestamp,
+              },
+            ]);
+          } else {
+            setGateOpen(false);
           }
           const raw = dataObj.message;
           const agentMsg = typeof raw === "string" ? raw.trim() : "";
@@ -808,6 +876,7 @@ export default function AnalyzePanel() {
           if (runPayload.cancelled === true) {
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
+            setActiveFieldReviewRevision(-1);
             setSelectedReviewField(null);
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
@@ -829,6 +898,7 @@ export default function AnalyzePanel() {
             if (gr.runId) setBlockedRunId(gr.runId);
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
+            setActiveFieldReviewRevision(-1);
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
             setSelectedReviewField(null);
@@ -875,7 +945,8 @@ export default function AnalyzePanel() {
       send("respond", { text: outgoing });
       setReplyText("");
       setWaitingAgent(null);
-      setActiveFieldReviewId(null);
+      setGateOpen(false);
+      // 多轮对齐：不清 activeFieldReviewId；保留用于下一轮更新同一卡片
       setActiveCleaningReviewId(null);
       setActiveAnalystReviewId(null);
       setSelectedReviewField(null);
@@ -899,9 +970,11 @@ export default function AnalyzePanel() {
     setWaitingAgent(null);
     setReplyText("");
     setActiveFieldReviewId(null);
+    setActiveFieldReviewRevision(-1);
     setActiveCleaningReviewId(null);
     setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
+    setGateOpen(false);
     setPhase("running");
     send("analyze", {
       data_path: dataPath,
@@ -919,9 +992,11 @@ export default function AnalyzePanel() {
     setWaitingAgent(null);
     setReplyText("");
     setActiveFieldReviewId(null);
+    setActiveFieldReviewRevision(-1);
     setActiveCleaningReviewId(null);
     setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
+    setGateOpen(false);
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
@@ -1158,7 +1233,7 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
-              {(cleanerCleaningReviewOpen || analystReviewOpen) && (
+              {(cleanerCleaningReviewOpen) && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1168,6 +1243,30 @@ export default function AnalyzePanel() {
                   >
                     <CheckCircle2 size={14} />
                     确认继续
+                  </button>
+                </div>
+              )}
+              {analystReviewOpen && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    确认继续
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      submitUserReply("已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
+                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
+                      motion-safe:transition-colors"
+                  >
+                    <FileText size={14} />
+                    同意进入报告
                   </button>
                 </div>
               )}
@@ -1212,6 +1311,30 @@ export default function AnalyzePanel() {
                   )}
                 </div>
               )}
+              {gateOpen && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("确认进清洗")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    确认进入清洗
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("还有补充")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
+                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
+                      motion-safe:transition-colors"
+                  >
+                    <MessageSquarePlus size={14} />
+                    还有补充
+                  </button>
+                </div>
+              )}
+              {!gateOpen && (
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={replyInputRef}
@@ -1229,7 +1352,7 @@ export default function AnalyzePanel() {
                       : cleanerCleaningReviewOpen
                         ? "对清洗的补充说明；留空可按 Enter 或点「确认继续」"
                         : analystReviewOpen
-                          ? "对统计结果的补充或关注点；留空可按 Enter 或点「确认继续」"
+                          ? "对统计结果的补充或关注点；留空可按 Enter 或点「确认继续」；亦可点「同意进入报告」留下明确确认记录"
                           : "输入回复，Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
@@ -1257,11 +1380,14 @@ export default function AnalyzePanel() {
                   发送
                 </button>
               </div>
+              )}
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
                   ? "表格行可点选高亮 · Enter /「确认无误」= 确认上表 · Shift+Enter 换行"
-                  : cleanerCleaningReviewOpen || analystReviewOpen
+                  : cleanerCleaningReviewOpen
                     ? "Enter /「确认继续」= 进入后续步骤 · Shift+Enter 换行"
+                    : analystReviewOpen
+                      ? "Enter /「确认继续」= 进入后续步骤 ·「同意进入报告」= 明确确认统计三要素后进入报告 · Shift+Enter 换行"
                     : "Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>

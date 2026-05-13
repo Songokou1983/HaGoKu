@@ -41,6 +41,7 @@
 - **规定暂停点**：在关键阶段结束后编排会 **暂停**，经 WebSocket 下发 **`USER_INPUT_REQUESTED`**（或等价事件）；前端优先渲染 **结构化工作流卡片**（`field_review` / `cleaning_review` / `analyst_review`），**不**用固定长模板冒充对话；若事件仍带短 `message`，可为 LLM 依当次结果生成（非必填）。
 - **用户回复**：用户在分析页用 **自然语言** 回复；前端发送 **`respond`**，后端 **`unblock`** 继续执行。不要用「固定表单卡片」理解当前 Web 产品（CLI 分阶段测试仍可独立存在）。
 - **体验原则**：Agent **主动引导**；进度展示应对应真实阶段（流水线状态 + 日志/事件），而非装饰性假状态。
+- **目标态（多轮对齐）**：阶段内以「对齐」为结束条件，**不**预设用户只能回复固定次数；**Scout 字段表**已在编排层实现多轮 `user_input_requested` + `interaction_revision`（见 `hagoku/manager/orchestrator.py`）。**跨阶段闸门、Cleaner/Analyst 同构**仍见 [INTERACTION_MULTITURN_PLAN.md](INTERACTION_MULTITURN_PLAN.md) §2.2 / §4-B/C。实施计划与路线图勾选见 [DEVELOPMENT_PROMPT.md](../DEVELOPMENT_PROMPT.md) **阶段 2.8**；可执行契约见 [AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md) **C4**。
 
 ### 用户体验原则
 - 进度条是真实的，不是 4 个格子轮流高亮的 checklist

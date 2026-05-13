@@ -11,6 +11,7 @@
 |------|------|
 | [PROJECT.md](PROJECT.md) | 灵魂、Agent、人机互动、双轨报告、交付物、**迭代执行顺序** |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册、测试与 Playwright/React 说明 |
+| [docs/INTERACTION_MULTITURN_PLAN.md](docs/INTERACTION_MULTITURN_PLAN.md) | **多轮对齐互动**：目标态、现状差距、分期实施与验收 |
 | [DEV.md](DEV.md) | 环境、日常命令 |
 | [README.md](README.md) | 用户安装与快速开始 |
 | [UI_CHANGELOG.md](UI_CHANGELOG.md) | 前端有界面改动时按 `CLAUDE.md` 记录 |
@@ -65,8 +66,19 @@
 
 > **阶段闸门**（表格）：未完成阶段 **1** 中标记为 P0 的项前，不启动阶段 **2** 的 P0；以此类推。若需破例，须在 PR 中写明原因并由审查人认可。  
 > **状态用语**：`[ ]` 未开始 · `[/]` 进行中 / 部分完成 · `[x]` 已完成（须代码/测试/或已备案差异）· `[!]` 阻塞（在备注写阻塞原因）  
-> **最后更新**：2026-05-14 — **作者备注**：**护栏 × 沟通**清单 **P0–P2 全勾**（含 `wsGuardrails` 与 **`tests/test_web/test_ws_guardrails_parity.py`** Python 镜像契约）。**2.7 → `[x]`**。**1.5** 仍为 **`[/]`**（Agent 失败无降级）。**路线图其余 2.1–2.6 / 3.x / 4.x** 仍为各表原状态，非本轮闭合并入范围。  
-> **设计手册对齐**：`docs/DEVELOPMENT.md`「测试方法」已补 **pytest 子集**（`tests/test_api/`、`test_ws_guardrails_parity`）、**UI 手动步骤** 5–7（报告按 run / 护栏拦截 / 事件与 API 一致）；`PROJECT.md`「Web UI 当前形态」已补护栏 run 与说明；`docs/TROUBLESHOOTING.md` §8 汇总复现与验证命令。
+> **最后更新**：2026-05-14 — **作者备注**：**护栏 × 沟通**清单 **P0–P2 全勾**（含 `wsGuardrails` 与 **`tests/test_web/test_ws_guardrails_parity.py`** Python 镜像契约）。**2.7 → `[x]`**。**1.5** 仍为 **`[/]`**（Agent 失败无降级）。**2.8.1 / 2.8.2** Scout 多轮与前端卡片已落地；**2.8.0** 书面词表与场景剧本仍建议补；**2.8.4** 契约与回归测已闭；**2.8.3** 仍为 **`[/]`**（Cleaner/Analyst 同构待拆）。**路线图其余 2.1–2.6 / 3.x / 4.x** 仍为各表原状态，非本轮闭合并入范围。  
+> **设计手册对齐**：`docs/DEVELOPMENT.md`「测试方法」已补 **pytest 子集**（`tests/test_api/`、`test_ws_guardrails_parity`）、**UI 手动步骤** 5–7（报告按 run / 护栏拦截 / 事件与 API 一致）；`PROJECT.md`「Web UI 当前形态」已补护栏 run 与说明；`docs/TROUBLESHOOTING.md` §8 汇总复现与验证命令。  
+> **多轮对齐互动（方案 / 分期）** → [docs/INTERACTION_MULTITURN_PLAN.md](docs/INTERACTION_MULTITURN_PLAN.md)（编排 + 分析页后续 PR 以此为准；进度在下方 **阶段 2.8** 勾选）。
+
+### 阶段 2.8 — 多轮对齐式互动（编排 + Web）
+
+| ID | 工作项 | 状态 | 备注 |
+|----|--------|------|------|
+| 2.8.0 | **Phase 0**：对齐判定规则 + 3 条场景剧本评审 | [/] | **代码侧**已有 `_scout_reply_is_pure_confirm` / `_is_scout_aligned`；**书面**词表（如「可以了」）与 3 条剧本仍建议产品补全，见 `INTERACTION_MULTITURN_PLAN.md` §2.2 |
+| 2.8.1 | **Phase 1**：Scout 字段理解子状态机 + `interaction_revision` + pytest | [x] | `hagoku/manager/orchestrator.py`（Scout 段 `while`；`_is_scout_aligned`；合约测于 `test_agent_interaction_contract.py`） |
+| 2.8.2 | **Phase 2**：`AnalyzePanel` 多轮同阶段暂停 UI | [x] | `activeFieldReviewRevision`；revision 递增时原地更新卡片 |
+| 2.8.3 | **Phase 3**：跨阶段闸门 + Cleaner/Analyst 同构 | [/] | **Scout→Cleaner 闸门**已落地（`_is_gate_confirm`；`gate_cleaning_pause_payload`；AnalyzePanel gate UI）；**Cleaner/Analyst 同构**仍待（可拆 PR） |
+| 2.8.4 | **契约**：`AGENT_INTERACTION_CONTRACT.md` C4 扩展 + 回归测 | [x] | C4 已含闸门行为（禁止未对齐进清洗）；`test_agent_interaction_contract.py` 新增闸门测（`_is_gate_confirm` 等 3 条） |
 
 ---
 

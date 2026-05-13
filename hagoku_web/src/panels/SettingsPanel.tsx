@@ -128,72 +128,67 @@ export default function SettingsPanel() {
           </p>
         )}
 
-        <Field label="推理服务地址（Base URL）" icon={<Globe size={14} />}>
+        <p className="text-ui-sm text-app-text leading-relaxed">
+          这里只管「大模型在哪、叫什么、密钥多少」。不要填本分析页的端口，也不要填 HaGoKu 后端默认的 8000。
+        </p>
+
+        <Field label="大模型服务网址" icon={<Globe size={14} />}>
           <input
             className={inputClass}
-            placeholder="http://localhost:8080/v1"
+            placeholder="例：http://127.0.0.1:8080/v1"
             autoComplete="off"
             value={llm.base_url}
             onChange={(e) => setLlm({ ...llm, base_url: e.target.value })}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted leading-relaxed">
-            OpenAI 兼容接口地址，需包含 <span className="font-mono">/v1</span> 后缀。勿填 HaGoKu 本服务端口（默认
-            8000）。
-          </p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">从你自己部署的推理软件说明里抄，一般末尾带 /v1。</p>
         </Field>
 
-        <Field label="API Key" icon={<Key size={14} />}>
+        <Field label="密钥" icon={<Key size={14} />}>
           <input
             className={inputClass}
             type="password"
-            placeholder={llm.api_key_configured ? "已保存 · 留空则不修改" : "本地模型可填 none"}
+            placeholder={llm.api_key_configured ? "已保存过，不想改就空着" : "本地没密钥就填 none"}
             autoComplete="new-password"
             value={apiKeyInput}
             onChange={(e) => setApiKeyInput(e.target.value)}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted leading-relaxed">
-            与上面地址同属一个推理服务，只填一份 Key。
-          </p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">和上面网址是同一套服务，只填一个密钥。</p>
         </Field>
 
-        <p className="text-ui-xs text-app-text-muted leading-relaxed">
-          三个模型名对应三条环境变量；快/深若与默认用同一推理模型，三格填相同名称即可（保存时若快/深留空，会按默认模型写入）。
-        </p>
-
-        <Field label="默认模型" icon={<Cpu size={14} />}>
+        <Field label="主用模型名字" icon={<Cpu size={14} />}>
           <input
             className={inputClass}
-            placeholder="例如 Qwen2.5-7B-Instruct"
+            placeholder="在推理服务里注册的名字，例如 Qwen2.5-7B-Instruct"
             autoComplete="off"
             value={llm.model}
             onChange={(e) => setLlm({ ...llm, model: e.target.value })}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL，必填。</p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">必填。下面两格不配时，全程都用这个名字。</p>
         </Field>
 
-        <Field label="快速模型（Scout / Cleaner / Reporter）" icon={<Zap size={14} />}>
+        <Field label="前面步骤用的模型名（可不配）" icon={<Zap size={14} />}>
           <input
             className={inputClass}
-            placeholder="与上相同则填同一模型名"
+            placeholder="不配就和主用模型一样；要配就写另一个名字"
             autoComplete="off"
             value={llm.model_quick}
             onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_QUICK。</p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">看表、洗数据、写报告那几步。一般和主用模型填同一个就行。</p>
         </Field>
 
-        <Field label="深度模型（Analyst）" icon={<BrainCircuit size={14} />}>
+        <Field label="后面统计用的模型名（可不配）" icon={<BrainCircuit size={14} />}>
           <input
             className={inputClass}
-            placeholder="与上相同则填同一模型名"
+            placeholder="不配就和主用模型一样；想更准可以换更大的模型名"
             autoComplete="off"
             value={llm.model_deep}
             onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_DEEP。</p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">只做假设检验、回归那块。不配也和主用模型一样。</p>
         </Field>
 
-        <Field label="项目数据目录（只读）" icon={<FolderOpen size={14} />}>
+        <Field label="项目数据放在哪（只读）" icon={<FolderOpen size={14} />}>
           <input className={`${inputClass} opacity-80 cursor-not-allowed`} readOnly value={projectsRoot} />
         </Field>
 
@@ -217,7 +212,7 @@ export default function SettingsPanel() {
                      text-white text-ui-base rounded transition-colors duration-150 cursor-pointer"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-          {saving ? "保存中…" : saved ? "已保存" : "保存 LLM 设置"}
+          {saving ? "保存中…" : saved ? "已保存" : "保存设置"}
         </button>
       </div>
     </div>

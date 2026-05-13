@@ -214,7 +214,7 @@ async def post_llm_config(req: LlmConfigBody):
     base_url = req.base_url.strip()
     model = req.model.strip()
     if not base_url or not model:
-        raise HTTPException(status_code=400, detail="推理服务地址与模型名称不能为空")
+        raise HTTPException(status_code=400, detail="网址和主模型名字不能为空")
     try:
         _dotenv_set(path, "HAGOKYU_LLM_BASE_URL", base_url)
         _dotenv_set(path, "HAGOKYU_LLM_MODEL", model)
@@ -236,7 +236,7 @@ async def post_llm_config(req: LlmConfigBody):
     return {
         "ok": True,
         "restart_required": True,
-        "hint": "已写入 ~/.hagoku/.env。请重启 hagoku-api 后新配置才会生效。",
+        "hint": "已经存到本机配置文件。请重新启动一次后端（运行 hagoku-api 的那个窗口关掉再开），新设置才会用在分析里。",
         "llm": {
             "base_url": str(vals.get("HAGOKYU_LLM_BASE_URL") or base_url),
             "model": str(vals.get("HAGOKYU_LLM_MODEL") or model),

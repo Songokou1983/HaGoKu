@@ -2,6 +2,22 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-14 — 设置页：LLM 地址 / 模型 / Key + 写入 ~/.hagoku/.env
+
+### 变更概要
+
+- **`hagoku/api/server.py`**：`GET /api/config` 返回 `llm`（含 `api_key_configured`）与 `projects_root`；新增 **`POST /api/config/llm`** 写入 `HAGOKYU_LLM_*`。
+- **`hagoku_web/src/panels/SettingsPanel.tsx`**：移除错误的「8000 + 提供商下拉 + 仅 localStorage」；改为常规三项 + 可选快速/深度模型；保存走 API。
+- **`tests/test_api/test_server.py`**：`TestConfigEndpoints` 契约测。
+
+### 涉及文件
+
+- `hagoku/api/server.py`
+- `hagoku_web/src/panels/SettingsPanel.tsx`
+- `tests/test_api/test_server.py`
+
+---
+
 ## 2026-05-14 — Scout：字段描述 LLM 模型名修复 + 分析页展示思考事件
 
 ### 变更概要

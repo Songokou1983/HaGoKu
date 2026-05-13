@@ -133,3 +133,69 @@ class TestKanbanTasksEndpoint:
         client = TestClient(app)
         r = client.get("/api/projects/ghost/kanban/tasks")
         assert r.status_code == 404
+
+
+class TestConfigEndpoints:
+    """GET /api/config、POST /api/config/llm"""
+
+    def test_get_config_has_llm_and_projects_root(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.get("/api/config")
+        assert r.status_code == 200
+        body = r.json()
+        assert "llm" in body
+        assert "base_url" in body["llm"]
+        assert "model" in body["llm"]
+        assert "model_quick" in body["llm"]
+        assert "model_deep" in body["llm"]
+        assert "api_key_configured" in body["llm"]
+        assert isinstance(body["llm"]["api_key_configured"], bool)
+        assert "projects_root" in body
+
+    def test_post_llm_writes_env_file(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr("hagoku.api.server._hagoku_dotenv_path", lambda: env_file)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.post(
+            "/api/config/llm",
+            json={
+                "base_url": "http://llm.test:9999/v1",
+                "model": "test-model-x",
+                "api_key": "sk-test-secret",
+                "model_quick": "",
+                "model_deep": "",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert data["llm"]["base_url"] == "http://llm.test:9999/v1"
+        assert data["llm"]["model"] == "test-model-x"
+        assert data["llm"]["api_key_configured"] is True
+        text = env_file.read_text(encoding="utf-8")
+        assert "HAGOKYU_LLM_BASE_URL" in text
+        assert "http://llm.test:9999/v1" in text
+        assert "HAGOKYU_LLM_MODEL" in text
+        assert "test-model-x" in text
+        assert "HAGOKYU_LLM_API_KEY" in text
+
+    def test_post_llm_400_when_missing_model(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr("hagoku.api.server._hagoku_dotenv_path", lambda: env_file)
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.post(
+            "/api/config/llm",
+            json={
+                "base_url": "http://x/v1",
+                "model": "   ",
+                "api_key": "",
+            },
+        )
+        assert r.status_code == 400

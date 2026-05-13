@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -143,19 +143,121 @@ async def get_report(project_name: str, filename: str):
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+def _hagoku_dotenv_path() -> Path:
+    """用户级环境变量文件（与 hagoku.config 加载路径一致）。"""
+    return Path.home() / ".hagoku" / ".env"
+
+
+def _dotenv_set(path: Path, key: str, value: str) -> None:
+    from dotenv import set_key
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.touch()
+    set_key(str(path), key, value, quote_mode="always")
+
+
+def _dotenv_unset(path: Path, key: str) -> None:
+    try:
+        from dotenv import unset_key
+
+        if path.exists():
+            unset_key(str(path), key)
+    except Exception:
+        pass
+
+
 # ── GET /api/config — 读取当前前端可见配置 ───────────────────
 @app.get("/api/config")
 async def get_config():
     from hagoku.config import HaGoKuConfig
+
     try:
         cfg = HaGoKuConfig.load()
+        ak = (cfg.llm.api_key or "").strip()
+        api_key_configured = bool(ak and ak.lower() != "none")
         return {
-            "base_url": cfg.llm.base_url or "",
-            "model": cfg.llm.model or "",
-            "workspace": str(_projects_root()),
+            "llm": {
+                "base_url": cfg.llm.base_url or "",
+                "model": cfg.llm.model or "",
+                "model_quick": cfg.llm.model_quick or "",
+                "model_deep": cfg.llm.model_deep or "",
+                "api_key_configured": api_key_configured,
+            },
+            "projects_root": str(_projects_root()),
         }
     except Exception:
-        return {"base_url": "", "model": "", "workspace": str(_projects_root())}
+        return {
+            "llm": {
+                "base_url": "",
+                "model": "",
+                "model_quick": "",
+                "model_deep": "",
+                "api_key_configured": False,
+            },
+            "projects_root": str(_projects_root()),
+        }
+
+
+class LlmConfigBody(BaseModel):
+    """OpenAI 兼容推理服务三项 + 可选双模；写入 ~/.hagoku/.env 对应 HAGOKYU_LLM_*。"""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    base_url: str
+    model: str
+    api_key: str = ""
+    model_quick: str = ""
+    model_deep: str = ""
+
+
+@app.post("/api/config/llm")
+async def post_llm_config(req: LlmConfigBody):
+    """
+    将 LLM 连接参数写入 ~/.hagoku/.env（仅本机开发场景；生产环境应加鉴权或禁用）。
+    已运行的 hagoku-api 进程仍使用旧环境变量，需重启后生效。
+    """
+    path = _hagoku_dotenv_path()
+    base_url = req.base_url.strip()
+    model = req.model.strip()
+    if not base_url or not model:
+        raise HTTPException(status_code=400, detail="推理服务地址与模型名称不能为空")
+    try:
+        _dotenv_set(path, "HAGOKYU_LLM_BASE_URL", base_url)
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL", model)
+        if req.api_key.strip():
+            _dotenv_set(path, "HAGOKYU_LLM_API_KEY", req.api_key.strip())
+        mq = req.model_quick.strip()
+        if mq:
+            _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", mq)
+        else:
+            _dotenv_unset(path, "HAGOKYU_LLM_MODEL_QUICK")
+        md = req.model_deep.strip()
+        if md:
+            _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", md)
+        else:
+            _dotenv_unset(path, "HAGOKYU_LLM_MODEL_DEEP")
+        from dotenv import dotenv_values
+
+        vals = dotenv_values(path) or {}
+        akv = str(vals.get("HAGOKYU_LLM_API_KEY") or "").strip()
+        api_key_configured = bool(akv and akv.lower() != "none")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "restart_required": True,
+        "hint": "已写入 ~/.hagoku/.env。请重启 hagoku-api 后新配置才会生效。",
+        "llm": {
+            "base_url": str(vals.get("HAGOKYU_LLM_BASE_URL") or base_url),
+            "model": str(vals.get("HAGOKYU_LLM_MODEL") or model),
+            "model_quick": str(vals.get("HAGOKYU_LLM_MODEL_QUICK") or ""),
+            "model_deep": str(vals.get("HAGOKYU_LLM_MODEL_DEEP") or ""),
+            "api_key_configured": api_key_configured,
+        },
+    }
 
 
 # ── GET /api/knowledge/{project_name} — 列出项目知识库文件 ──

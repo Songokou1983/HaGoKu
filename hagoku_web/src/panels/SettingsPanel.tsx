@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-  Gauge,
+  Zap,
+  BrainCircuit,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field } from "../components/FormField";
@@ -141,16 +142,6 @@ export default function SettingsPanel() {
           </p>
         </Field>
 
-        <Field label="模型名称" icon={<Cpu size={14} />}>
-          <input
-            className={inputClass}
-            placeholder="例如 Qwen2.5-7B-Instruct"
-            autoComplete="off"
-            value={llm.model}
-            onChange={(e) => setLlm({ ...llm, model: e.target.value })}
-          />
-        </Field>
-
         <Field label="API Key" icon={<Key size={14} />}>
           <input
             className={inputClass}
@@ -160,34 +151,50 @@ export default function SettingsPanel() {
             value={apiKeyInput}
             onChange={(e) => setApiKeyInput(e.target.value)}
           />
+          <p className="mt-1 text-ui-xs text-app-text-muted leading-relaxed">
+            与上面地址同属一个推理服务，只填一份 Key。
+          </p>
         </Field>
 
-        <details className="rounded border border-app-border bg-app-bg-secondary/40 px-3 py-2">
-          <summary className="cursor-pointer text-ui-sm text-app-text select-none flex items-center gap-2">
-            <Gauge size={14} className="text-app-text-muted shrink-0" />
-            可选：快速 / 深度模型（不设则与上面「模型名称」相同）
-          </summary>
-          <div className="mt-3 space-y-3 pt-1 border-t border-app-border">
-            <Field label="快速模型（Scout / Cleaner / Reporter）" icon={<Gauge size={14} />}>
-              <input
-                className={inputClass}
-                placeholder="留空则复用主模型"
-                autoComplete="off"
-                value={llm.model_quick}
-                onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
-              />
-            </Field>
-            <Field label="深度模型（Analyst）" icon={<Gauge size={14} />}>
-              <input
-                className={inputClass}
-                placeholder="留空则复用主模型"
-                autoComplete="off"
-                value={llm.model_deep}
-                onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
-              />
-            </Field>
-          </div>
-        </details>
+        <div className="rounded border border-app-border bg-app-bg-secondary/30 px-3 py-2.5 space-y-3">
+          <p className="text-ui-xs text-app-text-muted leading-relaxed">
+            <span className="text-app-text font-medium">双层模型</span>：快速步（Scout / Cleaner / Reporter）与深度步（Analyst）可用不同模型名，以平衡速度/成本与推理质量。
+            下面三项是<strong className="text-app-text">三个模型名</strong>；后两项留空时，会自动与「默认模型」相同。
+          </p>
+
+          <Field label="默认模型（必填）" icon={<Cpu size={14} />}>
+            <input
+              className={inputClass}
+              placeholder="例如 Qwen2.5-7B-Instruct"
+              autoComplete="off"
+              value={llm.model}
+              onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+            />
+            <p className="mt-1 text-ui-xs text-app-text-muted">对应环境变量 HAGOKYU_LLM_MODEL；后两格不填时全流程都用它。</p>
+          </Field>
+
+          <Field label="快速模型（选填）" icon={<Zap size={14} />}>
+            <input
+              className={inputClass}
+              placeholder="留空 = 与默认模型相同"
+              autoComplete="off"
+              value={llm.model_quick}
+              onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
+            />
+            <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_QUICK；用于 Scout、Cleaner、Reporter。</p>
+          </Field>
+
+          <Field label="深度模型（选填）" icon={<BrainCircuit size={14} />}>
+            <input
+              className={inputClass}
+              placeholder="留空 = 与默认模型相同"
+              autoComplete="off"
+              value={llm.model_deep}
+              onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
+            />
+            <p className="mt-1 text-ui-xs text-app-text-muted">HAGOKYU_LLM_MODEL_DEEP；用于 Analyst。</p>
+          </Field>
+        </div>
 
         <Field label="项目数据目录（只读）" icon={<FolderOpen size={14} />}>
           <input className={`${inputClass} opacity-80 cursor-not-allowed`} readOnly value={projectsRoot} />

@@ -8,6 +8,7 @@
 
 - **`hagoku/api/server.py`**：`GET /api/config` 返回 `llm`（含 `api_key_configured`）与 `projects_root`；新增 **`POST /api/config/llm`** 写入 `HAGOKYU_LLM_*`。
 - **`hagoku_web/src/panels/SettingsPanel.tsx`**：移除错误的「8000 + 提供商下拉 + 仅 localStorage」；改为常规三项 + 可选快速/深度模型；保存走 API。
+- **修订**：三个模型名平铺展示（默认 / 快速 / 深度），并说明「一套地址+Key、两条模型名」。
 - **`tests/test_api/test_server.py`**：`TestConfigEndpoints` 契约测。
 
 ### 涉及文件

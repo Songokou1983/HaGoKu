@@ -598,6 +598,8 @@ HaGoKu 自己只写 Agent 逻辑 + 统计护栏 + 编排策略 + 报告模板，
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 
+> **「双层 LLM」≠ 两套推理服务**：指**同一** OpenAI 兼容网关（同一 `HAGOKYU_LLM_BASE_URL` + `HAGOKYU_LLM_API_KEY`）下，为不同步骤指定**不同模型名**（`HAGOKYU_LLM_MODEL` / `MODEL_QUICK` / `MODEL_DEEP`），用于降本与延迟；见上文「借鉴清单」P0。若需「快速步连 A 厂商、深度步连 B 厂商」各一套网址与密钥，当前代码**未支持**，须扩展配置与客户端工厂（与现 `.env` 面不同）。
+
 ---
 
 ## 项目文档索引

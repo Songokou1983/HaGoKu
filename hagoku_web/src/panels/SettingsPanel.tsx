@@ -3,43 +3,79 @@ import {
   Globe,
   Cpu,
   Key,
-  FolderOpen,
   Save,
   CheckCircle2,
   Loader2,
   AlertCircle,
-  Zap,
-  BrainCircuit,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field } from "../components/FormField";
 
-/** 与 GET /api/config 对齐 */
+/** 接口返回的完整 llm 片段（含 sub_model，用于判断是否曾拆成两个名字） */
 interface LlmConfigPayload {
   base_url: string;
-  model: string;
-  model_quick: string;
-  model_deep: string;
+  main_model: string;
+  sub_model: string;
+  api_key_configured: boolean;
+}
+
+/** 表单里只编辑这三项；本页不提供第二格模型名 */
+interface LlmFormState {
+  base_url: string;
+  main_model: string;
   api_key_configured: boolean;
 }
 
 interface ConfigResponse {
-  llm: LlmConfigPayload;
-  projects_root: string;
+  llm: Partial<LlmConfigPayload> & Record<string, unknown>;
 }
 
-const emptyLlm: LlmConfigPayload = {
+const emptyLlm: LlmFormState = {
   base_url: "",
-  model: "",
-  model_quick: "",
-  model_deep: "",
+  main_model: "",
   api_key_configured: false,
 };
 
+/** localStorage：用户是否展开过「高级设置」；与本机已配置 QUICK≠主 时强制展开无关 */
+const ADVANCED_LLM_STORAGE_KEY = "hagoku_settings_advanced_llm_open";
+
+function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
+  const base_url = typeof raw.base_url === "string" ? raw.base_url : "";
+  const api_key_configured = typeof raw.api_key_configured === "boolean" ? raw.api_key_configured : false;
+  let main_model = typeof raw.main_model === "string" ? raw.main_model : "";
+  let sub_model = typeof raw.sub_model === "string" ? raw.sub_model : "";
+  if (!main_model) {
+    const m = typeof raw.model === "string" ? raw.model : "";
+    const md = typeof raw.model_deep === "string" ? raw.model_deep : "";
+    main_model = (m || md).trim();
+  }
+  if (!sub_model && typeof raw.model_quick === "string" && raw.model_quick.trim() && raw.model_quick.trim() !== main_model) {
+    sub_model = raw.model_quick.trim();
+  }
+  return { base_url, main_model, sub_model, api_key_configured };
+}
+
+function formFromNormalized(n: LlmConfigPayload): LlmFormState {
+  return {
+    base_url: n.base_url,
+    main_model: n.main_model,
+    api_key_configured: n.api_key_configured,
+  };
+}
+
+function hadDistinctQuickName(n: LlmConfigPayload): boolean {
+  const s = n.sub_model.trim();
+  return Boolean(s && s !== n.main_model.trim());
+}
+
 export default function SettingsPanel() {
-  const [llm, setLlm] = useState<LlmConfigPayload>(emptyLlm);
+  const [llm, setLlm] = useState<LlmFormState>(emptyLlm);
+  const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
+  const [subModelQuick, setSubModelQuick] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [projectsRoot, setProjectsRoot] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -56,8 +92,31 @@ export default function SettingsPanel() {
         return r.json() as Promise<ConfigResponse>;
       })
       .then((d) => {
-        setLlm(d.llm ?? emptyLlm);
-        setProjectsRoot(d.projects_root ?? "");
+        const raw = (d.llm ?? {}) as Record<string, unknown>;
+        if (Object.keys(raw).length) {
+          const n = normalizeLlmFromApi(raw);
+          setLlm(formFromNormalized(n));
+          const distinct = hadDistinctQuickName(n);
+          if (distinct) {
+            setAdvancedLlmOpen(true);
+            setSubModelQuick(n.sub_model.trim());
+          } else {
+            setSubModelQuick("");
+            try {
+              setAdvancedLlmOpen(localStorage.getItem(ADVANCED_LLM_STORAGE_KEY) === "1");
+            } catch {
+              setAdvancedLlmOpen(false);
+            }
+          }
+        } else {
+          setLlm(emptyLlm);
+          setSubModelQuick("");
+          try {
+            setAdvancedLlmOpen(localStorage.getItem(ADVANCED_LLM_STORAGE_KEY) === "1");
+          } catch {
+            setAdvancedLlmOpen(false);
+          }
+        }
         setApiKeyInput("");
       })
       .catch((e: unknown) => {
@@ -81,10 +140,9 @@ export default function SettingsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           base_url: llm.base_url.trim(),
-          model: llm.model.trim(),
+          main_model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
-          model_quick: llm.model_quick.trim(),
-          model_deep: llm.model_deep.trim(),
+          sub_model: advancedLlmOpen ? subModelQuick.trim() : "",
         }),
       });
       const d = (await r.json().catch(() => ({}))) as {
@@ -96,7 +154,17 @@ export default function SettingsPanel() {
         const msg = typeof d.detail === "string" ? d.detail : `保存失败 (${r.status})`;
         throw new Error(msg);
       }
-      if (d.llm) setLlm(d.llm);
+      if (d.llm) {
+        const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
+        setLlm(formFromNormalized(n));
+        const distinct = hadDistinctQuickName(n);
+        if (distinct) {
+          setAdvancedLlmOpen(true);
+          setSubModelQuick(n.sub_model.trim());
+        } else {
+          setSubModelQuick("");
+        }
+      }
       setApiKeyInput("");
       setSaved(true);
       setSaveHint(typeof d.hint === "string" ? d.hint : null);
@@ -155,42 +223,64 @@ export default function SettingsPanel() {
           <p className="mt-1 text-ui-xs text-app-text-muted">和上面网址是同一套服务，只填一个密钥。</p>
         </Field>
 
-        <Field label="主用模型名字" icon={<Cpu size={14} />}>
+        <Field label="模型名称" icon={<Cpu size={14} />}>
           <input
             className={inputClass}
-            placeholder="在推理服务里注册的名字，例如 Qwen2.5-7B-Instruct"
+            placeholder="在推理服务里注册的名字，例如 Qwen2.5-32B-Instruct"
             autoComplete="off"
-            value={llm.model}
-            onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+            value={llm.main_model}
+            onChange={(e) => setLlm({ ...llm, main_model: e.target.value })}
           />
-          <p className="mt-1 text-ui-xs text-app-text-muted">必填。下面两格不配时，全程都用这个名字。</p>
+          <p className="mt-1 text-ui-xs text-app-text-muted">必填。全流程用同一个在推理服务里注册的名字。</p>
         </Field>
 
-        <Field label="前面步骤用的模型名（可不配）" icon={<Zap size={14} />}>
-          <input
-            className={inputClass}
-            placeholder="不配就和主用模型一样；要配就写另一个名字"
-            autoComplete="off"
-            value={llm.model_quick}
-            onChange={(e) => setLlm({ ...llm, model_quick: e.target.value })}
-          />
-          <p className="mt-1 text-ui-xs text-app-text-muted">看表、洗数据、写报告那几步。一般和主用模型填同一个就行。</p>
-        </Field>
-
-        <Field label="后面统计用的模型名（可不配）" icon={<BrainCircuit size={14} />}>
-          <input
-            className={inputClass}
-            placeholder="不配就和主用模型一样；想更准可以换更大的模型名"
-            autoComplete="off"
-            value={llm.model_deep}
-            onChange={(e) => setLlm({ ...llm, model_deep: e.target.value })}
-          />
-          <p className="mt-1 text-ui-xs text-app-text-muted">只做假设检验、回归那块。不配也和主用模型一样。</p>
-        </Field>
-
-        <Field label="项目数据放在哪（只读）" icon={<FolderOpen size={14} />}>
-          <input className={`${inputClass} opacity-80 cursor-not-allowed`} readOnly value={projectsRoot} />
-        </Field>
+        <div className="border border-app-border rounded-md overflow-hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setAdvancedLlmOpen((prev) => {
+                const next = !prev;
+                try {
+                  localStorage.setItem(ADVANCED_LLM_STORAGE_KEY, next ? "1" : "0");
+                } catch {
+                  /* ignore */
+                }
+                return next;
+              });
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-left text-ui-sm text-app-text bg-app-bg-secondary hover:bg-app-bg transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal size={14} className="text-app-accent shrink-0" />
+            <span className="flex-1 font-medium">高级设置</span>
+            {advancedLlmOpen ? (
+              <ChevronDown size={14} className="text-app-text-muted shrink-0" />
+            ) : (
+              <ChevronRight size={14} className="text-app-text-muted shrink-0" />
+            )}
+          </button>
+          {advancedLlmOpen && (
+            <div className="px-3 py-3 space-y-3 border-t border-app-border bg-app-bg text-ui-xs text-app-text leading-relaxed">
+              <p>
+                仍为<strong>同一套</strong>推理服务（上方网址与密钥不变）。保存时把「模型名称」写入{" "}
+                <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL</code> 与{" "}
+                <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL_DEEP</code>（统计、假设检验、回归等深度步）。
+              </p>
+              <p>
+                下面可选填 <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL_QUICK</code>：Scout、Cleaner、Reporter
+                等前面轻步会优先用该名字；<strong>留空则与上面「模型名称」相同</strong>。
+              </p>
+              <Field label="HAGOKYU_LLM_MODEL_QUICK（可选）" icon={<SlidersHorizontal size={14} />}>
+                <input
+                  className={inputClass}
+                  placeholder="与主模型名不同则填写；否则留空"
+                  autoComplete="off"
+                  value={subModelQuick}
+                  onChange={(e) => setSubModelQuick(e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
 
         {saveError && (
           <p className="flex items-center gap-2 text-ui-sm text-app-error">

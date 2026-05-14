@@ -172,3 +172,13 @@ scout_ctx = DataContext.from_dict({
 ```
 
 **手动步骤**：见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)「UI 手动测试步骤」第 5–7 步。
+
+---
+
+## 9. 知识库详情 `Internal Server Error`（`/api/kb/content`）
+
+**常见根因**：运行 `hagoku-api` 的 Python 环境**未安装**依赖包 `markdown`（`pyproject.toml` 已声明 `markdown>=3.5`），首次点「查看正文」时 `import markdown` 失败。
+
+**修复**：在**同一解释器**下执行 `pip install "markdown>=3.5"` 或从仓库根 `pip install -e .`，然后**重启** `hagoku-api`。确认使用虚拟环境：`.venv/bin/hagoku-api` 或先 `source .venv/bin/activate`。
+
+**代码行为（主线）**：若仍缺包，接口会**降级**为转义后的纯文本 `<pre>`，不再返回 500；若仍见 500，请对照终端堆栈（其它异常如文件权限、注册表损坏等）。

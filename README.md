@@ -69,7 +69,7 @@ cd hagoku_web && npm run dev
 # React 开发服务器运行在 http://localhost:5173
 ```
 
-**UI 功能：** 固定导航切换视图 → **项目**（卡片式项目库、描述与数据文件）→ **分析**（「开始分析」、流水线进度、Agent 对话气泡与暂停回复、WebSocket 实时事件）→ **报告**（按项目列出 HTML 等）→ **知识**（方法类知识库）→ **事件**（原始事件流）
+**UI 功能：** 固定导航切换视图 → **项目**（卡片式项目库、描述与数据文件）→ **分析**（「开始分析」、流水线进度、Agent 对话气泡与暂停回复、WebSocket 实时事件）→ **报告**（按项目列出 HTML 等）→ **知识**（方法类知识库，**条目可点进查看完整正文**）→ **事件**（原始事件流）
 
 ### CLI
 
@@ -276,7 +276,7 @@ A: 代码已更新，执行 `pip install -e . --force-reinstall` 强制重装，
 A: 确认 LLM 推理服务已启动，且 `~/.hagoku/.env` 或 `config.yaml` 中的 `base_url`（如 `http://localhost:8080/v1`）与 `model` 指向该服务，**不要**误填 `hagoku-api` 的 `http://localhost:8000`。
 
 **Q: 项目文件存放在哪里？**
-A: 默认 `~/.hagoku/projects/`，可在 Settings 面板修改「项目文件夹」路径。
+A: 默认 `~/.hagoku/projects/`。若要整体改项目根目录，在 `~/.hagoku/.env` 里设置 `HAGOKYU_PROJECT_DIR` 后重启 `hagoku-api`（与 CLI / 分析写盘一致）。**报告 HTML**：在 Web **报告**页打开链接后，用浏览器 **另存为**（或打印为 PDF）保存到任意位置即可。
 
 ---
 

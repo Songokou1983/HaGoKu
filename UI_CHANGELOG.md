@@ -2,6 +2,62 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-13 — 知识库：条目点进查看正文
+
+### 变更概要
+
+- **`hagoku/api/server.py`**：新增 **`GET /api/kb/content?filename=`**，仅允许 `_registry.yaml` 已登记路径；返回 Markdown 正文转 HTML（依赖 `markdown`）；与 `GET /api/kb` 共用注册表加载逻辑。
+- **`hagoku_web/src/panels/KnowledgePanel.tsx`**：列表卡片可点进详情；详情顶栏 **返回列表**（图标+文字）；正文 `dangerouslySetInnerHTML` 展示服务端 HTML。
+- **`hagoku_web/src/index.css`**：`.kb-detail-html` 下表格表头居中、正文单元格左对齐等排版。
+- **`pyproject.toml`**：增加运行时依赖 `markdown>=3.5`。
+- **`tests/test_api/test_server.py`**：`TestKbContent` 契约测。
+- **`README.md`**：UI 功能一句中带知识库详情。
+
+## 2026-05-13 — 设置页：「高级设置」折叠（MODEL_QUICK）
+
+### 变更概要
+
+- **`hagoku_web/src/panels/SettingsPanel.tsx`**：在「模型名称」下增加 **高级设置** 折叠区（图标 + 文案）；展开后说明 `HAGOKYU_LLM_MODEL` / `MODEL_DEEP` / `MODEL_QUICK` 分工，并可填 `MODEL_QUICK`；默认收起；若本机已配置 QUICK≠主则自动展开并带出值；展开状态可写入 `localStorage` 键 `hagoku_settings_advanced_llm_open`。
+
+### 涉及文件
+
+- `hagoku_web/src/panels/SettingsPanel.tsx`
+- `PROJECT.md`
+
+## 2026-05-13 — 设置页移除项目路径；报告页说明另存为
+
+### 变更概要
+
+- **`hagoku_web/src/panels/SettingsPanel.tsx`**：去掉「项目数据放在哪（只读）」；`GET /api/config` 不再依赖 `projects_root`。
+- **`hagoku_web/src/panels/ReportPanel.tsx`**：顶部增加说明——打开报告后用浏览器 **另存为** / **打印为 PDF** 保存到自选位置。
+- **`hagoku/api/server.py`**：`GET /api/config` 不再返回 `projects_root`；`_projects_root()` 与 `HaGoKuConfig.output.project_dir`（含 `HAGOKYU_PROJECT_DIR`）一致，与 Orchestrator 写盘对齐。
+- **`README.md` / `PROJECT.md` / `DEV.md` / `.env.example`**：同步项目目录与报告导出说明。
+- **`tests/test_api/test_server.py`**：`GET /api/config` 契约去掉 `projects_root`。
+
+### 涉及文件
+
+- `hagoku/api/server.py`
+- `hagoku_web/src/panels/SettingsPanel.tsx`
+- `hagoku_web/src/panels/ReportPanel.tsx`
+- `README.md`、`PROJECT.md`、`DEV.md`、`.env.example`
+- `tests/test_api/test_server.py`
+
+## 2026-05-14 — 设置页：LLM 主模型 + 副模型（两格）
+
+### 变更概要
+
+- **`hagoku/api/server.py`**：`POST /api/config/llm` 请求体改为 `main_model` + `sub_model`（副留空则与主相同）；写入时 `HAGOKYU_LLM_MODEL` 与 `HAGOKYU_LLM_MODEL_DEEP` 均为主，`HAGOKYU_LLM_MODEL_QUICK` 为副。`GET /api/config` 的 `llm` 增加 `main_model`、`sub_model`（与主相同时 `sub_model` 为空串便于表单展示），仍保留 `model` / `model_quick` / `model_deep` 供兼容。
+- **`hagoku_web/src/panels/SettingsPanel.tsx`**：模型配置改为「主模型」「副模型（前面轻快步）」两栏，去掉第三格。
+- **`tests/test_api/test_server.py`**：`TestConfigEndpoints` 随契约更新。
+- **修订（文案）**：去掉「主模型 / 副模型」用语；改为「模型名称」+「可选：前面几步用另一个模型名」；保存校验提示改为「网址和模型名称不能为空」。
+- **修订（设置页）**：去掉第二格模型名输入；本页只配置一个模型名，保存时始终与前面步骤统一。若 `.env` 里曾拆开两个名字，仅提示保存后会合并。
+
+### 涉及文件
+
+- `hagoku/api/server.py`
+- `hagoku_web/src/panels/SettingsPanel.tsx`
+- `tests/test_api/test_server.py`
+
 ## 2026-05-14 — 设置页：LLM 地址 / 模型 / Key + 写入 ~/.hagoku/.env
 
 ### 变更概要

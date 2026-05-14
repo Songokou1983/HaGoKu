@@ -34,3 +34,56 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 知识库详情：Markdown 转 HTML 后的排版（深色） */
+@layer components {
+  .kb-detail-html {
+    @apply text-ui-sm text-app-text leading-relaxed max-w-none;
+  }
+  .kb-detail-html h1 {
+    @apply text-ui-md font-bold text-app-text mt-4 mb-2 border-b border-app-border pb-1;
+  }
+  .kb-detail-html h2 {
+    @apply text-ui-base font-semibold text-app-text mt-3 mb-2;
+  }
+  .kb-detail-html h3 {
+    @apply text-ui-sm font-semibold text-app-text mt-2 mb-1;
+  }
+  .kb-detail-html p {
+    @apply my-2 text-app-text;
+  }
+  .kb-detail-html ul,
+  .kb-detail-html ol {
+    @apply my-2 pl-5 text-app-text;
+  }
+  .kb-detail-html li {
+    @apply my-0.5;
+  }
+  .kb-detail-html table {
+    @apply w-full text-ui-xs border-collapse border border-app-border my-3;
+  }
+  .kb-detail-html thead th {
+    @apply text-center bg-app-bg-tertiary text-app-text border border-app-border px-2 py-1 font-medium;
+  }
+  .kb-detail-html tbody td {
+    @apply text-left border border-app-border px-2 py-1 text-app-text;
+  }
+  .kb-detail-html code {
+    @apply text-app-agent bg-app-bg-tertiary px-1 rounded text-ui-xs;
+  }
+  .kb-detail-html pre {
+    @apply bg-app-bg-tertiary border border-app-border rounded p-2 overflow-x-auto my-2 text-ui-xs;
+  }
+  .kb-detail-html pre code {
+    @apply bg-transparent p-0 text-app-text;
+  }
+  .kb-detail-html blockquote {
+    @apply border-l-2 border-app-accent pl-3 my-2 text-app-text-muted italic;
+  }
+  .kb-detail-html hr {
+    @apply border-app-border my-4;
+  }
+  .kb-detail-html a {
+    @apply text-app-accent underline hover:text-app-accent-hover;
+  }
+}

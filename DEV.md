@@ -81,7 +81,7 @@ python3 scripts/clean_ui_changelog_backups.py --older-than 30 --apply
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
-| `HAGOKYU_PROJECT_DIR` | 项目根目录（可选，覆盖默认 `~/ .hagoku/projects`） | — |
+| `HAGOKYU_PROJECT_DIR` | 项目根目录（可选，覆盖默认 `~/.hagoku/projects`）；改后重启 `hagoku-api`；不设时报告用浏览器另存为即可带走 | — |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |

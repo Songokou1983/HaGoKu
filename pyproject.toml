@@ -64,6 +64,7 @@ dependencies = [
     # API
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
+    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]

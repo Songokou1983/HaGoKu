@@ -51,7 +51,7 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 - **不是「静态聊天框」**：产品形态接近**有流程的协作**——流水线顺序固定（Scout → Cleaner → Analyst → Reporter），但在**规定暂停点**由 Agent **主动打断、说明当前发现、并向用户提问**；用户用自然语言回复后继续执行。
 - **话术动态、流程静态**：规定暂停点先交付 **结构化工作流卡片**（Scout / Cleaner / Analyst 的 `field_review` / `cleaning_review` / `analyst_review`）；**不**把整段说明硬塞进单一气泡或用固定长模板冒充「对话」。若仍附带短 `message`，可由 **LLM 依当次结果**生成，须短、且不重复表格已表达的信息。系统只锁定「何时暂停」，**不**锁定「暂停时说什么」。
 - **无用户模式分级**：不提供「快速 / 普通 / 资深」等自主度档位；互动深度由**流程中的暂停与回复**体现，与「始终可对话、Agent 主动引导」一致。
-- **Web UI 当前形态**（`hagoku_web/`）：**固定侧栏/顶栏视图切换**（项目、分析、报告、知识、事件等），**不再使用 dockview 可拖拽多 Tab**。分析页：**「开始分析」**进入流程；**流水线状态** + **对话气泡**承载 Agent 消息；用户通过 **WebSocket `respond`** 提交回复。报告页：**成功 run** 默认 HTML **双轨**（要点速览 / 数据与完整证据）；**强制级护栏未通过**的 run **不**交付正式双轨 HTML，但可在**按 run** 视图中阅读 `GUARDRAILS_BLOCKED.md` 等说明（与「统计护栏」产品原则一致；手动与回归步骤见 `docs/DEVELOPMENT.md`「测试方法」）。
+- **Web UI 当前形态**（`hagoku_web/`）：**固定侧栏/顶栏视图切换**（项目、分析、报告、知识、事件等），**不再使用 dockview 可拖拽多 Tab**。分析页：**「开始分析」**进入流程；**流水线状态** + **对话气泡**承载 Agent 消息；用户通过 **WebSocket `respond`** 提交回复。报告页：**成功 run** 默认 HTML **双轨**（要点速览 / 数据与完整证据）；**强制级护栏未通过**的 run **不**交付正式双轨 HTML，但可在**按 run** 视图中阅读 `GUARDRAILS_BLOCKED.md` 等说明（与「统计护栏」产品原则一致；手动与回归步骤见 `docs/DEVELOPMENT.md`「测试方法」）。**报告导出**：用户在报告页打开 HTML 后，用浏览器 **另存为** / **打印为 PDF** 保存到自选路径即可；**设置页不提供**「项目数据目录」编辑项。项目文件默认落在 `~/.hagoku/projects/`（可用环境变量 `HAGOKYU_PROJECT_DIR` 整体迁移根目录，见 `DEV.md` / `.env.example`，改后须重启 `hagoku-api`）。**设置页**：默认只填一套 LLM 与单一「模型名称」；**「高级设置」**折叠内可用技术用语配置可选的 `HAGOKYU_LLM_MODEL_QUICK`（与 `MODEL`/`MODEL_DEEP` 仍为同一网关）。**知识库页**：`hagoku/kb/_registry.yaml` 所列条目可点进阅读完整 Markdown 正文（`GET /api/kb/content`）。
 
 #### 互动与成长：原则优先级与验收（P0）
 

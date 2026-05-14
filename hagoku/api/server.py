@@ -48,9 +48,14 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
-# ── 项目目录约定（与 Orchestrator 保持一致）──────────────────
+# ── 项目目录（与 `HaGoKuConfig.output.project_dir` / `HAGOKYU_PROJECT_DIR` 一致）────
 def _projects_root() -> Path:
-    return Path(os.path.expanduser("~/.hagoku/projects"))
+    try:
+        from hagoku.config import HaGoKuConfig
+
+        return HaGoKuConfig.load().output.project_dir
+    except Exception:
+        return Path(os.path.expanduser("~/.hagoku/projects"))
 
 
 # ── GET /api/projects — 列出所有项目名 ──────────────────────
@@ -169,39 +174,42 @@ async def get_config():
         m = (cfg.llm.model or "").strip()
         mq_eff = ((cfg.llm.model_quick or m) or "").strip() or m
         md_eff = ((cfg.llm.model_deep or m) or "").strip() or m
+        main_eff = m or md_eff
+        sub_display = "" if mq_eff == main_eff else mq_eff
         return {
             "llm": {
                 "base_url": cfg.llm.base_url or "",
-                "model": m,
+                "main_model": main_eff,
+                "sub_model": sub_display,
+                "model": main_eff,
                 "model_quick": mq_eff,
                 "model_deep": md_eff,
                 "api_key_configured": api_key_configured,
             },
-            "projects_root": str(_projects_root()),
         }
     except Exception:
         return {
             "llm": {
                 "base_url": "",
+                "main_model": "",
+                "sub_model": "",
                 "model": "",
                 "model_quick": "",
                 "model_deep": "",
                 "api_key_configured": False,
             },
-            "projects_root": str(_projects_root()),
         }
 
 
 class LlmConfigBody(BaseModel):
-    """OpenAI 兼容推理服务三项 + 可选双模；写入 ~/.hagoku/.env 对应 HAGOKYU_LLM_*。"""
+    """OpenAI 兼容服务：网址 + 密钥 + 模型名称 + 可选「前面几步」另一模型名；写入 ~/.hagoku/.env。"""
 
     model_config = ConfigDict(protected_namespaces=())
 
     base_url: str
-    model: str
+    main_model: str
     api_key: str = ""
-    model_quick: str = ""
-    model_deep: str = ""
+    sub_model: str = ""
 
 
 @app.post("/api/config/llm")
@@ -209,26 +217,30 @@ async def post_llm_config(req: LlmConfigBody):
     """
     将 LLM 连接参数写入 ~/.hagoku/.env（仅本机开发场景；生产环境应加鉴权或禁用）。
     已运行的 hagoku-api 进程仍使用旧环境变量，需重启后生效。
+    模型名称写入 HAGOKYU_LLM_MODEL 与 HAGOKYU_LLM_MODEL_DEEP；可选的「前面几步」模型名
+    写入 HAGOKYU_LLM_MODEL_QUICK（留空则与上面相同）。
     """
     path = _hagoku_dotenv_path()
     base_url = req.base_url.strip()
-    model = req.model.strip()
-    if not base_url or not model:
-        raise HTTPException(status_code=400, detail="网址和主模型名字不能为空")
+    main = req.main_model.strip()
+    sub = req.sub_model.strip() or main
+    if not base_url or not main:
+        raise HTTPException(status_code=400, detail="网址和模型名称不能为空")
     try:
         _dotenv_set(path, "HAGOKYU_LLM_BASE_URL", base_url)
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL", model)
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL", main)
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", main)
+        _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", sub)
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKYU_LLM_API_KEY", req.api_key.strip())
-        mq = req.model_quick.strip() or model
-        md = req.model_deep.strip() or model
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", mq)
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", md)
         from dotenv import dotenv_values
 
         vals = dotenv_values(path) or {}
         akv = str(vals.get("HAGOKYU_LLM_API_KEY") or "").strip()
         api_key_configured = bool(akv and akv.lower() != "none")
+        mq_eff = str(vals.get("HAGOKYU_LLM_MODEL_QUICK") or sub).strip() or main
+        md_eff = str(vals.get("HAGOKYU_LLM_MODEL_DEEP") or main).strip() or main
+        sub_display = "" if mq_eff == main else mq_eff
     except HTTPException:
         raise
     except Exception as exc:
@@ -239,9 +251,11 @@ async def post_llm_config(req: LlmConfigBody):
         "hint": "已经存到本机配置文件。请重新启动一次后端（运行 hagoku-api 的那个窗口关掉再开），新设置才会用在分析里。",
         "llm": {
             "base_url": str(vals.get("HAGOKYU_LLM_BASE_URL") or base_url),
-            "model": str(vals.get("HAGOKYU_LLM_MODEL") or model),
-            "model_quick": str(vals.get("HAGOKYU_LLM_MODEL_QUICK") or ""),
-            "model_deep": str(vals.get("HAGOKYU_LLM_MODEL_DEEP") or ""),
+            "main_model": main,
+            "sub_model": sub_display,
+            "model": main,
+            "model_quick": mq_eff,
+            "model_deep": md_eff,
             "api_key_configured": api_key_configured,
         },
     }
@@ -520,18 +534,96 @@ async def upload_project_file(project_name: str, file: UploadFile = File(...)):
 
 
 # ── GET /api/kb — 全局学术知识库（kb/_registry.yaml） ───────
-@app.get("/api/kb")
-async def list_kb():
+def _kb_registry_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "kb" / "_registry.yaml"
+
+
+def _kb_load_registry_entries() -> list[dict]:
     import yaml
 
-    registry = Path(__file__).resolve().parent.parent / "kb" / "_registry.yaml"
+    registry = _kb_registry_path()
     if not registry.exists():
-        return {"entries": []}
+        return []
     try:
-        data = yaml.safe_load(registry.read_text(encoding="utf-8"))
-        return {"entries": data.get("entries", [])}
+        data = yaml.safe_load(registry.read_text(encoding="utf-8")) or {}
+        return list(data.get("entries", []))
     except Exception:
-        return {"entries": []}
+        return []
+
+
+def _kb_strip_frontmatter(raw: str) -> str:
+    if raw.startswith("---"):
+        parts = raw.split("---", 2)
+        if len(parts) >= 3:
+            return parts[2].strip()
+    return raw.strip()
+
+
+@app.get("/api/kb")
+async def list_kb():
+    return {"entries": _kb_load_registry_entries()}
+
+
+@app.get("/api/kb/content")
+async def get_kb_content(filename: str):
+    """返回注册表内某条 Markdown 的正文（转 HTML），供知识库详情页展示。"""
+    import html as html_stdlib
+    import re
+
+    fn = (filename or "").strip().replace("\\", "/")
+    if not fn or fn.startswith("/") or ".." in fn.split("/"):
+        raise HTTPException(400, "Invalid filename")
+
+    entries = _kb_load_registry_entries()
+    allowed = {str(e.get("filename", "")).replace("\\", "/") for e in entries if e.get("filename")}
+    if fn not in allowed:
+        raise HTTPException(404, "Unknown knowledge file")
+
+    kb_root = Path(__file__).resolve().parent.parent / "kb"
+    path = (kb_root / fn).resolve()
+    kb_resolved = kb_root.resolve()
+    if not str(path).startswith(str(kb_resolved)) or not path.is_file():
+        raise HTTPException(404, "File not found")
+
+    raw = path.read_text(encoding="utf-8")
+    body = _kb_strip_frontmatter(raw)
+    meta = next((e for e in entries if str(e.get("filename", "")).replace("\\", "/") == fn), {})
+
+    try:
+        import markdown as md_module
+
+        try:
+            html = md_module.markdown(
+                body,
+                extensions=[
+                    "markdown.extensions.tables",
+                    "markdown.extensions.fenced_code",
+                    "markdown.extensions.nl2br",
+                ],
+            )
+        except Exception:
+            # 个别正文触发扩展异常时降级，避免 500
+            html = (
+                '<pre class="kb-detail-html whitespace-pre-wrap break-words">'
+                f"{html_stdlib.escape(body)}</pre>"
+            )
+    except ImportError:
+        # 未 pip install markdown 时避免 500，降级为转义纯文本（表格等不渲染）
+        html = (
+            '<pre class="kb-detail-html whitespace-pre-wrap break-words">'
+            f"{html_stdlib.escape(body)}</pre>"
+        )
+
+    html = re.sub(r"(?i)<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+
+    return {
+        "filename": fn,
+        "title": meta.get("title", ""),
+        "category": meta.get("category", ""),
+        "tags": meta.get("tags", []) or [],
+        "summary": meta.get("summary", ""),
+        "html": html,
+    }
 
 
 @app.websocket("/ws")

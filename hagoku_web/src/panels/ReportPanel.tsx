@@ -101,6 +101,9 @@ export default function ReportPanel() {
       <PanelHeader title="报告" />
 
       <div className="px-3 py-2 border-b border-app-border bg-app-bg-secondary shrink-0">
+        <p className="text-ui-xs text-app-text-muted leading-relaxed mb-2">
+          打开报告链接后，用浏览器的<strong>另存为</strong>（或打印为 PDF）即可保存到你想放的文件夹；无需在设置里选输出路径。
+        </p>
         <div className="text-ui-xs text-app-text-muted mb-1">查看项目</div>
         <div className="relative" ref={dropdownRef}>
           <button

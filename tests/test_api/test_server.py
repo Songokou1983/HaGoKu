@@ -138,7 +138,7 @@ class TestKanbanTasksEndpoint:
 class TestConfigEndpoints:
     """GET /api/config、POST /api/config/llm"""
 
-    def test_get_config_has_llm_and_projects_root(self):
+    def test_get_config_has_llm(self):
         from fastapi.testclient import TestClient
 
         client = TestClient(app)
@@ -147,12 +147,13 @@ class TestConfigEndpoints:
         body = r.json()
         assert "llm" in body
         assert "base_url" in body["llm"]
+        assert "main_model" in body["llm"]
+        assert "sub_model" in body["llm"]
         assert "model" in body["llm"]
         assert "model_quick" in body["llm"]
         assert "model_deep" in body["llm"]
         assert "api_key_configured" in body["llm"]
         assert isinstance(body["llm"]["api_key_configured"], bool)
-        assert "projects_root" in body
 
     def test_post_llm_writes_env_file(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
@@ -165,17 +166,18 @@ class TestConfigEndpoints:
             "/api/config/llm",
             json={
                 "base_url": "http://llm.test:9999/v1",
-                "model": "test-model-x",
+                "main_model": "test-model-x",
                 "api_key": "sk-test-secret",
-                "model_quick": "",
-                "model_deep": "",
+                "sub_model": "",
             },
         )
         assert r.status_code == 200
         data = r.json()
         assert data["ok"] is True
         assert data["llm"]["base_url"] == "http://llm.test:9999/v1"
+        assert data["llm"]["main_model"] == "test-model-x"
         assert data["llm"]["model"] == "test-model-x"
+        assert data["llm"]["sub_model"] == ""
         assert data["llm"]["api_key_configured"] is True
         text = env_file.read_text(encoding="utf-8")
         assert "HAGOKYU_LLM_BASE_URL" in text
@@ -185,6 +187,37 @@ class TestConfigEndpoints:
         assert "HAGOKYU_LLM_API_KEY" in text
         assert "HAGOKYU_LLM_MODEL_QUICK" in text
         assert "HAGOKYU_LLM_MODEL_DEEP" in text
+        from dotenv import dotenv_values
+
+        v = dotenv_values(env_file) or {}
+        assert v.get("HAGOKYU_LLM_MODEL_DEEP") == "test-model-x"
+        assert v.get("HAGOKYU_LLM_MODEL_QUICK") == "test-model-x"
+
+    def test_post_llm_sub_model_writes_quick_only(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr("hagoku.api.server._hagoku_dotenv_path", lambda: env_file)
+
+        from dotenv import dotenv_values
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.post(
+            "/api/config/llm",
+            json={
+                "base_url": "http://llm.test/v1",
+                "main_model": "big-model",
+                "api_key": "",
+                "sub_model": "small-model",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["llm"]["main_model"] == "big-model"
+        assert data["llm"]["sub_model"] == "small-model"
+        v = dotenv_values(env_file) or {}
+        assert v.get("HAGOKYU_LLM_MODEL") == "big-model"
+        assert v.get("HAGOKYU_LLM_MODEL_DEEP") == "big-model"
+        assert v.get("HAGOKYU_LLM_MODEL_QUICK") == "small-model"
 
     def test_post_llm_400_when_missing_model(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
@@ -196,8 +229,45 @@ class TestConfigEndpoints:
             "/api/config/llm",
             json={
                 "base_url": "http://x/v1",
-                "model": "   ",
+                "main_model": "   ",
                 "api_key": "",
             },
         )
         assert r.status_code == 400
+
+    def test_projects_root_respects_hagokyu_project_dir(self, tmp_path, monkeypatch):
+        custom = tmp_path / "custom_projects"
+        custom.mkdir()
+        monkeypatch.setenv("HAGOKYU_PROJECT_DIR", str(custom))
+        from hagoku.api.server import _projects_root
+
+        assert _projects_root().resolve() == custom.resolve()
+
+
+class TestKbContent:
+    """GET /api/kb/content — 知识库 Markdown 正文"""
+
+    def test_kb_content_returns_html(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.get("/api/kb/content", params={"filename": "stats/ttest.md"})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["filename"] == "stats/ttest.md"
+        assert data.get("title")
+        assert "<" in data.get("html", "")
+
+    def test_kb_content_rejects_traversal(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.get("/api/kb/content", params={"filename": "../pyproject.toml"})
+        assert r.status_code in (400, 404)
+
+    def test_kb_content_unknown_file(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
+        r = client.get("/api/kb/content", params={"filename": "stats/nope.md"})
+        assert r.status_code == 404

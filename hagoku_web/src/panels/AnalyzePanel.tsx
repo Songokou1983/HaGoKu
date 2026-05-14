@@ -207,7 +207,7 @@ function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
       <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-0.5">
         <div className="font-medium text-app-text">Analyst</div>
         <div className="text-app-text-muted">
-          共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表（p 值、效应量、置信区间）；可补充说明或留空确认继续
+          共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表（p 值、效应量、置信区间）；可补充说明，或点「确认继续」进入下一步
         </div>
       </div>
       <table className="w-full text-ui-sm border-collapse min-w-[720px]">
@@ -969,13 +969,8 @@ export default function AnalyzePanel() {
     (raw: string) => {
       if (!waitingAgent) return;
       const outgoing = raw.trim();
-      const allowEmptyConfirm =
-        (Boolean(activeFieldReviewId) && waitingAgent === "scout") ||
-        (Boolean(activeCleaningReviewId) && waitingAgent === "cleaner") ||
-        (Boolean(activeAnalystReviewId) && waitingAgent === "analyst") ||
-        (gateOpen && waitingAgent === "scout");
-      if (!outgoing && !allowEmptyConfirm) return;
-      const displayBubble = outgoing || "确认";
+      if (!outgoing) return;
+      const displayBubble = outgoing;
       replySnapshotRef.current = { agent: waitingAgent, gate: gateOpen };
       const sent = send("respond", { text: outgoing });
       if (!sent) {
@@ -1008,7 +1003,7 @@ export default function AnalyzePanel() {
       setActiveAnalystReviewId(null);
       setSelectedReviewField(null);
     },
-    [send, waitingAgent, gateOpen, activeFieldReviewId, activeCleaningReviewId, activeAnalystReviewId],
+    [send, waitingAgent, gateOpen],
   );
 
   const handleReply = useCallback(() => {
@@ -1093,12 +1088,7 @@ export default function AnalyzePanel() {
   const analystReviewOpen =
     Boolean(activeAnalystReviewId) && waitingAgent === "analyst";
   const canSendReply =
-    !!waitingAgent &&
-    (replyText.trim().length > 0 ||
-      scoutFieldReviewOpen ||
-      cleanerCleaningReviewOpen ||
-      analystReviewOpen ||
-      (gateOpen && waitingAgent === "scout"));
+    !!waitingAgent && replyText.trim().length > 0;
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
@@ -1295,7 +1285,7 @@ export default function AnalyzePanel() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => submitUserReply("")}
+                    onClick={() => submitUserReply("确认继续")}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
                       bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
                   >
@@ -1308,7 +1298,7 @@ export default function AnalyzePanel() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => submitUserReply("")}
+                    onClick={() => submitUserReply("确认继续")}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
                       bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
                   >
@@ -1332,12 +1322,7 @@ export default function AnalyzePanel() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => submitUserReply("")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                  >
-                    <CheckCircle2 size={14} />
-                    确认无误
+                    onClick={() => submitUserReply("确认无误")}
                   </button>
                   <button
                     type="button"
@@ -1408,14 +1393,14 @@ export default function AnalyzePanel() {
                   }}
                   placeholder={
                     scoutFieldReviewOpen
-                      ? "补充或纠错；留空可按 Enter 或点「确认无误」"
+                      ? "补充或纠错后 Enter 发送；确认上表请点「确认无误」"
                       : cleanerCleaningReviewOpen
-                        ? "对清洗的补充说明；留空可按 Enter 或点「确认继续」"
+                        ? "对清洗的补充说明；Enter 发送；无补充请点「确认继续」"
                         : analystReviewOpen
-                          ? "对统计结果的补充或关注点；留空可按 Enter 或点「确认继续」；亦可点「同意进入报告」留下明确确认记录"
+                          ? "补充关注点后 Enter 发送；无补充请点「确认继续」，或点「同意进入报告」"
                           : gateOpen && waitingAgent === "scout"
-                            ? "可点上方按钮，或输入如「确认进清洗」「还有补充」后发送 · Shift+Enter 换行"
-                            : "输入回复，Enter 发送 · Shift+Enter 换行"
+                            ? "请点上方「确认进清洗」或「还有补充」，或输入同等含义文字后 Enter 发送 · Shift+Enter 换行"
+                            : "输入回复后 Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
                   className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
@@ -1444,14 +1429,14 @@ export default function AnalyzePanel() {
               </div>
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
-                  ? "表格行可点选高亮 · Enter /「确认无误」= 确认上表 · Shift+Enter 换行"
+                  ? "表格行可点选高亮 · 点「确认无误」确认上表 · 有文字时 Enter 发送 · Shift+Enter 换行"
                   : cleanerCleaningReviewOpen
-                    ? "Enter /「确认继续」= 进入后续步骤 · Shift+Enter 换行"
+                    ? "点「确认继续」进入后续；有补充时输入后 Enter 发送 · Shift+Enter 换行"
                     : analystReviewOpen
-                      ? "Enter /「确认继续」= 进入后续步骤 ·「同意进入报告」= 明确确认统计三要素后进入报告 · Shift+Enter 换行"
+                      ? "点「确认继续」或「同意进入报告」；有补充时输入后 Enter 发送 · Shift+Enter 换行"
                       : gateOpen && waitingAgent === "scout"
-                        ? "闸门：点按钮或输入文字后发送 · Enter 发送 · Shift+Enter 换行"
-                    : "Enter 发送 · Shift+Enter 换行"}
+                        ? "闸门：请点按钮或输入明确文字后 Enter 发送 · Shift+Enter 换行"
+                    : "有文字时 Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>
           )}

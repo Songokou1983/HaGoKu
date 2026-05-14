@@ -112,12 +112,13 @@ def test_c3_scout_user_natural_language_updates_context():
 # ─── Phase 1：Scout 多轮对齐子状态机 ───────────────────────────────────────────
 
 def test_is_scout_aligned_pure_confirm():
-    """纯确认（空字串 / ok / 好的 / 确认）→ 已对齐，不继续循环。"""
+    """显式纯确认（ok / 好的 / 确认 / 确认无误）→ 已对齐；空字串不视为确认。"""
     ctx = {"column_semantics": [{"column_name": "X", "needs_user_input": True}]}
-    assert _is_scout_aligned(ctx, "") is True
+    assert _is_scout_aligned(ctx, "") is False
     assert _is_scout_aligned(ctx, "ok") is True
     assert _is_scout_aligned(ctx, "好的") is True
     assert _is_scout_aligned(ctx, "确认") is True
+    assert _is_scout_aligned(ctx, "确认无误") is True
 
 
 def test_is_scout_aligned_all_fields_resolved():
@@ -166,8 +167,8 @@ def test_gate_cleaning_pause_payload_structure():
 
 
 def test_is_gate_confirm_pure():
-    """纯确认 / 空字串 → 闸门确认，进入下一阶段。"""
-    assert _is_gate_confirm("") is True
+    """显式纯确认 → 闸门确认；空字串不再默认进清洗。"""
+    assert _is_gate_confirm("") is False
     assert _is_gate_confirm("ok") is True
     assert _is_gate_confirm("好的") is True
     assert _is_gate_confirm("确认") is True

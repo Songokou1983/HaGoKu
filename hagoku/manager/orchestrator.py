@@ -156,7 +156,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 
 # 用户仅表示「确认」、无字段纠错时，不写 column_descriptions、不污染 query 补充段
 _SCOUT_PURE_CONFIRM_RE = re.compile(
-    r"^(确认|好的|是|没问题|对的|正确|已通过|pass|ok|okay|yes|y|thanks|thx)[\s!！。,\-\.]*$",
+    r"^(确认(?:无误|进清洗|继续)?|好的|是|没问题|对的|正确|已通过|pass|ok|okay|yes|y|thanks|thx)[\s!！。,\-\.]*$",
     re.I,
 )
 
@@ -164,7 +164,7 @@ _SCOUT_PURE_CONFIRM_RE = re.compile(
 def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
     t = (user_reply or "").strip()
     if not t:
-        return True
+        return False
     return bool(_SCOUT_PURE_CONFIRM_RE.match(t))
 
 
@@ -188,7 +188,7 @@ def gate_cleaning_pause_payload() -> dict[str, Any]:
     }
 
 
-# 闸门回复判定：纯确认 / 空 → 进下一阶段；非确认 → 回 FieldReviewLoop
+# 闸门回复判定：显式纯确认 → 进下一阶段；空字串不视为确认；非确认 → 回 FieldReviewLoop
 _GATE_SUPPLEMENT_RE = re.compile(
     r"补充|还有|改|不对|不对的|纠正|修正|更正|重新|再想想|再看看",
     re.I,
@@ -199,7 +199,7 @@ def _is_gate_confirm(user_reply: str) -> bool:
     """闸门回复是否为「确认进入下一阶段」而非「还有补充」。"""
     t = (user_reply or "").strip()
     if not t:
-        return True  # 空回车 = 确认
+        return False
     if _scout_reply_is_pure_confirm(t):
         return True
     # 含「补充 / 还有 / 改」等词 → 拒绝闸门，回 FieldReviewLoop

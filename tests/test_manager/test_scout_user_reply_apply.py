@@ -44,6 +44,8 @@ def test_pure_confirm_no_mutation():
     assert apply_scout_user_field_reply_to_context(ctx, "确认") == []
     assert ctx["column_descriptions"] == before
     assert _scout_reply_is_pure_confirm("确认")
+    assert _scout_reply_is_pure_confirm("确认无误")
+    assert _scout_reply_is_pure_confirm("") is False
 
 
 def test_empty_no_mutation():

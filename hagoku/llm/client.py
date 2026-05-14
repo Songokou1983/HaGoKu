@@ -75,6 +75,6 @@ def create_quick_client(config: Any) -> Any:
         base_url=config.llm.base_url,
         api_key=config.llm.api_key,
         temperature=config.llm.temperature,
-        max_tokens=4096,  # 快速模型用较短上下文
+        max_tokens=8192,  # 快速模型用较短上下文
     )
     return create_structured_llm_client(quick_config)

@@ -181,7 +181,10 @@ function ProjectCard({
               value={descDraft}
               onChange={(e) => setDescDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") saveDesc();
+                if (e.key === "Enter" && !e.nativeEvent.isComposing
+                  && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+                  saveDesc();
+                }
                 if (e.key === "Escape") cancelEdit();
               }}
               placeholder="一句话描述这个项目…"
@@ -356,7 +359,10 @@ export default function ProjectPanel() {
               value={newName}
               onChange={(e) => { setNewName(e.target.value); validateName(e.target.value); }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
+                if (e.key === "Enter" && !e.nativeEvent.isComposing
+                  && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+                  handleCreate();
+                }
                 if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }
               }}
               placeholder="项目名称，如 q4_sales_analysis"
@@ -377,7 +383,10 @@ export default function ProjectPanel() {
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreate();
+              if (e.key === "Enter" && !e.nativeEvent.isComposing
+                && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+                handleCreate();
+              }
               if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }
             }}
             placeholder="描述这个项目（可选）"

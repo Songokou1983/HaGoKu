@@ -1398,10 +1398,13 @@ export default function AnalyzePanel() {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (canSendReply) submitUserReply(replyText);
+                    if (e.key !== "Enter" || e.shiftKey) return;
+                    // 中文输入法用 Enter 确认候选时勿 preventDefault，否则无法上屏
+                    if (e.nativeEvent.isComposing || (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode === 229) {
+                      return;
                     }
+                    e.preventDefault();
+                    if (canSendReply) submitUserReply(replyText);
                   }}
                   placeholder={
                     scoutFieldReviewOpen

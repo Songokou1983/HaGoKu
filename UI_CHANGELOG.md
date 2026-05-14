@@ -2,6 +2,13 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-14 — 中文输入法：对话区 Enter 不打断组字
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：底部回复框 `Enter` 发送前检测 `nativeEvent.isComposing` / `keyCode === 229`，IME 选词确认时不 `preventDefault`。
+- **`InputBar.tsx`**、**`ProjectPanel.tsx`**：同类 `Enter` 逻辑同样避开组字阶段。
+
 ## 2026-05-13 — 分析页：WebSocket 进度文案不再成对重复
 
 ### 变更概要

@@ -9,6 +9,7 @@ import {
   Loader2, WifiOff, Search, Sparkles, BarChart2, FileText,
   ArrowRight, FolderOpen, Upload, ChevronDown, CheckCircle2, X,
   PlayCircle, RotateCcw, Clock, ShieldAlert, MessageSquarePlus,
+  ListChecks,
 } from "lucide-react";
 
 // ── Agent pipeline definition ─────────────────────────────────
@@ -653,6 +654,8 @@ export default function AnalyzePanel() {
   const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
   /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
   const [gateOpen, setGateOpen] = useState(false);
+  /** 强确认类按钮默认收起，用户点「我已核对」后再展示，避免与输入区误触混淆 */
+  const [pauseConfirmActionsVisible, setPauseConfirmActionsVisible] = useState(false);
   /** 最近一次 respond：WS 报错「无暂停」等时恢复等待态 */
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
 
@@ -791,6 +794,7 @@ export default function AnalyzePanel() {
 
         // 暂停点：结构化 field_review 用工作流卡片展示；message 仅作补充（不设预设 Agent 台词）
         if (d.event_type === "user_input_requested") {
+          setPauseConfirmActionsVisible(false);
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
           const fr = parseFieldReview(dataObj.field_review);
@@ -922,6 +926,8 @@ export default function AnalyzePanel() {
             setSelectedReviewField(null);
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
+            setGateOpen(false);
+            setPauseConfirmActionsVisible(false);
             setPhase("setup");
             setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
             setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
@@ -944,6 +950,8 @@ export default function AnalyzePanel() {
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
             setSelectedReviewField(null);
+            setGateOpen(false);
+            setPauseConfirmActionsVisible(false);
             setPhase("done");
           }
         }
@@ -1027,6 +1035,7 @@ export default function AnalyzePanel() {
     setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
     setGateOpen(false);
+    setPauseConfirmActionsVisible(false);
     setPhase("running");
     send("analyze", {
       data_path: dataPath,
@@ -1049,6 +1058,7 @@ export default function AnalyzePanel() {
     setActiveAnalystReviewId(null);
     setSelectedReviewField(null);
     setGateOpen(false);
+    setPauseConfirmActionsVisible(false);
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
@@ -1089,6 +1099,12 @@ export default function AnalyzePanel() {
     Boolean(activeAnalystReviewId) && waitingAgent === "analyst";
   const canSendReply =
     !!waitingAgent && replyText.trim().length > 0;
+  /** 这些暂停点含「进下一步」类强确认，先展示「已核对」再露出按钮 */
+  const pauseNeedsConfirmReveal =
+    scoutFieldReviewOpen ||
+    cleanerCleaningReviewOpen ||
+    analystReviewOpen ||
+    (gateOpen && waitingAgent === "scout");
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
@@ -1281,7 +1297,20 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
-              {(cleanerCleaningReviewOpen) && (
+              {pauseNeedsConfirmReveal && !pauseConfirmActionsVisible && (
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setPauseConfirmActionsVisible(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      border border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors"
+                  >
+                    <ListChecks size={14} />
+                    我已核对，显示确认选项
+                  </button>
+                </div>
+              )}
+              {(cleanerCleaningReviewOpen) && pauseConfirmActionsVisible && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1294,7 +1323,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {analystReviewOpen && (
+              {analystReviewOpen && pauseConfirmActionsVisible && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1320,10 +1349,17 @@ export default function AnalyzePanel() {
               )}
               {scoutFieldReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("确认无误")}
-                  </button>
+                  {pauseConfirmActionsVisible && (
+                    <button
+                      type="button"
+                      onClick={() => submitUserReply("确认无误")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                        bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                    >
+                      <CheckCircle2 size={14} />
+                      确认无误
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={appendFieldCorrection}
@@ -1354,7 +1390,7 @@ export default function AnalyzePanel() {
                   )}
                 </div>
               )}
-              {gateOpen && (
+              {gateOpen && pauseConfirmActionsVisible && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1393,13 +1429,13 @@ export default function AnalyzePanel() {
                   }}
                   placeholder={
                     scoutFieldReviewOpen
-                      ? "补充或纠错后 Enter 发送；确认上表请点「确认无误」"
+                      ? "补充或纠错后 Enter 发送；确认上表请先点「我已核对」再点「确认无误」"
                       : cleanerCleaningReviewOpen
-                        ? "对清洗的补充说明；Enter 发送；无补充请点「确认继续」"
+                        ? "对清洗的补充说明；Enter 发送；无补充请先点「我已核对」再点「确认继续」"
                         : analystReviewOpen
-                          ? "补充关注点后 Enter 发送；无补充请点「确认继续」，或点「同意进入报告」"
+                          ? "补充关注点后 Enter 发送；无补充请先点「我已核对」再操作下方确认按钮"
                           : gateOpen && waitingAgent === "scout"
-                            ? "请点上方「确认进清洗」或「还有补充」，或输入同等含义文字后 Enter 发送 · Shift+Enter 换行"
+                            ? "请先点「我已核对」再选「确认进清洗」或「还有补充」，也可手输同义句后 Enter · Shift+Enter 换行"
                             : "输入回复后 Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
@@ -1429,13 +1465,13 @@ export default function AnalyzePanel() {
               </div>
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
-                  ? "表格行可点选高亮 · 点「确认无误」确认上表 · 有文字时 Enter 发送 · Shift+Enter 换行"
+                  ? "表格行可点选 · 先点「我已核对」再点「确认无误」· 有文字时 Enter 发送 · Shift+Enter 换行"
                   : cleanerCleaningReviewOpen
-                    ? "点「确认继续」进入后续；有补充时输入后 Enter 发送 · Shift+Enter 换行"
+                    ? "先点「我已核对」再点「确认继续」；有补充时输入后 Enter 发送 · Shift+Enter 换行"
                     : analystReviewOpen
-                      ? "点「确认继续」或「同意进入报告」；有补充时输入后 Enter 发送 · Shift+Enter 换行"
+                      ? "先点「我已核对」再选确认类按钮；有补充时输入后 Enter 发送 · Shift+Enter 换行"
                       : gateOpen && waitingAgent === "scout"
-                        ? "闸门：请点按钮或输入明确文字后 Enter 发送 · Shift+Enter 换行"
+                        ? "闸门：先点「我已核对」再选进清洗或还有补充 · Shift+Enter 换行"
                     : "有文字时 Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>

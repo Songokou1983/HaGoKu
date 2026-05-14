@@ -2,6 +2,12 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+## 2026-05-13 — 分析页：WebSocket 进度文案不再成对重复
+
+### 变更概要
+
+- **`hagoku/api/ws_handler.py`**：去掉每个 WS 连接上对 `bridge.on_event` 的 `subscribe`/`unsubscribe`。共享 Orchestrator 创建时已订阅一次；重复订阅会导致一次 `emit` 多次 `broadcast`，分析页「理解你的问题」「正在加载数据」等每条出现两遍。
+
 ## 2026-05-13 — 知识库：条目点进查看正文
 
 ### 变更概要

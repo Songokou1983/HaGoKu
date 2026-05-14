@@ -155,9 +155,9 @@ async def ws_handler(ws: WebSocket) -> None:
     bridge.add_client(ws)
     bridge.set_loop(asyncio.get_running_loop())  # 捕获正确的 event loop
 
-    bus = get_bus()
-    if bus is not None:
-        bus.subscribe(bridge.on_event)
+    # EventBus → WSBridge 仅在创建共享 Orchestrator 时订阅一次（见 _run_analysis）。
+    # 切勿在每个 WebSocket 连接上再次 subscribe(bridge.on_event)，否则同一回调在
+    # subscribers 中出现多条，一次 emit 会多次 broadcast，前端进度文案会成对重复。
 
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu connected", "version": "0.1.0"})
@@ -259,9 +259,4 @@ async def ws_handler(ws: WebSocket) -> None:
     except Exception:
         logger.info("WebSocket closed", exc_info=True)
     finally:
-        if bus is not None:
-            try:
-                bus.unsubscribe(bridge.on_event)
-            except Exception:
-                pass
         bridge.remove_client(ws)

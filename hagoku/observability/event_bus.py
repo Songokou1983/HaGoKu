@@ -40,7 +40,9 @@ class EventBus:
         return event
 
     def subscribe(self, callback: Callable[[Event], None]) -> None:
-        """订阅事件"""
+        """订阅事件（同一 callback 只注册一次，避免 WS 桥接等重复订阅）"""
+        if callback in self.subscribers:
+            return
         self.subscribers.append(callback)
 
     def unsubscribe(self, callback: Callable[[Event], None]) -> None:

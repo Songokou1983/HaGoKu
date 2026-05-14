@@ -50,6 +50,10 @@ def set_orchestrator(orchestrator: "Orchestrator") -> None:
     global _shared_orchestrator
     _shared_orchestrator = orchestrator
     set_bus(orchestrator.event_bus)
+    # lifespan / main 会先于首次 analyze 创建 Orchestrator；须在此挂上 WSBridge，
+    # 否则 _run_analysis 因「实例已存在」跳过 subscribe，前端收不到任何事件。
+    bridge = WSBridge.get()
+    orchestrator.event_bus.subscribe(bridge.on_event)
 
 
 # ── Serialization ─────────────────────────────────────────────
@@ -78,9 +82,10 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> 
         config = HaGoKuConfig.load()
         _shared_orchestrator = Orchestrator(config)
         set_bus(_shared_orchestrator.event_bus)
-        # 订阅 WSBridge（uvicorn reload 子进程中 main() 未执行时的兜底）
-        bridge = WSBridge.get()
-        _shared_orchestrator.event_bus.subscribe(bridge.on_event)
+
+    # 无论实例是本函数新建还是 lifespan 已创建，都保证 EventBus → WSBridge（subscribe 幂等）
+    bridge = WSBridge.get()
+    _shared_orchestrator.event_bus.subscribe(bridge.on_event)
 
     # 运行分析（同步阻塞，在 executor 线程中执行）
     _shared_orchestrator.run(

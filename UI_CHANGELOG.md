@@ -7,6 +7,7 @@
 ### 变更概要
 
 - **`hagoku/api/ws_handler.py`**：去掉每个 WS 连接上对 `bridge.on_event` 的 `subscribe`/`unsubscribe`。共享 Orchestrator 创建时已订阅一次；重复订阅会导致一次 `emit` 多次 `broadcast`，分析页「理解你的问题」「正在加载数据」等每条出现两遍。
+- **回归修复**：`lifespan` / `main` 会先 `set_orchestrator` 再接受分析请求，此时 `_run_analysis` 不再走「新建实例」分支，原先仅靠该分支 `subscribe`，去掉按连接订阅后事件总线未接 WSBridge，表现为点了「开始分析」无推送。现改为在 **`set_orchestrator` 与每次 `_run_analysis`** 中幂等 `subscribe`；**`EventBus.subscribe`** 对同一 callback 只注册一次。
 
 ## 2026-05-13 — 知识库：条目点进查看正文
 

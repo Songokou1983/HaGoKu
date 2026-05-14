@@ -380,24 +380,14 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
   );
 }
 
-function FieldReviewTable({
-  data,
-  interactive = false,
-  selectedField = null,
-  onSelectField,
-}: {
-  data: FieldReviewPayload;
-  interactive?: boolean;
-  selectedField?: string | null;
-  onSelectField?: (fieldName: string) => void;
-}) {
+function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
   return (
     <div
       className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
-        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · Scout 字段核对
+        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · Scout 字段核对（在下方用自然语言补充或确认即可）
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
         <caption className="sr-only">字段理解核对</caption>
@@ -421,29 +411,10 @@ function FieldReviewTable({
         </thead>
         <tbody>
           {data.rows.map((r, i) => {
-            const sel = interactive && selectedField === r.field_name;
             return (
               <tr
                 key={`${r.field_name}-${i}`}
-                tabIndex={interactive ? 0 : undefined}
-                onClick={
-                  interactive && onSelectField
-                    ? () => onSelectField(r.field_name)
-                    : undefined
-                }
-                onKeyDown={
-                  interactive && onSelectField
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onSelectField(r.field_name);
-                        }
-                      }
-                    : undefined
-                }
-                className={`border-b border-app-border last:border-b-0
-                  ${interactive ? "cursor-pointer motion-safe:transition-colors motion-safe:duration-150 hover:bg-app-accent/5" : ""}
-                  ${sel ? "bg-app-accent/10 ring-1 ring-inset ring-app-accent/35" : ""}`}
+                className="border-b border-app-border last:border-b-0"
               >
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
                   {r.field_name}
@@ -541,17 +512,7 @@ function PipelineBar({ states, elapsed }: {
 }
 
 // ── Conversation feed ─────────────────────────────────────────
-function ConvoFeed({
-  messages,
-  activeFieldReviewId,
-  selectedReviewField,
-  onSelectReviewField,
-}: {
-  messages: ConvoMessage[];
-  activeFieldReviewId: string | null;
-  selectedReviewField: string | null;
-  onSelectReviewField: (fieldName: string) => void;
-}) {
+function ConvoFeed({ messages }: { messages: ConvoMessage[] }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -561,16 +522,10 @@ function ConvoFeed({
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
       {messages.map((m) => {
         if (m.role === "workflow" && m.fieldReview) {
-          const live = Boolean(activeFieldReviewId && m.id === activeFieldReviewId);
           return (
             <div key={m.id} className="flex justify-start w-full">
               <div className="w-full max-w-full">
-                <FieldReviewTable
-                  data={m.fieldReview}
-                  interactive={live}
-                  selectedField={live ? selectedReviewField : null}
-                  onSelectField={live ? onSelectReviewField : undefined}
-                />
+                <FieldReviewTable data={m.fieldReview} />
               </div>
             </div>
           );
@@ -651,7 +606,6 @@ export default function AnalyzePanel() {
   const [activeFieldReviewRevision, setActiveFieldReviewRevision] = useState<number>(-1);
   const [activeCleaningReviewId, setActiveCleaningReviewId] = useState<string | null>(null);
   const [activeAnalystReviewId, setActiveAnalystReviewId] = useState<string | null>(null);
-  const [selectedReviewField, setSelectedReviewField] = useState<string | null>(null);
   /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
   const [gateOpen, setGateOpen] = useState(false);
   /** 强确认类按钮默认收起，用户点「我已核对」后再展示，避免与输入区误触混淆 */
@@ -827,12 +781,10 @@ export default function AnalyzePanel() {
               ]);
             }
             setActiveFieldReviewRevision(incomingRevision);
-            setSelectedReviewField(null);
           } else if (!gatePayload) {
             // 仅「闸门」暂停不带 field_review：保留上一张卡片 id/revision，供下一轮原地更新
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
-            setSelectedReviewField(null);
           }
           if (cr) {
             const cid = uid();
@@ -923,7 +875,6 @@ export default function AnalyzePanel() {
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
-            setSelectedReviewField(null);
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
             setGateOpen(false);
@@ -949,7 +900,6 @@ export default function AnalyzePanel() {
             setActiveFieldReviewRevision(-1);
             setActiveCleaningReviewId(null);
             setActiveAnalystReviewId(null);
-            setSelectedReviewField(null);
             setGateOpen(false);
             setPauseConfirmActionsVisible(false);
             setPhase("done");
@@ -958,20 +908,6 @@ export default function AnalyzePanel() {
       }
     }
   }, [batch]);
-
-  const onSelectReviewField = useCallback((name: string) => {
-    setSelectedReviewField((s) => (s === name ? null : name));
-  }, []);
-
-  const appendFieldCorrection = useCallback(() => {
-    if (!selectedReviewField) return;
-    setReplyText((prev) => {
-      const line = `${selectedReviewField}=`;
-      if (!prev.trim()) return line;
-      return `${prev.replace(/\s+$/, "")}\n${line}`;
-    });
-    requestAnimationFrame(() => replyInputRef.current?.focus());
-  }, [selectedReviewField]);
 
   const submitUserReply = useCallback(
     (raw: string) => {
@@ -1006,10 +942,10 @@ export default function AnalyzePanel() {
       setReplyText("");
       setWaitingAgent(null);
       setGateOpen(false);
+      setPauseConfirmActionsVisible(false);
       // 多轮对齐：不清 activeFieldReviewId；保留用于下一轮更新同一卡片
       setActiveCleaningReviewId(null);
       setActiveAnalystReviewId(null);
-      setSelectedReviewField(null);
     },
     [send, waitingAgent, gateOpen],
   );
@@ -1033,7 +969,6 @@ export default function AnalyzePanel() {
     setActiveFieldReviewRevision(-1);
     setActiveCleaningReviewId(null);
     setActiveAnalystReviewId(null);
-    setSelectedReviewField(null);
     setGateOpen(false);
     setPauseConfirmActionsVisible(false);
     setPhase("running");
@@ -1056,7 +991,6 @@ export default function AnalyzePanel() {
     setActiveFieldReviewRevision(-1);
     setActiveCleaningReviewId(null);
     setActiveAnalystReviewId(null);
-    setSelectedReviewField(null);
     setGateOpen(false);
     setPauseConfirmActionsVisible(false);
     setResultReportUrl(null);
@@ -1287,12 +1221,7 @@ export default function AnalyzePanel() {
           )}
 
           {/* Conversation feed */}
-          <ConvoFeed
-            messages={messages}
-            activeFieldReviewId={activeFieldReviewId}
-            selectedReviewField={selectedReviewField}
-            onSelectReviewField={onSelectReviewField}
-          />
+          <ConvoFeed messages={messages} />
 
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
@@ -1347,47 +1276,17 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {scoutFieldReviewOpen && (
+              {scoutFieldReviewOpen && pauseConfirmActionsVisible && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  {pauseConfirmActionsVisible && (
-                    <button
-                      type="button"
-                      onClick={() => submitUserReply("确认无误")}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                        bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                    >
-                      <CheckCircle2 size={14} />
-                      确认无误
-                    </button>
-                  )}
                   <button
                     type="button"
-                    onClick={appendFieldCorrection}
-                    disabled={!selectedReviewField}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
-                      ${selectedReviewField
-                        ? "border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors"
-                        : "border-app-border text-app-text-muted cursor-not-allowed opacity-60"}`}
+                    onClick={() => submitUserReply("确认无误")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
                   >
-                    <MessageSquarePlus size={14} />
-                    插入纠错
+                    <CheckCircle2 size={14} />
+                    确认无误
                   </button>
-                  {selectedReviewField && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReviewField(null)}
-                      className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-ui-xs text-app-text-muted
-                        hover:text-app-text cursor-pointer motion-safe:transition-colors"
-                    >
-                      <X size={14} />
-                      取消点选
-                    </button>
-                  )}
-                  {selectedReviewField && (
-                    <span className="text-ui-xs text-app-text-muted">
-                      已点选字段：<span className="font-mono text-app-text">{selectedReviewField}</span>
-                    </span>
-                  )}
                 </div>
               )}
               {gateOpen && pauseConfirmActionsVisible && (
@@ -1429,7 +1328,7 @@ export default function AnalyzePanel() {
                   }}
                   placeholder={
                     scoutFieldReviewOpen
-                      ? "补充或纠错后 Enter 发送；确认上表请先点「我已核对」再点「确认无误」"
+                      ? "用自然语言说明哪些字段理解不对、应如何理解；确认上表请先点「我已核对」再点「确认无误」"
                       : cleanerCleaningReviewOpen
                         ? "对清洗的补充说明；Enter 发送；无补充请先点「我已核对」再点「确认继续」"
                         : analystReviewOpen
@@ -1442,7 +1341,7 @@ export default function AnalyzePanel() {
                   className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
                              text-ui-sm text-app-text placeholder-app-text-muted resize-none
                              focus:outline-none transition-colors
-                             ${selectedReviewField && scoutFieldReviewOpen
+                             ${scoutFieldReviewOpen
                                ? "border-app-accent ring-1 ring-app-accent/30"
                                : cleanerCleaningReviewOpen
                                  ? "border-app-success/50 ring-1 ring-app-success/20"
@@ -1465,7 +1364,7 @@ export default function AnalyzePanel() {
               </div>
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
-                  ? "表格行可点选 · 先点「我已核对」再点「确认无误」· 有文字时 Enter 发送 · Shift+Enter 换行"
+                  ? "在输入框用自然语言说明即可，Scout 会带入后续步骤 · 先点「我已核对」再点「确认无误」· Enter 发送 · Shift+Enter 换行"
                   : cleanerCleaningReviewOpen
                     ? "先点「我已核对」再点「确认继续」；有补充时输入后 Enter 发送 · Shift+Enter 换行"
                     : analystReviewOpen

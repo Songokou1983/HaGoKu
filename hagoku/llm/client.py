@@ -25,27 +25,61 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
         ImportError: 如果 openai 未安装
     """
     try:
+        import httpx
         import instructor
+        import os
         from openai import OpenAI
 
-        client = instructor.from_openai(
-            OpenAI(
+        # 清除 ALL_PROXY 等环境变量，避免 socks:// 等不被 httpx 支持的 scheme
+        # 导致 ValueError（LLM 服务为本地/内网访问，无需代理）
+        _proxy_keys = [
+            "ALL_PROXY", "all_proxy",
+            "HTTP_PROXY", "http_proxy",
+            "HTTPS_PROXY", "https_proxy",
+        ]
+        _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
+
+        try:
+            client = instructor.from_openai(
+                OpenAI(
+                    base_url=llm_config.base_url,
+                    api_key=llm_config.api_key,
+                    timeout=120.0,
+                ),
+                mode=instructor.Mode.JSON,
+            )
+            return client
+        finally:
+            # 恢复环境变量
+            for k, v in _saved.items():
+                if v is not None:
+                    os.environ[k] = v
+                elif k in os.environ:
+                    del os.environ[k]
+    except ImportError:
+        # 退回原始 OpenAI（无结构化输出）
+        import os
+        from openai import OpenAI
+
+        _proxy_keys = [
+            "ALL_PROXY", "all_proxy",
+            "HTTP_PROXY", "http_proxy",
+            "HTTPS_PROXY", "https_proxy",
+        ]
+        _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
+
+        try:
+            return OpenAI(
                 base_url=llm_config.base_url,
                 api_key=llm_config.api_key,
                 timeout=120.0,
-            ),
-            mode=instructor.Mode.JSON,
-        )
-        return client
-    except ImportError:
-        # 退回原始 OpenAI（无结构化输出）
-        from openai import OpenAI
-
-        return OpenAI(
-            base_url=llm_config.base_url,
-            api_key=llm_config.api_key,
-            timeout=120.0,
-        )
+            )
+        finally:
+            for k, v in _saved.items():
+                if v is not None:
+                    os.environ[k] = v
+                elif k in os.environ:
+                    del os.environ[k]
 
 
 def create_deep_client(config: Any) -> Any:

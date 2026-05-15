@@ -42,6 +42,9 @@ class EventType(Enum):
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
 
+    # System 事件
+    HEALTH_CHECK = "health_check"
+
 
 @dataclass
 class Event:

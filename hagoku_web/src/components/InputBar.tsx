@@ -29,7 +29,8 @@ export function InputBar({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key !== "Enter" || e.shiftKey) return;
-      if (e.nativeEvent.isComposing || (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode === 229) {
+      const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+      if (e.nativeEvent.isComposing || ne.keyCode === 229) {
         return;
       }
       e.preventDefault();

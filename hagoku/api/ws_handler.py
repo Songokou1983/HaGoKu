@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -136,14 +137,26 @@ class WSBridge:
         self._clients.pop(str(id(ws)), None)
 
     async def broadcast(self, msg: dict):
-        dead: list[str] = []
-        for key, ws in list(self._clients.items()):
+        """向所有 WS 客户端推送；单客户端慢/死连接不得阻塞整条事件循环（否则 HTTP 也会卡死）。"""
+        if not self._clients:
+            return
+        pairs = list(self._clients.items())
+        timeout = float(os.environ.get("HAGOKU_WS_SEND_TIMEOUT", "5"))
+
+        async def _send_one(key: str, ws: WebSocket) -> str | None:
             try:
-                await ws.send_json(msg)
+                await asyncio.wait_for(ws.send_json(msg), timeout=timeout)
+                return None
             except Exception:
-                dead.append(key)
-        for key in dead:
-            self._clients.pop(key, None)
+                return key
+
+        results = await asyncio.gather(
+            *(_send_one(k, w) for k, w in pairs),
+            return_exceptions=True,
+        )
+        for r in results:
+            if isinstance(r, str) and r:
+                self._clients.pop(r, None)
 
     def on_event(self, event: Event):
         """Callback subscribed to EventBus, called from orchestrator thread."""

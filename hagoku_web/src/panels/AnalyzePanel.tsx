@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { guardrailsRunCompletedInfo } from "../utils/wsGuardrails";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
@@ -33,16 +33,23 @@ function resolveAgentKey(raw: string): AgentKey | null {
   return null;
 }
 
+function parsePauseInteractionRevision(data: Record<string, unknown>): number | null {
+  const v = data.interaction_revision;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 // ── Types ────────────────────────────────────────────────────
 type SessionPhase = "setup" | "running" | "done";
 
-/** Scout 字段核对：后端 `field_review` 结构化载荷（非 Agent 台词） */
+/** Scout 字段核对：后端 `field_review`（列：字段名称 / 中文名称 / 含义理解） */
 interface FieldReviewPayload {
   n_rows: number | string;
   n_cols: number;
   rows: Array<{
     field_name: string;
-    understanding_name: string;
+    /** 中文名称：column_display_names 显式命名；无则占位「—」 */
+    chinese_name: string;
+    /** AI 对字段的含义理解（column_descriptions 或语义兜底） */
     meaning: string;
     needs_attention?: boolean;
   }>;
@@ -59,7 +66,7 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
     const r = item as Record<string, unknown>;
     rows.push({
       field_name: String(r.field_name ?? ""),
-      understanding_name: String(r.understanding_name ?? "—"),
+      chinese_name: String(r.chinese_name ?? "—"),
       meaning: String(r.meaning ?? ""),
       needs_attention: Boolean(r.needs_attention),
     });
@@ -387,10 +394,10 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
-        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · Scout 字段核对（在下方用自然语言补充或确认即可）
+        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · 三列：字段名称 / 中文名称 / 含义理解
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">字段理解核对</caption>
+        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解</caption>
         <colgroup>
           <col className="w-[18%]" />
           <col className="w-[22%]" />
@@ -399,10 +406,10 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
         <thead>
           <tr className="bg-app-bg border-b border-app-border">
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              字段名
+              字段名称
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              理解名称
+              中文名称
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
               含义理解
@@ -421,9 +428,9 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                 </td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">
                   {r.needs_attention ? (
-                    <span className="text-app-warning">{r.understanding_name}</span>
+                    <span className="text-app-warning">{r.chinese_name}</span>
                   ) : (
-                    r.understanding_name
+                    r.chinese_name
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-left align-top break-words">{r.meaning}</td>
@@ -461,6 +468,41 @@ function fmtSize(bytes: number): string {
 
 let _idCtr = 0;
 function uid() { return `m-${++_idCtr}-${Date.now()}`; }
+
+/** 由后端 `user_input_received` 结构化字段拼一条事实行（随状态变化，非固定话术库） */
+function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
+  const pendingRaw = inner.columns_still_needing_input;
+  const pending = Array.isArray(pendingRaw)
+    ? pendingRaw.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "").map((x) => (x as string).trim())
+    : [];
+  const appliedRaw = inner.applied_field_updates;
+  const lines = Array.isArray(appliedRaw)
+    ? appliedRaw.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "")
+    : [];
+  const count =
+    typeof inner.parse_applied_count === "number" && Number.isFinite(inner.parse_applied_count)
+      ? inner.parse_applied_count
+      : lines.length;
+  const pure = typeof inner.pure_confirm === "boolean" ? inner.pure_confirm : false;
+  const pStr = pending.length > 0 ? pending.join(", ") : "（无）";
+  if (lines.length > 0 || count > 0) {
+    const joined = lines.length > 0 ? lines.join("；") : "—";
+    return `字段理解写入 ${count} 条: ${joined}。仍需确认的列: ${pStr}`;
+  }
+  if (pure) {
+    return `本轮判定为仅确认（未新增解析行）。仍需确认的列: ${pStr}`;
+  }
+  const rep = typeof inner.reply === "string" ? inner.reply : "";
+  return `本轮 0 条写入（回复 ${rep.length} 字）。仍需确认的列: ${pStr}`;
+}
+
+function formatStageProceedFactLine(label: "清洗" | "统计", inner: Record<string, unknown>): string {
+  const ok = Boolean(inner.proceed_accepted);
+  const rev = inner.interaction_revision;
+  const revStr = typeof rev === "number" && Number.isFinite(rev) ? String(rev) : "?";
+  const r = typeof inner.reply === "string" ? inner.reply : "";
+  return `${label}确认 · revision ${revStr}: proceed=${ok} · 回复长度 ${r.length}`;
+}
 
 // ── Pipeline status bar ───────────────────────────────────────
 function PipelineBar({ states, elapsed }: {
@@ -512,18 +554,35 @@ function PipelineBar({ states, elapsed }: {
 }
 
 // ── Conversation feed ─────────────────────────────────────────
-function ConvoFeed({ messages }: { messages: ConvoMessage[] }) {
+function ConvoFeed({
+  messages,
+  scrollFieldTableId,
+  scrollFieldTableNonce,
+}: {
+  messages: ConvoMessage[];
+  scrollFieldTableId: string | null;
+  scrollFieldTableNonce: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
+  useLayoutEffect(() => {
+    if (!scrollFieldTableId || scrollFieldTableNonce === 0) return;
+    const root = containerRef.current;
+    if (!root) return;
+    const el = root.querySelector(`[data-workflow-id="${scrollFieldTableId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [scrollFieldTableId, scrollFieldTableNonce]);
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+    <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
       {messages.map((m) => {
         if (m.role === "workflow" && m.fieldReview) {
           return (
-            <div key={m.id} className="flex justify-start w-full">
+            <div key={m.id} data-workflow-id={m.id} className="flex justify-start w-full">
               <div className="w-full max-w-full">
                 <FieldReviewTable data={m.fieldReview} />
               </div>
@@ -605,11 +664,15 @@ export default function AnalyzePanel() {
   /** 多轮对齐：当前 field_review 卡片的 interaction_revision（递增时更新同一卡片） */
   const [activeFieldReviewRevision, setActiveFieldReviewRevision] = useState<number>(-1);
   const [activeCleaningReviewId, setActiveCleaningReviewId] = useState<string | null>(null);
+  const [activeCleaningReviewRevision, setActiveCleaningReviewRevision] = useState<number>(-1);
   const [activeAnalystReviewId, setActiveAnalystReviewId] = useState<string | null>(null);
+  const [activeAnalystReviewRevision, setActiveAnalystReviewRevision] = useState<number>(-1);
   /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
   const [gateOpen, setGateOpen] = useState(false);
   /** 强确认类按钮默认收起，用户点「我已核对」后再展示，避免与输入区误触混淆 */
   const [pauseConfirmActionsVisible, setPauseConfirmActionsVisible] = useState(false);
+  /** 字段表刷新时递增，驱动对话区把该卡片滚入视口（原地更新时 length 不变，仅靠 length 不会滚） */
+  const [fieldReviewScrollNonce, setFieldReviewScrollNonce] = useState(0);
   /** 最近一次 respond：WS 报错「无暂停」等时恢复等待态 */
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
 
@@ -746,7 +809,7 @@ export default function AnalyzePanel() {
           }
         }
 
-        // 暂停点：结构化 field_review 用工作流卡片展示；message 仅作补充（不设预设 Agent 台词）
+        // 暂停点：结构化 field_review 用工作流卡片展示；message 由编排层填入简短 Agent 气泡（可与卡片并存）
         if (d.event_type === "user_input_requested") {
           setPauseConfirmActionsVisible(false);
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
@@ -754,12 +817,18 @@ export default function AnalyzePanel() {
           const fr = parseFieldReview(dataObj.field_review);
           const cr = parseCleaningReview(dataObj.cleaning_review);
           const ar = parseAnalystReview(dataObj.analyst_review);
-          const incomingRevision = typeof dataObj.interaction_revision === "number"
-            ? (dataObj.interaction_revision as number)
-            : Infinity; // 无 revision 时当新卡片处理（向后兼容）
+          const incRev = parsePauseInteractionRevision(dataObj);
+          const incomingRevision = incRev !== null ? incRev : Infinity;
           if (fr) {
-            // 多轮对齐：revision 递增 → 更新同一张卡片（不堆叠）
-            if (incomingRevision > activeFieldReviewRevision && activeFieldReviewId !== null) {
+            // 多轮对齐：同 revision 或递增 revision → 更新同一张卡片（不堆叠）；revision 未变时
+            // 常见于闸门「还有补充」回到字段表（后端已递增 revision；此处兜底同号原地更新）。
+            const patchInPlace =
+              activeFieldReviewId !== null
+              && (
+                incomingRevision === activeFieldReviewRevision
+                || incomingRevision > activeFieldReviewRevision
+              );
+            if (patchInPlace) {
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m,
@@ -781,56 +850,100 @@ export default function AnalyzePanel() {
               ]);
             }
             setActiveFieldReviewRevision(incomingRevision);
-          } else if (!gatePayload) {
-            // 仅「闸门」暂停不带 field_review：保留上一张卡片 id/revision，供下一轮原地更新
+            setFieldReviewScrollNonce((n) => n + 1);
+          } else if (!gatePayload && !cr && !ar) {
+            // 非结构化暂停（且无清洗/分析卡）时才清 field_review 追踪；避免 Cleaner 暂停误清
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
+            setFieldReviewScrollNonce(0);
           }
           if (cr) {
-            const cid = uid();
-            setActiveCleaningReviewId(cid);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: cid,
-                role: "workflow",
-                text: "",
-                timestamp: d.timestamp,
-                cleaningReview: cr,
-              },
-            ]);
+            const patchCleaning =
+              activeCleaningReviewId !== null
+              && incRev !== null
+              && (
+                incRev === activeCleaningReviewRevision
+                || incRev > activeCleaningReviewRevision
+              );
+            if (patchCleaning) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === activeCleaningReviewId
+                    ? { ...m, cleaningReview: cr, timestamp: d.timestamp }
+                    : m,
+                ),
+              );
+            } else {
+              const cid = uid();
+              setActiveCleaningReviewId(cid);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: cid,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  cleaningReview: cr,
+                },
+              ]);
+            }
+            if (incRev !== null) setActiveCleaningReviewRevision(incRev);
           } else {
             setActiveCleaningReviewId(null);
+            setActiveCleaningReviewRevision(-1);
           }
           if (ar) {
-            const aid = uid();
-            setActiveAnalystReviewId(aid);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: aid,
-                role: "workflow",
-                text: "",
-                timestamp: d.timestamp,
-                analystReview: ar,
-              },
-            ]);
+            const patchAnalyst =
+              activeAnalystReviewId !== null
+              && incRev !== null
+              && (
+                incRev === activeAnalystReviewRevision
+                || incRev > activeAnalystReviewRevision
+              );
+            if (patchAnalyst) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === activeAnalystReviewId
+                    ? { ...m, analystReview: ar, timestamp: d.timestamp }
+                    : m,
+                ),
+              );
+            } else {
+              const aid = uid();
+              setActiveAnalystReviewId(aid);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: aid,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  analystReview: ar,
+                },
+              ]);
+            }
+            if (incRev !== null) setActiveAnalystReviewRevision(incRev);
           } else {
             setActiveAnalystReviewId(null);
+            setActiveAnalystReviewRevision(-1);
           }
           // 跨阶段闸门：gate_to_cleaning（Scout 对齐后、进入清洗前）
           if (gatePayload) {
-            const gateId = uid();
             setGateOpen(true);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: gateId,
-                role: "workflow",
-                text: gatePayload.prompt ?? "是否进入下一阶段？",
-                timestamp: d.timestamp,
-              },
-            ]);
+            const prompt =
+              typeof gatePayload.prompt === "string" ? gatePayload.prompt.trim() : "";
+            if (prompt) {
+              const gateId = uid();
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: gateId,
+                  role: "workflow",
+                  text: prompt,
+                  timestamp: d.timestamp,
+                },
+              ]);
+            }
           } else {
             setGateOpen(false);
           }
@@ -848,23 +961,51 @@ export default function AnalyzePanel() {
           setTimeout(() => replyInputRef.current?.focus(), 100);
         }
 
-        // Scout：用户原话已被后端写入 column_descriptions 时，给一条事实性系统提示（非拟人 Agent）
-        if (d.event_type === "user_input_received" && agentKey === "scout") {
+        if (d.event_type === "user_input_received") {
           const inner = (d.data ?? {}) as Record<string, unknown>;
-          const applied = inner.applied_field_updates;
-          if (Array.isArray(applied) && applied.length > 0) {
-            const lines = applied.filter((x): x is string => typeof x === "string");
-            if (lines.length > 0) {
+          if (agentKey === "scout") {
+            const hasNewFields =
+              "parse_applied_count" in inner
+              || "columns_still_needing_input" in inner
+              || "pure_confirm" in inner;
+            let line = "";
+            if (hasNewFields) {
+              line = formatScoutUserInputFactLine(inner);
+            } else {
+              const applied = inner.applied_field_updates;
+              const lines = Array.isArray(applied)
+                ? applied.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "")
+                : [];
+              if (lines.length > 0) {
+                line = `字段理解写入: ${lines.join("；")}`;
+              }
+            }
+            if (line) {
               setMessages((prev) => [
                 ...prev,
-                {
-                  id: uid(),
-                  role: "system",
-                  text: `已把你的说明写入字段理解（后续步骤会使用）：${lines.join("；")}`,
-                  timestamp: d.timestamp,
-                },
+                { id: uid(), role: "system", text: line, timestamp: d.timestamp },
               ]);
             }
+          } else if (agentKey === "cleaner" && typeof inner.proceed_accepted === "boolean") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "system",
+                text: formatStageProceedFactLine("清洗", inner),
+                timestamp: d.timestamp,
+              },
+            ]);
+          } else if (agentKey === "analyst" && typeof inner.proceed_accepted === "boolean") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "system",
+                text: formatStageProceedFactLine("统计", inner),
+                timestamp: d.timestamp,
+              },
+            ]);
           }
         }
 
@@ -875,8 +1016,11 @@ export default function AnalyzePanel() {
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
+            setFieldReviewScrollNonce(0);
             setActiveCleaningReviewId(null);
+            setActiveCleaningReviewRevision(-1);
             setActiveAnalystReviewId(null);
+            setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
             setPauseConfirmActionsVisible(false);
             setPhase("setup");
@@ -898,8 +1042,11 @@ export default function AnalyzePanel() {
             setWaitingAgent(null);
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
+            setFieldReviewScrollNonce(0);
             setActiveCleaningReviewId(null);
+            setActiveCleaningReviewRevision(-1);
             setActiveAnalystReviewId(null);
+            setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
             setPauseConfirmActionsVisible(false);
             setPhase("done");
@@ -930,22 +1077,22 @@ export default function AnalyzePanel() {
         ]);
         return;
       }
+      const ts = new Date().toISOString();
       setMessages((prev) => [
         ...prev,
         {
           id: uid(),
           role: "user",
           text: displayBubble,
-          timestamp: new Date().toISOString(),
+          timestamp: ts,
         },
       ]);
       setReplyText("");
       setWaitingAgent(null);
       setGateOpen(false);
       setPauseConfirmActionsVisible(false);
-      // 多轮对齐：不清 activeFieldReviewId；保留用于下一轮更新同一卡片
-      setActiveCleaningReviewId(null);
-      setActiveAnalystReviewId(null);
+      // 多轮对齐：不清 activeFieldReviewId / activeCleaningReviewId / activeAnalystReviewId；
+      // 下一轮 user_input_requested 依赖同一 id 原地更新工作流卡片。
     },
     [send, waitingAgent, gateOpen],
   );
@@ -967,8 +1114,11 @@ export default function AnalyzePanel() {
     setReplyText("");
     setActiveFieldReviewId(null);
     setActiveFieldReviewRevision(-1);
+    setFieldReviewScrollNonce(0);
     setActiveCleaningReviewId(null);
+    setActiveCleaningReviewRevision(-1);
     setActiveAnalystReviewId(null);
+    setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
     setPauseConfirmActionsVisible(false);
     setPhase("running");
@@ -989,8 +1139,11 @@ export default function AnalyzePanel() {
     setReplyText("");
     setActiveFieldReviewId(null);
     setActiveFieldReviewRevision(-1);
+    setFieldReviewScrollNonce(0);
     setActiveCleaningReviewId(null);
+    setActiveCleaningReviewRevision(-1);
     setActiveAnalystReviewId(null);
+    setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
     setPauseConfirmActionsVisible(false);
     setResultReportUrl(null);
@@ -1041,7 +1194,7 @@ export default function AnalyzePanel() {
     (gateOpen && waitingAgent === "scout");
 
   return (
-    <div className="h-full flex flex-col bg-app-bg text-app-text">
+    <div className="h-full flex flex-col bg-app-bg text-app-text relative">
       <PanelHeader title="分析">
         {phase !== "setup" && (
           <button
@@ -1221,7 +1374,11 @@ export default function AnalyzePanel() {
           )}
 
           {/* Conversation feed */}
-          <ConvoFeed messages={messages} />
+          <ConvoFeed
+            messages={messages}
+            scrollFieldTableId={activeFieldReviewId}
+            scrollFieldTableNonce={fieldReviewScrollNonce}
+          />
 
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
@@ -1320,7 +1477,8 @@ export default function AnalyzePanel() {
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" || e.shiftKey) return;
                     // 中文输入法用 Enter 确认候选时勿 preventDefault，否则无法上屏
-                    if (e.nativeEvent.isComposing || (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode === 229) {
+                    const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+                    if (e.nativeEvent.isComposing || ne.keyCode === 229) {
                       return;
                     }
                     e.preventDefault();
@@ -1330,9 +1488,9 @@ export default function AnalyzePanel() {
                     scoutFieldReviewOpen
                       ? "用自然语言说明哪些字段理解不对、应如何理解；确认上表请先点「我已核对」再点「确认无误」"
                       : cleanerCleaningReviewOpen
-                        ? "对清洗的补充说明；Enter 发送；无补充请先点「我已核对」再点「确认继续」"
+                        ? "对清洗的补充说明；Enter 发送。仅说明不会自动放行，认可以表内容请先点「我已核对」再点「确认继续」"
                         : analystReviewOpen
-                          ? "补充关注点后 Enter 发送；无补充请先点「我已核对」再操作下方确认按钮"
+                          ? "补充关注点后 Enter 发送；仅说明不会自动放行，进入报告请先点「我已核对」再点「确认继续」或「同意进入报告」"
                           : gateOpen && waitingAgent === "scout"
                             ? "请先点「我已核对」再选「确认进清洗」或「还有补充」，也可手输同义句后 Enter · Shift+Enter 换行"
                             : "输入回复后 Enter 发送 · Shift+Enter 换行"

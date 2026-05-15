@@ -663,7 +663,12 @@ def main():
     orchestrator = Orchestrator(config)
     set_orchestrator(orchestrator)
 
-    uvicorn.run("hagoku.api.server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "hagoku.api.server:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=os.environ.get("HAGOKU_API_RELOAD", "").strip().lower() in ("1", "true", "yes"),
+    )
 
 
 if __name__ == "__main__":

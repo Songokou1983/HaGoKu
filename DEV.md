@@ -50,8 +50,8 @@ print(result['status'])
 # 启动后端 API（FastAPI + WebSocket）
 hagoku-api   # http://localhost:8000
 
-# 启动前端开发服务器（React + Vite）
-cd hagoku_web && npm run dev   # http://localhost:5173
+# 启动前端开发服务器（React + Vite；仅本地需要时）
+cd hagoku_web && npm run dev   # 终端会打印实际地址，常见为 http://localhost:5173
 ```
 
 ## 本地 UI 快照（`UI_CHANGELOG_backup_*`）
@@ -85,6 +85,22 @@ python3 scripts/clean_ui_changelog_backups.py --older-than 30 --apply
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |
+| `HAGOKU_API_RELOAD` | `python -m hagoku.api.server` 是否启用 uvicorn **热重载**（`yes`/`1`/`true`）；默认关闭，避免监视子进程带来的偶发僵死 | 关闭 |
+| `HAGOKU_WS_SEND_TIMEOUT` | WebSocket 向单个客户端 `send_json` 的超时秒数（防止慢连接拖死整条 HTTP 事件循环） | `5` |
+
+### LLM 前置健康检查
+
+pipeline 启动前执行 `health.check_llm_health()`（`hagoku/tools/health.py`），5 项检查：
+
+| # | 检查项 | 失败级别 |
+|---|--------|---------|
+| 1 | HTTP 可达性 (`GET /models`) | **阻塞** |
+| 2 | 模型存在 (`model`/`model_quick`/`model_deep` 在列表中) | **阻塞** |
+| 3 | Chat completion 可用性 (发 `"ping"` 验证返回) | **阻塞** |
+| 4 | Token 速率 (< 5 tok/s → 警告) | 警告 |
+| 5 | JSON mode 可用性 | 警告 |
+
+LLM 不可用 → pipeline 不启动，前端显示明确错误。不存在硬编码兜底。
 
 ## 提交规范
 

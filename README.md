@@ -48,7 +48,7 @@ pip install -e .
 hagoku-api       # FastAPI 服务：http://localhost:8000
 
 # 6. 启动前端（新终端）
-cd hagoku_web && npm run dev   # React 开发服务器：http://localhost:5173
+cd hagoku_web && npm run dev   # 终端会打印实际地址，常见为 http://localhost:5173
 ```
 
 > ⚠️ **代码更新后**：执行 `pip install -e . --force-reinstall` 强制重装，使最新代码生效。
@@ -59,6 +59,8 @@ cd hagoku_web && npm run dev   # React 开发服务器：http://localhost:5173
 
 ### Web UI（推荐）
 
+> 在个人电脑上使用 Web 界面时，需要先在本机启动 **`hagoku-api`**（API，默认 **8000** 端口），再启动前端；浏览器地址以终端里 Vite 打印为准。
+
 ```bash
 # 终端 1：启动后端
 hagoku-api
@@ -66,7 +68,7 @@ hagoku-api
 
 # 终端 2：启动前端
 cd hagoku_web && npm run dev
-# React 开发服务器运行在 http://localhost:5173
+# 终端会打印实际地址，常见为 http://localhost:5173
 ```
 
 **UI 功能：** 固定导航切换视图 → **项目**（卡片式项目库、描述与数据文件）→ **分析**（「开始分析」、流水线进度、Agent 对话气泡与暂停回复、WebSocket 实时事件）→ **报告**（按项目列出 HTML 等）→ **知识**（方法类知识库，**条目可点进查看完整正文**）→ **事件**（原始事件流）
@@ -146,7 +148,7 @@ hagoku project run "Q1销售分析" -q "哪个渠道roi最高"
 | 命令 | 用途 |
 |------|------|
 | `hagoku-api` | 启动后端 API（http://localhost:8000） |
-| `cd hagoku_web && npm run dev` | 启动前端开发服务器（http://localhost:5173） |
+| `cd hagoku_web && npm run dev` | 本地启动前端（终端会打印地址，常见含 `localhost:5173`） |
 
 ---
 

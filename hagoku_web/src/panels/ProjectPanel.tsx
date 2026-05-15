@@ -181,8 +181,8 @@ function ProjectCard({
               value={descDraft}
               onChange={(e) => setDescDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing
-                  && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+                const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+                if (e.key === "Enter" && !e.nativeEvent.isComposing && ne.keyCode !== 229) {
                   saveDesc();
                 }
                 if (e.key === "Escape") cancelEdit();
@@ -241,7 +241,6 @@ export default function ProjectPanel() {
   const projects = useWorkspaceStore((s) => s.projects);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
   const agents = useWorkspaceStore((s) => s.agents);
-  const setProjects = useWorkspaceStore((s) => s.setProjects);
   const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
 
   const [newName, setNewName] = useState("");
@@ -251,25 +250,53 @@ export default function ProjectPanel() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** 避免并发 / 重入 fetch 时前一个请求的 finally 把 loading 提前清掉，或后序请求被盖住一直转圈 */
+  const projectsFetchRef = useRef<AbortController | null>(null);
 
   useAgentStatusSync();
   const batch = useBatchEvents();
 
   const loadProjects = useCallback(() => {
+    projectsFetchRef.current?.abort();
+    const ac = new AbortController();
+    projectsFetchRef.current = ac;
     setLoading(true);
     setLoadError(null);
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((d) => setProjects(d.projects as string[]))
-      .catch(() =>
-        setLoadError(
-          "无法连接后端：请在另一终端运行 hagoku-api（默认 http://127.0.0.1:8000），再刷新本页。",
-        ),
-      )
-      .finally(() => setLoading(false));
-  }, [setProjects]);
+    const tid = window.setTimeout(() => ac.abort(), 15_000);
 
-  useEffect(() => { loadProjects(); }, [loadProjects]);
+    fetch("/api/projects", { signal: ac.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (projectsFetchRef.current !== ac) return;
+        const list = d?.projects;
+        useWorkspaceStore.getState().setProjects(Array.isArray(list) ? (list as string[]) : []);
+      })
+      .catch((e: unknown) => {
+        if (projectsFetchRef.current !== ac) return;
+        const aborted =
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && e.name === "AbortError");
+        setLoadError(
+          aborted
+            ? "HaGoKu 分析服务连接超时，请确认服务已启动后刷新页面。"
+            : "无法连接到 HaGoKu 分析服务，请确认服务已启动后刷新页面。",
+        );
+      })
+      .finally(() => {
+        window.clearTimeout(tid);
+        if (projectsFetchRef.current === ac) {
+          projectsFetchRef.current = null;
+          setLoading(false);
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   // Refresh cards after a run completes (run count changes)
   useEffect(() => {
@@ -359,8 +386,8 @@ export default function ProjectPanel() {
               value={newName}
               onChange={(e) => { setNewName(e.target.value); validateName(e.target.value); }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing
-                  && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+                const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+                if (e.key === "Enter" && !e.nativeEvent.isComposing && ne.keyCode !== 229) {
                   handleCreate();
                 }
                 if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }
@@ -383,8 +410,8 @@ export default function ProjectPanel() {
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing
-                && (e.nativeEvent as KeyboardEvent & { keyCode?: number }).keyCode !== 229) {
+              const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+              if (e.key === "Enter" && !e.nativeEvent.isComposing && ne.keyCode !== 229) {
                 handleCreate();
               }
               if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }

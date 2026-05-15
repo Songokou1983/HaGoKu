@@ -36,9 +36,15 @@
 | 缺口 | 说明 |
 |------|------|
 | **Phase 0 未书面闭合** | 口语「对齐」词表仍主要依赖 `_scout_reply_is_pure_confirm` 正则；**「可以了」等**若未写入词表，在仍有 `needs_user_input=True` 时会**继续循环暂停**（用户须改字段或发已支持短句，或点「重置分析」）。产品应在 Phase 0 定稿词表或改为显式 intent。 |
-| **Cleaner / Analyst 多轮（§4-C）** | 未做；仍为单次 `_pause_and_wait`。 |
 
-**结论**：Scout **阶段内多轮对齐**与**跨阶段闸门**已具备工程形态；**Cleaner / Analyst 同构**仍按 §5 Phase 3 推进。
+**结论**：Scout **阶段内多轮对齐**、**跨阶段闸门**与 **Cleaner / Analyst 阶段内多轮 + 显式放行（C5）**已具备工程形态；Phase 0 词表书面闭合等仍按 §5 推进。
+
+### 2.3 Cleaner / Analyst（同路径）
+
+| 维度 | 之前 | **2026-05-14 起（已落地）** |
+|------|------|------------------------------|
+| 阶段内暂停 | 单次 `_pause_and_wait` | **多轮**：`while` 内反复暂停直至放行短语；载荷含递增 **`interaction_revision`** |
+| 出阶段条件 | 任意一句回复即继续 | **须** `_cleaner_reply_accepts_proceed` / `_analyst_reply_accepts_proceed`（契约 **C5**） |
 
 ---
 
@@ -100,7 +106,7 @@ stateDiagram-v2
 
 ### C. Cleaner / Analyst 同构（P2）
 
-- [ ] Cleaner、Analyst 暂停点按同一「子状态机 + 再展示」模式收敛（清洗表、统计表已结构化，补「多轮对齐」与「进下一阶段闸门」）。
+- [x] Cleaner、Analyst 暂停点按同一「子状态机 + 再展示 + 显式放行」模式收敛（载荷 `interaction_revision`；Web 原地更新工作流表；契约 **C5**）。
 
 ### D. 文档与契约（横切）
 

@@ -8,13 +8,16 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 const root = document.getElementById("root");
 if (!root) throw new Error("root element missing");
 
-// Start shared WebSocket connection early
-initWebSocket();
+try {
+  initWebSocket();
+} catch (e) {
+  console.error("[HaGoKu] initWebSocket failed", e);
+}
 
 createRoot(root).render(
   <StrictMode>
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </StrictMode>
+  </StrictMode>,
 );

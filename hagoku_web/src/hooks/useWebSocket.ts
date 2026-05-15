@@ -18,7 +18,7 @@ const BASE_URL = defaultWsUrl();
 
 /** Global singleton WebSocket + listener registry */
 let _ws: WebSocket | null = null;
-let _status: ConnectionStatus = "connecting";
+let _status: ConnectionStatus = "idle";
 let _reconnectAttempt = 0;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _pingTimer: ReturnType<typeof setInterval> | null = null;

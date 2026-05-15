@@ -31,9 +31,14 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 | 🧹 **Cleaner** | 数据清洗但不破坏信息 | 缺失机制检验（MCAR/MAR/MNAR）、异常区分（测量误差 vs 真实极端值）、清洗影响评估 |
 | 📊 **Analyst** | 回答用户问题的统计分析核心 | 假设检验、回归分析、效应量报告、模型诊断、因果推断（V3） |
 | 📝 **Reporter** | 把分析结果变成人话报告 | 双轨输出（吸引力层 + 核心价值层）、模板渲染、结论措辞 |
-| 📋 **Scribe** | 后台记录 + 仲裁 + 知识调度 | 确定性逻辑引擎，零 LLM 调用。看板管理、记忆维护、知识库检索与注入、字段决策仲裁、Agent 经验更新 |
+| 📋 **Scribe** | 后台记录 + 仲裁 + 知识调度 + **LLM 兜底恢复** | 看板管理、记忆维护、知识库检索与注入、字段决策仲裁、Agent 经验更新；LLM 调用仅用于**兜底恢复**（Scout 字段描述不完整时补全遗漏列），不做分析决策。 |
 
-> **Scribe 不是 Agent。** 它是确定性逻辑引擎，不调用 LLM，不做分析决策。它负责后台基础设施：记录所有 Agent 的输入输出、管理项目看板、维护双记忆系统、从知识库中检索相关内容注入 Agent prompt、在 Scout/Analyst 对字段角色有分歧时仲裁。
+> **Scribe 是确定性 + LLM 兜底的混合引擎。** 正常路径走确定性逻辑（记录、仲裁、知识调度），不走 LLM。仅在 Agent 产出不完整时（如 Scout 字段描述遗漏列），Scribe 用 LLM 补全——这是**缺什么补什么**的兜底策略，不是重新分析。Scribe 不会在兜底路径上再次交互用户，失败直接上报 Orchestrator。
+
+**错误处理原则**：
+- **LLM 不可用 → 前置拦截**：pipeline 启动前执行 `health.check_llm_health()`，API 不通/模型不存在/chat completion 失败 → 立即返回错误，不进入任何 Agent。
+- **LLM 产出不完整 → Scribe LLM 接管**：Scout 字段描述缺列时，Scribe 用 LLM 补全遗漏列（非硬编码规则）。
+- **零行硬编码兜底**：项目中不存在 `if-else` 拼凑的 fallback 字符串，所有兜底走 LLM。
 
 **协作机制**：Scribe 是 Agent 的"外骨骼"——Agent 负责分析决策，Scribe 负责给 Agent 装备知识（注入 prompt）、记录决策（写入 memory）、仲裁分歧（字段角色）。Agent 不用主动查知识库，Scribe 在启动前注入。
 
@@ -60,9 +65,9 @@ HaGoKu 不是 chatbot，是**多 Agent 协作分析引擎**。核心角色：
 1. **禁止**：用长模板、客服腔或「假装 Agent 已读完你的心声」的固定话术，顶替**可核验的事实**或**对用户输入的结构化响应**。  
 2. **优先**：暂停点先交付 **结构化事实**（字段表、清洗操作表、护栏摘要等）；若需一句 LLM 摘要，须 **短、可关、且不重复表格已表达的信息**。  
 3. **用户输入必须进状态**：自然语言纠错须写入 `context` / 后续可见载体（见 `apply_scout_user_field_reply_to_context` 等），**不得**仅拼进 `query` 却不在数据上下文中留下痕迹。  
-4. **成长（当前工程含义）**：指 **Scribe 双记忆 + knowledge 注入 + 看板/context 可追溯** 的累积；**不等于**「前端拟人聊天人设」。若产品上要 **同阶段多轮对话式成长**，须在编排层引入 **显式状态图/循环边**（对比 `PROJECT.md` 中 TradingAgents / LangGraph 对照节），单线程「每暂停点只 `respond` 一次」不足以单独承载该愿景——**这是编排形态缺口，不是 PROJECT 写错**。
+4. **成长（当前工程含义）**：指 **Scribe 双记忆 + knowledge 注入 + 看板/context 可追溯** 的累积；**不等于**「前端拟人聊天人设」。**阶段内多轮（已落地主线）**：Scout / Cleaner / Analyst 在各自子循环内可多次 `user_input_requested` + `respond`（`interaction_revision` 递增；Cleaner/Analyst 须**显式放行**才进入下一阶段），直至对齐或放行。若还要更宽的「任意轮次自由对话式成长」状态图，再引入 LangGraph 类编排（见 TradingAgents 对照节）——那是**能力扩展**，不是本条 P0 写错。
 
-**可执行契约**：`docs/AGENT_INTERACTION_CONTRACT.md`（含 **C4** Scout 多轮）；**回归测试**：`tests/test_product/test_agent_interaction_contract.py`（`pytest` 必须通过）。**多轮对齐式互动**的分期方案、**已落地 / 仍缺口**对照见 **`docs/INTERACTION_MULTITURN_PLAN.md`**（与上条「编排形态缺口」衔接；路线图勾选见 `DEVELOPMENT_PROMPT.md` 阶段 2.8）。
+**可执行契约**：`docs/AGENT_INTERACTION_CONTRACT.md`（**C4** Scout 多轮 + **C5** Cleaner/Analyst 放行）；**回归测试**：`tests/test_product/test_agent_interaction_contract.py`（`pytest` 必须通过）。**多轮对齐式互动**的分期方案、**已落地 / 仍缺口**对照见 **`docs/INTERACTION_MULTITURN_PLAN.md`**（路线图勾选见 `DEVELOPMENT_PROMPT.md` 阶段 2.8）。
 
 ---
 

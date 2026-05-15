@@ -26,28 +26,6 @@ from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as scout_knowledge
 
-# 与编排层展示过滤一致：不把「列名（统计类型）」当业务含义
-_TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
-    "分类型",
-    "数值型",
-    "时间型",
-    "文本型",
-    "布尔型",
-    "标识符",
-    "未知类型",
-)
-
-
-def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
-    d = (desc or "").strip()
-    c = (col or "").strip()
-    if not d or d == c:
-        return False
-    for suf in _TYPE_ECHO_SUFFIXES:
-        for o, cl in (("（", "）"), ("(", ")")):
-            if d == f"{c}{o}{suf}{cl}":
-                return False
-    return True
 
 
 def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
@@ -105,35 +83,6 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
     return ", ".join(parts)
 
 
-def _heuristic_column_business_hint(column_name: str, sample_preview: str) -> str:
-    """LLM 未给出可用描述时的短保底：不出现统计类型词。"""
-    c = (column_name or "").strip()
-    low = c.lower()
-    sp = (sample_preview or "").strip().replace("\n", " ")
-    if len(sp) > 56:
-        sp = sp[:53] + "…"
-
-    parts: list[str] = []
-    if low == "bu" or re.search(r"\bbu\b", low):
-        parts.append("多为事业部/业务线")
-    if "code" in low:
-        parts.append("多为业务或主数据编码")
-    if "period" in low:
-        parts.append("多为账期/统计周期")
-    if re.search(r"\binc\d*\b", low) or low.startswith("inc"):
-        parts.append("多为收入侧指标")
-    if re.search(r"\bbos\d*\b", low) or low.startswith("bos"):
-        parts.append("多为支出/成本侧指标")
-    if "date" in low or "time" in low:
-        parts.append("多为日期/时间")
-    if "id" in low and len(low) <= 32:
-        parts.append("多为标识字段")
-
-    core = "；".join(parts) if parts else "含义待你确认"
-
-    if sp:
-        return f"{core}（例：{sp}）"
-    return core
 
 
 class ScoutAgent(InteractionMixin):
@@ -324,6 +273,11 @@ class ScoutAgent(InteractionMixin):
             # 推断字段语义
             column_semantics = self._infer_all_semantics(df, query)
 
+            # per-column 数据画像（用于 LLM 生成描述 + 前端展示）
+            column_profiles: dict[str, Any] = {}
+            for col in df.columns:
+                column_profiles[col] = self._profile_column(df[col], col, df)
+
             # 构建上下文
             context = {
                 "data_path": data_path,
@@ -334,6 +288,7 @@ class ScoutAgent(InteractionMixin):
                 "missing_summary": profile.get("missing_summary", {}),
                 "warnings": [],
                 "column_descriptions": {},
+                "_column_profiles": column_profiles,
             }
 
             # 应用项目记忆
@@ -343,7 +298,7 @@ class ScoutAgent(InteractionMixin):
             # 派生字段角色
             self._derive_roles(context)
 
-            # 生成字段描述
+            # 生成字段描述（增强版：融入分布数据）
             self._generate_field_descriptions(context, df)
 
             # 提取样本值（用于 LLM 理解字段含义）
@@ -472,137 +427,221 @@ class ScoutAgent(InteractionMixin):
         )
 
     def _infer_all_semantics(self, df: pd.DataFrame, query: str) -> list[dict]:
-        """推断所有列的语义"""
-        semantics = []
-        target_keywords = self._extract_target_keywords(query)
+        """推断所有列的语义 — 全部通过 LLM 结构化输出完成，零硬编码"""
+        from ...llm.client import create_quick_client
 
+        # 构建每列的 profile 摘要
+        column_list: list[dict] = []
         for col in df.columns:
-            sem = self._infer_column(df[col], col, target_keywords)
-            semantics.append(sem)
+            p = self._profile_column(df[col], col, df)
+            sample_vals = _format_sample_preview(df, col, limit=5)
+            column_list.append({
+                "name": col,
+                "dtype": p.get("dtype", "object"),
+                "n_unique": p.get("n_unique", 0),
+                "n_total": p.get("n_total", 0),
+                "null_pct": p.get("null_pct", 0),
+                "sample_values": sample_vals if sample_vals else "",
+                "top_values": p.get("top_values", {}),
+                "min": p.get("min"),
+                "max": p.get("max"),
+                "mean": p.get("mean"),
+                "median": p.get("median"),
+                "q25": p.get("q25"),
+                "q75": p.get("q75"),
+                "distribution_shape": p.get("distribution_shape", ""),
+                "time_min": p.get("time_min"),
+                "time_max": p.get("time_max"),
+            })
+
+        payload = {
+            "user_query": query,
+            "n_rows": len(df),
+            "n_cols": len(df.columns),
+            "columns": column_list,
+        }
+
+        system_prompt = (
+            "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
+            "输出一个 JSON 对象，字段 `columns` 为数组，每项包含：\n"
+            "  - name: 原始列名（照抄）\n"
+            "  - inferred_type: 数据类型（id/datetime/boolean/numeric/categorical/text/unknown）\n"
+            "  - confidence: 置信度 0~1\n"
+            "  - evidence: 推断依据（自然语言简述，如「100%唯一整数值」、「日期格式」、「0/1 二元值」）\n"
+            "  - needs_user_input: 是否需要用户确认（boolean）\n"
+            "  - suggested_role: 建议角色（identifier/time_index/binary_feature/target/numeric_feature/categorical_feature/text_feature/unknown）\n"
+            "  - display_name: 简短中文业务名称（≤6 字，面向业务同事，如「收入」「用户ID」）\n"
+            "  - description: 业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）\n"
+            "\n"
+            "此外，在根级别同时输出：\n"
+            "  - target_columns: 从用户问题中识别到的目标变量候选列表（列名数组）\n"
+            "  - feature_columns: 特征变量列表（列名数组）\n"
+            "  - target_keywords_from_query: 从用户问题中提取的目标关键词（字符串数组，拆成中文词组，如 ['收入','销售额']）\n"
+            "\n"
+            "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
+        )
+
+        client = create_quick_client(self.llm_config)
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model_quick or self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{__import__('json').dumps(payload, ensure_ascii=False, default=str)}\n```"},
+                ],
+                temperature=0.0,
+                max_tokens=4096,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"Scout 字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
+
+        import json as _json
+        try:
+            result = _json.loads(raw)
+        except _json.JSONDecodeError:
+            try:
+                cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+                result = _json.loads(cleaned)
+            except _json.JSONDecodeError as e:
+                raise ValueError(f"Scout LLM 返回的格式无法解析为 JSON。原始内容前 500 字: {raw[:500]}") from e
+
+        columns_out = result.get("columns") or result.get("column_semantics") or []
+        if not columns_out:
+            raise ValueError("Scout LLM 未返回任何列推断结果（`columns` 字段为空）")
+
+        # 标准化输出到 Scout 代码库期望的格式
+        semantics: list[dict] = []
+        for item in columns_out:
+            col_name = item.get("name", "")
+            if not col_name or col_name not in set(df.columns):
+                continue
+            semantics.append({
+                "column_name": col_name,
+                "inferred_type": item.get("inferred_type", "unknown"),
+                "confidence": float(item.get("confidence", 0.5)),
+                "evidence": item.get("evidence", ""),
+                "needs_user_input": bool(item.get("needs_user_input", True)),
+                "suggested_role": item.get("suggested_role", "unknown"),
+            })
+
+        # 如果 LLM 遗漏某些列，用 unknown 补上
+        known = {s["column_name"] for s in semantics}
+        for col in df.columns:
+            if col not in known:
+                semantics.append({
+                    "column_name": col,
+                    "inferred_type": "unknown",
+                    "confidence": 0.0,
+                    "evidence": "LLM 未覆盖",
+                    "needs_user_input": True,
+                    "suggested_role": "unknown",
+                })
+
+        # 从 columns 数组中提取 description / display_name 到映射
+        llm_column_descriptions: dict[str, str] = {}
+        llm_display_names: dict[str, str] = {}
+        for item in columns_out:
+            col_name = item.get("name", "")
+            if not col_name:
+                continue
+            desc = item.get("description", "")
+            if desc and isinstance(desc, str) and desc.strip():
+                llm_column_descriptions[col_name] = desc.strip()
+            dn = item.get("display_name", "")
+            if dn and isinstance(dn, str) and dn.strip():
+                llm_display_names[col_name] = dn.strip()
+
+        # 也兼容根级别旧格式
+        root_descs = result.get("column_descriptions")
+        if isinstance(root_descs, dict):
+            for k, v in root_descs.items():
+                if k not in llm_column_descriptions and v and isinstance(v, str):
+                    llm_column_descriptions[k] = v
+        root_names = result.get("column_display_names")
+        if isinstance(root_names, dict):
+            for k, v in root_names.items():
+                if k not in llm_display_names and v and isinstance(v, str):
+                    llm_display_names[k] = v
+
+        self._llm_column_descriptions = llm_column_descriptions
+        self._llm_display_names = llm_display_names
+        self._llm_target_keywords = result.get("target_keywords_from_query") or []
+        self._llm_target_columns = result.get("target_columns") or []
+        self._llm_feature_columns = result.get("feature_columns") or []
 
         return semantics
 
-    def _infer_column(self, series: pd.Series, name: str, target_keywords: list) -> dict:
-        """单列语义推断"""
-        n_unique = series.nunique()
+    def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:
+        """对单列做数据画像：分布特征、值范围、缺失率、唯一值数"""
         n_total = len(series)
+        n_null = int(series.isna().sum())
+        n_unique = series.nunique()
+        null_pct = n_null / n_total if n_total > 0 else 0
 
-        # 100% 唯一 → ID
-        if n_unique == n_total and n_total > 10:
-            return {
-                "column_name": name,
-                "inferred_type": "id",
-                "confidence": 0.95,
-                "evidence": "100%唯一值",
-                "needs_user_input": False,
-                "suggested_role": "identifier",
-            }
-
-        # 日期
-        if pd.api.types.is_datetime64_any_dtype(series):
-            return {
-                "column_name": name,
-                "inferred_type": "datetime",
-                "confidence": 0.95,
-                "evidence": "日期类型",
-                "needs_user_input": False,
-                "suggested_role": "time_index",
-            }
-
-        # 布尔
-        if n_unique == 2 and pd.api.types.is_numeric_dtype(series):
-            vals = set(series.dropna().unique())
-            if vals <= {0, 1} or vals <= {0.0, 1.0}:
-                return {
-                    "column_name": name,
-                    "inferred_type": "boolean",
-                    "confidence": 0.90,
-                    "evidence": "二元数值(0/1)",
-                    "needs_user_input": False,
-                    "suggested_role": "binary_feature",
-                }
-
-        # 数值
-        if pd.api.types.is_numeric_dtype(series):
-            name_lower = name.lower()
-            if any(kw in name_lower for kw in target_keywords):
-                return {
-                    "column_name": name,
-                    "inferred_type": "target",
-                    "confidence": 0.50,
-                    "evidence": "列名含目标关键词",
-                    "needs_user_input": True,
-                    "suggested_role": "target",
-                }
-
-            # 高唯一值
-            if n_unique > n_total * 0.8 and not pd.api.types.is_float_dtype(series):
-                vals = series.dropna().sort_values()
-                val_range = vals.max() - vals.min() + 1
-                if val_range <= n_unique * 1.1:
-                    return {
-                        "column_name": name,
-                        "inferred_type": "id",
-                        "confidence": 0.60,
-                        "evidence": f"高唯一值整数列 {n_unique}/{n_total}",
-                        "needs_user_input": True,
-                        "suggested_role": "identifier",
-                    }
-
-            return {
-                "column_name": name,
-                "inferred_type": "numeric",
-                "confidence": 0.90,
-                "evidence": "数值类型",
-                "needs_user_input": False,
-                "suggested_role": "numeric_feature",
-            }
-
-        # 类别
-        if n_unique < 20:
-            return {
-                "column_name": name,
-                "inferred_type": "categorical",
-                "confidence": 0.70,
-                "evidence": f"{n_unique}个唯一值",
-                "needs_user_input": n_unique > 5,
-                "suggested_role": "categorical_feature",
-            }
-
-        # 文本
-        if n_unique > n_total * 0.5:
-            avg_len = series.dropna().str.len().mean() if series.dtype == object else 0
-            if avg_len > 50:
-                return {
-                    "column_name": name,
-                    "inferred_type": "text",
-                    "confidence": 0.60,
-                    "evidence": "高唯一值比+长文本",
-                    "needs_user_input": True,
-                    "suggested_role": "text_feature",
-                }
-
-        return {
+        profile: dict[str, Any] = {
             "column_name": name,
-            "inferred_type": "unknown",
-            "confidence": 0.0,
-            "evidence": "无法推断",
-            "needs_user_input": True,
+            "dtype": str(series.dtype),
+            "n_total": n_total,
+            "n_null": n_null,
+            "null_pct": round(null_pct, 4),
+            "n_unique": n_unique,
         }
 
-    def _extract_target_keywords(self, query: str) -> list[str]:
-        """从查询中提取目标变量关键词"""
-        keywords = [
-            "target", "y", "label", "revenue", "sales", "income",
-            "profit", "cost", "price", "value", "amount",
-            "收入", "销售额", "利润", "成本", "价格",
-        ]
-        if query:
-            query_lower = query.lower()
-            for kw in ["revenue", "sales", "income", "profit", "收入", "销售额", "利润"]:
-                if kw in query_lower and kw not in keywords:
-                    keywords.append(kw)
-        return keywords
+        # 数值列：分位数 + 分布形状
+        if pd.api.types.is_numeric_dtype(series):
+            non_null = series.dropna()
+            if len(non_null) > 0:
+                profile.update({
+                    "min": float(non_null.min()) if hasattr(non_null, "min") else None,
+                    "q25": float(non_null.quantile(0.25)),
+                    "median": float(non_null.median()),
+                    "q75": float(non_null.quantile(0.75)),
+                    "max": float(non_null.max()) if hasattr(non_null, "max") else None,
+                    "mean": round(float(non_null.mean()), 4),
+                    "std": round(float(non_null.std()), 4),
+                })
+                # 分布简记：如 -10 ~ 0 ~ 50 ~ 200 ~ 9800（min ~ q25 ~ median ~ q75 ~ max）
+                # 判断是否严重右偏（max > q75 * 3）
+                q75v = profile.get("q75", 0)
+                maxv = profile.get("max")
+                if q75v and maxv and q75v > 0 and maxv > q75v * 10:
+                    profile["distribution_shape"] = "严重右偏"
+                elif q75v and maxv and q75v > 0 and maxv > q75v * 3:
+                    profile["distribution_shape"] = "右偏"
+                elif profile.get("q25") is not None and profile.get("q25", 0) > 0 and profile.get("min", 0) < profile.get("q25", 0) * 0.3:
+                    profile["distribution_shape"] = "左偏"
+                else:
+                    q1 = profile.get("q25", 0)
+                    q3 = profile.get("q75", 0)
+                    med = profile.get("median", 0)
+                    if q3 and q1 and q3 > q1 and med > 0:
+                        if abs(med - (q1 + q3) / 2) / ((q3 - q1) / 2 + 1e-9) < 0.3:
+                            profile["distribution_shape"] = "大致对称"
+                        else:
+                            profile["distribution_shape"] = "一般偏态"
+
+        # 类别/对象列：高频值 top-5
+        if n_unique < 100 and n_unique > 0:
+            vc = series.value_counts().head(5)
+            top_vals = {}
+            for v, c in vc.items():
+                label = str(v)
+                if len(label) > 30:
+                    label = label[:27] + "…"
+                top_vals[label] = int(c)
+            profile["top_values"] = top_vals
+
+        # 日期列：时间范围
+        if pd.api.types.is_datetime64_any_dtype(series):
+            non_null = series.dropna()
+            if len(non_null) > 0:
+                profile["time_min"] = str(non_null.min())
+                profile["time_max"] = str(non_null.max())
+
+        return profile
+
 
     def _apply_project_memory(self, context: dict, memory_project: dict) -> None:
         """应用项目记忆中的字段定义"""
@@ -640,101 +679,38 @@ class ScoutAgent(InteractionMixin):
         context["variable_roles"] = variable_roles
 
     def _generate_field_descriptions(self, context: dict, df: pd.DataFrame) -> None:
-        """用 LLM 批量生成字段描述（融入知识库经验）"""
-        field_specs = []
-        for sem in context["column_semantics"]:
-            col = sem["column_name"]
-            if col in context["column_descriptions"]:
-                continue  # 已有描述不覆盖
+        """将 _infer_all_semantics LLM 产出回填到 context：column_descriptions / display_names / target / features。
 
-            sample_val = _format_sample_preview(df, col)
+        _infer_all_semantics 已经通过一次 LLM 调用产出了所有字段的 type/role/desc/display_name。
+        此方法仅做回填，不做独立 LLM 调用——零硬编码。
+        """
+        # 1. 回填 LLM 产出的 column_descriptions（_infer_all_semantics 暂存在 self 上）
+        llm_descs = getattr(self, "_llm_column_descriptions", {}) or {}
+        for col, desc in llm_descs.items():
+            if col not in context["column_descriptions"]:
+                context["column_descriptions"][col] = desc
 
-            field_specs.append(
-                f"[{col}] 类型={sem['inferred_type']} 置信={sem['confidence']:.0%} "
-                f"依据={sem['evidence']} 示例={sample_val if sample_val else '无'}"
-            )
+        # 2. 回填 display_names
+        llm_names = getattr(self, "_llm_display_names", {}) or {}
+        if llm_names:
+            context.setdefault("column_display_names", {})
+            for col, name in llm_names.items():
+                if col not in context["column_display_names"]:
+                    context["column_display_names"][col] = name
 
-        if not field_specs:
-            return
-
-        self._emit(EventType.AGENT_THINKING, {
-            "thought": "正在调用模型生成字段业务含义（列数较多时可能需数十秒）…",
-        })
-
-        field_block = "\n".join(field_specs)
-
-        # 检索相关字段知识（用于增强 LLM 上下文）
-        type_tags = list({s["inferred_type"] for s in context["column_semantics"]})
-        query = f"{' '.join(type_tags)} {' '.join([s['column_name'] for s in context['column_semantics'][:5]])}"
-        recalled = scout_knowledge.recall(query, top_k=3)
-        if recalled:
-            knowledge_hint = "参考经验：\n" + "\n".join(
-                f"- {r['content']}（置信{r['metadata'].get('confidence', 'N/A')}）"
-                for r in recalled
-            )
-        else:
-            knowledge_hint = ""
-
-        system_prompt = (
-            "你是专业数据分析师，为每个字段写一句**业务向**的中文（建议 12–28 字）。\n"
-            "要求：结合列名、示例猜测「这列在业务里可能表示什么」；面向业务同事。\n"
-            "禁止：写「数值型/分类型/未知类型」等统计用词；禁止只输出「字段名（类型）」或只重复英文列名。\n"
-            "若不确定，也要写「可能表示…」并点出你从样本里看到的现象（如金额大小、是否像编码）。\n"
-            + (f"\n{knowledge_hint}" if knowledge_hint else "")
-            + "\n\n每行**严格**使用格式：`字段名：理解名称｜含义理解`（全角冒号、全角竖线「｜」）。\n"
-            "「理解名称」≤12 字，为后续表格第二列的简短业务称呼；「含义理解」为第三列的一句话（可含（例：…）样本片段）。\n"
-            "不要 Markdown 表格，不要编号；每行只写一列字段。"
-        )
-        max_out = min(max(self.llm_config.max_tokens, 512), 1600)
-        model_name = self.llm_config.model_quick or self.llm_config.model
-
-        client = self._create_llm_client()
-        result = ""
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"为以下字段生成描述：\n{field_block}"},
-                ],
-                temperature=0.3,
-                max_tokens=max_out,
-            )
-            result = response.choices[0].message.content or ""
-        except Exception:
-            result = ""
-
-        known_cols = {sem["column_name"] for sem in context["column_semantics"]}
-        # 解析 LLM 输出
-        for line in result.split("\n"):
-            parsed = _parse_llm_field_desc_line(line)
-            if not parsed:
-                continue
-            col_name, desc_text = parsed
-            if col_name not in known_cols:
-                continue
-            if col_name in context["column_descriptions"]:
-                continue
-            if _description_is_user_facing_meaningful(col_name, desc_text):
-                if "｜" in desc_text:
-                    left, sep, right = desc_text.partition("｜")
-                    short_guess = left.strip()
-                    long_guess = right.strip()
-                    if sep and short_guess and long_guess:
-                        context.setdefault("column_display_names", {})[col_name] = short_guess
-                        desc_text = long_guess
-                context["column_descriptions"][col_name] = desc_text
-
-        # 仍为空的列：用语义缩写 + 样本做短保底
-        context.setdefault("_field_desc_auto_columns", [])
+        # 3. 无 LLM 描述的列：标记 needs_user_input=True
         for sem in context["column_semantics"]:
             col = sem["column_name"]
             raw = str(context["column_descriptions"].get(col, "") or "").strip()
-            if _description_is_user_facing_meaningful(col, raw):
-                continue
-            sample_val = _format_sample_preview(df, col)
-            context["column_descriptions"][col] = _heuristic_column_business_hint(col, sample_val)
-            context["_field_desc_auto_columns"].append(col)
+            if not raw or raw == col:
+                context.setdefault("column_display_names", {})[col] = col
+                sem["needs_user_input"] = True
+
+        # 4. 回填 LLM 产出的 target / features
+        if getattr(self, "_llm_target_columns", None):
+            context["target"] = getattr(self, "_llm_target_columns")[0] if getattr(self, "_llm_target_columns") else None
+        if getattr(self, "_llm_feature_columns", None):
+            context["features"] = list(getattr(self, "_llm_feature_columns"))
 
     def _generate_confirmation_message(self, column_semantics: list, context: dict) -> str:
         """用 LLM 生成字段确认的 Markdown 表（字段名｜理解名称｜含义理解）。"""
@@ -773,33 +749,22 @@ class ScoutAgent(InteractionMixin):
 | --- | --- | --- |"""
 
         client = self._create_llm_client()
-        try:
-            response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.5,
-                max_tokens=1200,
-            )
-            result = response.choices[0].message.content or ""
+        response = client.chat.completions.create(
+            model=self.llm_config.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.5,
+            max_tokens=1200,
+        )
+        result = response.choices[0].message.content or ""
 
-            # 提取思考标签外的内容（MiniMax 模型输出 <think>...</think>）
-            import re
-            result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
+        # 提取思考标签外的内容（MiniMax 模型输出 <think>...</think>）
+        import re
+        result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
 
-            return result.strip() if result.strip() else "（字段理解生成失败）"
-        except Exception:
-            # LLM 失败时回退到简单消息
-            return f"""数据包含 {len(column_semantics)} 个字段，请确认以下理解是否正确：
-
-{fields_text}
-
-确认流程：
-- 如果所有字段理解正确 → 输入"确认"继续
-- 如果某个字段理解有误 → 直接告诉我正确的含义，如"Inc1=销售额"或「理解名称｜含义理解」
-- 如果某字段完全不理解 → 告诉我这个字段是什么意思"""
+        return result.strip() if result.strip() else ""
 
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
         """将高置信度字段推断结果写入知识库"""
@@ -811,11 +776,12 @@ class ScoutAgent(InteractionMixin):
             if sem.get("confidence", 0) < 0.85 or sem.get("needs_user_input"):
                 continue
             col_name = sem["column_name"]
-            if col_name in context.get("_field_desc_auto_columns", []):
-                continue
             if col_name not in context.get("column_descriptions", {}):
                 continue
             desc = context["column_descriptions"][col_name]
+            if not desc or not isinstance(desc, str) or not desc.strip():
+                continue
+            desc = desc.strip()
             # 检查是否已存在相似条目（通过 recall 确认）
             existing = scout_knowledge.recall(f"{col_name} {desc}", top_k=1)
             if existing and existing[0]["similarity"] > 0.9:

@@ -35,7 +35,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   activeView: "projects",
   status: "idle",
   agents: {},
-  connectionStatus: "connecting",
+  connectionStatus: "idle",
   projects: [],
   currentProject: null,
   reportFiles: [],

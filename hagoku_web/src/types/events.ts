@@ -38,6 +38,7 @@ export type AgentStatus = "idle" | "running" | "done" | "error" | "waiting_input
 
 /** Connection states for the shared WebSocket */
 export type ConnectionStatus =
+  | "idle"
   | "connecting"
   | "connected"
   | "reconnecting"

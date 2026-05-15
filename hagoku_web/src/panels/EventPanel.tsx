@@ -71,10 +71,12 @@ export default function EventPanel() {
           <span className="text-app-text-muted font-normal">({entries.length})</span>
         }
       />
-      {entries.length === 0 && !loading && connectionStatus === "connected" && (
+      {entries.length === 0 && !loading && (connectionStatus === "connected" || connectionStatus === "idle") && (
         <div className="px-3 py-2 border-b border-app-border shrink-0">
           <p className="text-ui-xs text-app-text-muted">
-            分析运行时，每个 Agent 的工作进展会实时显示在这里。
+            {connectionStatus === "idle"
+              ? "正在连接服务器，建立后即可接收实时日志。"
+              : "分析运行时，每个 Agent 的工作进展会实时显示在这里。"}
           </p>
         </div>
       )}

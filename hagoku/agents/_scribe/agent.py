@@ -5,6 +5,7 @@ Scribe Agent — 内部记录员
 - 监听 EventBus，记录所有事件
 - 维护项目看板（KanbanDB SQLite）
 - 维护 context.md 接力棒文件
+- LLM 兜底恢复遗漏字段描述
 
 不与用户直接对话，只在后台工作。
 """
@@ -30,6 +31,7 @@ class ScribeAgent:
     - 监听 EventBus，记录所有事件到 process_log.md
     - 维护项目 kanban.db（状态机 + 交接记录）
     - 维护 context.md（接力棒数据）
+    - LLM 兜底恢复遗漏字段描述（recover_field_descriptions）
     """
 
     def __init__(self, llm_config: LLMConfig, event_bus: EventBus, project_path: Path) -> None:
@@ -362,3 +364,131 @@ class ScribeAgent:
     def get_stats(self) -> dict:
         """获取看板统计"""
         return self.kanban.get_stats()
+
+    # ── 字段描述恢复（LLM 兜底） ──────────────────────────
+
+    def recover_field_descriptions(
+        self,
+        row_count: int,
+        col_count: int,
+        existing: dict[str, str],
+        sample_rows: list[dict[str, object]] | None = None,
+        dtypes: dict[str, str] | None = None,
+        column_names: list[str] | None = None,
+    ) -> dict[str, str]:
+        """
+        LLM 兜底恢复遗漏列描述。
+
+        仅在 Scout 产出部分列描述缺失时调用。使用不同 prompt 策略，
+        要求只生成白话中文短语，禁止技术术语。
+
+        Args:
+            row_count: 数据总行数
+            col_count: 数据总列数
+            existing: 已有列描述 {col_name: desc}
+            sample_rows: 样本行（前 5-10 行），用于上下文推断
+            dtypes: 列数据类型 {col_name: dtype_str}
+            column_names: 所有列名（用于推断缺失列）
+
+        Returns:
+            补全后的完整 {col_name: desc} 字典
+        """
+        import json
+
+        if column_names is None:
+            column_names = list(existing.keys())
+
+        missing = [c for c in column_names if c not in existing or not existing[c]]
+        if not missing:
+            return existing
+
+        # 转义样本行中的复杂类型（日期等）为字符串
+        serializable_rows: list[dict[str, str | None]] = []
+        if sample_rows:
+            for row in sample_rows[:8]:
+                safe: dict[str, str | None] = {}
+                for k, v in row.items():
+                    if v is None:
+                        safe[k] = None
+                    elif isinstance(v, (str, int, float, bool)):
+                        safe[k] = str(v)
+                    else:
+                        safe[k] = str(v)
+                serializable_rows.append(safe)
+
+        dtypes_safe = dtypes or {}
+
+        prompt = f"""你是一位数据分析师，现在需要帮助理解数据集的列含义。
+
+数据概览：{row_count} 行 × {col_count} 列
+
+已有的列描述（不要修改）：
+{json.dumps({k: v for k, v in existing.items() if v}, ensure_ascii=False, indent=2)}
+
+缺失描述的列（需要你生成）：
+{json.dumps(missing, ensure_ascii=False)}
+
+样本数据（前 {len(serializable_rows)} 行）：
+{json.dumps(serializable_rows, ensure_ascii=False, indent=2)}
+
+列数据类型：
+{json.dumps({k: dtypes_safe.get(k, "未知") for k in missing}, ensure_ascii=False, indent=2)}
+
+要求：
+1. 为每个缺失描述的列生成一句白话中文描述（10-25字）
+2. 描述要面向业务用户，禁止出现 dtype/int64/float64 等技术术语
+3. 参考样本数据值和数据类型推断业务含义
+4. 不要重复已有描述中的内容
+5. 返回严格的 JSON 对象，格式：{{"列名": "描述"}}
+
+只返回 JSON，不要任何其他文字。"""
+
+        try:
+            from ...llm.client import create_quick_client
+
+            client = create_quick_client(self.llm_config)
+            response = client.chat.completions.create(
+                model=self.llm_config.model_quick or self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": "你是数据分析助手，只返回 JSON 对象。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=max(256, len(missing) * 64),
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content.strip()
+
+            # 尝试提取 JSON
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+                content = content.strip()
+
+            recovered = json.loads(content)
+            if isinstance(recovered, dict):
+                merged = {**existing}
+                for col, desc in recovered.items():
+                    if col in missing and isinstance(desc, str) and desc.strip():
+                        merged[col] = desc.strip()
+                return merged
+
+        except Exception:
+            import logging
+
+            logging.getLogger("hagoku").warning(
+                "Scribe LLM recover failed — using fallback placeholder for %d missing columns: %s",
+                len(missing),
+                missing,
+            )
+
+        # fallback: 为缺失列生成基础占位描述（不做硬编码假值）
+        merged = {**existing}
+        for col in missing:
+            dtype_hint = (dtypes_safe or {}).get(col, "")
+            if dtype_hint:
+                merged[col] = f"字段 {col}（{dtype_hint}）"
+            else:
+                merged[col] = f"字段 {col}"
+        return merged

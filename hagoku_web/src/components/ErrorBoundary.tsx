@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -22,17 +22,50 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const shell: CSSProperties = {
+        minHeight: "100vh",
+        boxSizing: "border-box",
+        backgroundColor: "#121826",
+        color: "#e2e5eb",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem",
+        fontFamily: "system-ui, sans-serif",
+      };
       return (
-        <div className="flex flex-col items-center justify-center h-full bg-app-bg text-app-text p-8">
-          <div className="text-app-error text-ui-md font-semibold mb-2">出现错误</div>
-          <pre className="font-mono text-ui-sm text-app-text-muted bg-app-bg-secondary rounded p-4 max-w-lg overflow-auto mb-4">
+        <div style={shell}>
+          <div style={{ color: "#ef4444", fontSize: "15px", fontWeight: 600, marginBottom: "0.5rem" }}>
+            出现错误
+          </div>
+          <pre
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: "13px",
+              color: "#b8bfca",
+              background: "#131a28",
+              borderRadius: "8px",
+              padding: "1rem",
+              maxWidth: "32rem",
+              overflow: "auto",
+              marginBottom: "1rem",
+            }}
+          >
             {this.state.error?.message}
           </pre>
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-app-accent hover:bg-app-accent-hover text-white text-ui-sm rounded
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent
-                       transition-colors duration-150 cursor-pointer"
+            style={{
+              padding: "0.5rem 1rem",
+              background: "#3b82f6",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
           >
             重试
           </button>

@@ -7,14 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        "app-bg":            '#0A0E1A',
-        "app-bg-secondary":  '#111827',
-        "app-bg-tertiary":   '#1F2937',
-        "app-text":          '#F9FAFB',
-        "app-text-muted":    '#9CA3AF',
+        // 背景略抬一点层次，正文用灰白而非刺眼的近纯白
+        "app-bg":            '#121826',
+        "app-bg-secondary":  '#131A28',
+        "app-bg-tertiary":   '#222A3A',
+        "app-text":          '#E2E5EB',
+        "app-text-muted":    '#B8BFCA',
         "app-accent":        '#3B82F6',
         "app-accent-hover":  '#2563EB',
-        "app-border":        '#374151',
+        "app-border":        '#3D4658',
         "app-error":         '#EF4444',
         "app-error-hover":   '#DC2626',
         "app-success":       '#10B981',

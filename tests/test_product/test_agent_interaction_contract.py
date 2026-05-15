@@ -7,6 +7,8 @@ Agent 互动与成长 — 可执行契约（见 docs/AGENT_INTERACTION_CONTRACT.
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import (
     Orchestrator,
+    _analyst_reply_accepts_proceed,
+    _cleaner_reply_accepts_proceed,
     _is_gate_confirm,
     _is_scout_aligned,
     analyst_review_pause_payload,
@@ -17,25 +19,22 @@ from hagoku.manager.orchestrator import (
 )
 
 
-def test_c1_fallback_cleaner_banned_phrases_absent():
-    """C1：Cleaner LLM 回退句不得再出现旧版「冒充对话」客服长模板。"""
+def test_c1_cleaner_pause_no_injected_dialogue():
+    """C1：Cleaner 暂停不得再注入整段「冒充 Agent」中文气泡（仅结构化 cleaning_review）。"""
     orch = Orchestrator(HaGoKuConfig())
-    msg = orch._fallback_pause_message(
-        "cleaner",
-        {
-            "operations": [{"column": "x", "strategy": "winsorize", "reason": "test"}],
-            "data_quality": "good",
-            "impact_rate": 0.0,
-        },
-    )
-    banned = (
-        "特别想保留",
-        "特别想排除",
-        "数据质量检测完成",
-        "可以继续执行清洗吗",
-    )
-    for b in banned:
-        assert b not in msg, f"forbidden substring {b!r} in fallback: {msg!r}"
+
+    class R:
+        total_rows_original = 100
+        total_rows_after = 100
+        bias_risk = "low"
+        warnings: list[str] = []
+        operations = [{"column": "x", "strategy": "winsorize", "reason": "test", "rows_affected": 5}]
+
+    p = cleaning_review_pause_payload(R(), data_quality="good", impact_rate=0.0)
+    p["interaction_revision"] = 1
+    out = orch._attach_pause_dialogue_message("cleaner", p)
+    assert out.get("message") == ""
+    assert isinstance(out.get("cleaning_review"), dict)
 
 
 def test_c2_scout_field_review_structured_empty_message():
@@ -112,13 +111,15 @@ def test_c3_scout_user_natural_language_updates_context():
 # ─── Phase 1：Scout 多轮对齐子状态机 ───────────────────────────────────────────
 
 def test_is_scout_aligned_pure_confirm():
-    """显式纯确认（ok / 好的 / 确认 / 确认无误）→ 已对齐；空字串不视为确认。"""
+    """显式纯确认（ok / 好的 / 确认 / 可以了 / 对齐了…）→ 已对齐；空字串不视为确认。"""
     ctx = {"column_semantics": [{"column_name": "X", "needs_user_input": True}]}
     assert _is_scout_aligned(ctx, "") is False
     assert _is_scout_aligned(ctx, "ok") is True
     assert _is_scout_aligned(ctx, "好的") is True
     assert _is_scout_aligned(ctx, "确认") is True
     assert _is_scout_aligned(ctx, "确认无误") is True
+    assert _is_scout_aligned(ctx, "可以了") is True
+    assert _is_scout_aligned(ctx, "对齐了") is True
 
 
 def test_is_scout_aligned_all_fields_resolved():
@@ -156,14 +157,33 @@ def test_interaction_revision_in_scout_payload():
 
 # ─── 2.8.3：跨阶段闸门 ─────────────────────────────────────────────────────────
 
+def test_scout_user_input_received_payload_has_machine_fields():
+    """user_input_received（Scout）载荷含可核验字段，供前端事实行。"""
+    from hagoku.manager.orchestrator import scout_user_input_received_payload
+
+    ctx = {
+        "column_semantics": [
+            {"column_name": "a", "needs_user_input": True},
+            {"column_name": "b", "needs_user_input": False},
+        ],
+    }
+    p = scout_user_input_received_payload(ctx, "a=foo", ["a←foo"], 2)
+    assert p["parse_applied_count"] == 1
+    assert p["pure_confirm"] is False
+    assert p["columns_still_needing_input"] == []
+    p2 = scout_user_input_received_payload(ctx, "确认", [], 3)
+    assert p2["pure_confirm"] is True
+    assert p2["parse_applied_count"] == 0
+
+
 def test_gate_cleaning_pause_payload_structure():
-    """gate_cleaning 暂停载荷含 gate.phase 与 gate.prompt。"""
+    """gate_cleaning 暂停载荷含 gate.phase；prompt 留空（不由后端注入话术）。"""
     p = gate_cleaning_pause_payload()
     assert p["message"] == ""
     gate = p.get("gate")
     assert gate is not None
     assert gate["phase"] == "cleaning"
-    assert "清洗" in gate["prompt"]
+    assert gate.get("prompt") == ""
 
 
 def test_is_gate_confirm_pure():
@@ -182,3 +202,14 @@ def test_is_gate_confirm_supplement():
     assert _is_gate_confirm("还要改") is False
     assert _is_gate_confirm("不对") is False
     assert _is_gate_confirm("Code=店铺编号 补充一下") is False
+
+
+def test_c5_cleaner_analyst_proceed_helpers():
+    """C5：Cleaner/Analyst 多轮暂停须显式放行短语，避免任意一句即结束子循环。"""
+    assert _cleaner_reply_accepts_proceed("确认继续") is True
+    assert _cleaner_reply_accepts_proceed("好的") is True
+    assert _cleaner_reply_accepts_proceed("我再看一下") is False
+    assert _cleaner_reply_accepts_proceed("") is False
+    assert _analyst_reply_accepts_proceed("生成报告") is True
+    assert _analyst_reply_accepts_proceed("已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段") is True
+    assert _analyst_reply_accepts_proceed("再看看显著性") is False

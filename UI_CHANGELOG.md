@@ -2,6 +2,124 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
+- **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu 后端再刷新」的白话。
+
+## 2026-05-14 — Web + API：暂停点不注入任何台词库文案
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：删除暂停气泡用的 LLM/回退/跟进整段中文路径；**`_attach_pause_dialogue_message`** 仅保证 `message` 为空串；**`gate_cleaning_pause_payload`** 的 **`gate.prompt`** 置空。
+- **`AnalyzePanel.tsx`**：闸门无 `prompt` 时不插入默认中文 workflow 行，仅保留结构化区与按钮。
+
+## 2026-05-14 — Web：项目列表「一直加载中」— 并发 fetch 与 finally 竞态
+
+### 变更概要
+
+- **`ProjectPanel.tsx`**：`loadProjects` 用 **`projectsFetchRef`** 串行化；仅**当前**这次请求的 **`finally`** 才 `setLoading(false)`，避免并发/重入时前一个 `finally` 误清状态或后请求被盖住；校验 **`r.ok`**；`AbortError` 与超时区分提示。
+
+## 2026-05-14 — Web：项目页后端失败提示（单人本机表述）
+
+### 变更概要
+
+- **`ProjectPanel.tsx`**：`/api/projects` 失败/超时文案改为**单人本机**：提示先在本机运行 `hagoku-api` 再刷新。
+
+## 2026-05-14 — Web：项目页后端失败提示（不假定用户本机跑 API）
+
+### 变更概要
+
+- **`ProjectPanel.tsx`**：`/api/projects` 失败/超时文案改为区分「已部署环境联系管理员」与「本机开发再跑 `hagoku-api`」。
+
+## 2026-05-14 — Web：撤销 `base: './'`、精简 `main.tsx` 启动兜底
+
+### 变更概要
+
+- **`vite.config.ts`**：去掉 **`base: './'`**，恢复 Vite 默认 **`/`** 资源路径，避免与现有根路径部署/反代假设不一致。
+- **`main.tsx`**：去掉 **`showBootstrapError`** 与包裹 **`createRoot` 的外层 try/catch`**，仅保留 **`initWebSocket` 的 try/catch**。
+
+## 2026-05-14 — Web：vite preview 反代 /api + 项目列表请求超时
+
+### 变更概要
+
+- **`vite.config.ts`**：抽出 **`preview.proxy`**（与 **`server.proxy`** 一致），`vite preview` 下 **`/api`、`/ws`** 转发到 8000，避免项目页 **`/api/projects`** 挂死、一直「加载中…」。
+- **`ProjectPanel.tsx`**：`loadProjects` 使用 **`AbortController` + 15s 超时**，避免后端无响应时 `loading` 永不结束。
+
+## 2026-05-14 — Web：修复 dist/子路径下整页空白（`base: './'` + 启动兜底）
+
+### 变更概要
+
+- **`vite.config.ts`**：`base: './'`，构建产物中 JS/CSS 为**相对路径**，避免在非根路径托管时 `/assets/*` 指错域名根导致 404。
+- **`main.tsx`**：`createRoot` 外层 **`try/catch`**，挂载失败时用 DOM 写出错误与「重试」（不依赖 Tailwind）。
+- **后续**：`base: './'` 与 **`main.tsx`** 外层兜底已撤销（见同日期上一条「撤销 `base`」）；子路径部署请自行配置 `base` 与网关。
+
+## 2026-05-14 — Web：去掉启动层与首屏内联脚本（精简）
+
+### 变更概要
+
+- **`index.html`** / **`main.tsx`**：移除 `#hagoku-boot-splash`、转圈动画、`queueMicrotask` 与 `hagoku:boot-done`、10s 提示脚本；保留 **`#root` 前**内联底色与字色（与 `app-bg` / `app-text` 一致）。
+
+## 2026-05-14 — Web：连接态 idle（缓解误铺「正在连接」遮罩）
+
+### 变更概要
+
+- **`ConnectionStatus`** 增加 **`idle`**（尚未发起 WS）；**`workspace` / `useWebSocket`** 初始为 `idle`，避免误显示「正在连接」全屏遮罩。
+- **`main.tsx`**：`initWebSocket` 在 **`createRoot` 之前**并 `try/catch`。
+- **`tailwind` `app-bg`**：与首屏底色对齐为 **`#121826`**。
+- **`EventPanel`**：`idle` 时空状态提示；**`AnalyzePanel`** 根容器加 **`relative`** 以利遮罩定位。
+
+## 2026-05-14 — Web：正文灰白、辅文提亮（全局色板）
+
+### 变更概要
+
+- **`hagoku_web/tailwind.config.js`**：`app-text` 由近纯白改为柔和灰白 `#E2E5EB`；`app-text-muted` 提亮至 `#B8BFCA`；背景/卡片/边框微调以层次略清、仍保持深色主题。
+
+## 2026-05-14 — 清洗 / 分析暂停：多轮 + 显式放行（C5）与文案
+
+### 变更概要
+
+- **`orchestrator.py`**：Cleaner、Analyst 暂停为子循环直至放行短语；`user_input_requested` 含递增 **`interaction_revision`**；非放行回复才拼入 `query`；`USER_INPUT_RECEIVED` 与多轮空 LLM 气泡文案对齐。
+- **`AnalyzePanel.tsx`**：`cleaning_review` / `analyst_review` 同 revision 原地更新；发送后保留卡片 id 以支持多轮；占位符说明「仅说明不自动放行」须点确认继续。
+- **文档**：`AGENT_INTERACTION_CONTRACT.md` **C5**、`INTERACTION_MULTITURN_PLAN.md` §2.3 / §4-C；**单测** `test_c5_cleaner_analyst_proceed_helpers` 等。
+
+## 2026-05-14 — 字段核对：沟通称呼恢复简称、暂停气泡去重、去掉假 Agent 固定句
+
+### 变更概要
+
+- **`orchestrator.py`**：第二列在无 `column_display_names` 时回退为从含义抽取的沟通简称（`_scout_second_column_cell`）；Scout 暂停回退气泡不再写「共 n 行×m 列」（与表头重复）；`interaction_revision >= 1` 且 LLM 空时用另一句引导，避免每轮同一句。
+- **`AnalyzePanel.tsx`**：去掉发送成功后硬编码的「已收到，我继续处理。」；表头第二列改为「沟通称呼」，副标题与 `sr-only` 同步。
+- **单测**：`test_scout_field_review_payload` 等对齐。
+
+## 2026-05-14 — 分析页：字段表刷新时滚入视口
+
+### 变更概要
+
+- **`AnalyzePanel.tsx`**：`field_review` 每次暂停/原地更新时递增内部 nonce，对话区 `useLayoutEffect` 将当前字段卡片 `scrollIntoView({ block: "nearest" })`；避免对话变长后原地更新的表留在视口上方找不到。新消息仍可按长度滚到底。
+
+## 2026-05-14 — 分析页：字段核对同 revision 不再重复插表
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：闸门「还有补充」回到 Scout 内层前 `interaction_revision += 1`，避免下一轮 `user_input_requested` 与上一轮同号导致前端误判为新卡片。
+- **`AnalyzePanel.tsx`**：`field_review` 在「同 revision 且已有卡片 id」时也走原地更新，作为兜底。
+
+## 2026-05-14 — 分析开场：Manager thinking 文案 softer
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：首轮 `AGENT_THINKING` 由「理解你的问题：…」改为「收到，启动分析，让我来…」；`_describe_intent` 各意图短语改为接在「让我来」后的自然说法（如「探索一下数据有什么规律」）。
+
+## 2026-05-14 — 前端：修复生产构建失败（白屏）
+
+### 变更概要
+
+- **`InputBar.tsx`**、**`AnalyzePanel.tsx`**、**`ProjectPanel.tsx`**：`Enter` 与 IME（`keyCode === 229`）判断里，对 `nativeEvent` 不再强转为 React 的 `KeyboardEvent`（与 DOM `KeyboardEvent` 不重叠，`tsc -b` 报错导致 `vite build` 失败、部署页白屏）；改为 `as unknown as { keyCode?: number }` 等安全收窄。
+
+## 2026-05-14 — 分析页：暂停点与发送后可见「对话」气泡
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：在 Scout 字段核对、进清洗闸门、Cleaner 确认、Analyst 确认等 `_pause_and_wait` 前，通过 `_attach_pause_dialogue_message` 填入非空 `message`（优先 `llm_quick` 生成，失败用规则回退；闸门用 `gate.prompt`），使 Web 端 `user_input_requested` 能追加 `role: "agent"` 气泡。
+- **`AnalyzePanel.tsx`**：用户从底部成功发出回复后，立即追加一条简短 Agent 确认（「已收到，我继续处理。」），与后端处理并行，避免对话区只有用户单边气泡。
+
 ## 2026-05-14 — 分析页：去掉「插入纠错」与表格行点选
 
 ### 变更概要
@@ -557,7 +675,7 @@ hagoku/api/  (FastAPI + WebSocket)       ← 后端
 hagoku-api          # http://localhost:8000
 
 # 终端 2：前端
-cd hagoku_web && npm run dev   # http://localhost:5173
+cd hagoku_web && npm run dev   # 终端会打印实际地址，常见为 http://localhost:5173
 ```
 
 ### 删除的文件

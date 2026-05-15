@@ -118,7 +118,7 @@ print('ALL 3 PHASES OK')
 > 契约全文：[AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md)（与 [PROJECT.md](../PROJECT.md)「互动与成长：原则优先级与验收」一致）。
 
 ### UI 手动测试步骤
-1. 浏览器打开 http://localhost:5173
+1. 浏览器打开前端界面（本地多为 Vite 终端打印的地址，常见形如 `http://localhost:5173`）
 2. **项目** 页选择或创建项目，确认描述与数据文件
 3. **分析** 页：选择项目与数据 → **开始分析**（必要时先输入/补充研究问题）
 4. 观察 **流水线进度** 与 **对话区**：在暂停点应出现 Agent 引导语，用自然语言 **回复** 后继续
@@ -135,7 +135,7 @@ from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False, args=['--no-sandbox'])
     page = browser.new_page()
-    page.goto('http://localhost:5173', timeout=60000)
+    page.goto('http://localhost:5173', timeout=60000)  # 若端口不同，改为你的 Vite 输出地址
     page.wait_for_load_state('domcontentloaded')
     # 注意：按钮点击无法正确触发，只能测试导航和页面结构
     page.get_by_text("分析", exact=True).first.click()
@@ -406,6 +406,41 @@ store.delete(entry_id)
 - 如果 OpenAI API 不可用，`recall()` 返回空列表，系统降级运行（不影响核心分析功能）
 
 ---
+
+## 错误处理与兜底原则
+
+HaGoKu 的字段理解（语义分析 / 描述生成）完全依赖 LLM。任何「字段含义」相关产出 **不存在硬编码 `if-else` 兜底**。
+
+### 三级防护
+
+| 层级 | 触发条件 | 处理方式 | 负责模块 |
+|------|---------|---------|---------|
+| **1. 前置健康检查** | pipeline 启动前 | `check_llm_health()` 验证 LLM 可达/模型存在/chat 可用；失败 → 返回错误，**不进 pipeline** | `hagoku/tools/health.py` |
+| **2. Agent 异常上报** | Scout `_generate_field_descriptions` LLM 调用失败/返回空 | emit `AGENT_FAILED` → Scribe 看板 block + 前端展示错误 | `scout/agent.py` → `_scribe/agent.py` |
+| **3. Scribe LLM 兜底恢复** | Scout 产出部分列描述缺失 | Scribe 用 LLM 补全遗漏列（不同 prompt 策略，质量优先）；失败 → emit `AGENT_FAILED` | `_scribe/agent.py` (`recover_field_descriptions()`) |
+
+### 删除清单（2026-05-15）
+
+以下硬编码兜底逻辑已删除，由上述三级防护替代：
+
+- `scout/agent.py`：`_TYPE_ECHO_SUFFIXES`、`_description_is_user_facing_meaningful`、`_heuristic_column_business_hint`、`_dedupe_column_display_names`、兜底段 `# 仍为空的列：用语义缩写 …`
+- `orchestrator.py`：`_SCOUT_TYPE_ECHO_SUFFIXES`、所有 fallback 函数（`_fallback_*`）、`_SEMANTIC_TYPE_LABELS`
+
+### 健康检查流程
+
+```
+Orchestrator.run()
+  │
+  ├─ check_llm_health(config)
+  │   ├─ 1. HTTP GET /models (timeout=5s)
+  │   ├─ 2. 模型名在列表中
+  │   ├─ 3. Chat completion ("ping")
+  │   ├─ 4. Token 速率 (警告)
+  │   └─ 5. JSON mode (警告)
+  │
+  ├─ PASS → 进入 pipeline
+  └─ FAIL → emit HEALTH_CHECK, 前端红框提示, return
+```
 
 ## 提交规范
 

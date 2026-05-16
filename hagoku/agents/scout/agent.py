@@ -428,7 +428,7 @@ class ScoutAgent(InteractionMixin):
 
     def _infer_all_semantics(self, df: pd.DataFrame, query: str) -> list[dict]:
         """推断所有列的语义 — 全部通过 LLM 结构化输出完成，零硬编码"""
-        from ...llm.client import create_quick_client
+        from ...llm.client import create_quick_client, create_raw_client
 
         # 构建每列的 profile 摘要
         column_list: list[dict] = []
@@ -481,7 +481,7 @@ class ScoutAgent(InteractionMixin):
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
         )
 
-        client = create_quick_client(self.llm_config)
+        client = create_raw_client(self.llm_config)
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,

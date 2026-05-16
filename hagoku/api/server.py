@@ -261,6 +261,59 @@ async def post_llm_config(req: LlmConfigBody):
     }
 
 
+# ── POST /api/config/llm/test — 测试模型连接 ────────────────
+class LlmTestBody(BaseModel):
+    base_url: str
+    main_model: str
+    api_key: str = ""
+
+
+@app.post("/api/config/llm/test")
+async def test_llm_connection(req: LlmTestBody):
+    """
+    用当前表单中的参数发送一次最小请求，验证 API 可达、密钥有效、模型存在。
+    """
+    import os as _os
+
+    base_url = req.base_url.strip()
+    model = req.main_model.strip()
+    api_key = req.api_key.strip()
+
+    if not base_url or not model:
+        raise HTTPException(status_code=400, detail="网址和模型名称不能为空")
+
+    try:
+        from openai import OpenAI
+
+        _proxy_keys = ["ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"]
+        _saved = {k: _os.environ.pop(k, None) for k in _proxy_keys}
+        try:
+            client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=4,
+                temperature=0,
+            )
+        finally:
+            for k, v in _saved.items():
+                if v is not None:
+                    _os.environ[k] = v
+                elif k in _os.environ:
+                    del _os.environ[k]
+
+        content = response.choices[0].message.content or ""
+        return {
+            "ok": True,
+            "model": model,
+            "base_url": base_url,
+            "reply": content[:200],
+            "latency_ms": round(response.usage.total_tokens if response.usage else 0, 1),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"连接失败: {exc}") from exc
+
+
 # ── GET /api/knowledge/{project_name} — 列出项目知识库文件 ──
 @app.get("/api/knowledge/{project_name}")
 async def list_knowledge(project_name: str):

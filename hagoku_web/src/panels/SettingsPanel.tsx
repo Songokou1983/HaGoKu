@@ -10,6 +10,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronRight,
+  Zap,
+  XCircle,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field } from "../components/FormField";
@@ -32,6 +34,8 @@ interface LlmFormState {
 interface ConfigResponse {
   llm: Partial<LlmConfigPayload> & Record<string, unknown>;
 }
+
+type TestStatus = "idle" | "testing" | "ok" | "fail";
 
 const emptyLlm: LlmFormState = {
   base_url: "",
@@ -83,6 +87,11 @@ export default function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // 测试连接
+  const [testStatus, setTestStatus] = useState<TestStatus>("idle");
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testTime, setTestTime] = useState<string | null>(null);
+
   const loadConfig = useCallback(() => {
     setLoading(true);
     setLoadError(null);
@@ -128,6 +137,35 @@ export default function SettingsPanel() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  const handleTest = async () => {
+    setTestStatus("testing");
+    setTestMessage(null);
+    setTestTime(null);
+    try {
+      const r = await fetch("/api/config/llm/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url: llm.base_url.trim(),
+          main_model: llm.main_model.trim(),
+          api_key: apiKeyInput.trim(),
+        }),
+      });
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; reply?: string; detail?: string };
+      if (!r.ok) {
+        const msg = typeof d.detail === "string" ? d.detail : `连接失败 (${r.status})`;
+        throw new Error(msg);
+      }
+      setTestStatus("ok");
+      setTestMessage(d.reply?.slice(0, 120) || "模型响应正常");
+      setTestTime(new Date().toLocaleTimeString());
+    } catch (e: unknown) {
+      setTestStatus("fail");
+      setTestMessage(e instanceof Error ? e.message : "连接失败");
+      setTestTime(new Date().toLocaleTimeString());
+    }
+  };
 
   const handleSave = async () => {
     setSaveError(null);
@@ -179,6 +217,8 @@ export default function SettingsPanel() {
   const inputClass =
     "w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-base text-app-text placeholder-app-text-muted outline-none focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent focus:outline-none transition-colors duration-150";
 
+  const hasFields = llm.base_url.trim() !== "" && llm.main_model.trim() !== "";
+
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
       <PanelHeader title="设置" />
@@ -206,7 +246,11 @@ export default function SettingsPanel() {
             placeholder="例：http://127.0.0.1:8080/v1"
             autoComplete="off"
             value={llm.base_url}
-            onChange={(e) => setLlm({ ...llm, base_url: e.target.value })}
+            onChange={(e) => {
+              setLlm({ ...llm, base_url: e.target.value });
+              setTestStatus("idle");
+              setTestMessage(null);
+            }}
           />
           <p className="mt-1 text-ui-xs text-app-text-muted">从你自己部署的推理软件说明里抄，一般末尾带 /v1。</p>
         </Field>
@@ -218,7 +262,11 @@ export default function SettingsPanel() {
             placeholder={llm.api_key_configured ? "已保存过，不想改就空着" : "本地没密钥就填 none"}
             autoComplete="new-password"
             value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
+            onChange={(e) => {
+              setApiKeyInput(e.target.value);
+              setTestStatus("idle");
+              setTestMessage(null);
+            }}
           />
           <p className="mt-1 text-ui-xs text-app-text-muted">和上面网址是同一套服务，只填一个密钥。</p>
         </Field>
@@ -229,7 +277,11 @@ export default function SettingsPanel() {
             placeholder="在推理服务里注册的名字，例如 Qwen2.5-32B-Instruct"
             autoComplete="off"
             value={llm.main_model}
-            onChange={(e) => setLlm({ ...llm, main_model: e.target.value })}
+            onChange={(e) => {
+              setLlm({ ...llm, main_model: e.target.value });
+              setTestStatus("idle");
+              setTestMessage(null);
+            }}
           />
           <p className="mt-1 text-ui-xs text-app-text-muted">必填。全流程用同一个在推理服务里注册的名字。</p>
         </Field>
@@ -281,6 +333,43 @@ export default function SettingsPanel() {
             </div>
           )}
         </div>
+
+        {/* 测试连接 */}
+        <button
+          type="button"
+          disabled={!hasFields || testStatus === "testing"}
+          onClick={() => void handleTest()}
+          className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border
+                     bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed
+                     text-app-text transition-colors duration-150 cursor-pointer"
+        >
+          {testStatus === "testing" ? (
+            <Loader2 size={14} className="animate-spin shrink-0" />
+          ) : testStatus === "ok" ? (
+            <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+          ) : testStatus === "fail" ? (
+            <XCircle size={14} className="text-app-error shrink-0" />
+          ) : (
+            <Zap size={14} className="shrink-0" />
+          )}
+          {testStatus === "testing" ? "测试中…" : "测试模型连接"}
+        </button>
+        {testMessage && (
+          <div
+            className={`text-ui-xs leading-relaxed px-2 py-1.5 rounded border ${
+              testStatus === "ok"
+                ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
+                : "border-app-error/30 bg-app-error/10 text-app-error"
+            }`}
+          >
+            <span>{testMessage}</span>
+            {testTime && (
+              <span className="ml-2 opacity-70">
+                &mdash; {testStatus === "ok" ? "成功" : "失败"} {testTime}
+              </span>
+            )}
+          </div>
+        )}
 
         {saveError && (
           <p className="flex items-center gap-2 text-ui-sm text-app-error">

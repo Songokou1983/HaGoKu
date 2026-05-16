@@ -82,18 +82,57 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
                     del os.environ[k]
 
 
+def create_raw_client(llm_config: LLMConfig) -> Any:
+    """
+    创建原始 OpenAI 客户端（不做 instructor 包装）
+
+    适用于需要 raw chat.completions.create() 的场景（如 Scout 的 JSON mode）。
+    """
+    import os
+    from openai import OpenAI
+
+    _proxy_keys = [
+        "ALL_PROXY", "all_proxy",
+        "HTTP_PROXY", "http_proxy",
+        "HTTPS_PROXY", "https_proxy",
+    ]
+    _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
+
+    try:
+        return OpenAI(
+            base_url=llm_config.base_url,
+            api_key=llm_config.api_key,
+            timeout=120.0,
+        )
+    finally:
+        for k, v in _saved.items():
+            if v is not None:
+                os.environ[k] = v
+            elif k in os.environ:
+                del os.environ[k]
+
+
+def _unwrap_llm(config: Any) -> LLMConfig:
+    """兼容 HaGoKuConfig（含 .llm 属性）和裸 LLMConfig 两种输入"""
+    if isinstance(config, LLMConfig):
+        return config
+    # 假设是 HaGoKuConfig
+    return config.llm
+
+
 def create_deep_client(config: Any) -> Any:
     """
     创建深度推理客户端（Analyst、仲裁器用）
 
-    模型选择: config.llm.model_deep or config.llm.model
+    模型选择: llm.model_deep or llm.model
     """
+    llm = _unwrap_llm(config)
     deep_config = LLMConfig(
-        model=config.llm.model_deep or config.llm.model,
-        base_url=config.llm.base_url,
-        api_key=config.llm.api_key,
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
+        model=llm.model_deep or llm.model,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        temperature=llm.temperature,
+        max_tokens=llm.max_tokens,
     )
     return create_structured_llm_client(deep_config)
 
@@ -102,13 +141,14 @@ def create_quick_client(config: Any) -> Any:
     """
     创建快速客户端（Scout、Reporter、Scribe 反思用）
 
-    模型选择: config.llm.model_quick or config.llm.model
+    模型选择: llm.model_quick or llm.model
     """
+    llm = _unwrap_llm(config)
     quick_config = LLMConfig(
-        model=config.llm.model_quick or config.llm.model,
-        base_url=config.llm.base_url,
-        api_key=config.llm.api_key,
-        temperature=config.llm.temperature,
+        model=llm.model_quick or llm.model,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        temperature=llm.temperature,
         max_tokens=8192,  # 快速模型用较短上下文
     )
     return create_structured_llm_client(quick_config)

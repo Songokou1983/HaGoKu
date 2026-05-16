@@ -304,11 +304,47 @@ def _parse_scout_means_clauses(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def _parse_scout_column_prefixed_line(line: str, columns: list[str]) -> tuple[str | None, str | None]:
-    """`Code是店铺编号`、`Code 表示 周`、`Code means x`（列名在句首，且列为真实列名）。"""
+# 预编译：中文名/别名类触发词（用于区分 display_name vs description）
+_DISPLAY_NAME_TRIGGER_RE = re.compile(
+    r"(?is)^(?:"
+    r"中文名(?:是|为|称(?:是|为)?|：|:|：=|=)|"
+    r"别名(?:是|为|：|:|：=|=|叫)|"
+    r"又名(?:是|为|：|:|：=|=|叫)?"
+    r"又称(?:是|为|：|:|：=|=|叫)?"
+    r"简称(?:是|为|：|:|：=|=|叫)?"
+    r"显示为"
+    r")\s*(.+)$"
+)
+
+# 含义理解中尾部混入的 display_name 意图信号（如「Code为X，你要更新到中文名称里」）
+# 匹配后剥离信号，并将 field_type 从 desc 翻转为 display
+_TRAILING_DISPLAY_INTENT_RE = re.compile(
+    r"(?is)[\s,，。;；]*"
+    r"(?:[你请](?:要|应该?|可以|必须|帮我?)?)?"
+    r"(?:更新到|放到|填到|写(?:到|入)|改成|改到|用在|"
+    r"作为|当作|充当|设(?:置)?为|标记为|归到|分到|"
+    r"用作|视为|当成|拿来当|用来做)"
+    r"[\s]*"
+    r"(?:中文名|中文名称|别名|简称|显示名|display|"
+    r"中文(?:列|栏|字段)|名称列|显示列)"
+    r"(?:里|里面|中|上|去|那儿|那里|上[头面]?)?"
+    r"[\s,，。.!！]*$"
+)
+
+
+def _parse_scout_column_prefixed_line(
+    line: str, columns: list[str]
+) -> tuple[str | None, str | None, str | None]:
+    """`Code是店铺编号`、`Code 表示 周`、`Code means x`、`Code的中文名是店铺编码`（列名在句首，且列为真实列名）。
+
+    返回 (col, meaning, field_type)：
+      - field_type="desc"   → 含义理解（column_descriptions）
+      - field_type="display" → 中文名称（column_display_names）
+      - field_type=None     → 未匹配
+    """
     s = line.strip()
     if not s:
-        return None, None
+        return None, None, None
     for col in sorted(set(columns), key=len, reverse=True):
         if len(s) < len(col) + 1:
             continue
@@ -316,7 +352,16 @@ def _parse_scout_column_prefixed_line(line: str, columns: list[str]) -> tuple[st
             continue
         tail = s[len(col) :].strip()
         if not tail:
-            return None, None
+            return None, None, None
+
+        # ── 先检测 display_name 触发词 ──
+        dm = _DISPLAY_NAME_TRIGGER_RE.match(tail)
+        if dm:
+            mean = (dm.group(1) or "").strip().rstrip(".,;，；")
+            if mean:
+                return col, mean, "display"
+
+        # ── 再检测含义类触发词 ──
         m = re.match(
             r"(?is)^(means|is|are|[:=：]|是|就是|为|表示|指的是|意为)\s*(.+)$",
             tail,
@@ -325,8 +370,17 @@ def _parse_scout_column_prefixed_line(line: str, columns: list[str]) -> tuple[st
             continue
         mean = (m.group(2) or "").strip().rstrip(".,;，；")
         if mean:
-            return col, mean
-    return None, None
+            # 检测尾部是否混杂 display_name 意图信号
+            # 如「Code为店铺编号，你要更新到中文名称里」
+            di = _TRAILING_DISPLAY_INTENT_RE.search(mean)
+            if di:
+                # 剥离尾部意图信号，翻转为 display_name
+                cleaned = mean[: di.start()].strip().rstrip(".,;，；")
+                if cleaned:
+                    return col, cleaned, "display"
+                # 清理后为空则回退为原含义
+            return col, mean, "desc"
+    return None, None, None
 
 
 def apply_scout_user_field_reply_to_context(
@@ -354,18 +408,23 @@ def apply_scout_user_field_reply_to_context(
         return []
 
     descs: dict[str, Any] = context.setdefault("column_descriptions", {})
+    display_names: dict[str, Any] = context.setdefault("column_display_names", {})
     applied: list[str] = []
     seen_col: set[str] = set()
 
-    def _apply_one(canonical: str, meaning: str) -> None:
+    def _apply_one(canonical: str, meaning: str, field_type: str = "desc") -> None:
         if not canonical or not meaning or canonical in seen_col:
             return
         seen_col.add(canonical)
-        descs[canonical] = meaning
+        if field_type == "display":
+            display_names[canonical] = meaning
+            applied.append(f"{canonical}:[display]←{meaning}")
+        else:
+            descs[canonical] = meaning
+            applied.append(f"{canonical}←{meaning}")
         for s in context.get("column_semantics") or []:
             if str(s.get("column_name", "")) == canonical:
                 s["needs_user_input"] = False
-        applied.append(f"{canonical}←{meaning}")
 
     # ── 第一阶段：正则解析 ────────────────────────────────────
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
@@ -378,13 +437,21 @@ def apply_scout_user_field_reply_to_context(
         if lt and rt:
             c = _resolve_scout_column_token(lt, columns)
             if c:
-                _apply_one(c, rt)
+                ft = "desc"
+                # 检测尾部 display_name 意图信号（如「Code=门店编号，请改到中文名称」）
+                di = _TRAILING_DISPLAY_INTENT_RE.search(rt)
+                if di:
+                    cleaned = rt[: di.start()].strip().rstrip(".,;，；")
+                    if cleaned:
+                        rt = cleaned
+                        ft = "display"
+                _apply_one(c, rt, field_type=ft)
                 handled = True
         if handled:
             continue
-        pc, pm = _parse_scout_column_prefixed_line(line, columns)
+        pc, pm, ptype = _parse_scout_column_prefixed_line(line, columns)
         if pc and pm:
-            _apply_one(pc, pm)
+            _apply_one(pc, pm, field_type=ptype or "desc")
             continue
         for col_t, mean in _parse_scout_means_clauses(line):
             c = _resolve_scout_column_token(col_t, columns)

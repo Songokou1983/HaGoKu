@@ -2111,3 +2111,63 @@ knowledge:
     confidence: 0.9
   created_at: '2026-05-12 15:52:52'
   use_count: 0
+- id: a8f4f203
+  content: 字段名：表示业务单元或部门代码，如B01、B02等，共5个不同业务单元；含义：表示业务单元或部门代码，如B01、B02等，共5个不同业务单元；数据特征：categorical
+    5个唯一字符串值（B01-B05），类似业务单元编码；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test_01
+    field: 表示业务单元或部门代码，如B01、B02等，共5个不同业务单元
+    meaning: 表示业务单元或部门代码，如B01、B02等，共5个不同业务单元
+    data_pattern: categorical 5个唯一字符串值（B01-B05），类似业务单元编码
+    inferred_role: categorical_feature
+    confidence: 0.95
+  created_at: '2026-05-16 07:08:59'
+  use_count: 0
+- id: 343298bc
+  content: 字段名：每条记录的唯一编号，格式为A后跟7位数字，如A0000001；含义：每条记录的唯一编号，格式为A后跟7位数字，如A0000001；数据特征：categorical
+    25个唯一字符串值，格式为A0000001-A0000005，每个值出现25次，具有唯一标识特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test_01
+    field: 每条记录的唯一编号，格式为A后跟7位数字，如A0000001
+    meaning: 每条记录的唯一编号，格式为A后跟7位数字，如A0000001
+    data_pattern: categorical 25个唯一字符串值，格式为A0000001-A0000005，每个值出现25次，具有唯一标识特征
+    inferred_role: identifier
+    confidence: 0.98
+  created_at: '2026-05-16 07:09:00'
+  use_count: 0
+- id: ad0787fa
+  content: 字段名：表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一字符串值（B01-B05），符合业务单元编码模式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test_01
+    field: 表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一字符串值（B01-B05），符合业务单元编码模式
+    inferred_role: categorical_feature
+    confidence: 0.95
+  created_at: '2026-05-16 10:45:27'
+  use_count: 0
+- id: 3ac7038e
+  content: 字段名：每条记录的唯一编号，格式为A后跟7位数字，用于标识不同业务条目；含义：每条记录的唯一编号，格式为A后跟7位数字，用于标识不同业务条目；数据特征：categorical
+    25个唯一值，格式为A0000001至A0000005，每个值出现25次，符合唯一标识符特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test_01
+    field: 每条记录的唯一编号，格式为A后跟7位数字，用于标识不同业务条目
+    meaning: 每条记录的唯一编号，格式为A后跟7位数字，用于标识不同业务条目
+    data_pattern: categorical 25个唯一值，格式为A0000001至A0000005，每个值出现25次，符合唯一标识符特征
+    inferred_role: identifier
+    confidence: 0.98
+  created_at: '2026-05-16 10:45:28'
+  use_count: 0

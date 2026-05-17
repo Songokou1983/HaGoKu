@@ -325,6 +325,38 @@ def apply_scout_user_field_reply_to_context(
     return []
 
 
+def _try_parse_json(text: str) -> Any:
+    """尝试从文本中提取并解析 JSON 对象。先直接解析，失败后用正则提取第一个 {...}。"""
+    import json
+    import re
+
+    if not text:
+        return None
+
+    # 1) 直接解析（去掉可能的 markdown 包裹）
+    cleaned = text.strip()
+    for prefix in ("```json", "```"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3].strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 2) 正则提取第一个 JSON 对象
+    m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def _apply_scout_reply_with_llm(
     context: dict[str, Any],
     raw: str,
@@ -351,69 +383,59 @@ def _apply_scout_reply_with_llm(
     applied: list[str] = []
     seen_col: set[str] = set()
 
-    # 构建已有表格状态的摘要，让 LLM 可以在已有基础上增量更新
-    existing_lines: list[str] = []
+    # 构建已有状态的精简摘要，仅标注哪些字段已有理解
+    understood_cols: set[str] = set()
     for s in semantics:
         col = str(s.get("column_name", ""))
         if not col:
             continue
-        cur_display = display_names.get(col, "")
-        cur_desc = descs.get(col, "")
-        needs_input = bool(s.get("needs_user_input"))
-        parts = [f"  {col}:"]
-        if cur_display:
-            parts.append(f"中文名={cur_display}")
-        if cur_desc:
-            parts.append(f"含义={cur_desc}")
-        if needs_input:
-            parts.append("(待用户确认)")
-        else:
-            parts.append("(已确认)")
-        existing_lines.append(" | ".join(parts))
+        if descs.get(col) or display_names.get(col):
+            understood_cols.add(col)
 
-    existing_state = "\n".join(existing_lines) if existing_lines else "（暂无已理解的内容）"
+    col_list = ", ".join(columns)
 
-    col_list = "\n".join(f"- {c}" for c in columns)
-    prompt = (
-        f"你是 HaGoKu Studio 的 Scout Agent（字段理解合伙人）。\n"
-        f"用户正在跟你沟通数据字段的含义。请根据用户的自然语言说明，增量更新以下字段信息。\n\n"
-        f"当前你对各字段的理解如下（保留已有正确的信息，只更新用户提到的新内容）：\n"
-        f"{existing_state}\n\n"
-        f"请从用户的输入中提取每个字段的更新内容，区分两类信息：\n"
-        f"  1) description（含义理解）：该字段在业务上代表什么、有什么用途（如\"店铺的唯一编号\"）\n"
-        f"  2) display_name（中文名称/显示名）：该字段的中文简称或别名（如\"店铺编号\"、\"门店ID\"）\n\n"
-        f"规则：\n"
-        f"  - 如果用户说\"X 代表/表示/是 Y\"，Y 通常既是含义也是中文名，两个字段都填 Y。\n"
-        f"  - 如果用户说\"X 的中文名是 Y\"，只填 display_name。\n"
-        f"  - 如果用户说\"X 是用来做 Z 的\"，只填 description。\n"
-        f"  - 字段名 key 必须与下面列出的字段名完全一致。\n"
-        f"  - 中文短语不超过 30 字。\n"
-        f"  - 只输出用户**本次提到**的字段，不要重复已有内容。\n"
-        f"  - 增量更新：用户没提到的字段不要输出，已有的正确信息不要改。\n\n"
-        f"只输出 JSON 对象，不要 markdown 代码块标记，不要任何解释文字。\n\n"
-        f"## 完整字段列表\n{col_list}\n\n"
-        f"## 用户的自然语言说明\n{raw}\n\n"
-        f"JSON:"
+    # ── few-shot prompt（参考 llama.cpp JSON 模式最佳实践）────────
+    system_msg = (
+        "你是一个只输出 JSON 的字段理解助手。"
+        "根据用户的自然语言说明，输出一个 JSON 对象，"
+        "key 是字段名，value 是对象，包含 description（含义）和/或 display_name（中文名）。"
+        "不要输出任何解释、markdown 或额外文字，只输出合法 JSON。"
     )
 
+    user_msg = (
+        f"字段列表：{col_list}\n"
+        f"已理解的字段（不要改动）：{', '.join(sorted(understood_cols)) if understood_cols else '无'}\n\n"
+        f"示例 —\n"
+        f'用户说："Code 代表店铺编号"\n'
+        f'你输出：{{"Code": {{"description": "店铺编号", "display_name": "店铺编号"}}}}\n\n'
+        f'用户说："Period的中文名是周次"\n'
+        f'你输出：{{"Period": {{"display_name": "周次"}}}}\n\n'
+        f'用户说："Inc1 是用来记录收入的"\n'
+        f'你输出：{{"Inc1": {{"description": "用来记录收入"}}}}\n\n'
+        f"现在用户说：{raw}\n"
+        f"输出："
+    )
+
+    _raw_text: str = ""
     try:
         resp = llm_client.chat.completions.create(
             model=llm_model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
             temperature=0.0,
             max_tokens=512,
+            response_format={"type": "json_object"},
         )
-        text = resp.choices[0].message.content.strip()
-        # 清理可能的 markdown 包裹
-        for prefix in ("```json", "```"):
-            if text.startswith(prefix):
-                text = text[len(prefix):].strip()
-        if text.endswith("```"):
-            text = text[:-3].strip()
+        _raw_text = (resp.choices[0].message.content or "").strip()
 
         import json
-        parsed = json.loads(text)
+        parsed = _try_parse_json(_raw_text)
         if not isinstance(parsed, dict):
+            import logging
+            _log = logging.getLogger("hagoku.orchestrator")
+            _log.warning("LLM 字段理解：JSON 解析后不是 dict | 原始响应: %s", repr(_raw_text[:200]))
             return []
 
         for col_t, val in parsed.items():
@@ -446,11 +468,15 @@ def _apply_scout_reply_with_llm(
 
         return applied
     except Exception as e:
-        # LLM 失败 → 记录日志，返回 []，不阻断流程
+        # LLM 失败 → 记录日志（含原始响应），返回 []，不阻断流程
+        import traceback
         import logging
         _log = logging.getLogger("hagoku.orchestrator")
-        _log.warning(f"LLM 字段理解失败（保留原字段信息不变）：{e}")
-        import traceback
+        _log.warning(
+            "LLM 字段理解失败（保留原字段信息不变）：%s | 原始响应: %s",
+            e,
+            repr(_raw_text[:200] if _raw_text else "(无响应)"),
+        )
         _log.debug(traceback.format_exc())
         return []
 

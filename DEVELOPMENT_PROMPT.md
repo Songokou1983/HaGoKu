@@ -9,9 +9,11 @@
 
 | 文档 | 用途 |
 |------|------|
-| [PROJECT.md](PROJECT.md) | 灵魂、Agent、人机互动、双轨报告、交付物、**迭代执行顺序** |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册、测试与 Playwright/React 说明 |
-| [docs/INTERACTION_MULTITURN_PLAN.md](docs/INTERACTION_MULTITURN_PLAN.md) | **多轮对齐互动**：目标态、现状差距、分期实施与验收 |
+| [PROJECT.md](PROJECT.md) | 项目灵魂—壳子/架构/通道、Agent 角色、人机互动、双轨报告、防退化机制 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册—看板/向量/防护/审查清单 |
+| [docs/EXTERNAL_REFERENCES.md](docs/EXTERNAL_REFERENCES.md) | 外部项目思想参考（Hermes/CrewAI/Instructor/Pingouin 等） |
+| [docs/INTERACTION_MULTITURN_PLAN.md](docs/INTERACTION_MULTITURN_PLAN.md) | 多轮对齐互动：目标态、现状差距、分期实施与验收 |
+| [docs/AGENT_INTERACTION_CONTRACT.md](docs/AGENT_INTERACTION_CONTRACT.md) | Agent 交互可执行契约 |
 | [DEV.md](DEV.md) | 环境、日常命令 |
 | [README.md](README.md) | 用户安装与快速开始 |
 | [UI_CHANGELOG.md](UI_CHANGELOG.md) | 前端有界面改动时按 `CLAUDE.md` 记录 |

@@ -82,7 +82,7 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
                     del os.environ[k]
 
 
-def create_raw_client(llm_config: LLMConfig) -> Any:
+def create_raw_client(config: Any) -> Any:
     """
     创建原始 OpenAI 客户端（不做 instructor 包装）
 
@@ -90,6 +90,8 @@ def create_raw_client(llm_config: LLMConfig) -> Any:
     """
     import os
     from openai import OpenAI
+
+    llm = _unwrap_llm(config)
 
     _proxy_keys = [
         "ALL_PROXY", "all_proxy",
@@ -100,8 +102,8 @@ def create_raw_client(llm_config: LLMConfig) -> Any:
 
     try:
         return OpenAI(
-            base_url=llm_config.base_url,
-            api_key=llm_config.api_key,
+            base_url=llm.base_url,
+            api_key=llm.api_key,
             timeout=120.0,
         )
     finally:

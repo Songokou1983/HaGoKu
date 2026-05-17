@@ -28,29 +28,6 @@
 
 ---
 
-## 用户核心需求（必须时刻记住）
-
-### 差异化定位
-- **不是聊天工具**：不是把数据丢给 LLM 问答
-- **不是 1 个 LLM**：4 个 Agent（Scout/Cleaner/Analyst/Reporter）+ Scribe 后台仲裁
-- **限制互动内容**：禁止 Agent 聊无关问题
-
-### 分析流程与人机互动（与 Web UI 对齐）
-
-- **不是聊天机器人**：用户不是在空框里随便问；主路径是 **Orchestrator 锁定的流水线**（Scout → Cleaner → Analyst → Reporter）。
-- **规定暂停点**：在关键阶段结束后编排会 **暂停**，经 WebSocket 下发 **`USER_INPUT_REQUESTED`**（或等价事件）；前端优先渲染 **结构化工作流卡片**（`field_review` / `cleaning_review` / `analyst_review`），**不**用固定长模板冒充对话；若事件仍带短 `message`，可为 LLM 依当次结果生成（非必填）。
-- **用户回复**：用户在分析页用 **自然语言** 回复；前端发送 **`respond`**，后端 **`unblock`** 继续执行。不要用「固定表单卡片」理解当前 Web 产品（CLI 分阶段测试仍可独立存在）。
-- **体验原则**：Agent **主动引导**；进度展示应对应真实阶段（流水线状态 + 日志/事件），而非装饰性假状态。
-- **目标态（多轮对齐）**：阶段内以「对齐」为结束条件，**不**预设用户只能回复固定次数；**Scout 字段表**已在编排层实现多轮 `user_input_requested` + `interaction_revision`（见 `hagoku/manager/orchestrator.py`）。**跨阶段闸门、Cleaner/Analyst 同构**仍见 [INTERACTION_MULTITURN_PLAN.md](INTERACTION_MULTITURN_PLAN.md) §2.2 / §4-B/C。实施计划与路线图勾选见 [DEVELOPMENT_PROMPT.md](../DEVELOPMENT_PROMPT.md) **阶段 2.8**；可执行契约见 [AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md) **C4**。
-
-### 用户体验原则
-- 进度条是真实的，不是 4 个格子轮流高亮的 checklist
-- Agent 主动引导用户，不是等用户输入
-- 4 个 Agent 要让用户感知到在做什么
-- 不要让用户用专业方式理解和回答
-
----
-
 ## 测试方法
 
 ### Python 后端测试（主要依赖这个）
@@ -115,7 +92,7 @@ print('ALL 3 PHASES OK')
 .venv/bin/python -m pytest tests/test_product/test_agent_interaction_contract.py -q
 ```
 
-> 契约全文：[AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md)（与 [PROJECT.md](../PROJECT.md)「互动与成长：原则优先级与验收」一致）。
+> 契约全文：[AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md)（与 [PROJECT.md](../PROJECT.md)「人机互动」一致）。
 
 ### UI 手动测试步骤
 1. 浏览器打开前端界面（本地多为 Vite 终端打印的地址，常见形如 `http://localhost:5173`）
@@ -124,9 +101,7 @@ print('ALL 3 PHASES OK')
 4. 观察 **流水线进度** 与 **对话区**：在暂停点应出现 Agent 引导语，用自然语言 **回复** 后继续
 5. **报告** 页：切换项目，**按 run** 查看。**正常完成**：打开 HTML（默认双轨：要点速览 + 完整证据）。**强制级护栏未通过**：应看到说明（或链到 `GUARDRAILS_BLOCKED.md` 全文），**不**把「双轨 HTML 成功预览」当成该次的默认交付态。
 6. **事件** 页（可选）：查看 WebSocket 事件流；若存在护栏拦截，`run_completed` 等在列表/标签上应与「成功完成」区分（含 `run_id` 以便对照报告与 API）。
-7. **护栏拦截整条路径**（有可调触发数据时）：分析页终态、项目卡状态、`GET .../runs` 与 `.../detail` 的 `guardrails_blocked` 应与实际是否产出正式 HTML 一致。契约与清单见 [DEVELOPMENT_PROMPT.md](../DEVELOPMENT_PROMPT.md)「护栏 × 沟通」。
-
-> 下列「Scout 字段确认卡片」等描述适用于 **早期 PROTOTYPE / CLI 分阶段**，**当前 Web 主线以对话式暂停为准**。详见 [PROJECT.md](../PROJECT.md)「人机互动理念」。
+7. **护栏拦截整条路径**（有可调触发数据时）：分析页终态、项目卡状态、`GET .../runs` 与 `.../detail` 的 `guardrails_blocked` 应与实际是否产出正式 HTML 一致。
 
 ### Playwright UI 自动化（受限）
 ```bash
@@ -135,51 +110,54 @@ from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False, args=['--no-sandbox'])
     page = browser.new_page()
-    page.goto('http://localhost:5173', timeout=60000)  # 若端口不同，改为你的 Vite 输出地址
+    page.goto('http://localhost:5173', timeout=60000)
     page.wait_for_load_state('domcontentloaded')
-    # 注意：按钮点击无法正确触发，只能测试导航和页面结构
-    page.get_by_text("分析", exact=True).first.click()
+    page.get_by_text('分析', exact=True).first.click()
 "
 ```
 
-> **说明**：旧版 Streamlit 的 Playwright 限制见 [TROUBLESHOOTING.md §1](TROUBLESHOOTING.md#1-ui-自动化测试playwright)；当前 React 侧栏通常为可点击，完整分析流可结合后端集成测试。
+> **说明**：完整分析流可结合后端集成测试。旧版 Streamlit 限制见 [TROUBLESHOOTING.md §1](TROUBLESHOOTING.md#1-ui-自动化测试playwright)。
 
 ---
 
 ## 代码审查清单（每次提交前）
 
-1. `emit_event` 调用是否有遗漏的 3 参数形式？
+1. **通道完整性**：用户输入语义解析路径中是否出现中文硬匹配？
+   ```bash
+   # 审查命令：通道区域内禁止中文动词匹配
+   grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/agents/scout/agent.py
+   grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.py
+   ```
+   若新增中文字符串匹配或 if-else 语义分支 → 拒绝合并，改为补通道。
+
+2. `emit_event` 调用是否有遗漏的 3 参数形式？
    ```bash
    grep -n "emit_event(" hagoku/agents/*.py
-   # 确保都是 emit_event(EventType, {data})
    ```
 
-2. `column_semantics` 是否正确传递？
+3. `column_semantics` 是否正确传递？
    ```bash
    grep -n "column_semantics" hagoku/manager/orchestrator.py
    grep -n "column_semantics" hagoku/agents/scout/agent.py
    ```
 
-3. SQLite 线程安全是否完整？
+4. SQLite 线程安全是否完整？
    - `memory_backends.py` 的 `save`/`delete` 用 `transaction()`
    - `database.py` 有 `check_same_thread=False` 和 `_lock`
 
-4. pytest 是否通过？
+5. pytest 是否通过？
    ```bash
    .venv/bin/python -m pytest tests/ -q
    ```
 
-5. 若改动 `hagoku_web/src/utils/wsGuardrails.ts`：是否已同步 `tests/test_web/test_ws_guardrails_parity.py` 并通过？
-   ```bash
-   .venv/bin/python -m pytest tests/test_web/test_ws_guardrails_parity.py -q
-   ```
+6. 若改动 `hagoku_web/src/utils/wsGuardrails.ts`：是否已同步 `tests/test_web/test_ws_guardrails_parity.py` 并通过？
 
-6. orchestrator 3 个阶段是否都返回正确 status？
+7. orchestrator 3 个阶段是否都返回正确 status？
    - `scout_first` → `scout_done`
    - `cleaning_first` → `cleaner_strategy`
    - `analyst_first` → `analyst_preliminary`
 
-7. 本地 `UI_CHANGELOG_backup_*` 快照是否误加入暂存区？（应被 `.gitignore`；清理命令见 [DEV.md](../DEV.md)「本地 UI 快照」。）
+8. 本地 `UI_CHANGELOG_backup_*` 快照是否误加入暂存区？
 
 ---
 
@@ -188,66 +166,33 @@ with sync_playwright() as p:
 - ❌ 不要修改 `~/.llama-proxy/` 下的任何文件
 - ❌ 不要用 `pm2 restart` 或 `pm2 stop` 操作 llama-proxy
 - ❌ 不要自己新建 llama.cpp 模型服务
-- ❌ 不要改 `config.py` 里 **`~/.hagoku/.env`** 的加载逻辑（本地密钥只放该文件；勿指望仓库根目录 `.env`）
+- ❌ 不要改 `config.py` 里 `~/.hagoku/.env` 的加载逻辑
 - ❌ 不要在 UI 代码里用 `time.sleep` 阻塞
 - ❌ 不要在 UI 代码里用相对导入（用 `from hagoku.xxx`）
-- ❌ 不要用已删除的 Streamlit 前提推断当前 React UI 的行为（排错以 React 为准）
+- ❌ 不要用已删除的 Streamlit 前提推断当前 React UI 的行为
 - ❌ 不要在 commit message 里写 "various fixes" 或 "update"
+- ❌ 不要硬编码字段语义兜底（所有语义决策交给 LLM，见 PROJECT.md「防退化机制」）
 
 ---
 
-## 项目级看板（Kanban）
-
-### 设计背景
-
-参考 Hermes Agent Kanban 架构，为 HaGoKu 设计项目内部看板。
-
-**核心目标**：可视化数据分析流程的每个阶段，外部与用户沟通，内部传递任务信息接力。
-
-### 架构设计
-
-**文件布局（每个项目独立）**：
-```
-~/.hagoku/projects/<project>/
-  kanban.db        ← SQLite 看板数据库
-  context.md       ← 接力棒（各 Agent 交接数据）
-  progress.yaml    ← 项目记忆（字段决策、用户偏好、分析历史）
-  memory/          ← 各 Agent 私有记忆
-```
-
-**看板状态机**：
-```
-triage → todo → ready → running → blocked → ready → done
-                                    ↓
-                                 archived
-```
-
-**HaGoKu 适配**：
-| 看板状态 | HaGoKu 含义 |
-|----------|-------------|
-| `triage` | 新建任务，Scout 待启动 |
-| `todo` | Scout 正在理解字段 |
-| `ready` | Scout 等待用户确认字段 / Cleaner 等待确认清洗策略 / Analyst 等待确认分析方向 |
-| `running` | Agent 正在执行 |
-| `blocked` | 等待用户输入（字段/策略/方向） |
-| `done` | 阶段完成，可交接下一 Agent |
+## 看板协作实现
 
 ### SQLite Schema
 
 ```sql
 CREATE TABLE kanban_tasks (
     id              TEXT PRIMARY KEY,
-    agent           TEXT NOT NULL,           -- scout/cleaner/analyst/reporter
+    agent           TEXT NOT NULL,
     title           TEXT NOT NULL,
     description     TEXT,
-    status          TEXT DEFAULT 'triage',  -- triage/todo/ready/running/blocked/done/archived
+    status          TEXT DEFAULT 'triage',
     priority        INTEGER DEFAULT 0,
-    parent_id       TEXT,                  -- 父任务（Scout 任务 → Cleaner 任务）
+    parent_id       TEXT,
     workspace_path  TEXT,
     created_at      TEXT,
     updated_at      TEXT,
     completed_at    TEXT,
-    claim_lock      TEXT,                 -- 防止重复执行的锁
+    claim_lock      TEXT,
     claim_expires   INTEGER,
     FOREIGN KEY (parent_id) REFERENCES kanban_tasks(id)
 );
@@ -255,8 +200,8 @@ CREATE TABLE kanban_tasks (
 CREATE TABLE task_events (
     id          TEXT PRIMARY KEY,
     task_id     TEXT NOT NULL,
-    event_type  TEXT NOT NULL,   -- created/claimed/completed/blocked/unblocked/comment
-    actor       TEXT,            -- system/user/agent_name
+    event_type  TEXT NOT NULL,
+    actor       TEXT,
     body        TEXT,
     created_at  TEXT,
     FOREIGN KEY (task_id) REFERENCES kanban_tasks(id)
@@ -265,58 +210,39 @@ CREATE TABLE task_events (
 CREATE TABLE task_comments (
     id          TEXT PRIMARY KEY,
     task_id     TEXT NOT NULL,
-    author      TEXT NOT NULL,   -- user/agent_name
+    author      TEXT NOT NULL,
     body        TEXT,
     created_at  TEXT,
     FOREIGN KEY (task_id) REFERENCES kanban_tasks(id)
 );
 ```
 
+### 看板状态机
+
+```
+triage → todo → ready → running → blocked → ready → done
+                                    ↓
+                                 archived
+```
+
+### HaGoKu 适配
+
+| 看板状态 | HaGoKu 含义 |
+|----------|-------------|
+| `triage` | 新建任务，Scout 待启动 |
+| `todo` | Scout 正在理解字段 |
+| `ready` | 等待用户确认（字段/策略/方向） |
+| `running` | Agent 正在执行 |
+| `blocked` | 等待用户输入 |
+| `done` | 阶段完成，可交接下一 Agent |
+
 ### 关键机制
 
-**1. 父子任务依赖（Scout → Cleaner → Analyst → Reporter）**
-- Scout 任务完成后，其子任务 Cleaner 任务自动晋升 `ready`
-- `recompute_ready()`：当父任务达到 `done` 状态，子任务从 triage/todo 直接晋升到 ready
-- **重要**：`init_pipeline()` 必须被调用来建立 parent_id 关系
+**父子任务依赖**：Scout 完成 → Cleaner 自动晋升 `ready`；`init_pipeline()` 建立 parent_id 关系。
 
-**2. Claim 锁机制**
-- `ready → running` 是原子操作，防止多 Agent 抢同一任务
-- 锁 15 分钟过期，长任务需定期 heartbeat 续期
-- **注意**：`claim_task()` 返回值必须检查，失败时不要继续处理
+**Claim 锁**：`ready → running` 原子操作，15 分钟过期，长任务需 heartbeat 续期。`claim_task()` 返回值必须检查。
 
-**3. Scribe Agent 钩子**
-- 监听 EventBus 所有事件
-- Agent STARTED → 更新任务状态
-- Agent COMPLETED → 触发子任务晋升 + 通知下一 Agent
-- USER_INPUT_REQUESTED → 任务进入 `blocked`
-
-**4. 交接记录（context.md）**
-- 每个 Agent 完成后，将产出写入 `context.md`
-- `context.md` 是接力棒，不是状态机
-
-### Scribe Agent 看板操作接口
-
-```python
-class ScribeAgent:
-    def init_pipeline() -> str: ...  # 创建任务链，返回 scout_id，必须调用！
-    def claim_task(agent) -> str | None: ...  # 返回 task_id 或 None
-    def complete_task(agent, result) -> bool: ...
-    def block_task(agent, reason) -> bool: ...
-    def unblock_task(agent) -> bool: ...
-    def heartbeat(agent) -> bool: ...
-    def add_comment(agent, author, body) -> str | None: ...
-    def get_task_status(agent) -> dict | None: ...
-    def get_pipeline_status() -> dict[str, str]: ...
-```
-
-### init_pipeline() 使用方法
-
-```python
-# 在 Orchestrator 或 Manager 启动 pipeline 时调用
-scribe = ScribeAgent(llm_config, event_bus, project_path)
-scout_id = scribe.init_pipeline()  # 创建 Scout→Cleaner→Analyst→Reporter 任务链
-# scout_id 可用于后续状态查询
-```
+**Scribe 钩子**：监听 EventBus → Agent STARTED 更新状态 → Agent COMPLETED 触发晋升 → USER_INPUT_REQUESTED 进入 blocked。
 
 ### 文件对应关系
 
@@ -341,17 +267,14 @@ scout_id = scribe.init_pipeline()  # 创建 Scout→Cleaner→Analyst→Reporter
 ### 技术栈
 
 - **向量存储**：sqlite_vec（SQLite 扩展）+ OpenAI 兼容 embedding API
-- **配置环境变量**：
-  - `HAGOKYU_EMBEDDING_BASE_URL`：embedding API 地址（默认 `https://api.openai-proxy.org/v1`）
-  - `HAGOKYU_EMBEDDING_API_KEY`：API 密钥
-  - `HAGOKYU_EMBEDDING_MODEL`：模型名（默认 `text-embedding-3-small`）
+- **配置环境变量**：`HAGOKYU_EMBEDDING_BASE_URL` / `HAGOKYU_EMBEDDING_API_KEY` / `HAGOKYU_EMBEDDING_MODEL`
 - **维度**：1536（text-embedding-3-small）
 
 ### 文件布局
 
 ```
 hagoku/agents/<agent>/
-  knowledge.yaml   ← 人可读知识条目（YAML）
+  knowledge.yaml   ← 人可读知识条目
   knowledge.db     ← sqlite_vec 向量数据库
   knowledge.py     ← recall/learn 封装函数
 ```
@@ -363,30 +286,19 @@ from hagoku.storage.knowledge_vector import KnowledgeVectorStore
 
 store = KnowledgeVectorStore("path/to/knowledge.yaml", dimension=1536)
 
-# 检索
 results = store.recall(query="渠道 ROI 分析", tags=["regression"], top_k=3)
 # [{id, content, tags, metadata, similarity, use_count}, ...]
 
-# 添加
-entry_id = store.add(
-    content="场景：渠道分析；方法：回归",
-    tags=["roi", "regression"],
-    metadata={"method": "ols", "confidence": 0.8}
-)
-
-# 更新或插入
+entry_id = store.add(content="场景：渠道分析；方法：回归", tags=["roi", "regression"],
+    metadata={"method": "ols", "confidence": 0.8})
 store.upsert(entry_id, content="...", tags=[...], metadata={...})
-
-# 列出所有
 all_entries = store.list_all()
-
-# 删除
 store.delete(entry_id)
 ```
 
 ### recall() 工作流程
 
-1. `_sync_vectors()`：YAML 有条目但 DB 无向量时，自动补全
+1. `_sync_vectors()`：YAML 有条目但 DB 无向量时自动补全
 2. 对 query 做 embedding（调用 OpenAI API）
 3. 从 DB 读取所有已有向量，计算余弦相似度
 4. 按相似度排序，返回 top_k
@@ -409,38 +321,30 @@ store.delete(entry_id)
 
 ## 错误处理与兜底原则
 
-HaGoKu 的字段理解（语义分析 / 描述生成）完全依赖 LLM。任何「字段含义」相关产出 **不存在硬编码 `if-else` 兜底**。
+HaGoKu 的字段理解完全依赖 LLM。任何「字段含义」相关产出 **不存在硬编码 if-else 兜底**。
 
 ### 三级防护
 
 | 层级 | 触发条件 | 处理方式 | 负责模块 |
 |------|---------|---------|---------|
-| **1. 前置健康检查** | pipeline 启动前 | `check_llm_health()` 验证 LLM 可达/模型存在/chat 可用；失败 → 返回错误，**不进 pipeline** | `hagoku/tools/health.py` |
-| **2. Agent 异常上报** | Scout `_generate_field_descriptions` LLM 调用失败/返回空 | emit `AGENT_FAILED` → Scribe 看板 block + 前端展示错误 | `scout/agent.py` → `_scribe/agent.py` |
-| **3. Scribe LLM 兜底恢复** | Scout 产出部分列描述缺失 | Scribe 用 LLM 补全遗漏列（不同 prompt 策略，质量优先）；失败 → emit `AGENT_FAILED` | `_scribe/agent.py` (`recover_field_descriptions()`) |
-
-### 删除清单（2026-05-15）
-
-以下硬编码兜底逻辑已删除，由上述三级防护替代：
-
-- `scout/agent.py`：`_TYPE_ECHO_SUFFIXES`、`_description_is_user_facing_meaningful`、`_heuristic_column_business_hint`、`_dedupe_column_display_names`、兜底段 `# 仍为空的列：用语义缩写 …`
-- `orchestrator.py`：`_SCOUT_TYPE_ECHO_SUFFIXES`、所有 fallback 函数（`_fallback_*`）、`_SEMANTIC_TYPE_LABELS`
+| **1. 前置健康检查** | pipeline 启动前 | `check_llm_health()` 验证 LLM 可达；失败 → 返回错误，不进 pipeline | `hagoku/tools/health.py` |
+| **2. Agent 异常上报** | Scout LLM 调用失败/返回空 | emit `AGENT_FAILED` → Scribe 看板 block + 前端展示错误 | `scout/agent.py` → `_scribe/agent.py` |
+| **3. Scribe LLM 兜底恢复** | Scout 产出部分列描述缺失 | Scribe 用 LLM 补全遗漏列；失败 → emit `AGENT_FAILED` | `_scribe/agent.py` |
 
 ### 健康检查流程
 
 ```
 Orchestrator.run()
-  │
   ├─ check_llm_health(config)
   │   ├─ 1. HTTP GET /models (timeout=5s)
   │   ├─ 2. 模型名在列表中
   │   ├─ 3. Chat completion ("ping")
-  │   ├─ 4. Token 速率 (警告)
-  │   └─ 5. JSON mode (警告)
-  │
+  │   └─ 4-5. Token速率/JSON mode (警告)
   ├─ PASS → 进入 pipeline
-  └─ FAIL → emit HEALTH_CHECK, 前端红框提示, return
+  └─ FAIL → emit HEALTH_CHECK, 前端红框, return
 ```
+
+---
 
 ## 提交规范
 

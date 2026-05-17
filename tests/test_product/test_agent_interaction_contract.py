@@ -12,7 +12,6 @@ from hagoku.manager.orchestrator import (
     _is_gate_confirm,
     _is_scout_aligned,
     analyst_review_pause_payload,
-    apply_scout_user_field_reply_to_context,
     cleaning_review_pause_payload,
     gate_cleaning_pause_payload,
     scout_field_review_pause_payload,
@@ -97,13 +96,22 @@ def test_c2_analyst_review_structured_empty_message():
     assert row0.get("confidence_interval") == "[0,1]"
 
 
-def test_c3_scout_user_natural_language_updates_context():
-    """C3：自然语言纠错须写入 column_descriptions。"""
+def test_c3_scout_user_natural_language_llm_driven():
+    """C3：自然语言纠错须经 LLM 理解后写入 column_descriptions（mock）。"""
+    from unittest.mock import MagicMock
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
     ctx = {
         "column_semantics": [{"column_name": "Code", "needs_user_input": True}],
         "column_descriptions": {"Code": "old"},
     }
-    applied = apply_scout_user_field_reply_to_context(ctx, "code means store number")
+    mock_llm = MagicMock()
+    choice = MagicMock()
+    choice.message.content = '{"Code": "store number"}'
+    resp = MagicMock()
+    resp.choices = [choice]
+    mock_llm.chat.completions.create.return_value = resp
+    applied = _apply_scout_reply_with_llm(ctx, "code means store number", ["Code"], mock_llm, "test-model")
     assert applied
     assert ctx["column_descriptions"]["Code"] == "store number"
 

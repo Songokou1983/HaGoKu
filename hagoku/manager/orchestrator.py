@@ -15,7 +15,7 @@ from ..agents.reporter import ReporterAgent
 from ..agents.scout import ScoutAgent
 from ..config import HaGoKuConfig
 from ..guardrails.statistical import StatisticalGuardrails
-from ..llm.client import create_deep_client, create_quick_client, create_structured_llm_client
+from ..llm.client import create_deep_client, create_quick_client, create_raw_client, create_structured_llm_client
 from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
@@ -285,102 +285,6 @@ def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
     return None
 
 
-def _parse_scout_field_assignments(line: str) -> tuple[str | None, str | None]:
-    """`Code=店铺`、`Code：店铺`、`Code: 店铺`（全角半角）。"""
-    m = re.match(r"^\s*([^\s=:=：]+?)\s*[=＝:：]\s*(.+)\s*$", line)
-    if not m:
-        return None, None
-    return m.group(1).strip(), m.group(2).strip()
-
-
-def _parse_scout_means_clauses(text: str) -> list[tuple[str, str]]:
-    """`code means store number`、一行内多个 `A means x, B means y`。"""
-    out: list[tuple[str, str]] = []
-    for m in re.finditer(r"(?i)\b([a-z0-9_]+)\s+means\s+([^,;，；\n]+)", text):
-        col_t = m.group(1).strip()
-        mean = m.group(2).strip().rstrip(".,;，；")
-        if col_t and mean:
-            out.append((col_t, mean))
-    return out
-
-
-# 预编译：中文名/别名类触发词（用于区分 display_name vs description）
-_DISPLAY_NAME_TRIGGER_RE = re.compile(
-    r"(?is)^(?:"
-    r"中文名(?:是|为|称(?:是|为)?|：|:|：=|=)|"
-    r"别名(?:是|为|：|:|：=|=|叫)|"
-    r"又名(?:是|为|：|:|：=|=|叫)?"
-    r"又称(?:是|为|：|:|：=|=|叫)?"
-    r"简称(?:是|为|：|:|：=|=|叫)?"
-    r"显示为"
-    r")\s*(.+)$"
-)
-
-# 含义理解中尾部混入的 display_name 意图信号（如「Code为X，你要更新到中文名称里」）
-# 匹配后剥离信号，并将 field_type 从 desc 翻转为 display
-_TRAILING_DISPLAY_INTENT_RE = re.compile(
-    r"(?is)[\s,，。;；]*"
-    r"(?:[你请](?:要|应该?|可以|必须|帮我?)?)?"
-    r"(?:更新到|放到|填到|写(?:到|入)|改成|改到|用在|"
-    r"作为|当作|充当|设(?:置)?为|标记为|归到|分到|"
-    r"用作|视为|当成|拿来当|用来做)"
-    r"[\s]*"
-    r"(?:中文名|中文名称|别名|简称|显示名|display|"
-    r"中文(?:列|栏|字段)|名称列|显示列)"
-    r"(?:里|里面|中|上|去|那儿|那里|上[头面]?)?"
-    r"[\s,，。.!！]*$"
-)
-
-
-def _parse_scout_column_prefixed_line(
-    line: str, columns: list[str]
-) -> tuple[str | None, str | None, str | None]:
-    """`Code是店铺编号`、`Code 表示 周`、`Code means x`、`Code的中文名是店铺编码`（列名在句首，且列为真实列名）。
-
-    返回 (col, meaning, field_type)：
-      - field_type="desc"   → 含义理解（column_descriptions）
-      - field_type="display" → 中文名称（column_display_names）
-      - field_type=None     → 未匹配
-    """
-    s = line.strip()
-    if not s:
-        return None, None, None
-    for col in sorted(set(columns), key=len, reverse=True):
-        if len(s) < len(col) + 1:
-            continue
-        if s[: len(col)].lower() != col.lower():
-            continue
-        tail = s[len(col) :].strip()
-        if not tail:
-            return None, None, None
-
-        # ── 先检测 display_name 触发词 ──
-        dm = _DISPLAY_NAME_TRIGGER_RE.match(tail)
-        if dm:
-            mean = (dm.group(1) or "").strip().rstrip(".,;，；")
-            if mean:
-                return col, mean, "display"
-
-        # ── 再检测含义类触发词 ──
-        m = re.match(
-            r"(?is)^(means|is|are|[:=：]|是|就是|为|表示|指的是|意为)\s*(.+)$",
-            tail,
-        )
-        if not m:
-            continue
-        mean = (m.group(2) or "").strip().rstrip(".,;，；")
-        if mean:
-            # 检测尾部是否混杂 display_name 意图信号
-            # 如「Code为店铺编号，你要更新到中文名称里」
-            di = _TRAILING_DISPLAY_INTENT_RE.search(mean)
-            if di:
-                # 剥离尾部意图信号，翻转为 display_name
-                cleaned = mean[: di.start()].strip().rstrip(".,;，；")
-                if cleaned:
-                    return col, cleaned, "display"
-                # 清理后为空则回退为原含义
-            return col, mean, "desc"
-    return None, None, None
 
 
 def apply_scout_user_field_reply_to_context(
@@ -393,9 +297,11 @@ def apply_scout_user_field_reply_to_context(
     """
     将用户在 Scout 字段核对暂停点的说明写入 context（column_descriptions、needs_user_input）。
 
-    先正则解析结构化行（Col=… / Col means … / Col是…）；若结果为 0 且非纯确认，
-    则用 LLM（quick 模型）从自然语言中提取 {列名: 含义} 映射，使非结构化的中文/英文
-    反馈也能被正确吸收到字段表中。
+    **核心设计：LLM 作为字段理解的唯一引擎。** 用户的自然语言说明（如"Code 代表店铺编号"）
+    原样转发给 LLM 理解语义，LLM 主动识别目标字段、区分含义与中文名称。
+    代码只负责把 LLM 返回的 JSON 机械写入 context —— 不解析、不判断、不兜底。
+
+    若 LLM 不可用或解析失败，保留原 context 不变，返回 []，不启用代码硬解析。
 
     返回简短人类可读记录（如 ``Code←店铺编号``），供事件或日志；无写入则返回 []。
     """
@@ -407,63 +313,16 @@ def apply_scout_user_field_reply_to_context(
     if not columns:
         return []
 
-    descs: dict[str, Any] = context.setdefault("column_descriptions", {})
-    display_names: dict[str, Any] = context.setdefault("column_display_names", {})
-    applied: list[str] = []
-    seen_col: set[str] = set()
+    # ── LLM 唯一引擎：将用户自然语言说明交给 LLM 理解 ──────────
+    if llm_client is not None and llm_model:
+        return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model)
 
-    def _apply_one(canonical: str, meaning: str, field_type: str = "desc") -> None:
-        if not canonical or not meaning or canonical in seen_col:
-            return
-        seen_col.add(canonical)
-        if field_type == "display":
-            display_names[canonical] = meaning
-            applied.append(f"{canonical}:[display]←{meaning}")
-        else:
-            descs[canonical] = meaning
-            applied.append(f"{canonical}←{meaning}")
-        for s in context.get("column_semantics") or []:
-            if str(s.get("column_name", "")) == canonical:
-                s["needs_user_input"] = False
+    # ── LLM 不可用（client/model 为空）：保留原 context，无写入 ──
+    import logging
+    _log = logging.getLogger("hagoku.orchestrator")
+    _log.warning("字段理解跳过：LLM client/model 不可用，保留原字段信息不变")
 
-    # ── 第一阶段：正则解析 ────────────────────────────────────
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-    if not lines:
-        lines = [raw]
-
-    for line in lines:
-        handled = False
-        lt, rt = _parse_scout_field_assignments(line)
-        if lt and rt:
-            c = _resolve_scout_column_token(lt, columns)
-            if c:
-                ft = "desc"
-                # 检测尾部 display_name 意图信号（如「Code=门店编号，请改到中文名称」）
-                di = _TRAILING_DISPLAY_INTENT_RE.search(rt)
-                if di:
-                    cleaned = rt[: di.start()].strip().rstrip(".,;，；")
-                    if cleaned:
-                        rt = cleaned
-                        ft = "display"
-                _apply_one(c, rt, field_type=ft)
-                handled = True
-        if handled:
-            continue
-        pc, pm, ptype = _parse_scout_column_prefixed_line(line, columns)
-        if pc and pm:
-            _apply_one(pc, pm, field_type=ptype or "desc")
-            continue
-        for col_t, mean in _parse_scout_means_clauses(line):
-            c = _resolve_scout_column_token(col_t, columns)
-            if c:
-                _apply_one(c, mean)
-
-    # ── 第二阶段：LLM fallback（正则未命中且非纯确认）─────────
-    if len(applied) == 0 and llm_client is not None and llm_model:
-        llm_applied = _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model)
-        applied.extend(llm_applied)
-
-    return applied
+    return []
 
 
 def _apply_scout_reply_with_llm(
@@ -474,33 +333,70 @@ def _apply_scout_reply_with_llm(
     llm_model: str,
 ) -> list[str]:
     """
-    正则解析未命中时，用 LLM（quick 模型）从自然语言中提取 {列名: 含义} 映射。
+    用 LLM（quick 模型）从用户自然语言中提取字段更新信息。
 
-    用于 handle 非结构化的中文/英文反馈，如：
-      "Code列应该是门店的唯一编号，用来区分不同门店的"
-      "Period 表示周次，不是日期"
+    让 LLM 主动分辨用户意图：是更新「中文名称」（display_name）还是「含义理解」（description），
+    避免代码硬写正则去猜。LLM 输出同时含 description 和 display_name 的结构化 JSON。
+
+    示例：
+      用户："Code 代表店铺编号" → LLM 输出 {"Code": {"description": "店铺编号", "display_name": "店铺编号"}}
+      用户："Period的中文名是周次" → LLM 输出 {"Period": {"display_name": "周次"}}
     """
     if not columns or not raw:
         return []
 
     descs: dict[str, Any] = context.setdefault("column_descriptions", {})
+    display_names: dict[str, Any] = context.setdefault("column_display_names", {})
+    semantics = context.get("column_semantics") or []
     applied: list[str] = []
     seen_col: set[str] = set()
 
+    # 构建已有表格状态的摘要，让 LLM 可以在已有基础上增量更新
+    existing_lines: list[str] = []
+    for s in semantics:
+        col = str(s.get("column_name", ""))
+        if not col:
+            continue
+        cur_display = display_names.get(col, "")
+        cur_desc = descs.get(col, "")
+        needs_input = bool(s.get("needs_user_input"))
+        parts = [f"  {col}:"]
+        if cur_display:
+            parts.append(f"中文名={cur_display}")
+        if cur_desc:
+            parts.append(f"含义={cur_desc}")
+        if needs_input:
+            parts.append("(待用户确认)")
+        else:
+            parts.append("(已确认)")
+        existing_lines.append(" | ".join(parts))
+
+    existing_state = "\n".join(existing_lines) if existing_lines else "（暂无已理解的内容）"
+
     col_list = "\n".join(f"- {c}" for c in columns)
     prompt = (
-        f"下面是用户对数据表格字段含义的说明。请从用户的说明中提取出「字段名 → 含义」的映射。\n"
-        f"只输出 JSON 对象，key 是字段名（必须与下面列出的字段名完全一致），value 是用户给的含义描述（简洁中文短语，不超过 30 字）。\n"
-        f"不要多解释，不要 markdown 代码块标记。\n\n"
-        f"## 字段列表\n{col_list}\n\n"
-        f"## 用户说明\n{raw}\n\n"
+        f"你是 HaGoKu Studio 的 Scout Agent（字段理解合伙人）。\n"
+        f"用户正在跟你沟通数据字段的含义。请根据用户的自然语言说明，增量更新以下字段信息。\n\n"
+        f"当前你对各字段的理解如下（保留已有正确的信息，只更新用户提到的新内容）：\n"
+        f"{existing_state}\n\n"
+        f"请从用户的输入中提取每个字段的更新内容，区分两类信息：\n"
+        f"  1) description（含义理解）：该字段在业务上代表什么、有什么用途（如\"店铺的唯一编号\"）\n"
+        f"  2) display_name（中文名称/显示名）：该字段的中文简称或别名（如\"店铺编号\"、\"门店ID\"）\n\n"
+        f"规则：\n"
+        f"  - 如果用户说\"X 代表/表示/是 Y\"，Y 通常既是含义也是中文名，两个字段都填 Y。\n"
+        f"  - 如果用户说\"X 的中文名是 Y\"，只填 display_name。\n"
+        f"  - 如果用户说\"X 是用来做 Z 的\"，只填 description。\n"
+        f"  - 字段名 key 必须与下面列出的字段名完全一致。\n"
+        f"  - 中文短语不超过 30 字。\n"
+        f"  - 只输出用户**本次提到**的字段，不要重复已有内容。\n"
+        f"  - 增量更新：用户没提到的字段不要输出，已有的正确信息不要改。\n\n"
+        f"只输出 JSON 对象，不要 markdown 代码块标记，不要任何解释文字。\n\n"
+        f"## 完整字段列表\n{col_list}\n\n"
+        f"## 用户的自然语言说明\n{raw}\n\n"
         f"JSON:"
     )
 
     try:
-        # llm_client 是 instructor 包装的 OpenAI 兼容客户端；
-        # 此处不传 response_model，直接获取原始 JSON 文本后手动解析，
-        # 避免 instructor 对简单提取任务引入不必要的 schema 约束。
         resp = llm_client.chat.completions.create(
             model=llm_model,
             messages=[{"role": "user", "content": prompt}],
@@ -520,20 +416,42 @@ def _apply_scout_reply_with_llm(
         if not isinstance(parsed, dict):
             return []
 
-        for col_t, meaning in parsed.items():
-            if not isinstance(meaning, str) or not meaning.strip():
-                continue
+        for col_t, val in parsed.items():
             c = _resolve_scout_column_token(col_t, columns)
-            if c and c not in seen_col:
-                seen_col.add(c)
-                descs[c] = meaning.strip()
-                for s in context.get("column_semantics") or []:
-                    if str(s.get("column_name", "")) == c:
-                        s["needs_user_input"] = False
-                applied.append(f"{c}←{meaning.strip()}")
+            if not c or c in seen_col:
+                continue
+            seen_col.add(c)
+
+            if isinstance(val, str):
+                # 兼容旧格式：纯字符串 → 仅 description
+                if val.strip():
+                    descs[c] = val.strip()
+                    applied.append(f"{c}←{val.strip()}")
+                    for s in context.get("column_semantics") or []:
+                        if str(s.get("column_name", "")) == c:
+                            s["needs_user_input"] = False
+            elif isinstance(val, dict):
+                d = str(val.get("description", "") or "").strip()
+                dn = str(val.get("display_name", "") or "").strip()
+                if d:
+                    descs[c] = d
+                    applied.append(f"{c}←{d}")
+                if dn:
+                    display_names[c] = dn
+                    applied.append(f"{c}:[display]←{dn}")
+                if d or dn:
+                    for s in context.get("column_semantics") or []:
+                        if str(s.get("column_name", "")) == c:
+                            s["needs_user_input"] = False
+
         return applied
-    except Exception:
-        # LLM fallback 失败 → 静默返回 []，不阻断流程
+    except Exception as e:
+        # LLM 失败 → 记录日志，返回 []，不阻断流程
+        import logging
+        _log = logging.getLogger("hagoku.orchestrator")
+        _log.warning(f"LLM 字段理解失败（保留原字段信息不变）：{e}")
+        import traceback
+        _log.debug(traceback.format_exc())
         return []
 
 
@@ -819,7 +737,8 @@ class Orchestrator:
         # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
         self._llm_client: Any | None = None
         self._llm_deep: Any | None = None  # 深度推理客户端（懒初始化）
-        self._llm_quick: Any | None = None  # 快速客户端（懒初始化）
+        self._llm_quick: Any | None = None  # 快速客户端（懒初始化，instructor 包装）
+        self._llm_quick_raw: Any | None = None  # 快速原始客户端（非 instructor 包装）
 
         # 设置模块级配置
         from ..tools.analysis import set_analysis_config
@@ -844,10 +763,17 @@ class Orchestrator:
 
     @property
     def llm_quick(self) -> Any:
-        """快速客户端（懒初始化）"""
+        """快速客户端（懒初始化，instructor 包装，用于结构化输出）"""
         if self._llm_quick is None:
             self._llm_quick = create_quick_client(self.config)
         return self._llm_quick
+
+    @property
+    def llm_quick_raw(self) -> Any:
+        """快速原始客户端（懒初始化，非 instructor 包装，用于 _apply_scout_reply_with_llm 等 JSON-only 调用）"""
+        if self._llm_quick_raw is None:
+            self._llm_quick_raw = create_raw_client(self.config)
+        return self._llm_quick_raw
 
     # ── 交互式暂停 / 恢复 ─────────────────────────────────────
 
@@ -1280,7 +1206,7 @@ class Orchestrator:
                         applied_scout = apply_scout_user_field_reply_to_context(
                             context,
                             user_reply_scout or "",
-                            llm_client=self.llm_quick,
+                            llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
                         )
                         if user_reply_scout:
@@ -1315,7 +1241,7 @@ class Orchestrator:
                         gate_applied = apply_scout_user_field_reply_to_context(
                             context,
                             gate_reply,
-                            llm_client=self.llm_quick,
+                            llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
                         )
                         if gate_reply:

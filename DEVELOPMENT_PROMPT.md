@@ -77,7 +77,7 @@
 | ID | 工作项 | 状态 | 备注 |
 |----|--------|------|------|
 | 2.8.0 | **Phase 0**：对齐判定规则 + 3 条场景剧本评审 | [/] | **代码侧**已有 `_scout_reply_is_pure_confirm` / `_is_scout_aligned`；**书面**词表（如「可以了」）与 3 条剧本仍建议产品补全，见 `INTERACTION_MULTITURN_PLAN.md` §2.2 |
-| 2.8.1 | **Phase 1**：Scout 字段理解子状态机 + `interaction_revision` + pytest | [x] | `hagoku/manager/orchestrator.py`（Scout 段 `while`；`_is_scout_aligned`；合约测于 `test_agent_interaction_contract.py`） |
+| 2.8.1 | **Phase 1**：Scout 字段理解子状态机 + `interaction_revision` + pytest | [x] | `hagoku/manager/orchestrator.py`（Scout 段 `while`；`_is_scout_aligned`；合约测于 `test_agent_interaction_contract.py`）；2026-05-18 用户纠错流程重构为 function calling 模式（`_apply_scout_reply_with_llm` → `update_field_understanding` 工具 → `apply_scout_user_field_reply_to_context` 机械执行） |
 | 2.8.2 | **Phase 2**：`AnalyzePanel` 多轮同阶段暂停 UI | [x] | `activeFieldReviewRevision`；revision 递增时原地更新卡片 |
 | 2.8.3 | **Phase 3**：跨阶段闸门 + Cleaner/Analyst 同构 | [/] | **Scout→Cleaner 闸门**已落地（`_is_gate_confirm`；`gate_cleaning_pause_payload`；AnalyzePanel gate UI）；**Cleaner/Analyst 同构**仍待（可拆 PR） |
 | 2.8.4 | **契约**：`AGENT_INTERACTION_CONTRACT.md` C4 扩展 + 回归测 | [x] | C4 已含闸门行为（禁止未对齐进清洗）；`test_agent_interaction_contract.py` 新增闸门测（`_is_gate_confirm` 等 3 条） |

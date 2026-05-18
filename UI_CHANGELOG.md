@@ -4,6 +4,14 @@
 
 - **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu 后端再刷新」的白话。
 
+## 2026-05-18 — 字段理解交互：从硬编码解析重构为 function calling 模式
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：用户纠错 `_apply_scout_reply_with_llm` 重构。代码不再用正则/if-else 解析用户自然语言，改为将用户原话完整传给 LLM。LLM 通过 `update_field_understanding` function calling 工具自主决定更新哪些字段的 `display_name` 与 `description`。`apply_scout_user_field_reply_to_context` 成为纯机械执行层——遍历 `msg.tool_calls` 结果，写入 `column_descriptions` / `column_display_names`，不判断语义。
+- **`tests/test_manager/test_scout_user_reply_apply.py`**：新增测试覆盖 function calling 路径，验证 LLM 收到 `update_field_understanding` 工具签名且代码层不自行解析。
+- 本次不涉及前端 UI 改动（仅后端交互逻辑变更）。
+
 ## 2026-05-14 — Web + API：暂停点不注入任何台词库文案
 
 ### 变更概要

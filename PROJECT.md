@@ -32,6 +32,8 @@ HaGoKu 由三个要素构成。代码只负责壳子（运行环境）、架构�
 
 **通道的检验标准**：当 LLM 看到上下文后，能否仅凭上下文做出正确决定？如果不能，说明信息有遗漏——需要补的是通道（多传信息），不是补代码规则。
 
+**通道的首选机制**：function calling（tools）。代码定义工具签名（`update_field_understanding`），LLM 主动调用工具来理解、更新字段。代码仅机械执行 `msg.tool_calls` 的结果。function calling 是代码只管"怎么做"的最高级形态——LLM 在丰富的上下文里自主决定调用哪个工具、传什么参数。
+
 任何需要"判断"的环节——用户想干什么、字段是什么意思、失败后该换什么策略——信息必须完整到达 LLM。
 
 ---
@@ -69,7 +71,7 @@ HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，
 |------|--------------------------|---------------------|
 | 字段理解 | 代码提供 3 列表格模板（display_name/description/状态），LLM 填写内容 | 代码用正则解析用户输入，自己判断哪个列该更新什么 |
 | 分析方法 | 代码注册 50+ 分析方法（工具库），LLM 选择调用哪个 | 代码用 if-else 根据关键词选择分析方法 |
-| 用户反馈处理 | 代码把用户自然语言原样转发给 LLM，把 LLM 返回的 JSON 机械写入 context | 代码用正则 `col=desc` 格式解析用户输入并自行更新字段 |
+| 用户反馈处理 | 代码提供 `update_field_understanding` function calling 工具，LLM 通过 tool_calls 主动选择更新哪些字段，代码机械写入 context | 代码用正则 `col=desc` 格式解析用户输入并自行更新字段 |
 | 保底/降级 | LLM 失败时保留原 context 不变，通知用户"AI 暂时无法处理" | LLM 失败时代码用正则/默认值自己填表 |
 
 **检验标准**：如果一段代码的语义产出（字段含义、方法选择、报告叙述）可以被删除且不影响最终结果（因为 LLM 会产生同样的产出），那这段代码就是硬写——应删除。
@@ -91,6 +93,8 @@ HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，
 - `if/elif` 链枚举语义模式
 
 出现即违规。
+
+> **当前通道区域**：`orchestrator.py` 中 `_apply_scout_reply_with_llm`（function calling 模式，LLM 通过 `update_field_understanding` 工具自主决定更新内容）与 `apply_scout_user_field_reply_to_context`（机械执行层，将 tool_calls 结果写入 context）。`_SCOUT_FIELD_UPDATE_TOOLS` 内的中文字符串是 function calling 工具的 `description`（供 LLM 理解工具用途），不属于代码硬匹配。
 
 ### 刹车 2：回归契约（测试级）
 

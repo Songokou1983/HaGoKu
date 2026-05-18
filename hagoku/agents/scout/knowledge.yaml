@@ -2411,3 +2411,33 @@ knowledge:
     confidence: 0.98
   created_at: '2026-05-18 08:07:02'
   use_count: 0
+- id: 627d26e1
+  content: 字段名：表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一字符串值（B01-B05），符合业务单元编码模式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test_01
+    field: 表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一字符串值（B01-B05），符合业务单元编码模式
+    inferred_role: categorical_feature
+    confidence: 0.95
+  created_at: '2026-05-18 11:26:07'
+  use_count: 0
+- id: ff7861a8
+  content: 字段名：唯一标识每条记录的编号，格式为A后跟7位数字，如A0000001；含义：唯一标识每条记录的编号，格式为A后跟7位数字，如A0000001；数据特征：categorical
+    25个唯一值，格式为A0000001-A0000005，每个值恰好出现25次，符合唯一标识符特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test_01
+    field: 唯一标识每条记录的编号，格式为A后跟7位数字，如A0000001
+    meaning: 唯一标识每条记录的编号，格式为A后跟7位数字，如A0000001
+    data_pattern: categorical 25个唯一值，格式为A0000001-A0000005，每个值恰好出现25次，符合唯一标识符特征
+    inferred_role: identifier
+    confidence: 0.98
+  created_at: '2026-05-18 11:26:08'
+  use_count: 0

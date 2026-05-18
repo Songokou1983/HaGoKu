@@ -394,12 +394,14 @@ def _apply_scout_reply_with_llm(
 
     col_list = ", ".join(columns)
 
-    # ── few-shot prompt（参考 llama.cpp JSON 模式最佳实践）────────
+    # ── prompt 兼容 llama.cpp（无 response_format 支持）────────
+    # 通过 prompt 引导 + assistant prefill 强制 JSON 输出
     system_msg = (
         "你是一个只输出 JSON 的字段理解助手。"
         "根据用户的自然语言说明，输出一个 JSON 对象，"
         "key 是字段名，value 是对象，包含 description（含义）和/或 display_name（中文名）。"
         "不要输出任何解释、markdown 或额外文字，只输出合法 JSON。"
+        "必须以 '{' 开头、'}' 结尾。"
     )
 
     user_msg = (
@@ -413,22 +415,27 @@ def _apply_scout_reply_with_llm(
         f'用户说："Inc1 是用来记录收入的"\n'
         f'你输出：{{"Inc1": {{"description": "用来记录收入"}}}}\n\n'
         f"现在用户说：{raw}\n"
-        f"输出："
+        f"现在请输出纯 JSON（不含任何 markdown、解释或换行说明）："
     )
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg},
+        # assistant prefill：强制 LLM 以 '{' 开头，兼容不支持 response_format 的 llama.cpp
+        {"role": "assistant", "content": "{"},
+    ]
 
     _raw_text: str = ""
     try:
         resp = llm_client.chat.completions.create(
             model=llm_model,
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
+            messages=messages,
             temperature=0.0,
             max_tokens=512,
-            response_format={"type": "json_object"},
         )
-        _raw_text = (resp.choices[0].message.content or "").strip()
+        resp_text = (resp.choices[0].message.content or "").strip()
+        # assistant prefill 已输出 '{'，LLM 回复拼接后即为完整 JSON
+        _raw_text = "{" + resp_text
 
         import json
         parsed = _try_parse_json(_raw_text)

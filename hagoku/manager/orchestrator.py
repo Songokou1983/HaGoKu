@@ -357,6 +357,52 @@ def _try_parse_json(text: str) -> Any:
     return None
 
 
+# ── LLM 工具定义：字段理解（function calling）──────────────────
+# LLM 通过调用这些工具来主动更新字段表格，而非被动输出 JSON。
+
+_SCOUT_FIELD_UPDATE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "update_field_understanding",
+            "description": (
+                "更新一个字段的中文名称（display_name）和/或业务含义理解（description）。"
+                "当用户通过对话说明了某个字段的含义或中文名称时，主动调用此工具来更新字段表格。"
+                "如果用户的说明一次覆盖多个字段，请多次调用此工具，每次更新一个字段。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column_name": {
+                        "type": "string",
+                        "description": "要更新的字段名，必须是当前字段表格中存在的字段。",
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "description": (
+                            "字段的中文业务名称，简短（≤8字），面向业务同事。"
+                            "例如：'店铺编号'、'销售额'、'周次'。"
+                            "仅当用户在对话中明确提到了中文简称／名称时才填写此项。"
+                            "如果用户只是解释了含义但未给中文名，则不填此字段。"
+                        ),
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": (
+                            "字段的业务含义理解，自然语言一句话。"
+                            "例如：'代表每个门店的唯一数字编号'、'该周期的总收入金额（万元）'。"
+                            "如果用户给出的说明更适合放在 display_name（简短中文名），"
+                            "则可将此字段设为相同或留空。"
+                        ),
+                    },
+                },
+                "required": ["column_name"],
+            },
+        },
+    },
+]
+
+
 def _apply_scout_reply_with_llm(
     context: dict[str, Any],
     raw: str,
@@ -365,14 +411,19 @@ def _apply_scout_reply_with_llm(
     llm_model: str,
 ) -> list[str]:
     """
-    用 LLM（quick 模型）从用户自然语言中提取字段更新信息。
+    LLM 作为字段理解的唯一引擎，通过 function calling 主动更新字段信息。
 
-    让 LLM 主动分辨用户意图：是更新「中文名称」（display_name）还是「含义理解」（description），
-    避免代码硬写正则去猜。LLM 输出同时含 description 和 display_name 的结构化 JSON。
+    **核心设计**：
+    - 代码将当前「字段表格」完整状态传给 LLM
+    - LLM 通过调用 `update_field_understanding` 工具来主动更新字段
+    - 代码只负责机械执行 LLM 的工具调用结果——不解析、不判断、不兜底
+    - 若模型不支持 tool calling（返回空 tool_calls），降级为 JSON 解析模式
 
     示例：
-      用户："Code 代表店铺编号" → LLM 输出 {"Code": {"description": "店铺编号", "display_name": "店铺编号"}}
-      用户："Period的中文名是周次" → LLM 输出 {"Period": {"display_name": "周次"}}
+      用户："Code 代表店铺编号"
+        → LLM 调用 update_field_understanding(column_name="Code", display_name="店铺编号", description="代表店铺编号")
+      用户："Period的中文名是周次"
+        → LLM 调用 update_field_understanding(column_name="Period", display_name="周次")
     """
     if not columns or not raw:
         return []
@@ -383,46 +434,44 @@ def _apply_scout_reply_with_llm(
     applied: list[str] = []
     seen_col: set[str] = set()
 
-    # 构建已有状态的精简摘要，仅标注哪些字段已有理解
-    understood_cols: set[str] = set()
-    for s in semantics:
-        col = str(s.get("column_name", ""))
+    # ── 构建当前字段表格状态，供 LLM 理解已有信息 ─────────────
+    field_state_lines: list[str] = []
+    for sem in semantics:
+        col = str(sem.get("column_name", ""))
         if not col:
             continue
-        if descs.get(col) or display_names.get(col):
-            understood_cols.add(col)
+        current_desc = str(descs.get(col, "") or "").strip()
+        current_dn = str(display_names.get(col, "") or "").strip()
+        parts = [f"  - {col}"]
+        if current_dn:
+            parts.append(f"中文名: {current_dn}")
+        if current_desc:
+            parts.append(f"含义: {current_desc}")
+        if not current_dn and not current_desc:
+            parts.append("(尚未理解)")
+        field_state_lines.append(" | ".join(parts))
 
-    col_list = ", ".join(columns)
+    field_state = "\n".join(field_state_lines) if field_state_lines else "（尚无任何字段）"
 
-    # ── prompt 兼容 llama.cpp（无 response_format 支持）────────
-    # 通过 prompt 引导 + assistant prefill 强制 JSON 输出
     system_msg = (
-        "你是一个只输出 JSON 的字段理解助手。"
-        "根据用户的自然语言说明，输出一个 JSON 对象，"
-        "key 是字段名，value 是对象，包含 description（含义）和/或 display_name（中文名）。"
-        "不要输出任何解释、markdown 或额外文字，只输出合法 JSON。"
-        "必须以 '{' 开头、'}' 结尾。"
+        "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
+        "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
+        "当前字段表格状态：\n"
+        f"{field_state}\n\n"
+        "规则：\n"
+        "- 当用户说明了某个字段的含义时，调用 `update_field_understanding` 工具来更新该字段。\n"
+        "- 如果用户说了中文名称（如'Code 叫店铺编号'），请同时更新 display_name 和 description。\n"
+        "- 如果用户只解释了含义（如'Code 代表店铺的唯一编号'），只更新 description。\n"
+        "- 如果用户的说明同时覆盖多个字段，请多次调用工具，每次更新一个字段。\n"
+        "- 不要调用工具更新未被用户提及的字段。\n"
+        "- 如果用户的输入不涉及字段含义（如纯确认'好的/确认'、闲聊），不要调用任何工具。"
     )
 
-    user_msg = (
-        f"字段列表：{col_list}\n"
-        f"已理解的字段（不要改动）：{', '.join(sorted(understood_cols)) if understood_cols else '无'}\n\n"
-        f"示例 —\n"
-        f'用户说："Code 代表店铺编号"\n'
-        f'你输出：{{"Code": {{"description": "店铺编号", "display_name": "店铺编号"}}}}\n\n'
-        f'用户说："Period的中文名是周次"\n'
-        f'你输出：{{"Period": {{"display_name": "周次"}}}}\n\n'
-        f'用户说："Inc1 是用来记录收入的"\n'
-        f'你输出：{{"Inc1": {{"description": "用来记录收入"}}}}\n\n'
-        f"现在用户说：{raw}\n"
-        f"现在请输出纯 JSON（不含任何 markdown、解释或换行说明）："
-    )
+    user_msg = f"用户说：{raw}"
 
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": user_msg},
-        # assistant prefill：强制 LLM 以 '{' 开头，兼容不支持 response_format 的 llama.cpp
-        {"role": "assistant", "content": "{"},
     ]
 
     _raw_text: str = ""
@@ -432,52 +481,104 @@ def _apply_scout_reply_with_llm(
             messages=messages,
             temperature=0.0,
             max_tokens=512,
+            tools=_SCOUT_FIELD_UPDATE_TOOLS,
+            tool_choice="auto",
         )
-        resp_text = (resp.choices[0].message.content or "").strip()
-        # assistant prefill 已输出 '{'，LLM 回复拼接后即为完整 JSON
-        _raw_text = "{" + resp_text
 
-        import json
-        parsed = _try_parse_json(_raw_text)
-        if not isinstance(parsed, dict):
-            import logging
-            _log = logging.getLogger("hagoku.orchestrator")
-            _log.warning("LLM 字段理解：JSON 解析后不是 dict | 原始响应: %s", repr(_raw_text[:200]))
-            return []
+        msg = resp.choices[0].message
+        tool_calls = getattr(msg, "tool_calls", None)
+        _raw_text = (msg.content or "").strip()
 
-        for col_t, val in parsed.items():
-            c = _resolve_scout_column_token(col_t, columns)
-            if not c or c in seen_col:
-                continue
-            seen_col.add(c)
+        # ── 处理 LLM 的工具调用（主路径）──────────────────────
+        if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
+            import json as _json
 
-            if isinstance(val, str):
-                # 兼容旧格式：纯字符串 → 仅 description
-                if val.strip():
-                    descs[c] = val.strip()
-                    applied.append(f"{c}←{val.strip()}")
-                    for s in context.get("column_semantics") or []:
+            for tc in tool_calls:
+                # 兼容 OpenAI SDK 的 ToolCall 对象和 dict
+                if hasattr(tc, "function"):
+                    func_name = tc.function.name
+                    func_args_str = tc.function.arguments
+                elif isinstance(tc, dict):
+                    f = tc.get("function", {})
+                    func_name = f.get("name", "")
+                    func_args_str = f.get("arguments", "{}")
+                else:
+                    continue
+
+                if func_name != "update_field_understanding":
+                    continue
+
+                try:
+                    args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+                except (_json.JSONDecodeError, TypeError):
+                    continue
+
+                col_t = str(args.get("column_name", "")).strip()
+                c = _resolve_scout_column_token(col_t, columns)
+                if not c or c in seen_col:
+                    continue
+                seen_col.add(c)
+
+                d_raw = str(args.get("description", "") or "").strip()
+                dn_raw = str(args.get("display_name", "") or "").strip()
+
+                updated_something = False
+                if d_raw:
+                    descs[c] = d_raw
+                    applied.append(f"{c}←{d_raw}")
+                    updated_something = True
+                if dn_raw:
+                    display_names[c] = dn_raw
+                    applied.append(f"{c}:[display]←{dn_raw}")
+                    updated_something = True
+                if updated_something:
+                    for s in semantics:
                         if str(s.get("column_name", "")) == c:
                             s["needs_user_input"] = False
-            elif isinstance(val, dict):
-                d = str(val.get("description", "") or "").strip()
-                dn = str(val.get("display_name", "") or "").strip()
-                if d:
-                    descs[c] = d
-                    applied.append(f"{c}←{d}")
-                if dn:
-                    display_names[c] = dn
-                    applied.append(f"{c}:[display]←{dn}")
-                if d or dn:
-                    for s in context.get("column_semantics") or []:
-                        if str(s.get("column_name", "")) == c:
-                            s["needs_user_input"] = False
 
-        return applied
+            return applied
+
+        # ── 无 tool_calls：尝试 JSON fallback（兼容旧模型）─────
+        if _raw_text:
+            parsed = _try_parse_json(_raw_text)
+            if isinstance(parsed, dict):
+                import json as _json
+
+                for col_t, val in parsed.items():
+                    c = _resolve_scout_column_token(col_t, columns)
+                    if not c or c in seen_col:
+                        continue
+                    seen_col.add(c)
+
+                    if isinstance(val, str):
+                        if val.strip():
+                            descs[c] = val.strip()
+                            applied.append(f"{c}←{val.strip()}")
+                            for s in semantics:
+                                if str(s.get("column_name", "")) == c:
+                                    s["needs_user_input"] = False
+                    elif isinstance(val, dict):
+                        d = str(val.get("description", "") or "").strip()
+                        dn = str(val.get("display_name", "") or "").strip()
+                        if d:
+                            descs[c] = d
+                            applied.append(f"{c}←{d}")
+                        if dn:
+                            display_names[c] = dn
+                            applied.append(f"{c}:[display]←{dn}")
+                        if d or dn:
+                            for s in semantics:
+                                if str(s.get("column_name", "")) == c:
+                                    s["needs_user_input"] = False
+                return applied
+
+        return []
+
     except Exception as e:
-        # LLM 失败 → 记录日志（含原始响应），返回 []，不阻断流程
+        # LLM 失败 → 记录日志，返回 []，不阻断流程
         import traceback
         import logging
+
         _log = logging.getLogger("hagoku.orchestrator")
         _log.warning(
             "LLM 字段理解失败（保留原字段信息不变）：%s | 原始响应: %s",

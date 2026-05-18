@@ -36,7 +36,10 @@ def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
     s = re.sub(r"^[\-\*\•]\s*", "", s)
     s = re.sub(r"^\d+[\.)]\s*", "", s)
     if "：" in s:
-        left, right = s.split("：", 1)
+        idx = s.find("：")
+        left, right = s[:idx], s[idx + 1 :]
+        if len(left.strip()) > 64:
+            return None
     elif ":" in s:
         idx = s.find(":")
         left, right = s[:idx], s[idx + 1 :]
@@ -502,10 +505,22 @@ class ScoutAgent(InteractionMixin):
             result = _json.loads(raw)
         except _json.JSONDecodeError:
             try:
-                cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+                cleaned = raw.strip()
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+                cleaned = cleaned.strip()
                 result = _json.loads(cleaned)
-            except _json.JSONDecodeError as e:
-                raise ValueError(f"Scout LLM 返回的格式无法解析为 JSON。原始内容前 500 字: {raw[:500]}") from e
+            except _json.JSONDecodeError:
+                try:
+                    match = re.search(r"\{.*\}", raw, re.DOTALL)
+                    if match:
+                        result = _json.loads(match.group())
+                    else:
+                        raise
+                except Exception:
+                    raise ValueError(
+                        f"Scout LLM 返回的格式无法解析为 JSON。原始内容前 500 字: {raw[:500]}"
+                    )
 
         columns_out = result.get("columns") or result.get("column_semantics") or []
         if not columns_out:

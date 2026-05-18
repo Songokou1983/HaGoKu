@@ -193,7 +193,7 @@ class ScoutAgent(InteractionMixin):
             self._emit(EventType.TOOL_RESULT, {"summary": f"质量={profile['quality_score']:.0%}"})
 
             # 3. 推断字段语义
-            column_semantics = self._infer_all_semantics(df, query)
+            column_semantics = self._infer_all_semantics(df, query, memory_project)
 
             # 4. 构建上下文
             context = {
@@ -274,7 +274,7 @@ class ScoutAgent(InteractionMixin):
             profile = generate_profile(df)
 
             # 推断字段语义
-            column_semantics = self._infer_all_semantics(df, query)
+            column_semantics = self._infer_all_semantics(df, query, memory_project)
 
             # per-column 数据画像（用于 LLM 生成描述 + 前端展示）
             column_profiles: dict[str, Any] = {}
@@ -429,8 +429,13 @@ class ScoutAgent(InteractionMixin):
             },
         )
 
-    def _infer_all_semantics(self, df: pd.DataFrame, query: str) -> list[dict]:
-        """推断所有列的语义 — 全部通过 LLM 结构化输出完成，零硬编码"""
+    def _infer_all_semantics(self, df: pd.DataFrame, query: str, memory_project: dict[str, Any] | None = None) -> list[dict]:
+        """推断所有列的语义 — 全部通过 LLM 结构化输出完成，零硬编码
+
+        memory_project: 来自 MemoryManager.build_memory_project() 的项目记忆，
+                       包含 {"fields": {...}, "display_names": {...}}。
+                       已确认的字段描述和中文名称会直接注入 prompt，LLM 可沿用而非重新推断。
+        """
         from ...llm.client import create_quick_client, create_raw_client
 
         # 构建每列的 profile 摘要
@@ -464,6 +469,23 @@ class ScoutAgent(InteractionMixin):
             "columns": column_list,
         }
 
+        # 拼接记忆上下文到 system_prompt
+        memory_notes = ""
+        if memory_project:
+            fields = memory_project.get("fields", {})
+            display_names = memory_project.get("display_names", {})
+            if fields or display_names:
+                lines = [
+                    "\n\n【项目记忆 — 以下字段已在历史分析中确认，请直接沿用，无需重新推断：】"
+                ]
+                for col, desc in fields.items():
+                    dn = display_names.get(col, "")
+                    if dn:
+                        lines.append(f"  - {col}: 中文名称「{dn}」，含义：{desc}")
+                    else:
+                        lines.append(f"  - {col}: 含义：{desc}")
+                memory_notes = "\n".join(lines)
+
         system_prompt = (
             "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
             "输出一个 JSON 对象，字段 `columns` 为数组，每项包含：\n"
@@ -482,6 +504,7 @@ class ScoutAgent(InteractionMixin):
             "  - target_keywords_from_query: 从用户问题中提取的目标关键词（字符串数组，拆成中文词组，如 ['收入','销售额']）\n"
             "\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
+            f"{memory_notes}"
         )
 
         client = create_raw_client(self.llm_config)
@@ -661,15 +684,20 @@ class ScoutAgent(InteractionMixin):
     def _apply_project_memory(self, context: dict, memory_project: dict) -> None:
         """应用项目记忆中的字段定义"""
         fields = memory_project.get("fields", {})
-        if not fields:
+        display_names = memory_project.get("display_names", {})
+        if not fields and not display_names:
             return
 
-        # 从全局记忆加载字段描述
+        # 从全局记忆加载字段描述和显示名
         for sem in context["column_semantics"]:
             col = sem["column_name"]
             if col in fields:
                 context["column_descriptions"][col] = fields[col]
                 sem["confidence"] = 1.0  # 记忆中的定义是高置信度
+            if col in display_names:
+                context.setdefault("column_display_names", {})
+                context["column_display_names"][col] = display_names[col]
+                sem["needs_user_input"] = False  # 记忆中的名称减少确认需求
 
     def _derive_roles(self, context: dict) -> None:
         """从 column_semantics 推导 target/features"""

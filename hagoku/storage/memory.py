@@ -47,6 +47,7 @@ class ColumnSemanticDef(BaseModel):
     ordinal: bool | None = None
     order: list[str] | None = None
     unit: str | None = None
+    display_name: str | None = None
     description: str | None = None
     role: str | None = None
     confidence: float = 1.0
@@ -552,11 +553,14 @@ class MemoryManager:
         用于每次 Scout 运行时注入历史字段理解，避免用户重复回答。
         """
         fields: dict[str, str] = {}
+        display_names: dict[str, str] = {}
         confirmed = self.get_column_semantics(project_id)
         for col_name, sem_def in confirmed.items():
             if sem_def.description:
                 fields[col_name] = sem_def.description
-        return {"fields": fields}
+            if sem_def.display_name:
+                display_names[col_name] = sem_def.display_name
+        return {"fields": fields, "display_names": display_names}
 
     def persist_field_descriptions(
         self,
@@ -586,7 +590,7 @@ class MemoryManager:
                 if desc:
                     sem_def.description = desc
                 if dn:
-                    sem_def.unit = dn  # display_name 暂存为 unit 字段
+                    sem_def.display_name = dn
                 sem_def.source = "user"
                 sem_def.confidence = 1.0
             else:

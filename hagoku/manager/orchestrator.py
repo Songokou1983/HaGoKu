@@ -1144,8 +1144,12 @@ class Orchestrator:
             self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "🔍 正在识别数据字段，请稍候...",
             })
-            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
-            ir = scout.begin(data_path=data_path, query=query, project_id=project_name)
+            # 加载项目历史记忆，避免用户重复回答字段含义
+            memory_project = self.memory.build_memory_project(project_name) if self.memory else None
+            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
+                               memory_project=memory_project)
+            ir = scout.begin(data_path=data_path, query=query, project_id=project_name,
+                             memory_project=memory_project)
             # begin() 已触发 AGENT_STARTED（由 Scribe claim 任务），并在需要确认时 block 了看板
             # 返回 InteractionResult 给 UI 显示确认项
             return {
@@ -1156,6 +1160,7 @@ class Orchestrator:
                 "pending_items": ir.pending_items,
                 "data": ir.data,
                 "final": ir.final,
+                "memory_loaded": bool(memory_project and memory_project.get("fields")),
             }
 
         # ── Cleaner 策略阶段 ────────────────────────────────────
@@ -1314,8 +1319,12 @@ class Orchestrator:
             # Scout + Cleaner（如果不是 resume）
             if context is None:
                 # 3. Scout: 数据侦察
+                # 加载项目历史记忆，避免用户重复回答字段含义
+                memory_project = self.memory.build_memory_project(project_name) if self.memory else None
+                scout.memory_project = memory_project
                 context = scout.run(
-                    data_path, query, project_id=project_name, emit_completed=False
+                    data_path, query, project_id=project_name, emit_completed=False,
+                    memory_project=memory_project,
                 )
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
@@ -1343,6 +1352,9 @@ class Orchestrator:
                             llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
                         )
+                        # 用户字段回复：持久化到项目记忆，避免下次重复询问
+                        if applied_scout and self.memory:
+                            self._persist_scout_field_updates(project_name, applied_scout, context)
                         if user_reply_scout:
                             self.event_bus.emit(
                                 EventType.USER_INPUT_RECEIVED,
@@ -1378,6 +1390,9 @@ class Orchestrator:
                             llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
                         )
+                        # 闸门处的字段补充也持久化到项目记忆
+                        if gate_applied and self.memory:
+                            self._persist_scout_field_updates(project_name, gate_applied, context)
                         if gate_reply:
                             self.event_bus.emit(
                                 EventType.USER_INPUT_RECEIVED,
@@ -1885,6 +1900,55 @@ class Orchestrator:
             })
             return None
 
+    def _persist_scout_field_updates(
+        self,
+        project_name: str,
+        applied_scout: list[str],
+        context: dict[str, Any],
+    ) -> None:
+        """
+        将用户在 Scout 字段核对中的字段理解回复持久化到项目记忆。
+
+        从 `applied_scout`（如 "Code←店铺编号"）中提取字段名与含义，
+        通过 MemoryManager.persist_field_descriptions() 写入 SQLite + YAML。
+        下次同一项目分析时，这些字段理解会被重新加载，避免重复询问。
+        """
+        if not self.memory or not applied_scout or not context:
+            return
+
+        descs: dict[str, Any] = context.get("column_descriptions", {}) or {}
+        display_names: dict[str, Any] = context.get("column_display_names", {}) or {}
+        new_descs: dict[str, str] = {}
+        new_dnames: dict[str, str] = {}
+
+        for a in applied_scout:
+            if not a or "←" not in a:
+                continue
+            # 格式: "col←desc" 或 "col:[display]←中文名"
+            col_part, _, val = a.partition("←")
+            col = col_part.strip()
+            val = val.strip()
+            if not col or not val:
+                continue
+
+            if col.endswith(":[display]"):
+                col = col.replace(":[display]", "").strip()
+                new_dnames[col] = val
+            else:
+                new_descs[col] = val
+
+        # 补充 context 中已有的 column_descriptions（不上覆盖的应用字段）
+        full_descs: dict[str, str] = {}
+        for col, d in descs.items():
+            if isinstance(d, str) and d.strip():
+                full_descs[str(col)] = str(d).strip()
+        full_descs.update(new_descs)
+
+        if full_descs:
+            self.memory.persist_field_descriptions(
+                project_name, full_descs, column_display_names=new_dnames,
+            )
+
     def _parse_user_query(self, query: str) -> Any:
         """解析用户查询为结构化意图"""
         try:
@@ -2109,6 +2173,14 @@ class Orchestrator:
 
             ir = scout.respond(user_input, project_id=project_name)
 
+            # 持久化用户在 confirm_fields 阶段的字段理解回复
+            if project_name:
+                applied_updates = ir.data.get("applied_field_updates", [])
+                if applied_updates:
+                    self._ensure_memory_for_respond(project_name)
+                    if self.memory:
+                        self._persist_scout_field_updates(project_name, applied_updates, scout._context or {})
+
             if ir.final:
                 # Scout 完成了，返回后续指令
                 return {
@@ -2162,6 +2234,15 @@ class Orchestrator:
             "status": "error",
             "message": f"未知阶段: {agent_name}/{phase}",
         }
+
+    def _ensure_memory_for_respond(self, project_name: str) -> None:
+        """确保 self.memory 已初始化（供 WebSocket respond() 路径使用）。"""
+        if self.memory is not None:
+            return
+        if self.output_mgr is None:
+            self.output_mgr = OutputManager(self.config.output, project_name)
+        schema_file = self.output_mgr.project_dir / "progress.yaml"
+        self.memory = MemoryManager(self.db, progress_path=schema_file)
 
     def _save_field_descriptions(
         self,

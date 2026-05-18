@@ -540,6 +540,69 @@ class MemoryManager:
 
         return context
 
+    # ── 项目记忆构建 ─────────────────────────────────────────
+
+    def build_memory_project(self, project_id: str) -> dict[str, Any]:
+        """
+        构建 Scout Agent 所需的 memory_project 字典。
+
+        格式：{"fields": {"col_name": "description", ...}}
+
+        从已持久化的 column_semantics 中提取有 description 的字段。
+        用于每次 Scout 运行时注入历史字段理解，避免用户重复回答。
+        """
+        fields: dict[str, str] = {}
+        confirmed = self.get_column_semantics(project_id)
+        for col_name, sem_def in confirmed.items():
+            if sem_def.description:
+                fields[col_name] = sem_def.description
+        return {"fields": fields}
+
+    def persist_field_descriptions(
+        self,
+        project_id: str,
+        column_descriptions: dict[str, str],
+        column_display_names: dict[str, str] | None = None,
+    ) -> int:
+        """
+        将用户确认的字段描述持久化到项目记忆。
+
+        对每个有描述的列，更新或创建 ColumnSemanticDef，标记 source="user"。
+        返回新持久化的字段数。
+        """
+        count = 0
+        display_names = column_display_names or {}
+
+        for col_name, desc in column_descriptions.items():
+            desc = (desc or "").strip()
+            dn = (display_names.get(col_name, "") or "").strip()
+            if not desc and not dn:
+                continue
+
+            # 读取已有定义（若存在则合并，否则新建）
+            existing = self.get_column_semantics(project_id).get(col_name)
+            if existing:
+                sem_def = existing
+                if desc:
+                    sem_def.description = desc
+                if dn:
+                    sem_def.unit = dn  # display_name 暂存为 unit 字段
+                sem_def.source = "user"
+                sem_def.confidence = 1.0
+            else:
+                sem_def = ColumnSemanticDef(
+                    semantic="unknown",
+                    description=desc if desc else None,
+                    unit=dn if dn else None,
+                    source="user",
+                    confidence=1.0,
+                )
+
+            self.save_column_semantic(project_id, col_name, sem_def)
+            count += 1
+
+        return count
+
     # ── 核心：记忆从结果学习 ─────────────────────────────────
 
     def learn_from_run(

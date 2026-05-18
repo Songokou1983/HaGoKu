@@ -9,28 +9,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 ## hagoku/ — HaGoKu 多 Agent 数据分析平台
 
 > 项目灵魂、Agent 表、架构原则、命令参考、技术栈 → 见 **[PROJECT.md](PROJECT.md)**（唯一真相源）。
-> UI 设计原则、全局工作原则、Karpathy 编码原则 → 见下文。
-
-### 项目文档索引
-
-| 文档 | 用途 | 何时读 |
-|------|------|--------|
-| | [PROJECT.md](PROJECT.md) | 项目灵魂、模块全景、架构原则、反模式 | 每次对话开始 |
-| | [DEV.md](DEV.md) | 快速上手（环境搭建→测试→提交） | 新环境搭建 |
-| | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册（架构/看板/向量/审查） | 涉及架构变更时 |
-| | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 已知 bug 及修复 | 遇到问题时 |
-| | [README.md](README.md) | 用户手册（安装、命令参考） | 回答用户问题 |
-| | [DEVELOPMENT_PROMPT.md](DEVELOPMENT_PROMPT.md) | **四阶段路线图跟踪** + 单轮任务模板；审查约定见该文件 | 派活、协作开发、PR 审查 |
-
-### Agent 角色速查
-
-| Agent | 职责 | LLM 层级 |
-|-------|------|----------|
-| 🔍 **Scout** | 数据理解：类型推断、语义分析、缺失/分布报告 | `quick` |
-| 🧹 **Cleaner** | 数据清洗：缺失机制检验、异常区分、清洗影响评估 | `quick` |
-| 📊 **Analyst** | 统计分析核心：假设检验、回归、效应量、模型诊断 | `deep` |
-| 📝 **Reporter** | 双轨报告渲染：吸引力层 + 核心价值层 | `quick` |
-| 📋 **Scribe** | **确定性逻辑引擎（非 Agent，零 LLM 调用）**：看板管理、记忆维护、知识库检索与注入、字段仲裁 | 无 |
+> 文档索引、环境变量、测试命令 → 见 **[DEV.md](DEV.md)**。
 
 ### 当前架构关键点（已实施的 P0 项）
 
@@ -45,7 +24,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 - `validate_analysis_output()` 综合 4 项检查
 - Reporter 需调用解析器验证 Analyst 输出结构完整性
 
-**Scribe 身份**：不是 Agent，是确定性逻辑引擎。不调用 LLM，不做分析决策。负责：知识注入、记忆写入、字段仲裁、看板管理。详见 PROJECT.md L36-38。
+**Scribe**：确定性 Agent，仅字段描述不完整时用 LLM 补全。负责：看板管理、记忆维护、知识库检索与注入、字段仲裁。详见 PROJECT.md Agent 表。
 
 ---
 
@@ -65,12 +44,6 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 9. **操作按钮**：图标 + 文字双重要素，缺一不可
 10. **最小改动原则**：每次只改用户要求的那一个地方，不做额外的改动，不改变未要求的元素
 11. **每次改动前必须备份（二选一即可）**：**优先**用 Git（`git stash` / 小步 `commit`）保留可回滚点；若仍习惯 `cp` 本地快照，文件名须为 `UI_CHANGELOG_backup_YYYYMMDDHHMMSS_原文件名`（该模式已 `.gitignore`，**勿** `git add`）。堆积后可运行 `python3 scripts/clean_ui_changelog_backups.py` 查看列表，`--older-than N --apply` 按修改时间清理（见 [DEV.md](DEV.md)）。每一步 UI/编排相关改动仍须记录到 `UI_CHANGELOG.md`。
-
----
-
-## 全局工作原则 → 见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-
-开发流程、测试方法、提交规范、编码约束（不重复造轮子、不重复犯错）统一维护在设计手册中。此处不再重复。
 
 ---
 

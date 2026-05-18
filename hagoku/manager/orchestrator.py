@@ -1,4 +1,4 @@
-"""HaGoKu Manager — 编排器，规则+AI 双驱动"""
+"""HaGoKu Manager — 编排器：LLM 决策驱动，代码构建通道"""
 
 from __future__ import annotations
 

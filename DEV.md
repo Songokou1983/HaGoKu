@@ -27,25 +27,12 @@ pytest tests/ -q
 
 ## 日常命令
 
-```bash
-# 测试
-pytest tests/ -q                    # 全部测试
-pytest tests/test_web/test_ws_guardrails_parity.py -q  # 与 hagoku_web/src/utils/wsGuardrails.ts 同步的解析契约
-pytest tests/test_agents/ -q       # 单模块
+> 完整测试命令和调试指南 → [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#测试与质量)
 
+```bash
 # 代码质量
 ruff check hagoku/                 # lint
 mypy hagoku/                       # 类型检查
-
-# 直接调试后端（不经过 UI）
-.venv/bin/python -c "
-from hagoku.config import HaGoKuConfig
-from hagoku.manager.orchestrator import Orchestrator
-config = HaGoKuConfig.load()
-orch = Orchestrator(config)
-result = orch.run('data.csv', '分析问题', phase='scout_first')
-print(result['status'])
-"
 
 # 启动后端 API（FastAPI + WebSocket）
 hagoku-api   # http://localhost:8000
@@ -104,20 +91,7 @@ LLM 不可用 → pipeline 不启动，前端显示明确错误。不存在硬�
 
 ## 提交规范
 
-```bash
-git add <files>
-git commit -m "$(cat <<'EOF'
-fix: <具体描述>
-
-<改动1>
-<改动2>
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
-EOF
-)"
-```
-
-每次提交只做一件事，commit message 要写清楚具体改了什么。
+> 完整规范 → [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#不要做的清单)
 
 ## 文件索引
 

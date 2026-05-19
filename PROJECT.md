@@ -260,6 +260,7 @@ HaGoKu 全程透明，用户坐副驾驶位：
 🧹 Cleaner ── ✅ 完成 (8s)
 📊 Analyst ── 🔄 执行中...
 📝 Reporter ── ⏳ 等待中
+> Scribe（📋 看板仲裁）在后台运行，不显示终端进度。
 ```
 
 ---
@@ -289,9 +290,9 @@ hagoku/
 | 部位 | 选型 | 核心价值 |
 |------|------|---------|
 | 🧠 大脑 | **Pingouin** + **Statsmodels** | 自动效应量 + 深度诊断 |
-| 🧹 手 | **sklearn** + **PyOD** + **Cleanlab** | MICE 填补 + 异常区分 |
+| 🧹 手 | **sklearn** + **PyOD** | MICE 填补 + 异常检测（IsolationForest） |
 | 📝 嘴 | **Jinja2** + Plotly | 模板渲染 + 交互式图表 |
-| 🦿 腿 | **CrewAI** + **langchain-openai** | Agent 编排 + LLM 适配 |
+| 🦿 腿 | **Orchestrator（手动编排）** + **langchain-openai** | Agent 调度 + LLM 适配；CrewAI 为可选适配器（按需创建，非管道路径） |
 | 🫀 心脏 | **Instructor** + **Pydantic** | 结构化输出保证 |
 | 📊 数据 | **Pandas** + **DuckDB** + **PyArrow** | 数据处理 + SQL + Parquet |
 | 🖥 界面 | **Click** + **FastAPI** + **React** | CLI + Web UI |
@@ -318,8 +319,12 @@ hagoku/
 | `HAGOKYU_LLM_API_KEY` | API 密钥 | `none` |
 | `HAGOKYU_LLM_MODEL` | 默认模型名 | `Qwen3.6-35B-A3B` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理（Analyst/仲裁器） | 同 `MODEL` |
-| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter） | 同 `MODEL` |
+| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter/Scribe） | 同 `MODEL` |
+| `HAGOKYU_EMBEDDING_BASE_URL` | Embedding 服务地址 | 空（须自行填写） |
+| `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | `none` |
+| `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
+| `HAGOKYU_PROJECT_DIR` | 项目根目录覆盖 | 同 `WORK_DIR/projects` |
 
 ---
 

@@ -45,14 +45,10 @@ dependencies = [
     "scipy>=1.12",
     # ML
     "scikit-learn>=1.4",
-    "flaml>=2.0",
     # Cleaning & validation
     "pyod>=1.1",
-    "cleanlab>=2.0",
-    "great-expectations>=1.0",
     # Profiling
     "ydata-profiling>=4.0",
-    "missingno>=0.5",
     # Visualization
     "plotly>=5.0",
     "matplotlib>=3.8",

@@ -72,7 +72,7 @@ class CleaningConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     """向量嵌入配置"""
 
-    base_url: str = "https://api.openai-proxy.org/v1"
+    base_url: str = ""
     api_key: str = "none"
     model: str = "text-embedding-3-small"
     dimension: int = 1536

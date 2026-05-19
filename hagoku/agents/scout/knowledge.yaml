@@ -2822,3 +2822,120 @@ knowledge:
     confidence: 1.0
   created_at: '2026-05-19 08:40:04'
   use_count: 0
+- id: 67ac1e33
+  content: 字段名：业务单元代码，包含B01至B05共5个类别，用于区分不同的业务部门或区域；含义：业务单元代码，包含B01至B05共5个类别，用于区分不同的业务部门或区域；数据特征：categorical
+    5个唯一类别值（B01-B05），符合业务单元编码模式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test_01
+    field: 业务单元代码，包含B01至B05共5个类别，用于区分不同的业务部门或区域
+    meaning: 业务单元代码，包含B01至B05共5个类别，用于区分不同的业务部门或区域
+    data_pattern: categorical 5个唯一类别值（B01-B05），符合业务单元编码模式
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:25'
+  use_count: 0
+- id: dca90126
+  content: 字段名：代表店铺的唯一编号；含义：代表店铺的唯一编号；数据特征：categorical 25个唯一值，格式为A0000001至A0000025，每个店铺出现25次（对应25个周期）；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test_01
+    field: 代表店铺的唯一编号
+    meaning: 代表店铺的唯一编号
+    data_pattern: categorical 25个唯一值，格式为A0000001至A0000025，每个店铺出现25次（对应25个周期）
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:25'
+  use_count: 0
+- id: 3f4b1b7a
+  content: 字段名：统计周期编码，采用202540格式表示2025年第40周，覆盖约2025年40周至2026年12周；含义：统计周期编码，采用202540格式表示2025年第40周，覆盖约2025年40周至2026年12周；数据特征：datetime
+    25个唯一整数值，范围202540至202612，格式为YYYYWW表示年份和周数；推断角色：time_index
+  tags:
+  - datetime
+  - time_index
+  metadata:
+    project: test_01
+    field: 统计周期编码，采用202540格式表示2025年第40周，覆盖约2025年40周至2026年12周
+    meaning: 统计周期编码，采用202540格式表示2025年第40周，覆盖约2025年40周至2026年12周
+    data_pattern: datetime 25个唯一整数值，范围202540至202612，格式为YYYYWW表示年份和周数
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:25'
+  use_count: 0
+- id: 674a2511
+  content: 字段名：代表店铺的收入金额；含义：代表店铺的收入金额；数据特征：numeric 浮点数值，范围0.0039至397.6249，均值59.70，中位数16.10，右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: 代表店铺的收入金额
+    meaning: 代表店铺的收入金额
+    data_pattern: numeric 浮点数值，范围0.0039至397.6249，均值59.70，中位数16.10，右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:26'
+  use_count: 0
+- id: 24a28661
+  content: 字段名：代表店铺的积分数量；含义：代表店铺的积分数量；数据特征：numeric 浮点数值，范围0至296.3193，均值43.45，中位数11.27，右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: 代表店铺的积分数量
+    meaning: 代表店铺的积分数量
+    data_pattern: numeric 浮点数值，范围0至296.3193，均值43.45，中位数11.27，右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:26'
+  use_count: 0
+- id: 51debc77
+  content: 字段名：与积分关联的奖金指标1，可能表示第一类积分相关的奖金或基数指标；含义：与积分关联的奖金指标1，可能表示第一类积分相关的奖金或基数指标；数据特征：numeric
+    浮点数值，范围0至175.25，均值25.14，中位数6.5，右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: 与积分关联的奖金指标1，可能表示第一类积分相关的奖金或基数指标
+    meaning: 与积分关联的奖金指标1，可能表示第一类积分相关的奖金或基数指标
+    data_pattern: numeric 浮点数值，范围0至175.25，均值25.14，中位数6.5，右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:26'
+  use_count: 0
+- id: c85433d2
+  content: 字段名：与积分关联的奖金指标2，可能表示第二类积分相关的奖金或基数指标；含义：与积分关联的奖金指标2，可能表示第二类积分相关的奖金或基数指标；数据特征：numeric
+    浮点数值，范围0至5.46，均值0.93，中位数0.24，右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: 与积分关联的奖金指标2，可能表示第二类积分相关的奖金或基数指标
+    meaning: 与积分关联的奖金指标2，可能表示第二类积分相关的奖金或基数指标
+    data_pattern: numeric 浮点数值，范围0至5.46，均值0.93，中位数0.24，右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:27'
+  use_count: 0
+- id: 9548a872
+  content: 字段名：与积分关联的奖金指标3，可能表示第三类积分相关的奖金或基数指标；含义：与积分关联的奖金指标3，可能表示第三类积分相关的奖金或基数指标；数据特征：numeric
+    浮点数值，范围0至6.6906，均值1.12，中位数0.51，右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test_01
+    field: 与积分关联的奖金指标3，可能表示第三类积分相关的奖金或基数指标
+    meaning: 与积分关联的奖金指标3，可能表示第三类积分相关的奖金或基数指标
+    data_pattern: numeric 浮点数值，范围0至6.6906，均值1.12，中位数0.51，右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-19 10:26:27'
+  use_count: 0

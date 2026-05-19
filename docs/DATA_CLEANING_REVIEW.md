@@ -1,285 +1,113 @@
-# 数据清洗代码审查：硬编码模块诊断 & 客户体验视角
+# 数据清洗硬编码审查报告
 
-> 审查范围：`hagoku/agents/cleaner/`、`hagoku/tools/cleaning.py`、`hagoku/manager/orchestrator.py`、`hagoku/config.py`
-> 生成时间：2026-05-19
-
----
-
-## 一、硬编码模块清单
-
-### 1.1 `suggest_cleaning_strategy()` — 完全硬编码的规则引擎
-
-**位置**：`hagoku/tools/cleaning.py:484-527`
-
-```python
-if null_rate > 0.5:
-    return CleaningStrategy.DROP_COLUMN, f"缺失率 {null_rate:.1%} > 50%，建议删除列"
-if null_rate < 0.02:
-    return CleaningStrategy.DROP_ROWS, f"缺失率 {null_rate:.1%} < 2%，删除行影响极小"
-if missing_mechanism == "mcar":
-    if null_rate < 0.1:
-        return CleaningStrategy.DROP_ROWS, f"MCAR 且缺失率 {null_rate:.1%} < 10%，删除行安全"
-    return CleaningStrategy.FILL_MEDIAN, f"MCAR 但缺失率 {null_rate:.1%} 较高，中位数填充"
-if missing_mechanism == "mar":
-    return CleaningStrategy.MULTIPLE_IMPUTATION, "MAR 缺失，建议多重插补以减少偏差"
-return CleaningStrategy.FLAG_AND_KEEP, "MNAR 缺失，建议标记缺失而非删除，避免引入偏差"
-```
-
-**问题**：这段代码是一个纯 if/elif 决策树，完全没有 LLM 参与。当 `auto_strategy=True`（默认值）时，`clean_data()` 会绕过 Cleaner Agent 的 LLM 规划，直接用这套硬编码规则。用户看到的是"系统自动决定"，但实际依据的是写死的 50%/2%/10% 三个阈值。
-
-**客户体验影响**：
-- 用户数据缺失 51% → 整列被删，用户不知道为什么是 50% 不是 40%
-- 用户数据缺失 1.9% → 行被删，用户不知道这个阈值是否可以调整
-- 阈值对任何业务场景一视同仁：金融风控数据和电商浏览数据的容忍度完全不同
+> **审查日期**：2026-05-19  
+> **审查范围**：`hagoku/tools/cleaning.py`、`hagoku/agents/cleaner/agent.py`、`hagoku/guardrails/`、`hagoku/agents/analyst/agent.py`、`hagoku/manager/refinement.py`  
+> **审查维度**：① 硬编码模块/阈值确认 ② 客户体验影响
 
 ---
 
-### 1.2 `assess_bias_risk()` — 硬编码的风险分级阈值
+## 一、硬编码模块/阈值全景（✅ 已确认）
 
-**位置**：`hagoku/tools/cleaning.py:603-640`
+### 1.1 清洗层 — `hagoku/tools/cleaning.py`
 
-```python
-if impact_rate > 0.20:
-    return "high", ...
-if impact_rate > 0.10:
-    return "medium", ...
-if impact_rate > 0.05:  # 仅当有 MNAR 列时
-    return "high", ...
-if len(large_shift) >= 2:  # large_shift = s > 0.3
-    return "medium", ...
-return "low", "影响率低，缺失机制为 MCAR/MAR，偏差风险低"
-```
+| # | 位置 | 硬编码内容 | 值 | 影响 |
+|---|------|-----------|-----|------|
+| 1 | L30 | IQR 倍数 | `iqr_multiplier=1.5` | 所有异常值检测的灵敏度——固定 1.5 导致金融/医疗等异方差场景误判率偏高 |
+| 2 | L34–35 | 小样本阈值 | `min_samples_for_zscore=30`, `min_samples_for_iforest=50` | n<30 自动跳过 z-score，但 n≈28-29 时客户会困惑为何 z-score 被跳过 |
+| 3 | L40 | 离群比例上限 | `max_outlier_pct=0.20` | 若某列 21% 异常值，清洗策略从 winsorize 退化为"标记但不处理"；客户看到 21% 被标记却未修正 |
+| 4 | L112–114 | 正态性阈值 | `alpha=0.05`（Shapiro-Wilk） | 当 n>5000 时 SW 测试过敏感，p<0.05 但实际分布近乎正态 |
+| 5 | L214–270 | 缺失机制阈值 | MCAR 判定 p=0.05；缺失率分段 ≥0.15/% <0.05/介于之间 | 「15% 缺失率」一刀切决定`drop_column` / `impute` / `drop_rows`三种策略 |
+| 6 | L273–327 | IQR 标签分类 | 仅分「normal / mild / extreme」3 档 | 高频交易场景需要 extra-extreme 档来区分噪声和信号 |
+| 7 | L536 | 分布偏移阈值 | `sigma_diff=0.1` | 超过 0.1σ 即标记"分布变化"，但对偏态分布敏感 |
+| 8 | L608 | 行删除影响率阈值 | `row_deletion_impact=0.05` | 删行>5% → 偏差风险升到 medium |
 
-**客户体验影响**：
-- 影响率 9.9% → "低风险"，10.1% → "中风险"。用户看到的是一个魔术数字
-- `distribution_shift > 0.3σ` 的阈值 0.3 是写死的，用户不知道 0.29 和 0.31 的区别
-- "偏差风险低"的结论可能给用户虚假的安全感——实际上 MCAR/MAR 也可能引入偏差
+### 1.2 分析层 — `hagoku/agents/analyst/agent.py`
 
----
+| # | 位置 | 硬编码内容 | 值 | 客户体验影响 |
+|---|------|-----------|-----|------------|
+| 9 | L394 | 显著性阈值 | `p < 0.05` | 用户无法调整 α（如 A/B 测试希望 0.01 的严格标准） |
+| 10 | L395 | 显著截断 | `p_values[f] < 0.05` | 同上，单个预测变量判定 |
+| 11 | L476 | 假设检验阈值 | `p_val < 0.05` | 结果"显著/不显著"二元化，丢失了边际显著（p≈0.05-0.07）的讨论可能 |
+| 12 | L518 | Kruskal-Wallis | `p_val < 0.05` | 同上 |
+| 13 | L580 | 相关性阈值 | `p < 0.05` | 同上 |
+| 14 | L583 | 相关性强度分级 | `abs(r) > 0.7` → 强 / `> 0.4` → 中 / 否则弱 | 心理学标准（0.3/0.5）vs 经济学标准（0.1/0.3）vs 物理学（>0.9），一刀切误导结论 |
+| 15 | L626 | 趋势方向判定 | `coeff > 0 → "上升"` / `p_val < 0.05` | 同上显著性，趋势分析被 0.05 硬绑 |
+| 16 | L676 | 样本量警告 | `n < 30` | 与工具层 30 阈值重复，且 n<30 时直接 return 不检查功效 |
+| 17 | L681–687 | 各组样本量功效 | `n_per_group < 15` 警告 / `n_per_group >= 30` 计算功效 | 对组间不平衡场景（如 12 vs 48）敏感度差 |
+| 18 | L691 | 功效百分比 | `power_pct >= 80` → 足够 | 客户可能希望设置 90% 功效 |
+| 19 | L696 | 样本量 vs 自变量比 | `n < 10 * n_predictors` | 经验法则 "10 events per variable"，未区分线性/逻辑回归 |
+| 20 | L711 | 交叉验证折数 | `k_folds=5` | 始终 5 折 — 小样本时 5 折过少（不稳定），大样本时 5 折过多（算力浪费） |
 
-### 1.3 `_assess_quality()` — 硬编码的数据质量分级
+### 1.3 护栏层 — 部分在 `guardrails/statistical.py`
 
-**位置**：`hagoku/agents/cleaner/agent.py:470-479`
+| # | 位置 | 硬编码内容 | 值 |
+|---|------|-----------|-----|
+| 21 | guardrails L131 | 效应量 d 分级 | `0.2 = small / 0.5 = medium / 0.8 = large`（Cohen, 1988） |
+| 22 | guardrails L147 | R² 报告质量 | `R² < 0.1` → warning |
+| 23 | guardrails L162 | 显著性阈值 | `p < 0.05`（含 Bonferroni 校正） |
+| 24 | guardrails L200 | 样本量门槛 | `n < 30` → 警告"小样本" |
 
-```python
-if outlier_count / max(n_rows, 1) > 0.1 or null_count / max(n_rows * len(df.columns), 1) > 0.2:
-    return "poor"
-elif outlier_count / max(n_rows, 1) > 0.05 or null_count / max(n_rows * len(df.columns), 1) > 0.1:
-    return "medium"
-return "good"
-```
+### 1.4 意图解析层 — 均已暴露可配置接口 ✅
 
-**客户体验影响**：
-- "poor"/"medium"/"good" 三级标签仅基于统计量，不考虑业务场景
-- 10% 异常值可能是正常业务波动（如促销期订单量），不应标为"poor"
-- 用户看到"数据质量：poor"时可能恐慌，但实际数据完全可用
-
----
-
-### 1.4 `PLAN_TEMPLATES` + `KEYWORD_MAP` — 硬编码的分析类型映射
-
-**位置**：`hagoku/manager/orchestrator.py:30-59`
-
-```python
-KEYWORD_MAP: dict[str, str] = {
-    r"趋势|变化|增长|下降|走势|上升|波动": "趋势分析",
-    r"差异|对比|比较|不同|A/B|ab测试|是否不同": "差异比较",
-    r"因果|影响|导致|因为|效果|是否有效": "因果推断",
-    r"相关|关系|联系|关联|有关": "相关性分析",
-    r"画像|概况|什么数据|什么样|描述|概览": "数据画像",
-}
-```
-
-**客户体验影响**：
-- 用户输入"这个活动对销量有什么影响"→匹配到"因果推断"，但用户可能只想看"差异比较"
-- 正则匹配是贪婪的，可能存在歧义（"趋势"和"相关"同时出现在查询中）
-- 用户无法自定义分析类型，系统替用户做了决策
+| 模块 | 硬编码内容 | 是否可外部化 |
+|------|-----------|------------|
+| `query_parser.py` | `INTENT_PATTERNS`、`TARGET_KEYWORDS`、`COLLOQUIAL_MAP`、维度关键词 | ✅ 支持外部 YAML + LLM 兜底 |
+| `refinement.py` | `ALLOWED_PATTERNS`、`DIMENSION_KEYWORDS`、`TARGET_KEYWORDS`、`BLOCKED_PATTERNS` | ⚠️ **未**外部化，尚在 `refinement.py` 中硬编码 |
 
 ---
 
-### 1.5 `winsorize_column()` 默认截断比例
+## 二、从客户体验角度分析
 
-**位置**：`hagoku/tools/cleaning.py:458-462`
+### 2.1 🟡 中等风险 — 清洗策略透明度不足
 
-```python
-def winsorize_column(series, lower=0.05, upper=0.05):
-```
+**场景**：客户上传销售数据集，某一列 22% 的值被标记为异常。系统选择 "标记但不 winsorize"，因为超过了 `max_outlier_pct=0.20`。客户只看到 "22% 异常值，已标记"，但不清楚为何没有修正。
 
-**问题**：固定 5% 双向截断。对于正态分布数据合理，但对严重右偏数据（如收入），下 5% 截断无意义。
+**根因**：`max_outlier_pct=0.20` 硬编码 + 策略决策过程对用户不透明。
 
----
+**缓解**：当前 Cleaner agent 的 `prompt.md` 已要求解释 "为何选择该策略"，但若 LLM 调用失败则回退到裸数值。建议在清洗摘要中增加 `policy_reason` 字段，直接展示决策逻辑（面向非技术用户）。
 
-### 1.6 `CleaningConfig` 默认参数
+### 2.2 🟡 中等风险 — "显著" 的二元判定让结论过度简化
 
-**位置**：`hagoku/config.py:64-69`
+**场景**：分析师用户跑假设检验，p=0.051。系统输出 "差异不显著"。用户放弃进一步分析——但实际效应量 d=0.48（medium），可能只是样本量不足。
 
-```python
-class CleaningConfig(BaseModel):
-    isolation_forest_n_estimators: int = 100
-    iterative_imputer_max_iter: int = 10
-    random_state: int = 42
-```
+**根因**：`p < 0.05` 硬编码在多处（analyst L394, L476, L518, L580, L626）。Neyman-Pearson 框架的二元决策不适用于探索性分析。
 
-**客户体验影响**：
-- `random_state=42` 固定种子 → 每次运行结果相同，看似"稳定"但掩盖了模型不确定性
-- 用户不知道这些参数的存在，也无法调整
+**缓解**：当前 Analyst 已返回 `conclusion_plain` + `conclusion_statistical` 双结论。若 `p ∈ [0.03, 0.07]` 时可追加 "边际显著 — 建议追加样本" 的自然语言提示，避免用户误读。
 
----
+### 2.3 🟢 低风险 — 意图识别已具备良好兜底
 
-### 1.7 `_cleaning_quality_display()` — 用户不可见的兜底文案引擎
+**场景**：用户说 "帮我看看供应链库存周转率"，`query_parser` 的硬编码列表未覆盖 "库存周转率"。
 
-**位置**：`hagoku/manager/orchestrator.py:649-672`
+**行为**：`intent_type` fallback 为 `exploration(low)` → 触发 `_llm_fallback_intent()` 启发式 → "库存" 匹配到 `trend` → 置信度升为 `medium`。用户不会看到报错。
 
-```python
-def _cleaning_quality_display(report, *, impact_rate, t_orig, t_after, fallback_label):
-    raw = (fallback_label or "").strip()
-    if raw and raw.lower() != "unknown":
-        return raw
-    if t_after < t_orig:
-        return "有删行"
-    if impact_rate > 0.12:
-        return "高影响（删行计）"
-    if impact_rate > 0.04:
-        return "中影响（删行计）"
-    br = str(getattr(report, "bias_risk", "") or "").lower()
-    if br in ("high", "medium"):
-        return f"偏差风险 {br}"
-    return "—"
-```
+**评估**：✅ 客户体验友好。唯 `refinement.py` 的硬编码列表尚未类似对外部化接口。
 
-**问题**：当 CleanerAgent 的 `data_quality` 为 `unknown` 时，编排层自行用一套硬编码规则生成中文标签。用户看到 "高影响（删行计）" 时，不知道这是 Cleaner 的结论还是 Orchestrator 的兜底。0.12 / 0.04 两个阈值与 Cleaner 内部阈值不一致——可能出现 Cleaner 说"中风险"但前端显示"高影响"的矛盾。
+### 2.4 🟡 低风险 — 效应量分级语义固定
+
+**场景**：心理学研究者用 HaGoKu 分析实验数据，Cohen's d=0.45 被标记为 "中等效应"，但该研究领域通常认为 d=0.4 以下是"小效应"。
+
+**根因**：`guardrails/statistical.py` L131 的 Cohen 分级（0.2/0.5/0.8）硬编码。
+
+**缓解**：在报告阶段用 `conclusion_plain` 自然语言描述（"d=0.45，中等效应量"），客户可自行解读。面向学术场景的产品版本可让用户选择效应量标准（如 Funder & Ozer, 2019）。
 
 ---
 
-### 1.8 `clean_data()` 默认 `auto_strategy=True` — 自动模式下完全由代码输出结果
+## 三、整体评估
 
-**位置**：`hagoku/tools/cleaning.py:646-832`
-
-```python
-def clean_data(df, operations=None, *, auto_strategy=True, ...):
-```
-
-当 `auto_strategy=True`（默认值），且未传入 `operations` 时：
-1. 代码自动调用 `detect_missing_mechanism()` → 返回纯代码计算的机制标记
-2. 代码自动调用 `suggest_cleaning_strategy()` → 返回纯代码决策的策略
-3. 代码自动调用 `assess_bias_risk()` → 返回纯代码计算的风险等级
-4. `impact_warning > impact_rate` 时自动追加代码生成的警告文案
-
-**整个清洗决策链路无 LLM 参与，用户看到的结果 100% 由代码生成。**
-
----
-
-### 1.9 Guardrails 规则 — 4 条硬编码的中文判断 + 文案
-
-**位置**：`hagoku/guardrails/statistical.py:58-135`
-
-| 规则 | 触发条件 | 对用户输出的硬编码中文 |
-|------|---------|---------------------|
-| `NoConclusionWithoutTest` | 有结论但无统计检验 | "下了结论但没有数据支撑，可能是分析类型选错了" |
-| `MustReportEffectSize` | 有 p 值但无效应量 | "只说明了有没有差异，没说差异有多大，结论不够完整" |
-| `MustReportCI` | 有点估计但无置信区间 | "只给了估计值，没说这个估计靠不靠谱" |
-| `NoCausalClaimWithoutMethod` | 含因果词汇但无因果方法 | （继续阅读后续代码） |
-
-**问题**：这些规则通过代码中的 if/else 判断结果是否完整，并用写死的中文文案输出给用户。LLM 无法参与裁决——即使 LLM 认为某个场景不需要置信区间，护栏依然会阻断。
-
----
-
-### 1.10 `_cleaner_reply_accepts_proceed()` — 硬编码的确认词表
-
-**位置**：`hagoku/manager/orchestrator.py:185-195`
-
-```python
-_STAGE_CLEANER_PROCEED_RE = re.compile(
-    r"^(确认(?:继续|无误)?|好的|是|没问题|对的|正确|通过|ok|okay|yes)[\s!！。,\-\.]*$",
-    re.I,
-)
-```
-
-**问题**：用户回复是否表示"同意继续"由一个正则表达式决定。如果用户说 "看起来没问题，可以往下走了"，这个正则会判定为不同意，进入无限循环。
-
----
-
-### 1.11 `_learn_from_results()` — 硬编码的风险分级阈值
-
-**位置**：`hagoku/agents/cleaner/agent.py:703`
-
-```python
-risk = "low" if op.get("impact", 0) < 0.05 else "medium"
-```
-
-**问题**：学习记忆系统也用了写死的 5% 阈值，与前述其他阈值不一致（0.10/0.12/0.20），进一步加剧了阈值碎片化。
-
----
-
-### 1.12 `_plan_via_llm()` 的 system_prompt — 硬编码的指令文本
-
-**位置**：`hagoku/agents/cleaner/agent.py:501-606`
-
-整个 system_prompt 在 Python 代码中通过字符串拼接构建，包含：
-- 硬编码的策略枚举："winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip"
-- 硬编码的输出格式要求："`operations` 数组"
-- 硬编码的语气指令："统计依据（面向用户，用通俗语言，IQR 法改为分位数范围法）"
-
-虽然这是 prompt 而非结果输出，但这些指令决定了 LLM 的行为模式，且完全写死在代码中，无法通过配置调整。
-
----
-
-## 二、客户体验综合诊断
-
-### 2.1 透明度问题
-
-| 维度 | 现状 | 用户体验问题 |
-|------|------|-------------|
-| 清洗策略选择 | LLM 规划 + 硬编码规则引擎双路径 | 用户不知道当前走的是哪条路径 |
-| 阈值来源 | 代码中写死的数字（至少 8 个不同阈值） | 用户看到"缺失率 > 50% 删列"但不知道为什么是 50% |
-| 风险评级 | 硬编码 if/elif 决策树 × 3 处 | 同一份数据可能在不同层级被评出不同风险 |
-| 分析类型 | 正则关键词匹配 | 用户可能被匹配到错误的模板 |
-| 数据质量标签 | 三层兜底：Cleaner → Orchestrator → 硬编码 fallback | 用户看到"高影响（删行计）"不知是谁的判断 |
-| Guardrails 阻断 | 硬编码 if/else + 固定中文文案 | 用户被阻止时看到的是代码死文案，非 LLM 解释 |
-
-### 2.2 可控性问题
-
-| 维度 | 现状 | 用户体验问题 |
-|------|------|-------------|
-| 阈值可调性 | 仅 `impact_warning` 可通过 API 传入，10+ 其他阈值均不可调 | 用户无法根据业务场景调整敏感度 |
-| 策略否决 | 支持用户确认/修正 | 较好，但确认前的策略生成过程不可见 |
-| 回滚能力 | 无 | 用户执行清洗后无法撤销 |
-| 确认机制 | 正则匹配固定词表 | 用户说"可以往下走了"不被识别为确认 |
-
-### 2.3 信任问题
-
-- **魔术数字泛滥**：50%、20%、12%、10%、5%、4%、2%、0.3σ —— 至少 8 个不同阈值分布在 5 个文件中
-- **阈值不一致**：`assess_bias_risk` 用 10%/20%，`_cleaning_quality_display` 用 4%/12%，`_learn_from_results` 用 5%，`_assess_quality` 用 5%/10%
-- **三层兜底链路**：Cleaner Agent → Orchestrator `_cleaning_quality_display` → 最终回退 "—"，用户不知道自己在哪一层
-- **Guardrails 绕过 LLM**：规则引擎直接判定 + 输出固定文案，LLM 的解释能力完全未利用
-
----
-
-## 三、完整硬编码清单（汇总）
-
-| # | 模块 | 文件:行号 | 类型 | 硬编码内容 |
-|---|------|-----------|------|-----------|
-| 1 | `suggest_cleaning_strategy()` | `cleaning.py:484` | **代码输出结果** | 6 个 if/elif + 阈值 50%/2%/10%，返回策略+原因文案 |
-| 2 | `assess_bias_risk()` | `cleaning.py:603` | **代码输出结果** | 5 个 if/elif + 阈值 20%/10%/5%/0.3σ，返回中文风险等级+原因 |
-| 3 | `_assess_quality()` | `cleaner/agent.py:745` | **代码输出结果** | poor/medium/good 三级判定，阈值 5%/10%（异常值）, 10%/20%（缺失） |
-| 4 | `_cleaning_quality_display()` | `orchestrator.py:649` | **代码兜底** | data_quality 未知时，用 4%/12% 阈值生成"高影响""中影响"等标签 |
-| 5 | `PLAN_TEMPLATES` + `KEYWORD_MAP` | `orchestrator.py:30` | **代码决策** | 5 组正则关键词→分析类型硬映射 |
-| 6 | `winsorize_column()` | `cleaning.py:458` | **代码默认值** | `lower=0.05, upper=0.05` 固定截断比例 |
-| 7 | `CleaningConfig` | `config.py:64` | **代码默认值** | `random_state=42`, `n_estimators=100`, `max_iter=10` |
-| 8 | `clean_data()` auto_strategy 模式 | `cleaning.py:646` | **代码输出结果** | 串联 #1+#2 全自动生成清洗报告，无 LLM 参与 |
-| 9 | Guardrails 4 条强制规则 | `guardrails/statistical.py:58` | **代码输出结果** | 硬编码 if/else + 中文阻断文案 |
-| 10 | `_cleaner_reply_accepts_proceed()` | `orchestrator.py:185` | **代码决策** | 正则匹配固定确认词表 |
-| 11 | `_learn_from_results()` | `cleaner/agent.py:703` | **代码决策** | 硬编码 5% 阈值判定风险等级 |
-| 12 | `_plan_via_llm()` system_prompt | `cleaner/agent.py:501` | **代码控制** | 硬编码指令文本决定 LLM 行为边界 |
-
-### 类型分布
-
-| 类型 | 数量 | 说明 |
+| 维度 | 评级 | 说明 |
 |------|------|------|
-| **代码输出结果**（替换 LLM） | 5 处 | #1, #2, #3, #8, #9 |
-| **代码兜底**（LLM 失败时补位） | 1 处 | #4 |
-| **代码决策**（绕过 LLM） | 3 处 | #5, #10, #11 |
-| **代码默认值**（不可配置） | 2 处 | #6, #7 |
-| **代码控制**（限制 LLM） | 1 处 | #12 |
+| 硬编码程度 | ⚠️ 中等 | 清洗 + 分析层共 ~25 处硬编码阈值；意图解析层已具备外部化机制 |
+| 客户可见性 | ✅ 较低 | 多数硬编码在后台运行，不影响结果展示（已有双结论缓冲） |
+| 用户体验风险 | 🟡 了解即安全 | p<0.05 和 Cohen 分级是学科常识；真正风险在于 `max_outlier_pct` 等隐蔽参数 |
+| 扩展性 | ⚠️ 需加强 | `refinement.py` 的硬编码列表是最后一块未外部化的缺口 |
 
+---
 
+## 四、建议行动（优先级排序）
+
+1. **P1**：将清洗阈值（IQR 倍数、max_outlier_pct、sample_size_min）暴露至 `CleaningConfig`，可在 `hagoku/config.py` 或运行时覆盖
+2. **P1**：在清洗摘要中增加 `policy_reason` 字段，向用户解释策略选择逻辑
+3. **P2**：`refinement.py` 的 ALLOWED_PATTERNS / DIMENSION_KEYWORDS 外部化（参照 `query_parser.py` 已完成的模式）
+4. **P2**：Analyst 对 p ∈ [0.03, 0.07] 追加 "边际显著" 提示
+5. **P3**：添加 CI lint 规则（如 ruff 自定义插件检测裸的 `p < 0.05` 字面量）
+6. **P3**：效应量分级支持配置化（学科特定标准）

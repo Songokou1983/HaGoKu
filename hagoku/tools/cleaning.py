@@ -93,6 +93,8 @@ class CleaningReport:
     distribution_shift: dict[str, float] = field(default_factory=dict)  # 列 → 变化程度
     bias_risk: str = "low"  # low / medium / high
     bias_risk_reason: str = ""
+    # 双轨数据支持：记录实际被修改的列名
+    modified_columns: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -107,6 +109,7 @@ class CleaningReport:
             "distribution_shift": self.distribution_shift,
             "bias_risk": self.bias_risk,
             "bias_risk_reason": self.bias_risk_reason,
+            "modified_columns": self.modified_columns,
         }
 
 
@@ -115,7 +118,7 @@ class CleaningReport:
 
 def littles_mcar_test(
     df: pd.DataFrame,
-    alpha: float = 0.05,
+    alpha: float | None = None,
 ) -> dict[str, Any]:
     """
     Little's MCAR 检验
@@ -131,6 +134,9 @@ def littles_mcar_test(
         {"statistic": float, "p_value": float, "is_mcar": bool, "conclusion": str}
     """
     from scipy import stats
+
+    if alpha is None:
+        alpha = _config.mcar_test_alpha
 
     numeric_df = df.select_dtypes(include=[np.number])
     cols_with_missing = [c for c in numeric_df.columns if numeric_df[c].isnull().any()]
@@ -214,7 +220,7 @@ def littles_mcar_test(
 def detect_missing_mechanism(
     df: pd.DataFrame,
     column: str,
-    alpha: float = 0.05,
+    alpha: float | None = None,
 ) -> str:
     """
     检测缺失机制
@@ -232,6 +238,9 @@ def detect_missing_mechanism(
         "mcar" / "mar" / "mnar"
     """
     from scipy import stats
+
+    if alpha is None:
+        alpha = _config.missing_mechanism_alpha
 
     if df[column].notna().all():
         return "mcar"
@@ -259,9 +268,9 @@ def detect_missing_mechanism(
 
     # 如果显著差异的比例很高，说明缺失与观测变量相关 → MAR
     sig_rate = n_significant / n_tests
-    if sig_rate < 0.2:
+    if sig_rate < _config.sig_rate_mcar_below:
         return "mcar"
-    elif sig_rate < 0.6:
+    elif sig_rate < _config.sig_rate_mnar_above:
         return "mar"
     else:
         return "mnar"
@@ -273,7 +282,7 @@ def detect_missing_mechanism(
 def detect_outliers_iqr(
     df: pd.DataFrame,
     columns: list[str] | None = None,
-    factor: float = 1.5,
+    factor: float | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
     IQR 法检测异常值
@@ -288,6 +297,8 @@ def detect_outliers_iqr(
     """
     if columns is None:
         columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    if factor is None:
+        factor = _config.iqr_factor
 
     results = {}
     for col in columns:
@@ -330,7 +341,7 @@ def detect_outliers_iqr(
 def detect_outliers_zscore(
     df: pd.DataFrame,
     columns: list[str] | None = None,
-    threshold: float = 3.0,
+    threshold: float | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Z-score 法检测异常值
@@ -345,6 +356,8 @@ def detect_outliers_zscore(
     """
     if columns is None:
         columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    if threshold is None:
+        threshold = _config.zscore_threshold
 
     results = {}
     for col in columns:
@@ -379,7 +392,7 @@ def detect_outliers_zscore(
 def detect_outliers_isolation_forest(
     df: pd.DataFrame,
     columns: list[str] | None = None,
-    contamination: float = 0.05,
+    contamination: float | None = None,
     random_state: int = 42,
 ) -> dict[str, dict[str, Any]]:
     """
@@ -409,8 +422,11 @@ def detect_outliers_isolation_forest(
             }
         }
 
+    if contamination is None:
+        contamination = _config.isolation_forest_contamination
+
     numeric_df = df[columns].dropna(axis=1, how="all")
-    usable_cols = [c for c in columns if c in numeric_df.columns and numeric_df[c].notna().sum() >= 10]
+    usable_cols = [c for c in columns if c in numeric_df.columns and numeric_df[c].notna().sum() >= _config.min_samples_for_iforest]
 
     if len(usable_cols) < 2:
         return {}
@@ -457,8 +473,8 @@ def detect_outliers_isolation_forest(
 
 def winsorize_column(
     series: pd.Series,
-    lower: float = 0.05,
-    upper: float = 0.05,
+    lower: float | None = None,
+    upper: float | None = None,
 ) -> pd.Series:
     """
     Winsorize：将极端值截断到指定分位数，不删除行
@@ -473,6 +489,10 @@ def winsorize_column(
     """
     if not pd.api.types.is_numeric_dtype(series):
         raise TypeError(f"winsorize_column 仅支持数值类型，收到: {series.dtype}")
+    if lower is None:
+        lower = _config.winsorize_lower_pct
+    if upper is None:
+        upper = _config.winsorize_upper_pct
     low_val = series.quantile(lower)
     high_val = series.quantile(1 - upper)
     return series.clip(lower=low_val, upper=high_val)
@@ -506,17 +526,17 @@ def suggest_cleaning_strategy(
         missing_mechanism = detect_missing_mechanism(df, column)
 
     # 高缺失率 → 删除列
-    if null_rate > 0.5:
-        return CleaningStrategy.DROP_COLUMN, f"缺失率 {null_rate:.1%} > 50%，建议删除列"
+    if null_rate > _config.drop_column_null_rate:
+        return CleaningStrategy.DROP_COLUMN, f"缺失率 {null_rate:.1%} > {_config.drop_column_null_rate:.0%}，建议删除列"
 
     # 极低缺失率 → 删除行
-    if null_rate < 0.02:
-        return CleaningStrategy.DROP_ROWS, f"缺失率 {null_rate:.1%} < 2%，删除行影响极小"
+    if null_rate < _config.drop_rows_null_rate:
+        return CleaningStrategy.DROP_ROWS, f"缺失率 {null_rate:.1%} < {_config.drop_rows_null_rate:.0%}，删除行影响极小"
 
     # MCAR → 可以安全删除或简单填充
     if missing_mechanism == "mcar":
-        if null_rate < 0.1:
-            return CleaningStrategy.DROP_ROWS, f"MCAR 且缺失率 {null_rate:.1%} < 10%，删除行安全"
+        if null_rate < _config.mcar_drop_rows_null_rate:
+            return CleaningStrategy.DROP_ROWS, f"MCAR 且缺失率 {null_rate:.1%} < {_config.mcar_drop_rows_null_rate:.0%}，删除行安全"
         return CleaningStrategy.FILL_MEDIAN, f"MCAR 但缺失率 {null_rate:.1%} 较高，中位数填充"
 
     # MAR → 需要更谨慎
@@ -604,9 +624,9 @@ def assess_bias_risk(
     impact_rate: float,
     distribution_shift: dict[str, float],
     mechanisms: dict[str, str],
-) -> tuple[str, str]:
+) -> dict[str, Any]:
     """
-    评估清洗引入偏差的风险
+    返回偏差风险相关数据摘要，由 LLM 负责解读和生成风险报告。
 
     Args:
         impact_rate: 总影响率
@@ -614,30 +634,18 @@ def assess_bias_risk(
         mechanisms: 各列缺失机制
 
     Returns:
-        (风险等级, 原因)
+        数据摘要字典，供 LLM 解读使用
     """
-    # 影响率判断
-    if impact_rate > 0.20:
-        return "high", f"清洗影响了 {impact_rate:.1%} 的数据，偏差风险高"
-
-    # MNAR 列被处理
     mnar_cols = [c for c, m in mechanisms.items() if m == "mnar"]
-    if mnar_cols:
-        if impact_rate > 0.05:
-            return "high", f"存在 MNAR 缺失列 {mnar_cols} 且影响率 {impact_rate:.1%} > 5%，偏差风险高"
+    large_shift = {c: s for c, s in distribution_shift.items() if s > _config.bias_large_shift_sigma}
 
-    # 分布变化大的列
-    large_shift = [c for c, s in distribution_shift.items() if s > 0.3]
-    if len(large_shift) >= 2:
-        return "medium", f"{len(large_shift)} 列分布变化 > 0.3σ: {large_shift}"
-
-    if mnar_cols:
-        return "medium", f"存在 MNAR 缺失列 {mnar_cols}，偏差风险中等"
-
-    if impact_rate > 0.10:
-        return "medium", f"影响率 {impact_rate:.1%} > 10%，偏差风险中等"
-
-    return "low", "影响率低，缺失机制为 MCAR/MAR，偏差风险低"
+    return {
+        "impact_rate": round(impact_rate, 4),
+        "mnar_columns": mnar_cols,
+        "large_shift_columns": {c: round(s, 4) for c, s in large_shift.items()},
+        "all_mechanisms": dict(mechanisms),
+        "all_distribution_shifts": {c: round(s, 4) for c, s in distribution_shift.items()},
+    }
 
 
 # ── 清洗执行 ──────────────────────────────────────────────────
@@ -647,21 +655,25 @@ def clean_data(
     df: pd.DataFrame,
     operations: list[dict[str, Any]] | None = None,
     *,
-    auto_strategy: bool = True,
-    impact_warning: float = 0.10,
+    impact_warning: float | None = None,
 ) -> tuple[pd.DataFrame, CleaningReport]:
     """
     执行数据清洗
 
+    operations 必须由 LLM 提供，代码不做自动策略判断。
+    调用方有责任在调用前完成 LLM 清洗规划。
+
     Args:
         df: 原始数据
-        operations: 手动指定的清洗操作列表，每项包含 column, strategy, reason
-        auto_strategy: 是否自动为缺失列建议策略
+        operations: 清洗操作列表（必须非空），每项包含 column, strategy, reason
         impact_warning: 影响率超过此值时发出警告
 
     Returns:
         (清洗后的 DataFrame, 清洗报告)
     """
+    if impact_warning is None:
+        impact_warning = _config.impact_warning_threshold
+
     # 空 DataFrame
     if len(df) == 0:
         return df.copy(), CleaningReport(
@@ -679,21 +691,6 @@ def clean_data(
     # 清洗前快照
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     before_stats = compute_stats_snapshot(df, numeric_cols)
-
-    if operations is None and auto_strategy:
-        # 自动为每列缺失建议策略
-        operations = []
-        for col in df.columns:
-            null_rate = df[col].isnull().mean()
-            if null_rate > 0:
-                mechanism = detect_missing_mechanism(df, col)
-                mechanisms[col] = mechanism
-                strategy, reason = suggest_cleaning_strategy(df, col, null_rate, mechanism)
-                operations.append({
-                    "column": col,
-                    "strategy": strategy.value,
-                    "reason": reason,
-                })
 
     if operations:
         for op_spec in operations:
@@ -783,8 +780,8 @@ def clean_data(
                 if not pd.api.types.is_numeric_dtype(df_clean[col]):
                     warnings.append(f"列 '{col}' 为非数值类型，跳过 Winsorize")
                     continue
-                lower_pct = op_spec.get("lower", 0.05)
-                upper_pct = op_spec.get("upper", 0.05)
+                lower_pct = op_spec.get("lower", _config.winsorize_lower_pct)
+                upper_pct = op_spec.get("upper", _config.winsorize_upper_pct)
                 n_before_win = int(((df_clean[col] < df_clean[col].quantile(lower_pct)) | (df_clean[col] > df_clean[col].quantile(1 - upper_pct))).sum())
                 df_clean[col] = winsorize_column(df_clean[col], lower_pct, upper_pct)
                 rows_affected = n_before_win
@@ -812,8 +809,11 @@ def clean_data(
     after_stats = compute_stats_snapshot(df_clean, [c for c in numeric_cols if c in df_clean.columns])
     distribution_shift = compare_before_after(before_stats, after_stats)
 
-    # 偏差风险评估
-    bias_risk, bias_risk_reason = assess_bias_risk(impact_rate, distribution_shift, mechanisms)
+    # 偏差风险数据摘要（由 LLM 解读，代码不做风险评级）
+    bias_summary = assess_bias_risk(impact_rate, distribution_shift, mechanisms)
+
+    # 双轨数据支持：收集实际被修改的列名
+    modified_columns = list({op.column for op in ops if op.strategy != CleaningStrategy.SKIP})
 
     report = CleaningReport(
         total_rows_original=original_rows,
@@ -825,8 +825,9 @@ def clean_data(
         before_stats=before_stats,
         after_stats=after_stats,
         distribution_shift=distribution_shift,
-        bias_risk=bias_risk,
-        bias_risk_reason=bias_risk_reason,
+        bias_risk="",
+        bias_risk_reason=str(bias_summary),
+        modified_columns=modified_columns,
     )
 
     return df_clean, report

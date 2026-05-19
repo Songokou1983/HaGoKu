@@ -19,6 +19,7 @@ import yaml
 from ...config import LLMConfig
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
+from ...config import CleaningConfig
 from ...tools.cleaning import (
     CleaningReport,
     clean_data,
@@ -26,6 +27,9 @@ from ...tools.cleaning import (
     detect_outliers_iqr,
     littles_mcar_test,
 )
+
+# 模块级配置
+_cconfig = CleaningConfig()
 from ...tools.data_io import load_data
 from .._interactive import InteractionMixin
 from ..types import InteractionResult
@@ -106,11 +110,11 @@ class CleanerAgent(InteractionMixin):
         context: dict,
         project_id: str | None = None,
         user_operations: list[dict[str, Any]] | None = None,
-        impact_warning: float = 0.10,
+        impact_warning: float | None = None,
         phase: str = "full",
         *,
         emit_completed: bool = True,
-    ) -> tuple[pd.DataFrame, CleaningReport, dict]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, CleaningReport, dict]:
         """
         执行数据清洗
 
@@ -124,7 +128,7 @@ class CleanerAgent(InteractionMixin):
             emit_completed: 为 False 时不发 AGENT_COMPLETED（编排层在用户确认清洗方案后再发）。
 
         Returns:
-            (清洗后的 DataFrame, 清洗报告, 清洗摘要)
+            (原始 DataFrame, 清洗后 DataFrame, 清洗报告, 清洗摘要)
         """
         self._emit(EventType.AGENT_STARTED, {"goal": "清洗数据，去掉明显错误"})
 
@@ -147,7 +151,7 @@ class CleanerAgent(InteractionMixin):
                 bias_risk_reason="无法加载数据",
                 missing_mechanism={},
             )
-            return pd.DataFrame(), report, {}
+            return pd.DataFrame(), pd.DataFrame(), report, {}
 
         try:
             # 1. 异常值检测
@@ -207,15 +211,14 @@ class CleanerAgent(InteractionMixin):
                 self._emit(EventType.AGENT_COMPLETED, {
                     "result_summary": f"策略生成完成：{len(operations)} 个计划操作"
                 })
-                return df, strategy_report, {"operations": operations}
+                return df, df, strategy_report, {"operations": operations}
 
             # 4. 执行清洗
             self._emit(EventType.AGENT_THINKING, {"thought": f"执行 {len(operations)} 个清洗操作..."})
             df_clean, report = clean_data(
                 df,
                 operations=operations if operations else None,
-                auto_strategy=not bool(operations),
-                impact_warning=impact_warning,
+                impact_warning=impact_warning if impact_warning is not None else _cconfig.impact_warning_threshold,
             )
 
             self._emit(EventType.TOOL_RESULT, {
@@ -224,10 +227,11 @@ class CleanerAgent(InteractionMixin):
 
             # 5. 分布变化警告
             if report.distribution_shift:
-                large_shifts = {k: v for k, v in report.distribution_shift.items() if v > 0.1}
+                sigma = _cconfig.large_shift_sigma
+                large_shifts = {k: v for k, v in report.distribution_shift.items() if v > sigma}
                 if large_shifts:
                     self._emit(EventType.AGENT_THINKING, {
-                        "thought": f"分布变化 > 0.1σ 的列: {list(large_shifts.keys())}"
+                        "thought": f"分布变化 > {sigma}σ 的列: {list(large_shifts.keys())}"
                     })
 
             # 6. 偏差风险
@@ -239,7 +243,7 @@ class CleanerAgent(InteractionMixin):
             self._update_own_memory(operations, project_id)
 
             # 8. 学习：将清洗策略写入知识库
-            self._learn_from_results(df, operations, report, context, project_id)
+            self._learn_from_results(operations, context, project_id)
 
             # 摘要
             summary = {
@@ -253,7 +257,7 @@ class CleanerAgent(InteractionMixin):
             if emit_completed:
                 self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"影响率 {report.impact_rate:.1%}"})
 
-            return df_clean, report, summary
+            return df, df_clean, report, summary
 
         except Exception as e:
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
@@ -268,7 +272,7 @@ class CleanerAgent(InteractionMixin):
                 bias_risk_reason=str(e),
                 missing_mechanism=mechanisms,
             )
-            return df, report, {}
+            return df, df, report, {}
 
     # ── 交互式接口 ────────────────────────────────────────
 
@@ -409,8 +413,7 @@ class CleanerAgent(InteractionMixin):
         df_clean, report = clean_data(
             df,
             operations=[{"column": k, "strategy": v} for k, v in final_ops.items()] if final_ops else None,
-            auto_strategy=not bool(final_ops),
-            impact_warning=0.10,
+            impact_warning=_cconfig.impact_warning_threshold,
         )
 
         self._df = df_clean
@@ -429,7 +432,7 @@ class CleanerAgent(InteractionMixin):
         # 更新记忆
         ops_for_memory = [{"column": k, "strategy": v} for k, v in final_ops.items()]
         self._update_own_memory(ops_for_memory, project_id)
-        self._learn_from_results(df, ops_for_memory, report, context, project_id)
+        self._learn_from_results(ops_for_memory, context, project_id)
 
         return self._write_memory_and_ask_next(df_clean, context, ops_for_memory, project_id)
 
@@ -467,16 +470,22 @@ class CleanerAgent(InteractionMixin):
             },
         )
 
-    def _assess_quality(self, df: pd.DataFrame, outliers: dict, null_cols: list) -> str:
+    def _assess_quality(self, df: pd.DataFrame, outliers: dict, null_cols: list) -> dict[str, Any]:
+        """返回原始质量统计数据，评级由 LLM 在清洗规划时结合业务上下文给出。"""
         n_rows = len(df)
         outlier_count = sum(v.get("count", 0) for v in outliers.values())
         null_count = df.isnull().sum().sum()
+        outlier_rate = outlier_count / max(n_rows, 1)
+        null_rate = null_count / max(n_rows * len(df.columns), 1)
 
-        if outlier_count / max(n_rows, 1) > 0.1 or null_count / max(n_rows * len(df.columns), 1) > 0.2:
-            return "poor"
-        elif outlier_count / max(n_rows, 1) > 0.05 or null_count / max(n_rows * len(df.columns), 1) > 0.1:
-            return "medium"
-        return "good"
+        return {
+            "n_rows": n_rows,
+            "n_columns": len(df.columns),
+            "outlier_count": outlier_count,
+            "outlier_rate": round(outlier_rate, 4),
+            "null_count": int(null_count),
+            "null_rate": round(null_rate, 4),
+        }
 
     def _plan_operations(
         self,
@@ -550,33 +559,6 @@ class CleanerAgent(InteractionMixin):
                         "max": float(non_null.max()) if hasattr(non_null, "max") else None,
                         "mean": round(float(non_null.mean()), 4),
                     })
-                    # 分布形状简记
-                    q75v = col_info.get("q75", 0)
-                    maxv = col_info.get("max")
-                    if q75v and maxv and q75v > 0 and maxv > q75v * 10:
-                        col_info["distribution_shape"] = "严重右偏"
-                    elif q75v and maxv and q75v > 0 and maxv > q75v * 3:
-                        col_info["distribution_shape"] = "右偏"
-                    else:
-                        col_info["distribution_shape"] = "大致对称"
-                # 已知边界列
-                minv = col_info.get("min")
-                if minv is not None and maxv is not None:
-                    if minv >= 0 and maxv <= 1 and series.nunique() <= 3:
-                        col_info["known_range"] = "0-1 二值/比例"
-                    elif minv >= 1 and maxv <= 10 and series.nunique() <= 10:
-                        col_info["known_range"] = "1-10 评分"
-                    elif minv >= 1 and maxv <= 5 and series.nunique() <= 5:
-                        col_info["known_range"] = "1-5 评分"
-                    elif minv >= 0 and maxv <= 100 and series.nunique() <= 20:
-                        col_info["known_range"] = "百分比"
-
-            # IQR 异常值信息
-            outlier_info = outliers.get(col)
-            if outlier_info and outlier_info.get("count", 0) > 0:
-                col_info["outlier_count"] = outlier_info["count"]
-                col_info["outlier_rate"] = outlier_info.get("rate", 0)
-
             # 缺失机制
             mech = mechanisms.get(col)
             if mech:
@@ -605,7 +587,8 @@ class CleanerAgent(InteractionMixin):
         }
 
         system_prompt = (
-            "你是专业数据清洗员。基于每列的数据画像、字段语义和分析目标，决定清洗策略。\n"
+            "你是专业数据清洗员。你收到的每列数据画像仅包含原始统计量（count/min/q25/median/q75/max/mean/null_rate），"
+            "没有任何预判信息。你需要自行决策：\n"
             "\n"
             "核心原则：\n"
             "1. 清洗策略必须匹配分析目标：\n"
@@ -613,18 +596,22 @@ class CleanerAgent(InteractionMixin):
             "   - 算均值/比较 → 温和截断极端值，保护均值不被拉偏\n"
             "   - 预测建模 → 保守处理特征列，目标变量绝对不碰\n"
             "   - 找高价值/异常 → 极端值就是答案，不做截断\n"
-            "2. 理解列的语义边界：评分 1-5 不截断；收入可以有极端值；目标变量不删行不截断\n"
+            "2. 自行判断列的语义边界（不要依赖代码预判，数据里没有'known_range'字段）：\n"
+            "   - 比较 min/max 与样本值判断是否为评分列（如 1-5 / 1-10 / 0-100 百分比）→ 是评分则 skip\n"
+            "   - 比较 q75 与 max 的差距判断有无极端值（如 max > q75 * 3 可能有极端值，max > q75 * 10 几乎确定是异常）\n"
+            "   - 比较 mean 与 median 的偏离判断分布偏态\n"
             "3. 标识列(identifier)、分组列 — 不处理\n"
-            "4. 缺失率 > 50% → 建议删除该列或标记缺失\n"
+            "4. 缺失率 > 50% → 建议标记缺失（fill_mcar），不要盲目删行\n"
             "5. 缺失率 < 1% 且非目标变量 → 可删行\n"
+            "6. 目标变量绝对不删行、不截断 → skip\n"
             "\n"
-            "输出一个 JSON 对象，字段 `operations` 为数组，每项包含：\n"
+            "输出一个 JSON 对象，字段 `operations` 为数组，仅包含需要处理的列。每项包含：\n"
             "  - column: 列名（照抄）\n"
             "  - strategy: 清洗策略（winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip）\n"
-            "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'该列有47个值偏离正常业务范围'这样）\n"
+            "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'最大值为中位数的15倍，存在极端偏离'这样）\n"
             "  - impact_estimate: 预估影响行数或比例（字符串，如'约5%'）\n"
             "\n"
-            "只输出需要处理的列。不需要清洗的列不要出现在 operations 中。"
+            "不需要清洗的列不要出现在 operations 中。"
         )
 
         client = create_raw_client(self.llm_config)
@@ -712,9 +699,7 @@ class CleanerAgent(InteractionMixin):
 
     def _learn_from_results(
         self,
-        df: pd.DataFrame,
         operations: list[dict],
-        report,
         context: dict,
         project_id: str | None,
     ) -> None:
@@ -732,11 +717,9 @@ class CleanerAgent(InteractionMixin):
             existing = cleaner_knowledge.recall(condition, top_k=1)
             if existing and existing[0]["similarity"] > 0.85:
                 continue
-            risk = "low" if op.get("impact", 0) < 0.05 else "medium"
             cleaner_knowledge.learn(
                 condition=condition,
                 action=strategy,
-                risk=risk,
                 tags=["清洗策略", col, strategy],
                 metadata={"project": project_id, "column": col, "strategy": strategy},
             )
@@ -759,17 +742,10 @@ class CleanerAgent(InteractionMixin):
 
         operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
 
-        # 数据质量评估
+        # 数据质量统计（由 LLM 解读，代码不做评级）
         n_rows = len(df)
         outlier_count = sum(v.get("count", 0) for v in outliers_iqr.values())
         null_count = df.isnull().sum().sum()
-
-        if outlier_count / max(n_rows, 1) > 0.1 or null_count / max(n_rows * len(df.columns), 1) > 0.2:
-            data_quality = "poor"
-        elif outlier_count / max(n_rows, 1) > 0.05 or null_count / max(n_rows * len(df.columns), 1) > 0.1:
-            data_quality = "medium"
-        else:
-            data_quality = "good"
 
         return {
             "status": "cleaner_strategy",
@@ -778,5 +754,10 @@ class CleanerAgent(InteractionMixin):
             "outliers": {k: v for k, v in outliers_iqr.items() if v.get("count", 0) > 0},
             "missing_mechanisms": mechanisms,
             "operations": operations,
-            "data_quality": data_quality,
+            "data_quality": {
+                "outlier_rate": round(outlier_count / max(n_rows, 1), 4),
+                "null_rate": round(null_count / max(n_rows * len(df.columns), 1), 4),
+                "n_rows": n_rows,
+                "n_columns": len(df.columns),
+            },
         }

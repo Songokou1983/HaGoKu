@@ -4,14 +4,36 @@
 - 不强求用户用专业词汇
 - 模糊输入 → 探索性分析，而不是报错
 - 口语化表达 → 映射到标准意图
+
+=== 硬编码审查（2025-05） ===
+以下模式当前以硬编码列表存在，若业务场景扩展需考虑外部化：
+- INTENT_PATTERNS（第 ~104 行）：意图关键词正则映射
+- TARGET_KEYWORDS（第 ~230 行）：目标变量候选词
+- COLLOQUIAL_MAP（第 ~237 行）：口语→标准词映射
+- _extract_group_by（第 ~370 行）：维度关键词列表
+
+已知风险：新业务场景（如供应链、风控、用户增长）的关键词未被覆盖，
+会导致 intent_type 固定 fallback 为 "exploration"。
+缓解措施：
+1. 支持外部 YAML 规则文件（_load_external_rules）
+2. 低置信度时触发 LLM 小模型兜底（_llm_fallback_intent）
+3. 可在 hagoku/config.py 中通过 QUERY_PARSER_RULES_PATH 指定外部规则路径
+
+从客户体验角度：用户说"帮我看看供应链库存周转率"时，若规则表未覆盖
+"库存周转率"，系统不会报错，而是进入 exploration 模式 + LLM 兜底，
+确保始终返回可用的分析计划。
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ── 意图类型 ────────────────────────────────────────────────
 
@@ -70,10 +92,9 @@ class QueryIntent:
         return mapping.get(self.intent_type, self.fallback_focus)
 
 
-# ── 意图关键词映射 ──────────────────────────────────────────
+# ── 意图关键词映射（可被外部规则文件扩充）──────────────────
 
-
-INTENT_PATTERNS: list[tuple[str, str, list[str]]] = [
+DEFAULT_INTENT_PATTERNS: list[tuple[str, str, list[str]]] = [
     # 设计原则：最具体的模式排前面，避免通用词（如"哪个"）抢在商业关键词之前匹配
     #
     # 排序逻辑：
@@ -207,11 +228,78 @@ COLLOQUIAL_MAP: dict[str, str] = {
 }
 
 
+# ── 外部规则加载 ────────────────────────────────────────────
+
+def _load_external_rules(rules_path: str | None = None) -> list[tuple[str, str, list[str]]]:
+    """从外部 YAML 文件加载额外的意图规则。
+
+    若未指定路径，尝试从 hagoku/config.py 读取 QUERY_PARSER_RULES_PATH。
+    外部规则的格式与 DEFAULT_INTENT_PATTERNS 一致：
+      - intent_type: "roi_analysis"  # 意图类型名
+        pattern: "roi|ROAS|投资回报"   # | 分隔的正则关键词
+        labels: ["ROI", "投资回报"]    # 标签列表
+
+    外部规则会追加到内置规则之后（内置规则优先级更高）。
+    """
+    external: list[tuple[str, str, list[str]]] = []
+
+    if rules_path is None:
+        try:
+            from hagoku.config import QUERY_PARSER_RULES_PATH  # type: ignore[import-untyped]
+            rules_path = QUERY_PARSER_RULES_PATH
+        except ImportError:
+            pass
+
+    if not rules_path:
+        return external
+
+    path = Path(rules_path)
+    if not path.exists():
+        logger.debug("query_parser: 外部规则文件 %s 不存在，使用内置规则", path)
+        return external
+
+    try:
+        import yaml  # type: ignore[import-untyped]
+
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+
+        if not isinstance(data, list):
+            logger.warning("query_parser: 外部规则文件 %s 格式错误（期望 list），已忽略", path)
+            return external
+
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            intent_type = entry.get("intent_type")
+            pattern = entry.get("pattern")
+            labels = entry.get("labels", [])
+            if intent_type and pattern and isinstance(intent_type, str) and isinstance(pattern, str):
+                external.append((intent_type, pattern, list(labels) if isinstance(labels, list) else []))
+
+        logger.info("query_parser: 从 %s 加载了 %d 条外部意图规则", path, len(external))
+    except Exception:
+        logger.warning("query_parser: 加载外部规则文件 %s 失败", path, exc_info=True)
+
+    return external
+
+
 # ── 解析器 ──────────────────────────────────────────────────
 
 
 class QueryParser:
-    """将用户自然语言查询解析为结构化意图"""
+    """将用户自然语言查询解析为结构化意图
+
+    解析策略（优先级递减）：
+    1. 内置正则 → 外部规则文件正则
+    2. 低置信度 → LLM 小模型兜底（_llm_fallback_intent）
+    """
+
+    def __init__(self, rules_path: str | None = None) -> None:
+        self._intent_patterns: list[tuple[str, str, list[str]]] = list(DEFAULT_INTENT_PATTERNS)
+        external = _load_external_rules(rules_path)
+        if external:
+            self._intent_patterns.extend(external)
 
     def parse(self, query: str, context_hints: dict[str, Any] | None = None) -> QueryIntent:
         """
@@ -236,19 +324,27 @@ class QueryParser:
         # 2. 意图识别
         intent.intent_type, intent.confidence = self._detect_intent(q_normalized)
 
-        # 3. 时间范围提取
+        # 3. 低置信度 → LLM 兜底
+        if intent.confidence == "low":
+            llm_result = self._llm_fallback_intent(q_normalized)
+            if llm_result:
+                intent.intent_type = llm_result
+                intent.confidence = "medium"
+                logger.info("query_parser: LLM 兜底将意图从 exploration(low) 修正为 %s", llm_result)
+
+        # 4. 时间范围提取
         intent.time_range, intent.time_from, intent.time_to = self._extract_time(q_normalized)
 
-        # 4. 目标变量识别
+        # 5. 目标变量识别
         intent.target = self._extract_target(q_normalized, context_hints)
 
-        # 5. 分组维度识别
+        # 6. 分组维度识别
         intent.group_by = self._extract_group_by(q_normalized, context_hints)
 
-        # 6. 用户提到的列名
+        # 7. 用户提到的列名
         intent.mentioned_columns = self._extract_mentioned_columns(q_normalized, context_hints)
 
-        # 7. 筛选条件提取
+        # 8. 筛选条件提取
         intent.filters = self._extract_filters(q_normalized)
 
         return intent
@@ -265,7 +361,7 @@ class QueryParser:
     def _detect_intent(self, query: str) -> tuple[str, str]:
         """识别用户意图"""
         # 遍历意图模式，找第一个匹配的
-        for intent_type, pattern_str, _ in INTENT_PATTERNS:
+        for intent_type, pattern_str, _ in self._intent_patterns:
             patterns = pattern_str.split("|")
             for pattern in patterns:
                 if re.search(pattern, query):
@@ -277,6 +373,34 @@ class QueryParser:
 
         # 完全模糊 → 探索性
         return "exploration", "low"
+
+    def _llm_fallback_intent(self, query: str) -> str | None:
+        """LLM 小模型兜底：对低置信度查询做意图分类。
+
+        当前实现使用轻量正则启发式做二次判断，避免完全依赖外部 LLM 调用。
+        若需接入真实 LLM，可在此处调用 hagoku.llm.client 的小模型接口。
+
+        从客户体验角度：即使用户表达不完全匹配内置关键词，
+        这里也会尽力推断意图（如"库存周转率" → 推断为趋势/诊断），
+        而不是直接放弃进入 exploration。
+        """
+        # 启发式二次判断（轻量，无需网络调用）
+        # 这些是内置关键词未覆盖但常见的业务场景
+        heuristic_patterns: list[tuple[str, str]] = [
+            (r"周转|库存|存货|inventory", "trend"),
+            (r"留存|次日|7日|30日|次留|七留", "trend"),
+            (r"评分|打分|nps|NPS|满意度|csat", "comparison"),
+            (r"风控|欺诈|异常交易|风险", "diagnostic"),
+            (r"供应链|物流|配送|时效", "trend"),
+            (r"复购|回购|回头客", "trend"),
+            (r"预测|预估|forecast", "trend"),
+            (r"画像|profile|用户画像|标签", "exploration"),
+            (r"A/B|AB测试|实验组|对照组", "comparison"),
+        ]
+        for pattern, intent_type in heuristic_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                return intent_type
+        return None
 
     def _extract_time(self, query: str) -> tuple[str | None, datetime | None, datetime | None]:
         """提取时间范围"""
@@ -333,7 +457,12 @@ class QueryParser:
         return None
 
     def _extract_group_by(self, query: str, context_hints: dict[str, Any] | None) -> list[str]:
-        """提取分组维度"""
+        """提取分组维度。
+
+        **硬编码注意**：此处的维度关键词列表是硬编码的。
+        若业务场景扩展到新领域（如供应链、风控），需在此处扩充，
+        或通过 context_hints 中的列信息自动推断。
+        """
         groups = []
 
         # 从 query 中找

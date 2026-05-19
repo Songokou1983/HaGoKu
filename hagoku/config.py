@@ -62,9 +62,42 @@ class AnalysisConfig(BaseModel):
 
 
 class CleaningConfig(BaseModel):
-    """数据清洗配置"""
+    """数据清洗配置
 
+    所有阈值均可通过 YAML 配置文件或运行时 set_cleaning_config() 覆盖。
+    """
+
+    # ── 异常值检测 ──
+    iqr_factor: float = 1.5  # IQR 倍数（异常值判定灵敏度）
+    zscore_threshold: float = 3.0  # Z-score 阈值
     isolation_forest_n_estimators: int = 100
+    isolation_forest_contamination: float = 0.05  # Isolation Forest 预期异常比例
+    min_samples_for_zscore: int = 30  # z-score 最小样本量
+    min_samples_for_iforest: int = 50  # Isolation Forest 最小样本量
+    max_outlier_pct: float = 0.20  # 离群比例上限（超过此值则标记但不 winsorize）
+
+    # ── 缺失值检测 ──
+    mcar_test_alpha: float = 0.05  # Little's MCAR 检验显著性水平
+    missing_mechanism_alpha: float = 0.05  # 缺失机制 t 检验显著性
+    sig_rate_mcar_below: float = 0.2  # 显著比例 < 此值 → 判定为 MCAR
+    sig_rate_mnar_above: float = 0.6  # 显著比例 > 此值 → 判定为 MNAR
+
+    # ── Winsorize 截断 ──
+    winsorize_lower_pct: float = 0.05  # 下截断分位数（默认 5%）
+    winsorize_upper_pct: float = 0.05  # 上截断分位数（默认 5%）
+
+    # ── 清洗策略推荐阈值 ──
+    drop_column_null_rate: float = 0.5  # 缺失率 > 此值 → 建议删除列
+    drop_rows_null_rate: float = 0.02  # 缺失率 < 此值 → 删除行影响极小
+    mcar_drop_rows_null_rate: float = 0.1  # MCAR 时缺失率 < 此值 → 可安全删行
+
+    # ── 清洗影响评估 ──
+    impact_warning_threshold: float = 0.10  # 影响率超过此值触发警告
+    large_shift_sigma: float = 0.1  # 分布变化 > 此 σ 值 → 标记为"分布变化"
+    bias_large_shift_sigma: float = 0.3  # assess_bias_risk 中判定"大偏移"的 σ 阈值
+    row_deletion_bias_risk: float = 0.05  # 删行率 > 此值 → 偏差风险升 medium
+
+    # ── 其他 ──
     iterative_imputer_max_iter: int = 10
     random_state: int = 42
 

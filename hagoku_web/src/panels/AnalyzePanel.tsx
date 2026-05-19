@@ -655,6 +655,7 @@ export default function AnalyzePanel() {
   // Track which agent is waiting for user reply
   const [waitingAgent, setWaitingAgent] = useState<AgentKey | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [queryText, setQueryText] = useState("");
   const [resultReportUrl, setResultReportUrl] = useState<string | null>(null);
   const [guardrailsBlocked, setGuardrailsBlocked] = useState(false);
   const [blockedRunId, setBlockedRunId] = useState<string | null>(null);
@@ -1088,6 +1089,7 @@ export default function AnalyzePanel() {
         },
       ]);
       setReplyText("");
+    setQueryText("");
       setWaitingAgent(null);
       setGateOpen(false);
       setPauseConfirmActionsVisible(false);
@@ -1124,7 +1126,7 @@ export default function AnalyzePanel() {
     setPhase("running");
     send("analyze", {
       data_path: dataPath,
-      query: "",
+      query: queryText.trim() || "",
       project_name: currentProject ?? "default",
       phase: "full",
     });
@@ -1339,12 +1341,23 @@ export default function AnalyzePanel() {
               <div className="text-app-text-muted text-ui-xs">准备好后点击"开始分析"</div>
             </div>
           ) : (
-            <div className="text-center space-y-2">
-              <div className="text-ui-sm text-app-text-muted">项目和数据文件已就绪</div>
-              <div className="text-ui-xs text-app-text-muted opacity-60">
-                需要暂停确认时会在对话区提示，并在下方出现输入框
+            <>
+              <div className="text-center space-y-2">
+                <div className="text-ui-sm text-app-text-muted">项目和数据文件已就绪</div>
+                <div className="text-ui-xs text-app-text-muted opacity-60">
+                  需要暂停确认时会在对话区提示，并在下方出现输入框
+                </div>
               </div>
-            </div>
+              <div className="w-full max-w-md">
+                <textarea
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  placeholder="你想分析什么？例如：这批广告投放的 ROI 如何？哪个渠道转化最高？"
+                  rows={3}
+                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-ui-sm text-app-text placeholder:text-app-text-muted focus:outline-none focus:border-app-accent resize-none transition-colors"
+                />
+              </div>
+            </>
           )}
           <button
             onClick={handleStartSession}

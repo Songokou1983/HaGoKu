@@ -692,6 +692,7 @@ class MemoryManager:
             return None
         return {
             "cleaned_path": state.get("cleaned_path", ""),
+            "raw_path": state.get("raw_path", ""),
             "context": state.get("context_json"),
             "stage": state.get("stage", "created"),
         }
@@ -701,6 +702,7 @@ class MemoryManager:
         project_id: str,
         stage: str,
         cleaned_path: str = "",
+        raw_path: str = "",
         context: Any = None,
         run_id: str = "",
     ) -> None:
@@ -708,6 +710,8 @@ class MemoryManager:
         kwargs: dict[str, Any] = {"stage": stage}
         if cleaned_path:
             kwargs["cleaned_path"] = cleaned_path
+        if raw_path:
+            kwargs["raw_path"] = raw_path
         if context and hasattr(context, "to_dict"):
             kwargs["context_json"] = context.to_dict()
         self._db.update_project_state(project_id, **kwargs)

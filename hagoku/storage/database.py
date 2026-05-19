@@ -18,7 +18,8 @@ _RUN_ALLOWED_FIELDS = frozenset({
 })
 _PROJECT_STATE_ALLOWED_FIELDS = frozenset({
     "goal", "data_path", "data_hash", "stage", "context_json",
-    "cleaned_path", "cleaning_json", "results_json", "report_path", "next_action", "updated_at"
+    "cleaned_path", "cleaning_json", "results_json", "report_path", "next_action", "updated_at",
+    "raw_path"
 })
 
 
@@ -119,6 +120,7 @@ CREATE TABLE IF NOT EXISTS project_state (
     stage       TEXT DEFAULT 'created',     -- 当前阶段: created / profiled / cleaned / analyzed / reported
     context_json TEXT DEFAULT '',            -- Scout 产出的数据上下文（JSON）
     cleaned_path TEXT DEFAULT '',            -- 清洗后数据路径
+    raw_path TEXT DEFAULT '',                -- 原始数据路径（供 Analyst 按分析类型选用）
     cleaning_json TEXT DEFAULT '',           -- 清洗报告（JSON）
     results_json TEXT DEFAULT '',            -- 分析结果摘要（JSON）
     report_path TEXT DEFAULT '',             -- 报告路径

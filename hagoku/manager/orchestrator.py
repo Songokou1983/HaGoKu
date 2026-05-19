@@ -1242,7 +1242,7 @@ class Orchestrator:
             cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
             if cleaning_operations is not None:
                 # 用户已确认策略 → 执行清洗
-                df_clean, cleaning_report, _ = cleaner.run(
+                df_raw, df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     user_operations=cleaning_operations,
                     impact_warning=self.config.manager.cleaning_impact_warning,
@@ -1250,18 +1250,18 @@ class Orchestrator:
                 )
             else:
                 # 未确认 → 只返回策略供用户确认
-                cleaner_result: tuple[Any, Any, Any] = cleaner.run(
+                cleaner_result = cleaner.run(
                     data_path, context,
                     user_operations=cleaning_operations,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                     phase="strategy_only",
                 )
-                if isinstance(cleaner_result, tuple) and len(cleaner_result) == 3:
-                    _, _, strategy_dict = cleaner_result
+                if isinstance(cleaner_result, tuple) and len(cleaner_result) >= 4:
+                    _, _, _, strategy_dict = cleaner_result
                     if isinstance(strategy_dict, dict):
                         # 用户未确认操作，用自动规划的执行
                         auto_ops = strategy_dict.get("operations", [])
-                        df_clean, cleaning_report, _ = cleaner.run(
+                        df_raw, df_clean, cleaning_report, _ = cleaner.run(
                             data_path, context,
                             user_operations=auto_ops,
                             impact_warning=self.config.manager.cleaning_impact_warning,
@@ -1416,7 +1416,7 @@ class Orchestrator:
                 )
 
                 # 4. Cleaner: 数据清洗
-                df_clean, cleaning_report, _ = cleaner.run(
+                df_raw, df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
                     impact_warning=self.config.manager.cleaning_impact_warning,
                     emit_completed=False,
@@ -1464,17 +1464,27 @@ class Orchestrator:
                     cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
                     save_data(df_clean, cleaned_path)
                     cleaned_path_str = str(cleaned_path)
+
+                    # 同时保存原始数据副本，供 Analyst 按分析类型选用（P1-3）
+                    if df_raw is not None:
+                        raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
+                        save_data(df_raw, raw_path)
+                        raw_path_str = str(raw_path)
+                    else:
+                        raw_path_str = cleaned_path_str
                 else:
                     cleaned_path_str = ""
+                    raw_path_str = ""
                     self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
                         "verdict": "warning",
                         "detail": "数据清洗未成功，尝试使用原始数据",
                     })
 
-                # 保存 resume 状态
+                # 保存 resume 状态（包含 raw 路径）
                 self.memory.save_resume_state(
                     project_name, "cleaned",
                     cleaned_path=cleaned_path_str,
+                    raw_path=raw_path_str if df_clean is not None else "",
                     context=context, run_id=run_id,
                 )
 

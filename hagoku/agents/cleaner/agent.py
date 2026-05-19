@@ -25,7 +25,6 @@ from ...tools.cleaning import (
     detect_missing_mechanism,
     detect_outliers_iqr,
     littles_mcar_test,
-    suggest_cleaning_strategy,
 )
 from ...tools.data_io import load_data
 from .._interactive import InteractionMixin
@@ -486,59 +485,212 @@ class CleanerAgent(InteractionMixin):
         mechanisms: dict,
         outliers: dict,
     ) -> list[dict]:
-        """规划清洗操作"""
-        operations = []
-        variable_roles = context.get("variable_roles", {})
-        target_col = context.get("target")
+        """规划清洗操作 — LLM 原生模式
 
-        # 从记忆加载该项目的清洗偏好
-        project_prefs = self.memory.get("cleaning_preferences", {})
+        LLM 不可达或返回无效结果时，直接抛出异常。
+        框架不做硬编码兜底：LLM 有问题就去解决 LLM 的问题。
+        """
+        llm_ops = self._plan_via_llm(df, context, mechanisms, outliers)
+        if llm_ops:
+            self._emit(EventType.AGENT_THINKING, {
+                "thought": f"LLM 生成了 {len(llm_ops)} 个清洗操作"
+            })
+            return llm_ops
+        raise RuntimeError(
+            "Cleaner LLM 清洗规划失败：LLM 未返回任何有效的清洗操作。"
+            "请检查 LLM 配置和 API 连通性，解决后再重试。"
+        )
 
+    def _plan_via_llm(
+        self,
+        df: pd.DataFrame,
+        context: dict,
+        mechanisms: dict,
+        outliers: dict,
+    ) -> list[dict] | None:
+        """LLM 原生清洗规划：让 LLM 直接看数据并决定清洗策略
+
+        对标 Scout._infer_all_semantics() 的 LLM 原生模式：
+        - 构建每列数据画像 + 字段语义 + 分析目标
+        - 发送给 LLM
+        - 解析 JSON 输出
+        """
+        from ...llm.client import create_raw_client
+
+        # 构建每列的画像摘要
+        column_list: list[dict] = []
         for col in df.columns:
-            role = variable_roles.get(col, "")
+            series = df[col]
+            n_total = len(series)
+            n_null = int(series.isna().sum())
+            null_pct = n_null / n_total if n_total > 0 else 0
 
-            if role in ("ignore", "identifier"):
-                continue
+            col_info: dict = {
+                "name": col,
+                "dtype": str(series.dtype),
+                "n_total": n_total,
+                "n_null": n_null,
+                "null_pct": round(null_pct, 4),
+            }
 
-            # 缺失值处理
-            null_rate = df[col].isnull().mean()
-            if null_rate > 0:
-                # 优先用记忆中的偏好
-                if project_prefs and col in project_prefs:
-                    strategy = project_prefs[col]
-                    reason = f"历史偏好: {strategy}"
-                else:
-                    strategy, reason = suggest_cleaning_strategy(
-                        df, col, null_rate, mechanisms.get(col)
+            # 字段语义（来自 Scout）
+            variable_roles = context.get("variable_roles", {})
+            col_info["role"] = variable_roles.get(col, "unknown")
+            col_info["description"] = context.get("column_descriptions", {}).get(col, "")
+
+            # 数值列：分位数 + 分布
+            if pd.api.types.is_numeric_dtype(series):
+                non_null = series.dropna()
+                if len(non_null) > 0:
+                    col_info.update({
+                        "min": float(non_null.min()) if hasattr(non_null, "min") else None,
+                        "q25": float(non_null.quantile(0.25)),
+                        "median": float(non_null.median()),
+                        "q75": float(non_null.quantile(0.75)),
+                        "max": float(non_null.max()) if hasattr(non_null, "max") else None,
+                        "mean": round(float(non_null.mean()), 4),
+                    })
+                    # 分布形状简记
+                    q75v = col_info.get("q75", 0)
+                    maxv = col_info.get("max")
+                    if q75v and maxv and q75v > 0 and maxv > q75v * 10:
+                        col_info["distribution_shape"] = "严重右偏"
+                    elif q75v and maxv and q75v > 0 and maxv > q75v * 3:
+                        col_info["distribution_shape"] = "右偏"
+                    else:
+                        col_info["distribution_shape"] = "大致对称"
+                # 已知边界列
+                minv = col_info.get("min")
+                if minv is not None and maxv is not None:
+                    if minv >= 0 and maxv <= 1 and series.nunique() <= 3:
+                        col_info["known_range"] = "0-1 二值/比例"
+                    elif minv >= 1 and maxv <= 10 and series.nunique() <= 10:
+                        col_info["known_range"] = "1-10 评分"
+                    elif minv >= 1 and maxv <= 5 and series.nunique() <= 5:
+                        col_info["known_range"] = "1-5 评分"
+                    elif minv >= 0 and maxv <= 100 and series.nunique() <= 20:
+                        col_info["known_range"] = "百分比"
+
+            # IQR 异常值信息
+            outlier_info = outliers.get(col)
+            if outlier_info and outlier_info.get("count", 0) > 0:
+                col_info["outlier_count"] = outlier_info["count"]
+                col_info["outlier_rate"] = outlier_info.get("rate", 0)
+
+            # 缺失机制
+            mech = mechanisms.get(col)
+            if mech:
+                col_info["missing_mechanism"] = mech if isinstance(mech, str) else str(mech)
+
+            # 样本值
+            try:
+                sample_vals = df[col].dropna().unique()[:3]
+                col_info["sample_values"] = [str(v) for v in sample_vals]
+            except Exception:
+                pass
+
+            column_list.append(col_info)
+
+        # 提取分析目标
+        analysis_goal = context.get("analysis_goal", "")
+        query = context.get("query", "")
+        target_col = context.get("target", "")
+
+        payload = {
+            "analysis_goal": analysis_goal or query or "未指定",
+            "target_column": target_col,
+            "n_rows": len(df),
+            "n_cols": len(df.columns),
+            "columns": column_list,
+        }
+
+        system_prompt = (
+            "你是专业数据清洗员。基于每列的数据画像、字段语义和分析目标，决定清洗策略。\n"
+            "\n"
+            "核心原则：\n"
+            "1. 清洗策略必须匹配分析目标：\n"
+            "   - 看分布/画像 → 不截断极端值，极端值就是用户想看的\n"
+            "   - 算均值/比较 → 温和截断极端值，保护均值不被拉偏\n"
+            "   - 预测建模 → 保守处理特征列，目标变量绝对不碰\n"
+            "   - 找高价值/异常 → 极端值就是答案，不做截断\n"
+            "2. 理解列的语义边界：评分 1-5 不截断；收入可以有极端值；目标变量不删行不截断\n"
+            "3. 标识列(identifier)、分组列 — 不处理\n"
+            "4. 缺失率 > 50% → 建议删除该列或标记缺失\n"
+            "5. 缺失率 < 1% 且非目标变量 → 可删行\n"
+            "\n"
+            "输出一个 JSON 对象，字段 `operations` 为数组，每项包含：\n"
+            "  - column: 列名（照抄）\n"
+            "  - strategy: 清洗策略（winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip）\n"
+            "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'该列有47个值偏离正常业务范围'这样）\n"
+            "  - impact_estimate: 预估影响行数或比例（字符串，如'约5%'）\n"
+            "\n"
+            "只输出需要处理的列。不需要清洗的列不要出现在 operations 中。"
+        )
+
+        client = create_raw_client(self.llm_config)
+        import json as _json
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"请分析以下数据集的清洗需求：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
+                ],
+                temperature=0.0,
+                max_tokens=4096,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"Cleaner LLM 清洗规划失败：LLM 不可达。原始错误: {e}") from e
+
+        try:
+            result = _json.loads(raw)
+        except _json.JSONDecodeError:
+            try:
+                cleaned = raw.strip()
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+                cleaned = cleaned.strip()
+                result = _json.loads(cleaned)
+            except _json.JSONDecodeError:
+                try:
+                    match = re.search(r"\{.*\}", raw, re.DOTALL)
+                    if match:
+                        result = _json.loads(match.group())
+                    else:
+                        raise
+                except Exception:
+                    raise ValueError(
+                        f"Cleaner LLM 返回的格式无法解析为 JSON。原始内容前 500 字: {raw[:500]}"
                     )
 
-                # 目标变量用保守策略
-                if col == target_col and strategy.value == "drop_rows":
-                    from ...tools.cleaning import CleaningStrategy
-                    strategy = CleaningStrategy.FILL_MEDIAN
-                    reason = "目标变量不轻易删行，改用中位数填充"
+        operations = result.get("operations") or []
+        if not operations:
+            return None
 
-                operations.append({
-                    "column": col,
-                    "strategy": strategy.value,
-                    "reason": reason,
-                })
-
-        # 异常值处理
-        for col, info in outliers.items():
-            role = variable_roles.get(col, "")
-            if role == "identifier":
+        # 标准化并校验
+        valid_strategies = {"winsorize", "drop_rows", "fill_median", "fill_mean", "fill_mode", "fill_mcar", "skip"}
+        valid_columns = set(df.columns)
+        normalized: list[dict] = []
+        for op in operations:
+            col = op.get("column", "")
+            if not col or col not in valid_columns:
                 continue
-            if info.get("count", 0) > 0 and info.get("rate", 0) < 0.1:
-                rate_threshold = 0.05 if col == target_col else 0.1
-                if info.get("rate", 0) < rate_threshold:
-                    operations.append({
-                        "column": col,
-                        "strategy": "winsorize",
-                        "reason": f"IQR 检测到 {info['count']} 个异常值({info['rate']:.1%})，Winsorize 截断优于删除",
-                    })
+            strategy = op.get("strategy", "skip")
+            if strategy not in valid_strategies:
+                strategy = "skip"
+            reason = op.get("reason", "")
+            if not reason or not isinstance(reason, str):
+                reason = f"对 {col} 列执行 {strategy}"
+            normalized.append({
+                "column": col,
+                "strategy": strategy,
+                "reason": reason,
+                "impact_estimate": op.get("impact_estimate", ""),
+            })
 
-        return operations
+        return normalized if normalized else None
 
     def _update_own_memory(self, operations: list[dict], project_id: str | None) -> None:
         """更新清洗偏好记忆"""

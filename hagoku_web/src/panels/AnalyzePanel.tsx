@@ -9,7 +9,6 @@ import {
   Loader2, WifiOff, Search, Sparkles, BarChart2, FileText,
   ArrowRight, FolderOpen, Upload, ChevronDown, CheckCircle2, X,
   PlayCircle, RotateCcw, Clock, ShieldAlert, MessageSquarePlus,
-  ListChecks,
 } from "lucide-react";
 
 // ── Agent pipeline definition ─────────────────────────────────
@@ -671,7 +670,6 @@ export default function AnalyzePanel() {
   /** 跨阶段闸门：gate_to_cleaning 暂停点（展示「确认进入清洗」/「还有补充」按钮） */
   const [gateOpen, setGateOpen] = useState(false);
   /** 强确认类按钮默认收起，用户点「我已核对」后再展示，避免与输入区误触混淆 */
-  const [pauseConfirmActionsVisible, setPauseConfirmActionsVisible] = useState(false);
   /** 字段表刷新时递增，驱动对话区把该卡片滚入视口（原地更新时 length 不变，仅靠 length 不会滚） */
   const [fieldReviewScrollNonce, setFieldReviewScrollNonce] = useState(0);
   /** 最近一次 respond：WS 报错「无暂停」等时恢复等待态 */
@@ -812,7 +810,6 @@ export default function AnalyzePanel() {
 
         // 暂停点：结构化 field_review 用工作流卡片展示；message 由编排层填入简短 Agent 气泡（可与卡片并存）
         if (d.event_type === "user_input_requested") {
-          setPauseConfirmActionsVisible(false);
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
           const fr = parseFieldReview(dataObj.field_review);
@@ -1023,7 +1020,6 @@ export default function AnalyzePanel() {
             setActiveAnalystReviewId(null);
             setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
-            setPauseConfirmActionsVisible(false);
             setPhase("setup");
             setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
             setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
@@ -1049,7 +1045,6 @@ export default function AnalyzePanel() {
             setActiveAnalystReviewId(null);
             setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
-            setPauseConfirmActionsVisible(false);
             setPhase("done");
           }
         }
@@ -1092,7 +1087,6 @@ export default function AnalyzePanel() {
     setQueryText("");
       setWaitingAgent(null);
       setGateOpen(false);
-      setPauseConfirmActionsVisible(false);
       // 多轮对齐：不清 activeFieldReviewId / activeCleaningReviewId / activeAnalystReviewId；
       // 下一轮 user_input_requested 依赖同一 id 原地更新工作流卡片。
     },
@@ -1122,7 +1116,6 @@ export default function AnalyzePanel() {
     setActiveAnalystReviewId(null);
     setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
-    setPauseConfirmActionsVisible(false);
     setPhase("running");
     send("analyze", {
       data_path: dataPath,
@@ -1147,7 +1140,6 @@ export default function AnalyzePanel() {
     setActiveAnalystReviewId(null);
     setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
-    setPauseConfirmActionsVisible(false);
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
@@ -1188,13 +1180,6 @@ export default function AnalyzePanel() {
     Boolean(activeAnalystReviewId) && waitingAgent === "analyst";
   const canSendReply =
     !!waitingAgent && replyText.trim().length > 0;
-  /** 这些暂停点含「进下一步」类强确认，先展示「已核对」再露出按钮 */
-  const pauseNeedsConfirmReveal =
-    scoutFieldReviewOpen ||
-    cleanerCleaningReviewOpen ||
-    analystReviewOpen ||
-    (gateOpen && waitingAgent === "scout");
-
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text relative">
       <PanelHeader title="分析">
@@ -1396,20 +1381,7 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
-              {pauseNeedsConfirmReveal && !pauseConfirmActionsVisible && (
-                <div className="mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setPauseConfirmActionsVisible(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      border border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors"
-                  >
-                    <ListChecks size={14} />
-                    我已核对，显示确认选项
-                  </button>
-                </div>
-              )}
-              {(cleanerCleaningReviewOpen) && pauseConfirmActionsVisible && (
+              {(cleanerCleaningReviewOpen) && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1422,7 +1394,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {analystReviewOpen && pauseConfirmActionsVisible && (
+              {analystReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1446,7 +1418,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {scoutFieldReviewOpen && pauseConfirmActionsVisible && (
+              {scoutFieldReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1459,7 +1431,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {gateOpen && pauseConfirmActionsVisible && (
+              {gateOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
@@ -1499,13 +1471,13 @@ export default function AnalyzePanel() {
                   }}
                   placeholder={
                     scoutFieldReviewOpen
-                      ? "用自然语言说明哪些字段理解不对、应如何理解；确认上表请先点「我已核对」再点「确认无误」"
+                      ? "字段理解不对时输入说明，Enter 发送；确认无误请点上方按钮"
                       : cleanerCleaningReviewOpen
-                        ? "对清洗的补充说明；Enter 发送。仅说明不会自动放行，认可以表内容请先点「我已核对」再点「确认继续」"
+                        ? "补充说明后 Enter 发送；确认结果请点上方按钮"
                         : analystReviewOpen
-                          ? "补充关注点后 Enter 发送；仅说明不会自动放行，进入报告请先点「我已核对」再点「确认继续」或「同意进入报告」"
+                          ? "补充关注点后 Enter 发送；确认结果请点上方按钮"
                           : gateOpen && waitingAgent === "scout"
-                            ? "请先点「我已核对」再选「确认进清洗」或「还有补充」，也可手输同义句后 Enter · Shift+Enter 换行"
+                            ? "补充说明后 Enter 发送；确认请点上方按钮"
                             : "输入回复后 Enter 发送 · Shift+Enter 换行"
                   }
                   rows={2}
@@ -1535,14 +1507,14 @@ export default function AnalyzePanel() {
               </div>
               <div className="mt-1 text-ui-xs text-app-text-muted">
                 {scoutFieldReviewOpen
-                  ? "在输入框用自然语言说明即可，Scout 会带入后续步骤 · 先点「我已核对」再点「确认无误」· Enter 发送 · Shift+Enter 换行"
+                  ? "用自然语言说明字段理解即可 · Scout 会带入后续 · Enter 发送 · Shift+Enter 换行"
                   : cleanerCleaningReviewOpen
-                    ? "先点「我已核对」再点「确认继续」；有补充时输入后 Enter 发送 · Shift+Enter 换行"
+                    ? "补充说明后 Enter 发送 · Shift+Enter 换行"
                     : analystReviewOpen
-                      ? "先点「我已核对」再选确认类按钮；有补充时输入后 Enter 发送 · Shift+Enter 换行"
+                      ? "补充关注点后 Enter 发送 · Shift+Enter 换行"
                       : gateOpen && waitingAgent === "scout"
-                        ? "闸门：先点「我已核对」再选进清洗或还有补充 · Shift+Enter 换行"
-                    : "有文字时 Enter 发送 · Shift+Enter 换行"}
+                        ? "补充说明后 Enter 发送 · Shift+Enter 换行"
+                    : "Enter 发送 · Shift+Enter 换行"}
               </div>
             </div>
           )}

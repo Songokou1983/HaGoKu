@@ -55,8 +55,7 @@ class CleaningStrategy(Enum):
     MULTIPLE_IMPUTATION = "multiple_imputation"
     FLAG_AND_KEEP = "flag_and_keep"
     WINSORIZE = "winsorize"
-
-
+    SKIP = "skip"
 @dataclass
 class CleaningOp:
     """单次清洗操作"""
@@ -787,6 +786,8 @@ def clean_data(
                 rows_affected = n_before_win
                 ops_detail = {"lower_pct": lower_pct, "upper_pct": upper_pct, "values_clipped": n_before_win}
 
+            elif strategy == CleaningStrategy.SKIP:
+                rows_affected = 0
             ops.append(CleaningOp(
                 column=col,
                 strategy=strategy,

@@ -38,6 +38,33 @@ from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as analyst_knowledge
 
+from ..constants import (
+    ANALYST_DEDUP_SIMILARITY,
+    CLEANING_IMPACT_HIGH_THRESHOLD,
+    CLEANING_IMPACT_MEDIUM_THRESHOLD,
+    CORRELATION_DIRECTION_NEG,
+    CORRELATION_DIRECTION_POS,
+    CORRELATION_LABEL_MODERATE,
+    CORRELATION_LABEL_STRONG,
+    CORRELATION_LABEL_WEAK,
+    CORRELATION_THRESHOLD_MODERATE_ABS,
+    CORRELATION_THRESHOLD_STRONG_ABS,
+    CROSS_VALIDATION_FOLDS_DEFAULT,
+    DW_LOWER_BOUND,
+    DW_UPPER_BOUND,
+    LLM_TOKEN_RATE_MIN,
+    POWER_ADEQUATE_PER_GROUP,
+    POWER_EFFECT_SIZE_DEFAULT,
+    POWER_MIN_PER_GROUP_SAMPLE,
+    POWER_MIN_TOTAL_SAMPLE,
+    POWER_REGRESSION_RATIO,
+    POWER_TARGET_PCT,
+    SIGNIFICANCE_LABEL_CORRECTED,
+    SIGNIFICANCE_LABEL_NOT_SIG,
+    SIGNIFICANCE_LABEL_SIG,
+    SIGNIFICANCE_THRESHOLD,
+)
+
 
 @dataclass
 class AnalysisResult:
@@ -228,7 +255,7 @@ class AnalystAgent(InteractionMixin):
             suggested = ""
             if results:
                 top = results[0]
-                if top.get("significance") == "significant":
+                if top.get("significance") == SIGNIFICANCE_LABEL_SIG:
                     suggested = f"初步发现「{top.get('question', '')}」具有统计显著性，建议重点分析"
                 else:
                     suggested = "初步结果均不显著，建议扩大样本或调整分析维度"
@@ -391,9 +418,9 @@ class AnalystAgent(InteractionMixin):
             r_sq = reg_result.get("r_squared", 0)
             f_p = reg_result.get("f_pvalue", 1)
             p_values = reg_result.get("p_values", {})
-            significant_predictors = [f for f in available_features if f in p_values and p_values[f] < 0.05]
+            significant_predictors = [f for f in available_features if f in p_values and p_values[f] < SIGNIFICANCE_THRESHOLD]
 
-            sig = "significant" if f_p is not None and 0 <= f_p < 0.05 else "not_significant"
+            sig = "significant" if f_p is not None and 0 <= f_p < SIGNIFICANCE_THRESHOLD else SIGNIFICANCE_LABEL_NOT_SIG
 
             conclusion = (
                 f"回归模型 R²={r_sq:.3f}，"
@@ -473,7 +500,7 @@ class AnalystAgent(InteractionMixin):
                     return None
 
                 p_val = test_result["p_value"]
-                sig = "significant" if p_val < 0.05 else "not_significant"
+                sig = "significant" if p_val < SIGNIFICANCE_THRESHOLD else "not_significant"
 
                 if use_nonparam:
                     medians = [float(g1.median()), float(g2.median())]
@@ -515,7 +542,7 @@ class AnalystAgent(InteractionMixin):
                     return None
 
                 p_val = test_result["p_value"]
-                sig = "significant" if p_val < 0.05 else "not_significant"
+                sig = "significant" if p_val < SIGNIFICANCE_THRESHOLD else "not_significant"
 
                 conclusion = (
                     f"{n_groups} 组 {target_col} 均值"
@@ -577,10 +604,10 @@ class AnalystAgent(InteractionMixin):
         col1, col2 = best_pair
         r = best_corr["statistic"]
         p = best_corr["p_value"]
-        sig = "significant" if p < 0.05 else "not_significant"
+        sig = "significant" if p < SIGNIFICANCE_THRESHOLD else "not_significant"
 
-        direction = "正" if r > 0 else "负"
-        strength = "强" if abs(r) > 0.7 else ("中" if abs(r) > 0.4 else "弱")
+        direction = CORRELATION_DIRECTION_POS if r > 0 else CORRELATION_DIRECTION_NEG
+        strength = CORRELATION_LABEL_STRONG if abs(r) > CORRELATION_THRESHOLD_STRONG_ABS else (CORRELATION_LABEL_MODERATE if abs(r) > CORRELATION_THRESHOLD_MODERATE_ABS else CORRELATION_LABEL_WEAK)
         conclusion = f"{col1} 与 {col2} 呈{strength}{direction}相关 (r={r:.3f}, p={p:.4f})"
 
         self._emit(EventType.AGENT_THINKING, {"thought": conclusion})
@@ -623,12 +650,12 @@ class AnalystAgent(InteractionMixin):
             r_sq = result.get("r_squared", 0)
 
             direction = "上升" if coeff > 0 else "下降"
-            sig = "significant" if p_val < 0.05 else "not_significant"
+            sig = "significant" if p_val < SIGNIFICANCE_THRESHOLD else "not_significant"
 
             conclusion = (
                 f"{target_col} 呈{direction}趋势"
                 f"(β={coeff:.4f}, p={p_val:.4f})"
-                if p_val < 0.05
+                if p_val < SIGNIFICANCE_THRESHOLD
                 else f"{target_col} 无显著时间趋势 (p={p_val:.4f})"
             )
 
@@ -673,7 +700,7 @@ class AnalystAgent(InteractionMixin):
         """功效预检"""
         warnings = []
 
-        if n < 30:
+        if n < POWER_MIN_TOTAL_SAMPLE:
             warnings.append(f"⚠️ 数据量偏少（n={n}），检验功效可能不足。")
             return warnings
 
@@ -682,18 +709,18 @@ class AnalystAgent(InteractionMixin):
             if cat_cols:
                 n_groups = df[cat_cols[0]].nunique()
                 n_per_group = n // n_groups
-                if n_per_group < 15:
+                if n_per_group < POWER_MIN_PER_GROUP_SAMPLE:
                     warnings.append(f"⚠️ 每组样本量偏少（n={n_per_group}），检测中等效应功效可能不足。")
-                elif n_per_group >= 30:
-                    power_info = power_ttest(n_per_group, n_per_group, effect_size=0.5)
+                elif n_per_group >= POWER_ADEQUATE_PER_GROUP:
+                    power_info = power_ttest(n_per_group, n_per_group, effect_size=POWER_EFFECT_SIZE_DEFAULT)
                     if "error" not in power_info:
                         power_pct = power_info.get("power", 0) * 100
-                        if power_pct >= 80:
+                        if power_pct >= POWER_TARGET_PCT:
                             warnings.append(f"✅ 每组 n={n_per_group}，检测中等效应功效约 {power_pct:.0f}%，足够。")
 
         if "regression" in focus:
             n_predictors = len([f for f in context.get("features", []) if f in df.columns])
-            if n_predictors > 0 and n < 10 * n_predictors:
+            if n_predictors > 0 and n < POWER_REGRESSION_RATIO * n_predictors:
                 warnings.append(f"⚠️ 样本量 n={n} 与自变量数 {n_predictors} 的比例偏低。")
 
         return warnings
@@ -739,7 +766,7 @@ class AnalystAgent(InteractionMixin):
                         "still_significant": correction["significant"][i],
                     }
                     if not correction["significant"][i] and result["significance"] == "significant":
-                        result["significance"] = "not_significant_after_correction"
+                        result["significance"] = SIGNIFICANCE_LABEL_CORRECTED
         except Exception:
             pass
 
@@ -785,13 +812,13 @@ class AnalystAgent(InteractionMixin):
             scenario = f"{','.join(focus)} n={n} target={target_col}"
             # 检查是否已有相似条目
             existing = analyst_knowledge.recall(scenario, top_k=1)
-            if existing and existing[0]["similarity"] > 0.85:
+            if existing and existing[0]["similarity"] > ANALYST_DEDUP_SIMILARITY:
                 continue
             analyst_knowledge.learn(
                 scenario=scenario,
                 method=method,
                 method_code="",
-                confidence=0.8 if significance == "yes" else 0.6,
+                confidence=0.8 if significance == SIGNIFICANCE_LABEL_SIG else 0.6,
                 tags=focus + [f"n={n}", significance],
                 metadata={"project": project_id, "result": str(result.get("conclusion_plain", ""))[:100]},
             )

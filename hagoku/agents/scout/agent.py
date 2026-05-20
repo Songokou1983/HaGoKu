@@ -26,6 +26,31 @@ from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as scout_knowledge
 
+from ..constants import (
+    DISTRIBUTION_GENERAL_SKEWED,
+    DISTRIBUTION_LEFT_SKEWED,
+    DISTRIBUTION_RIGHT_SKEWED,
+    DISTRIBUTION_ROUGHLY_SYMMETRIC,
+    DISTRIBUTION_SEVERELY_RIGHT_SKEWED,
+    SCOUT_COLNAME_MAX_LEN,
+    SCOUT_CONFIRM_MAX_TOKENS,
+    SCOUT_CONFIRM_TEMPERATURE,
+    SCOUT_DEDUP_SIMILARITY,
+    SCOUT_INFER_MAX_TOKENS,
+    SCOUT_INFER_TEMPERATURE,
+    SCOUT_LABEL_PREVIEW_LEN,
+    SCOUT_LABEL_TRUNCATE_LEN,
+    SCOUT_LEARN_CONFIDENCE_MIN,
+    SCOUT_SAMPLE_PREVIEW_LEN,
+    SCOUT_SAMPLE_TRUNCATE_LEN,
+    SCOUT_TOP_VALUES_MAX_UNIQUE,
+    SKEW_LEFT_RATIO,
+    SKEW_RIGHT_RATIO,
+    SKEW_SEVERE_RIGHT_RATIO,
+    SKEW_SYMMETRY_EPS,
+    SKEW_SYMMETRY_TOLERANCE,
+)
+
 
 
 def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
@@ -38,7 +63,7 @@ def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
     if "：" in s:
         idx = s.find("：")
         left, right = s[:idx], s[idx + 1 :]
-        if len(left.strip()) > 64:
+        if len(left.strip()) > SCOUT_COLNAME_MAX_LEN:
             return None
     elif ":" in s:
         idx = s.find(":")
@@ -80,8 +105,8 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
             parts.append(str(int(v)))
         else:
             s = str(v).strip()
-            if len(s) > 20:
-                s = s[:17] + "…"
+            if len(s) > SCOUT_SAMPLE_TRUNCATE_LEN:
+                s = s[:SCOUT_SAMPLE_PREVIEW_LEN] + "…"
             parts.append(s)
     return ", ".join(parts)
 
@@ -515,8 +540,8 @@ class ScoutAgent(InteractionMixin):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{__import__('json').dumps(payload, ensure_ascii=False, default=str)}\n```"},
                 ],
-                temperature=0.0,
-                max_tokens=4096,
+                temperature=SCOUT_INFER_TEMPERATURE,
+                max_tokens=SCOUT_INFER_MAX_TOKENS,
                 response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content or ""
@@ -644,30 +669,30 @@ class ScoutAgent(InteractionMixin):
                 # 判断是否严重右偏（max > q75 * 3）
                 q75v = profile.get("q75", 0)
                 maxv = profile.get("max")
-                if q75v and maxv and q75v > 0 and maxv > q75v * 10:
-                    profile["distribution_shape"] = "严重右偏"
-                elif q75v and maxv and q75v > 0 and maxv > q75v * 3:
-                    profile["distribution_shape"] = "右偏"
-                elif profile.get("q25") is not None and profile.get("q25", 0) > 0 and profile.get("min", 0) < profile.get("q25", 0) * 0.3:
-                    profile["distribution_shape"] = "左偏"
+                if q75v and maxv and q75v > 0 and maxv > q75v * SKEW_SEVERE_RIGHT_RATIO:
+                    profile["distribution_shape"] = DISTRIBUTION_SEVERELY_RIGHT_SKEWED
+                elif q75v and maxv and q75v > 0 and maxv > q75v * SKEW_RIGHT_RATIO:
+                    profile["distribution_shape"] = DISTRIBUTION_RIGHT_SKEWED
+                elif profile.get("q25") is not None and profile.get("q25", 0) > 0 and profile.get("min", 0) < profile.get("q25", 0) * SKEW_LEFT_RATIO:
+                    profile["distribution_shape"] = DISTRIBUTION_LEFT_SKEWED
                 else:
                     q1 = profile.get("q25", 0)
                     q3 = profile.get("q75", 0)
                     med = profile.get("median", 0)
                     if q3 and q1 and q3 > q1 and med > 0:
-                        if abs(med - (q1 + q3) / 2) / ((q3 - q1) / 2 + 1e-9) < 0.3:
-                            profile["distribution_shape"] = "大致对称"
+                        if abs(med - (q1 + q3) / 2) / ((q3 - q1) / 2 + SKEW_SYMMETRY_EPS) < SKEW_SYMMETRY_TOLERANCE:
+                            profile["distribution_shape"] = DISTRIBUTION_ROUGHLY_SYMMETRIC
                         else:
-                            profile["distribution_shape"] = "一般偏态"
+                            profile["distribution_shape"] = DISTRIBUTION_GENERAL_SKEWED
 
         # 类别/对象列：高频值 top-5
-        if n_unique < 100 and n_unique > 0:
+        if n_unique < SCOUT_TOP_VALUES_MAX_UNIQUE and n_unique > 0:
             vc = series.value_counts().head(5)
             top_vals = {}
             for v, c in vc.items():
                 label = str(v)
-                if len(label) > 30:
-                    label = label[:27] + "…"
+                if len(label) > SCOUT_LABEL_TRUNCATE_LEN:
+                    label = label[:SCOUT_LABEL_PREVIEW_LEN] + "…"
                 top_vals[label] = int(c)
             profile["top_values"] = top_vals
 
@@ -798,8 +823,8 @@ class ScoutAgent(InteractionMixin):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.5,
-            max_tokens=1200,
+            temperature=SCOUT_CONFIRM_TEMPERATURE,
+            max_tokens=SCOUT_CONFIRM_MAX_TOKENS,
         )
         result = response.choices[0].message.content or ""
 
@@ -816,7 +841,7 @@ class ScoutAgent(InteractionMixin):
 
         for sem in context["column_semantics"]:
             # 只学习高置信度且不需要用户确认的推断
-            if sem.get("confidence", 0) < 0.85 or sem.get("needs_user_input"):
+            if sem.get("confidence", 0) < SCOUT_LEARN_CONFIDENCE_MIN or sem.get("needs_user_input"):
                 continue
             col_name = sem["column_name"]
             if col_name not in context.get("column_descriptions", {}):
@@ -827,14 +852,14 @@ class ScoutAgent(InteractionMixin):
             desc = desc.strip()
             # 检查是否已存在相似条目（通过 recall 确认）
             existing = scout_knowledge.recall(f"{col_name} {desc}", top_k=1)
-            if existing and existing[0]["similarity"] > 0.9:
+            if existing and existing[0]["similarity"] > SCOUT_DEDUP_SIMILARITY:
                 continue  # 已有相似条目，跳过
             scout_knowledge.learn(
                 field=desc,
                 meaning=desc,
                 data_pattern=f"{sem['inferred_type']} {sem['evidence']}",
                 inferred_role=sem.get("suggested_role", "feature"),
-                confidence=sem.get("confidence", 0.85),
+                confidence=sem.get("confidence", SCOUT_LEARN_CONFIDENCE_MIN),
                 tags=[sem["inferred_type"], sem.get("suggested_role", "feature")],
                 metadata={"project": project_id},
             )

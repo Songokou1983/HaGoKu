@@ -1,24 +1,25 @@
 """
-Reporter Agent — 报告员
+Reporter Agent — 报告员（LLM 原生版）
 
-从 prompt.md 读取角色定义，从 memory.md 读取/保存报告历史
+从 prompt.md 读取角色定义，从 memory.md 读取/保存报告历史。
+LLM 决定所有叙事内容（headline、摘要、章节），代码只负责：
+- 结构化组装 ReportData / ReportSection
+- 调用 ReportGenerator 产生文件
+- 调用图表工具
+- 记忆读写
+- 交互流程（pause / done）
 """
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from .._scribe.agent import ScribeAgent
-
-import pandas as pd
 import yaml
 
-from ...config import LLMConfig
-from ...guardrails.parsers import validate_analysis_output
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.reporting import ReportData, ReportGenerator, ReportSection
@@ -28,21 +29,25 @@ from ..types import InteractionResult
 
 
 class ReporterAgent(InteractionMixin):
-    """报告员：让分析结果说话"""
+    """报告员：让分析结果说话，LLM 决定说什么、怎么说"""
 
     def __init__(
         self,
-        llm_config: LLMConfig,
-        event_bus: EventBus,
-        scribe: "ScribeAgent | None" = None,
+        *args: Any,
+        event_bus: EventBus | None = None,
         llm_client: Any | None = None,
+        scribe: Any | None = None,
+        **kwargs: Any,
     ) -> None:
+        # 兼容旧签名的第一个位置参数 llm_config（忽略）
         self.role = "reporter"
-        self.llm_config = llm_config
-        self.event_bus = event_bus
+        self.event_bus = event_bus or args[1] if len(args) > 1 else event_bus  # type: ignore[assignment]
         self.scribe = scribe
-        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
+        self._llm_client = llm_client
+        if not self.event_bus:
+            raise ValueError("ReporterAgent 需要 event_bus 参数")
 
+        # 运行时加载 prompt + memory
         self.prompt = self._load_prompt()
         self.memory = self._load_memory()
 
@@ -51,6 +56,9 @@ class ReporterAgent(InteractionMixin):
         self._results: list[dict] = []
         self._context: dict = {}
         self._cleaning_summary: dict = {}
+        self._pending_data: dict = {}
+
+    # ── prompt / memory 读写 ────────────────────────────────
 
     def _load_prompt(self) -> str:
         path = Path(__file__).parent / "prompt.md"
@@ -74,7 +82,6 @@ class ReporterAgent(InteractionMixin):
         path = Path(__file__).parent / "memory.md"
         content = path.read_text(encoding="utf-8")
 
-        # 将 reports 嵌套到 yaml 顶层 key，保证缩进正确
         reports_yaml = yaml.dump(
             {"reports": self.memory.get("reports") or {}},
             default_flow_style=False,
@@ -83,151 +90,314 @@ class ReporterAgent(InteractionMixin):
 
         pattern = r"```yaml\nreports:.*?```"
         if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, f"```yaml\n{reports_yaml}\n```", content, flags=re.DOTALL)
+            content = re.sub(
+                pattern, f"```yaml\n{reports_yaml}\n```", content, flags=re.DOTALL
+            )
         else:
             content = re.sub(r"reports:.*", reports_yaml, content)
 
         path.write_text(content, encoding="utf-8")
 
+    # ── LLM 调用 ────────────────────────────────────────────
+
+    def _call_llm(self, system: str, user: str) -> str:
+        """调用 LLM，返回文本响应"""
+        if self._llm_client is None:
+            raise RuntimeError("ReporterAgent 没有 LLM 客户端")
+        # 使用底层 raw 接口（和 Scout/Analyst 一致）
+        if hasattr(self._llm_client, "chat_raw"):
+            return self._llm_client.chat_raw(system=system, user=user)
+        if hasattr(self._llm_client, "chat"):
+            resp = self._llm_client.chat(system=system, messages=[{"role": "user", "content": user}])
+            if isinstance(resp, dict):
+                return resp.get("content", "")
+            return str(resp)
+        raise RuntimeError(f"不支持的 LLM 客户端类型: {type(self._llm_client)}")
+
     def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
-    # ── 核心逻辑 ────────────────────────────────────────────
+    # ── 核心：run() ─────────────────────────────────────────
 
     def run(
         self,
         results: list[dict],
         context: dict,
         cleaning_summary: dict | None = None,
-        project_id: str = "分析项目",
+        *,
+        project_name: str = "分析项目",
         query: str = "",
         output_path: str | None = None,
-        df: pd.DataFrame | None = None,
+        df: Any | None = None,
         business_metrics: list[dict] | None = None,
-        project_name: str = "分析项目",
-        formats: list[str] | None = None,
         template: str | None = None,
-        template_dir: str | None = None,
+        formats: list[str] | None = None,
     ) -> ReportData:
         """
-        生成分析报告
+        生成分析报告（orchestrator 调用的主入口）。
 
-        Returns:
-            ReportData
+        LLM 决定叙事内容，代码负责结构化组装和文件产出。
         """
         self._emit(EventType.AGENT_STARTED, {"goal": "让分析结果说话"})
 
         try:
-            # 1. 提取关键发现
-            key_findings = self._extract_key_findings(results)
+            # 1. 让 LLM 生成报告内容 JSON
+            llm_output = self._generate_report_via_llm(
+                results=results,
+                context=context,
+                cleaning_summary=cleaning_summary or {},
+                project_name=project_name,
+                query=query,
+                business_metrics=business_metrics,
+            )
 
-            # 2. 生成 headline
-            headline = self._generate_headline(results, context)
+            # 2. 结构化为 ReportData
+            report = self._build_report_data(
+                llm_output=llm_output,
+                context=context,
+                cleaning_summary=cleaning_summary or {},
+                project_name=project_name,
+                query=query,
+            )
 
-            # 3. 生成 metric cards
-            metric_cards = self._generate_metric_cards(results, context)
-
-            # 3b. 要点速览（双轨之「摘要轨」，由 HTML 模板单独呈现）
-            executive_summary = self._generate_overall_plain(results)
-
-            # 4. 构建章节（仅「证据轨」：图表、商业指标、逐项分析；不含重复的核心发现块）
-            sections = []
-
-            # 商业指标
-            if business_metrics:
-                biz_section = self._build_business_metrics_section(business_metrics)
-                if biz_section:
-                    sections.append(biz_section)
-
-            # 数据概览图表
+            # 3. 数据概览图表（代码负责：工具调用）
             charts_dir = Path(output_path).parent / "charts" if output_path else None
             if df is not None and charts_dir:
                 try:
-                    overview_charts = generate_data_overview_charts(df, output_dir=charts_dir, interactive=True)
+                    overview_charts = generate_data_overview_charts(
+                        df, output_dir=charts_dir, interactive=True,
+                    )
                     if overview_charts:
-                        sections.insert(1, ReportSection(
+                        chart_section = ReportSection(
                             title="📊 数据概况",
                             content="",
                             charts=overview_charts,
                             level=2,
-                        ))
+                        )
+                        report.sections.insert(1, chart_section)
                 except Exception:
                     pass
 
-            # 详细结果
-            for result in results:
-                section = self._build_result_section(result)
-                sections.append(section)
-
-            # 报告数据
-            effective_project_name = project_name or project_id
-            report = ReportData(
-                project_name=effective_project_name,
-                query=query,
-                sections=sections,
-                data_summary={
-                    "n_rows": context.get("n_rows", 0),
-                    "n_cols": context.get("n_cols", 0),
-                    "quality_score": context.get("quality_score", 0),
-                },
-                cleaning_summary=cleaning_summary or {},
-                findings_summary=key_findings,
-                headline=headline,
-                metric_cards=metric_cards,
-                executive_summary=executive_summary,
-            )
-
-            # 生成文件
+            # 4. 生成文件（代码负责：工具调用）
             if output_path:
                 generator = ReportGenerator()
-                if output_path.endswith(".html") or ".html" in str(output_path):
-                    generator.generate_html(report, output_path=output_path, template_name=template)
-                elif output_path.endswith(".md"):
-                    generator.generate_markdown(report, output_path=output_path)
+                fmt_list = formats or (["html"] if output_path.endswith(".html") else ["md"])
+                for fmt in fmt_list:
+                    if fmt == "html":
+                        p = output_path if output_path.endswith(".html") else f"{output_path}.html"
+                        generator.generate_html(report, output_path=p, template_name=template)
+                    elif fmt == "md":
+                        p = output_path.replace(".html", ".md") if ".html" in str(output_path) else f"{output_path}.md"
+                        generator.generate_markdown(report, output_path=p)
 
-            # 更新记忆
-            self._update_own_memory(effective_project_name, headline, len(key_findings), results)
+            # 5. 更新记忆
+            self._update_own_memory(project_name, report.headline or "", results)
 
             self._emit(EventType.AGENT_COMPLETED, {
-    "result_summary": f"生成 {len(sections)} 个章节",
-    "output_path": str(output_path) if output_path else "",
-    "project_name": effective_project_name,
-})
+                "result_summary": f"生成 {len(report.sections)} 个章节",
+                "output_path": str(output_path) if output_path else "",
+                "project_name": project_name,
+            })
 
             return report
 
         except Exception as e:
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
-            effective_project_name = project_name or project_id
             return ReportData(
-                project_name=effective_project_name,
+                project_name=project_name,
                 query=query,
                 sections=[ReportSection(title="⚠️ 报告生成失败", content=str(e), level=1)],
                 data_summary={},
                 findings_summary=[],
                 headline="报告生成失败",
                 metric_cards=[],
-                executive_summary=None,
             )
+
+    def _generate_report_via_llm(
+        self,
+        results: list[dict],
+        context: dict,
+        cleaning_summary: dict,
+        project_name: str,
+        query: str,
+        business_metrics: list[dict] | None,
+    ) -> dict:
+        """调用 LLM 生成报告内容的 JSON 结构"""
+        # 构建传给 LLM 的上下文
+        results_text = json.dumps(results, ensure_ascii=False, indent=2, default=str)
+        context_text = json.dumps(context, ensure_ascii=False, indent=2, default=str)
+        biz_text = json.dumps(business_metrics or [], ensure_ascii=False, indent=2, default=str)
+        cleaning_text = json.dumps(cleaning_summary, ensure_ascii=False, indent=2, default=str)
+
+        # 加载历史记忆参考
+        history = self.memory.get("reports", {}).get(project_name, [])
+        history_text = json.dumps(history[-3:] if history else [], ensure_ascii=False, indent=2)
+
+        user_prompt = f"""## 系统角色
+{self.prompt}
+
+## 当前项目
+- 项目名：{project_name}
+- 研究问题：{query}
+
+## 数据上下文
+{context_text}
+
+## 数据清洗摘要
+{cleaning_text}
+
+## 商业指标
+{biz_text}
+
+## 分析结果
+{results_text}
+
+## 历史报告参考
+{history_text}
+
+## 输出要求
+请严格按照以下 JSON schema 输出报告内容（只输出 JSON，不要任何额外文本）：
+
+```json
+{{
+  "headline": "一句话核心发现（≤80字）",
+  "executive_summary": "整体人话解读（2-4句话，非技术背景可读）",
+  "metric_cards": [
+    {{"value": "数值", "label": "标签", "trend": "up|down|null"}}
+  ],
+  "findings_summary": [
+    {{
+      "analysis_type": "...",
+      "question": "...",
+      "headline": "一句话结论（≤60字）",
+      "conclusion_plain": "人话结论",
+      "p_value": 0.01,
+      "effect_size": 0.5,
+      "effect_type": "cohen_d",
+      "significance": "significant|not_significant",
+      "limitations": ["局限1", "局限2"]
+    }}
+  ],
+  "sections": [
+    {{
+      "title": "📈 章节标题",
+      "content": "章节详细内容（markdown）",
+      "headline": "吸引力层一句话",
+      "plain_explanation": "核心价值层人话解读",
+      "level": 2,
+      "metric_cards": [...],
+      "findings": [{{"同 findings_summary 格式"}}]
+    }}
+  ]
+}}
+```
+
+关键规则：
+1. headline 必须一句话讲清楚最重要的发现，≤80字
+2. executive_summary 让非技术人员也能看懂
+3. metric_cards 提取 3-5 个最关键指标
+4. 每个 section 包含吸引力层（headline）+ 核心价值层（plain_explanation）
+5. 如果有历史报告，对比标注新发现/变化
+6. 不要编造数据，所有数值必须来自分析结果
+"""
+
+        system = "你是 HaGoKu Studio 的专业报告员。你的任务是把数据分析结果变成一份谁都看得懂的报告。只输出 JSON，不要任何解释。"
+
+        self._emit(EventType.AGENT_THINKING, {"thought": "正在通过 LLM 生成报告内容..."})
+
+        response = self._call_llm(system=system, user=user_prompt)
+
+        # 解析 LLM 返回的 JSON
+        return self._parse_llm_json(response)
+
+    def _parse_llm_json(self, response: str) -> dict:
+        """从 LLM 响应中提取 JSON"""
+        # 尝试直接解析
+        response = response.strip()
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            pass
+
+        # 尝试提取 ```json ... ``` 块
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # 尝试提取 { ... } 最外层
+        match = re.search(r"\{.*\}", response, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # 失败：返回空结构
+        self._emit(EventType.AGENT_THINKING, {
+            "thought": f"⚠️ 无法解析 LLM 输出为 JSON，使用 fallback。原始输出前 200 字：{response[:200]}"
+        })
+        return {
+            "headline": "分析报告",
+            "executive_summary": response[:500] if response else "报告生成中...",
+            "metric_cards": [],
+            "findings_summary": [],
+            "sections": [{"title": "📊 分析结果", "content": response[:1000] if response else "", "level": 2}],
+        }
+
+    def _build_report_data(
+        self,
+        llm_output: dict,
+        context: dict,
+        cleaning_summary: dict,
+        project_name: str,
+        query: str,
+    ) -> ReportData:
+        """将 LLM JSON 输出转换为 ReportData 对象"""
+        sections = []
+        for sec in llm_output.get("sections", []):
+            sections.append(ReportSection(
+                title=sec.get("title", ""),
+                content=sec.get("content", ""),
+                level=sec.get("level", 2),
+                headline=sec.get("headline"),
+                plain_explanation=sec.get("plain_explanation"),
+                metric_cards=sec.get("metric_cards"),
+                findings=sec.get("findings"),
+            ))
+
+        return ReportData(
+            project_name=project_name,
+            query=query,
+            sections=sections,
+            data_summary={
+                "n_rows": context.get("n_rows", 0),
+                "n_cols": context.get("n_cols", 0),
+                "quality_score": context.get("quality_score", 0),
+            },
+            cleaning_summary=cleaning_summary,
+            findings_summary=llm_output.get("findings_summary", []),
+            headline=llm_output.get("headline", ""),
+            metric_cards=llm_output.get("metric_cards", []),
+            executive_summary=llm_output.get("executive_summary"),
+        )
 
     # ── 交互式接口 ────────────────────────────────────────
 
-    def begin(  # type: ignore[override]
+    def begin(
         self,
         results: list[dict],
         context: dict,
         cleaning_summary: dict | None = None,
-        project_id: str = "分析项目",
+        *,
+        project_name: str = "分析项目",
         query: str = "",
-        df: pd.DataFrame | None = None,
+        df: Any | None = None,
         business_metrics: list[dict] | None = None,
     ) -> InteractionResult:
-        """
-        开始 Reporter 交互。
-
-        流程：预览报告结构 → 确认 → 生成报告 → 完成
-        Reporter 是最后一环，直接完成。
-        """
+        """开始 Reporter 交互：预览 → 确认 → 生成"""
         self._results = results
         self._context = context
         self._cleaning_summary = cleaning_summary or {}
@@ -235,68 +405,58 @@ class ReporterAgent(InteractionMixin):
 
         self._emit(EventType.AGENT_STARTED, {"goal": "让分析结果说话"})
 
-        key_findings = self._extract_key_findings(results)
-        n_sig = sum(1 for f in key_findings if f.get("significance") == "significant")
+        # 先让 LLM 生成预览（headline + 摘要）
+        n_sig = sum(1 for r in results if r.get("significance") == "significant")
 
-        # block，等用户确认
         if self.scribe:
             self.scribe.block_task("reporter", "等用户确认生成报告")
+
         return self._pause(
             phase="confirm_report",
             message=f"分析完成：{len(results)} 项分析，{n_sig} 项显著发现。确认生成报告？",
             needs_confirmation=True,
             confirmation_prompt="确认生成报告",
-            pending_items=key_findings[:3] if key_findings else [],
+            pending_items=results[:3] if results else [],
             data={
                 "n_results": len(results),
                 "n_significant": n_sig,
-                "project_id": project_id,
+                "project_name": project_name,
                 "query": query,
                 "df": df,
                 "business_metrics": business_metrics or [],
             },
         )
 
-    def respond(  # type: ignore[override]
+    def respond(
         self,
         user_input: dict,
         output_path: str | None = None,
     ) -> InteractionResult:
-        """
-        处理用户确认，生成最终报告。
-        """
+        """处理用户确认，生成最终报告"""
         if self._phase not in ("confirm_report",):
             return self._done("done", "阶段错误，请重新开始", {})
 
-        confirmed = user_input.get("confirmed", True)  # 默认确认
-
+        confirmed = user_input.get("confirmed", True)
         if not confirmed:
             if self.scribe:
                 self.scribe.unblock_task("reporter")
             return self._done("done", "报告生成已取消", {})
 
-        # 解除 block
         if self.scribe:
             self.scribe.unblock_task("reporter")
 
-        data = self._context.get("_report_data", {})
+        data = self._pending_data
 
         report = self.run(
             results=self._results,
             context=self._context,
             cleaning_summary=self._cleaning_summary,
-            project_id=data.get("project_id", "分析项目"),
+            project_name=data.get("project_name", "分析项目"),
             query=data.get("query", ""),
             output_path=output_path,
             df=data.get("df"),
             business_metrics=data.get("business_metrics"),
         )
-
-        self._emit(EventType.AGENT_COMPLETED, {
-            "result_summary": f"报告生成完成：{len(report.sections)} 个章节",
-            "output_path": str(output_path) if output_path else "",
-            "project_name": data.get("project_id", "default"),
-        })
 
         return self._done(
             phase="done",
@@ -307,188 +467,12 @@ class ReporterAgent(InteractionMixin):
             },
         )
 
-    def _get_project_history(self, project_id: str) -> list[dict]:
-        """获取项目历史报告"""
-        return self.memory.get("reports", {}).get(project_id, [])  # type: ignore[no-any-return]
+    # ── 记忆更新 ──────────────────────────────────────────
 
-    def _generate_headline(self, results: list[dict], context: dict) -> str:
-        """生成一句话 headline"""
-        significant = [r for r in results if r.get("significance") == "significant"]
-
-        if not significant:
-            if results:
-                return f"{len(results)} 项分析完成，未发现显著差异"
-            return "分析完成，暂无发现"
-
-        best = max(significant, key=lambda r: abs(r.get("effect_size") or 0))
-        headline = best.get("conclusion_plain", "").split("。")[0]
-        if len(headline) > 80:
-            headline = headline[:77] + "..."
-
-        return headline or f"发现 {len(significant)} 项统计显著结果"
-
-    def _generate_metric_cards(self, results: list[dict], context: dict) -> list[dict]:
-        """生成指标卡片"""
-        cards = []
-
-        # 样本量
-        if context.get("n_rows"):
-            cards.append({"value": f"{context['n_rows']:,}", "label": "样本量"})
-
-        # 显著发现
-        n_sig = sum(1 for r in results if r.get("significance") == "significant")
-        n_total = len(results)
-        if n_total > 0:
-            cards.append({
-                "value": f"{n_sig}/{n_total}",
-                "label": "显著发现",
-                "trend": "up" if n_sig > n_total / 2 else None,  # type: ignore[dict-item]
-            })
-
-        # 最大效应量
-        sig_with_es = [r for r in results if r.get("significance") == "significant" and r.get("effect_size") is not None]
-        if sig_with_es:
-            best = max(sig_with_es, key=lambda r: abs(r.get("effect_size") or 0))
-            cards.append({
-                "value": f"{abs(best.get('effect_size') or 0):.2f}",  # type: ignore[arg-type]
-                "label": f"最大效应量 ({best.get('effect_type', '')})",
-            })
-
-        return cards
-
-    def _check_analyst_completeness(self, text: str) -> dict[str, bool]:
-        """验证 Analyst 输出是否包含必要的统计结论"""
-        result = validate_analysis_output(text)
-        missing = [k for k, v in result.items() if not v]
-        if missing:
-            self._emit(EventType.AGENT_THINKING, {
-                "thought": f"⚠️ Analyst 输出缺少: {', '.join(missing)}"
-            })
-        return result
-
-    def _extract_key_findings(self, results: list[dict]) -> list[dict]:
-        """提取关键发现"""
-        findings = []
-
-        for result in results:
-            significance = result.get("significance", "")
-            headline = result.get("conclusion_plain", "").split("。")[0]
-            if len(headline) > 60:
-                headline = headline[:57] + "..."
-
-            # 验证 Analyst 输出的结构完整性
-            validation_text = result.get("conclusion_statistical") or result.get("conclusion_plain") or ""
-            completeness_check = self._check_analyst_completeness(validation_text)
-
-            limitations = []
-            missing_items = [k for k, v in completeness_check.items() if not v]
-            if missing_items:
-                limitations.append(f"解析验证缺少: {', '.join(missing_items)}")
-
-            finding = {
-                "analysis_type": result.get("analysis_type"),
-                "question": result.get("question"),
-                "conclusion_plain": result.get("conclusion_plain"),
-                "p_value": result.get("p_value"),
-                "effect_size": result.get("effect_size"),
-                "effect_type": result.get("effect_type"),
-                "significance": significance,
-                "headline": headline,
-                "plain_explanation": result.get("conclusion_plain"),
-                "limitations": limitations,
-            }
-
-            findings.append(finding)
-
-        return findings
-
-    def _generate_overall_plain(self, results: list[dict]) -> str:
-        """生成整体人话解读"""
-        significant = [r for r in results if r.get("significance") == "significant"]
-        not_sig = [r for r in results if r.get("significance") != "significant"]
-
-        parts = []
-        if significant:
-            parts.append(f"在 {len(results)} 项分析中，{len(significant)} 项达到统计显著水平（p < 0.05）。")
-            for r in significant[:3]:
-                if r.get("conclusion_plain"):
-                    parts.append(f"• {r['conclusion_plain']}")
-
-        if not_sig:
-            parts.append(f"{len(not_sig)} 项分析未达显著水平。这不是失败——它告诉我们：目前数据不足以得出强结论。")
-
-        return "\n".join(parts) if parts else "分析完成。"
-
-    def _build_result_section(self, result: dict) -> ReportSection:
-        """构建单个结果章节"""
-        title_map = {
-            "regression": "📈 回归分析",
-            "hypothesis_test": "🔬 假设检验",
-            "trend_analysis": "📈 趋势分析",
-            "correlation": "🔗 相关性分析",
-        }
-        title = title_map.get(result.get("analysis_type", ""), "📊 分析结果")
-
-        headline = result.get("conclusion_plain", "").split("。")[0]
-        if len(headline) > 80:
-            headline = headline[:77] + "..."
-
-        metric_cards = []
-        if result.get("p_value") is not None:
-            sig_label = "显著 ✅" if result.get("significance") == "significant" else "不显著"
-            metric_cards.append({"value": f"p={result['p_value']:.4f}", "label": sig_label})
-        if result.get("effect_size") is not None:
-            metric_cards.append({
-                "value": f"{abs(result['effect_size']):.2f}",
-                "label": f"{result.get('effect_type', '效应量')}",
-            })
-
-        return ReportSection(
-            title=title,
-            content=result.get("conclusion_plain", ""),
-            findings=[result],
-            level=2,
-            headline=headline,
-            metric_cards=metric_cards,
-            plain_explanation=result.get("conclusion_plain"),
-        )
-
-    def _build_business_metrics_section(self, metrics: list[dict]) -> ReportSection | None:
-        """构建商业指标章节"""
-        if not metrics:
-            return None
-
-        content_parts = []
-        metric_cards = []
-
-        for m in metrics:
-            m_type = m.get("type", "unknown")
-
-            if m_type == "roi":
-                roi = m.get("roi", m.get("avg_roi", 0))
-                roi_pct = f"{roi:.1f}%" if isinstance(roi, (int, float)) else "N/A"
-                metric_cards.append({"value": roi_pct, "label": "ROI"})
-                content_parts.append(f"• ROI = {roi_pct}")
-
-            elif m_type == "roas":
-                roas = m.get("roas", m.get("avg_roas", 0))
-                roas_str = f"{roas:.1f}x"
-                metric_cards.append({"value": roas_str, "label": "ROAS"})
-                content_parts.append(f"• ROAS = {roas_str}")
-
-        if not content_parts:
-            return None
-
-        return ReportSection(
-            title="💰 商业指标",
-            content="\n".join(content_parts),
-            level=2,
-            metric_cards=metric_cards,
-        )
-
-    def _update_own_memory(self, project_id: str, headline: str, n_findings: int, results: list[dict]) -> None:
+    def _update_own_memory(
+        self, project_id: str, headline: str, results: list[dict],
+    ) -> None:
         """更新报告记忆"""
-        # 确保 reports 是 dict（YAML 中 `reports:` 无值时读出 None）
         if not isinstance(self.memory.get("reports"), dict):
             self.memory["reports"] = {}
 
@@ -498,8 +482,43 @@ class ReporterAgent(InteractionMixin):
         self.memory["reports"][project_id].append({
             "date": datetime.now().strftime("%Y-%m-%d"),
             "headline": headline,
-            "n_findings": n_findings,
+            "n_results": len(results),
             "significant": any(r.get("significance") == "significant" for r in results),
         })
 
         self._save_memory()
+
+    # ── InteractionMixin 要求的方法 ─────────────────────────
+
+    def _pause(
+        self, phase: str, message: str, needs_confirmation: bool = False,
+        confirmation_prompt: str = "", pending_items: list | None = None,
+        actions: list | None = None,
+        data: dict | None = None,
+    ) -> InteractionResult:
+        """暂停等待用户交互（和 Scout/Analyst 一致）"""
+        self._phase = phase
+        if data:
+            self._pending_data = data
+        return InteractionResult(
+            phase=phase,
+            message=message,
+            needs_confirmation=needs_confirmation,
+            confirmation_prompt=confirmation_prompt,
+            pending_items=pending_items or [],
+            actions=actions or [],
+            final=False,
+            data=data or {},
+        )
+
+    def _done(self, phase: str, message: str, data: dict, actions: list | None = None) -> InteractionResult:
+        """完成交互"""
+        self._phase = phase
+        return InteractionResult(
+            phase=phase,
+            message=message,
+            needs_confirmation=False,
+            actions=actions or [],
+            final=True,
+            data=data,
+        )

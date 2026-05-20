@@ -40,6 +40,11 @@ reports:
     headline: 分析完成，暂无发现
     n_findings: 0
     significant: false
+  测试项目:
+  - date: '2026-05-20'
+    headline: 转化率提升 23%，A/B 测试结果显著
+    n_results: 1
+    significant: true
 ```
 
 ### 项目发现对比

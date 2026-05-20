@@ -27,12 +27,6 @@ from ..types import InteractionResult
 from . import knowledge as scout_knowledge
 
 from ..constants import (
-    DISTRIBUTION_GENERAL_SKEWED,
-    DISTRIBUTION_LEFT_SKEWED,
-    DISTRIBUTION_RIGHT_SKEWED,
-    DISTRIBUTION_ROUGHLY_SYMMETRIC,
-    DISTRIBUTION_SEVERELY_RIGHT_SKEWED,
-    SCOUT_COLNAME_MAX_LEN,
     SCOUT_CONFIRM_MAX_TOKENS,
     SCOUT_CONFIRM_TEMPERATURE,
     SCOUT_DEDUP_SIMILARITY,
@@ -41,46 +35,13 @@ from ..constants import (
     SCOUT_LABEL_PREVIEW_LEN,
     SCOUT_LABEL_TRUNCATE_LEN,
     SCOUT_LEARN_CONFIDENCE_MIN,
-    SCOUT_SAMPLE_PREVIEW_LEN,
-    SCOUT_SAMPLE_TRUNCATE_LEN,
     SCOUT_TOP_VALUES_MAX_UNIQUE,
-    SKEW_LEFT_RATIO,
-    SKEW_RIGHT_RATIO,
-    SKEW_SEVERE_RIGHT_RATIO,
-    SKEW_SYMMETRY_EPS,
-    SKEW_SYMMETRY_TOLERANCE,
 )
 
 
 
-def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
-    """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
-    s = (raw or "").strip()
-    if not s:
-        return None
-    s = re.sub(r"^[\-\*\•]\s*", "", s)
-    s = re.sub(r"^\d+[\.)]\s*", "", s)
-    if "：" in s:
-        idx = s.find("：")
-        left, right = s[:idx], s[idx + 1 :]
-        if len(left.strip()) > SCOUT_COLNAME_MAX_LEN:
-            return None
-    elif ":" in s:
-        idx = s.find(":")
-        left, right = s[:idx], s[idx + 1 :]
-        if len(left.strip()) > 64:
-            return None
-    else:
-        return None
-    col = left.strip().strip("`").strip()
-    desc = right.strip()
-    if not col or not desc:
-        return None
-    return col, desc
-
-
 def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
-    """把样本值格式化成人类可读短串（去掉 np.float64 等噪音）。"""
+    """提取样本值直白串，不做格式判断——让 LLM 自行理解。"""
     try:
         vals = df[col].dropna().unique()
     except Exception:
@@ -89,25 +50,7 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
         return ""
     parts: list[str] = []
     for v in vals[:limit]:
-        try:
-            if hasattr(v, "item") and callable(getattr(v, "item", None)):
-                v = v.item()  # numpy scalar → Python
-        except Exception:
-            pass
-        if isinstance(v, float):
-            av = abs(v)
-            if av != 0 and (av >= 1e6 or av < 1e-5):
-                parts.append(f"{v:.3e}")
-            else:
-                s = f"{v:.6g}".rstrip("0").rstrip(".")
-                parts.append(s or "0")
-        elif isinstance(v, (int, np.integer)):
-            parts.append(str(int(v)))
-        else:
-            s = str(v).strip()
-            if len(s) > SCOUT_SAMPLE_TRUNCATE_LEN:
-                s = s[:SCOUT_SAMPLE_PREVIEW_LEN] + "…"
-            parts.append(s)
+        parts.append(str(v).strip())
     return ", ".join(parts)
 
 
@@ -223,6 +166,7 @@ class ScoutAgent(InteractionMixin):
             # 4. 构建上下文
             context = {
                 "data_path": data_path,
+                "query": query,
                 "n_rows": len(df),
                 "n_cols": len(df.columns),
                 "column_semantics": column_semantics,
@@ -309,6 +253,7 @@ class ScoutAgent(InteractionMixin):
             # 构建上下文
             context = {
                 "data_path": data_path,
+                "query": query,
                 "n_rows": len(df),
                 "n_cols": len(df.columns),
                 "column_semantics": column_semantics,
@@ -482,7 +427,7 @@ class ScoutAgent(InteractionMixin):
                 "median": p.get("median"),
                 "q25": p.get("q25"),
                 "q75": p.get("q75"),
-                "distribution_shape": p.get("distribution_shape", ""),
+                "distribution_summary": p.get("distribution_summary", ""),
                 "time_min": p.get("time_min"),
                 "time_max": p.get("time_max"),
             })
@@ -665,25 +610,22 @@ class ScoutAgent(InteractionMixin):
                     "mean": round(float(non_null.mean()), 4),
                     "std": round(float(non_null.std()), 4),
                 })
-                # 分布简记：如 -10 ~ 0 ~ 50 ~ 200 ~ 9800（min ~ q25 ~ median ~ q75 ~ max）
-                # 判断是否严重右偏（max > q75 * 3）
-                q75v = profile.get("q75", 0)
-                maxv = profile.get("max")
-                if q75v and maxv and q75v > 0 and maxv > q75v * SKEW_SEVERE_RIGHT_RATIO:
-                    profile["distribution_shape"] = DISTRIBUTION_SEVERELY_RIGHT_SKEWED
-                elif q75v and maxv and q75v > 0 and maxv > q75v * SKEW_RIGHT_RATIO:
-                    profile["distribution_shape"] = DISTRIBUTION_RIGHT_SKEWED
-                elif profile.get("q25") is not None and profile.get("q25", 0) > 0 and profile.get("min", 0) < profile.get("q25", 0) * SKEW_LEFT_RATIO:
-                    profile["distribution_shape"] = DISTRIBUTION_LEFT_SKEWED
-                else:
-                    q1 = profile.get("q25", 0)
-                    q3 = profile.get("q75", 0)
-                    med = profile.get("median", 0)
-                    if q3 and q1 and q3 > q1 and med > 0:
-                        if abs(med - (q1 + q3) / 2) / ((q3 - q1) / 2 + SKEW_SYMMETRY_EPS) < SKEW_SYMMETRY_TOLERANCE:
-                            profile["distribution_shape"] = DISTRIBUTION_ROUGHLY_SYMMETRIC
+                # 分布特征仅传原始分位数，让 LLM 自行判断分布形态
+                # 不再由代码做硬编码的形状标签
+                parts: list[str] = []
+                for key in ["min", "q25", "median", "q75", "max"]:
+                    v = profile.get(key)
+                    if v is not None:
+                        if isinstance(v, float):
+                            if abs(v) >= 1e6 or (v != 0 and abs(v) < 1e-5):
+                                parts.append(f"{v:.3e}")
+                            else:
+                                parts.append(f"{v:.6g}")
                         else:
-                            profile["distribution_shape"] = DISTRIBUTION_GENERAL_SKEWED
+                            parts.append(str(v))
+                    else:
+                        parts.append("-")
+                profile["distribution_summary"] = " ~ ".join(parts)
 
         # 类别/对象列：高频值 top-5
         if n_unique < SCOUT_TOP_VALUES_MAX_UNIQUE and n_unique > 0:

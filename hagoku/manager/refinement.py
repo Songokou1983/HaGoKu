@@ -1,6 +1,6 @@
 """Refinement 解析器 — 解析用户的反馈/调整指令
 
-HaGoKu 的定位：调仪表盘，不是换引擎
+HaGoKu Studio 的定位：调仪表盘，不是换引擎
 
 ✅ 允许的调整（结构性）：
 - filter：缩小数据范围（"只看付费渠道"）
@@ -14,7 +14,7 @@ HaGoKu 的定位：调仪表盘，不是换引擎
 - regenerate：重新跑一遍 → 引导重新 run
 - 推测性回答、原因猜测等 → 明确拒绝
 
-核心原则：保持 HaGoKu 的分析约束，不因交互而退化
+核心原则：保持 HaGoKu Studio 的分析约束，不因交互而退化
 """
 
 from __future__ import annotations
@@ -163,7 +163,7 @@ class RefinementParser:
                 "   或直接运行：hagoku run <数据文件> -q <新问题>"
             ),
             "speculate": (
-                "💡 HaGoKu 只呈现数据告诉你的事实，不推测原因。\n"
+                "💡 HaGoKu Studio 只呈现数据告诉你的事实，不推测原因。\n"
                 "   如需分析原因，请重新 run 并明确问题"
             ),
             "explore": (

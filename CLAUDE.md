@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains **one primary project**: `hagoku/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
 
-## hagoku/ — HaGoKu 多 Agent 数据分析平台
+## hagoku/ — HaGoKu Studio 多 Agent 数据分析平台
 
 > 项目灵魂、Agent 表、架构原则、命令参考、技术栈 → 见 **[PROJECT.md](PROJECT.md)**（唯一真相源）。
 > 文档索引、环境变量、测试命令 → 见 **[DEV.md](DEV.md)**。
@@ -26,9 +26,24 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 **Scribe**：确定性 Agent，仅字段描述不完整时用 LLM 补全。负责：看板管理、记忆维护、知识库检索与注入、字段仲裁。详见 PROJECT.md Agent 表。
 
+**P0 架构净化（2026-05-20）**：移除 6 处代码级硬编码语义，彻底贯彻 `LLM 输出 → 代码搬运 → 用户` 通道原则：
+
+| # | 变更 | 文件 | 说明 |
+|---|------|------|------|
+| P0-1 | 意图解析 LLM 化 | `hagoku/manager/query_parser.py` | 移除关键词硬匹配，改为 LLM structured output（`PlanRequestFields` schema）|
+| P0-2 | Scout 分布判断 LLM 化 | `hagoku/agents/scout/agent.py` | 移除硬编码倍数阈值（`maxv > q75v * 10` 等），shape analysis 由 LLM 完成 |
+| P0-3 | 删除 `_parse_llm_field_desc_line()` | `hagoku/manager/orchestrator.py` | 移除正则字段描述解析器 |
+| P0-4 | 删除 `_format_sample_preview()` | `hagoku/agents/scout/agent.py` | Scout 只传原始 top-10 值，格式化由 LLM 决定 |
+| P0-5 | Plan 构建 LLM 化 | `hagoku/manager/orchestrator.py` | 移除关键词映射表，改为 `_call_llm_for_plan()` |
+| P0-6 | 阶段消息 LLM 化 | `hagoku/manager/orchestrator.py` | 移除 `llm_lines` 硬编码消息，改为 `_generate_phase_message()` LLM 生成 |
+
+> 删除的硬编码常量（`DISTRIBUTION_CATEGORICAL_THRESHOLD` 等）位于 `hagoku/agents/constants.py`。完整审查 → `docs/AGENT_HARDCODED_REVIEW.md`。
+
+**代码层角色限定**：serialize → validate → transport。任何涉及"判断"（意图、字段语义、分布形状、分析策略、用户消息）的环节，信息必须完整到达 LLM。
+
 ---
 
-## HaGoKu UI 设计原则（每一条改动都必须遵守）
+## HaGoKu Studio UI 设计原则（每一条改动都必须遵守）
 
 1. **考虑用户体验**：每次改动想清楚用户看到什么、怎么用
 2. **差异化**：和市面上产品有明显区别，不是功能堆砌

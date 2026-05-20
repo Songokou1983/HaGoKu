@@ -1,4 +1,4 @@
-"""HaGoKu Knowledge Base — 结构化领域知识库"""
+"""HaGoKu Studio Knowledge Base — 结构化领域知识库"""
 
 from .knowledge_base import (
     KnowledgeBase,

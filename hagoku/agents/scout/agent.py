@@ -399,6 +399,7 @@ class ScoutAgent(InteractionMixin):
             },
         )
 
+    # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
     def _infer_all_semantics(self, df: pd.DataFrame, query: str, memory_project: dict[str, Any] | None = None) -> list[dict]:
         """推断所有列的语义 — 全部通过 LLM 结构化输出完成，零硬编码
 

@@ -1,4 +1,4 @@
-"""HaGoKu Agent 层"""
+"""HaGoKu Studio Agent 层"""
 
 # 共享类型（供所有 Agent 使用）
 from .analyst import AnalysisResult, AnalystAgent

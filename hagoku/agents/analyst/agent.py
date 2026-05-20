@@ -243,7 +243,9 @@ class AnalystAgent(InteractionMixin):
             if result:
                 results.append(result)
 
-        # 兜底
+        # ==== CHANNEL ZONE: 兜底路径，禁止语义推断 ====
+        # 当所有定向分析方法均未命中时，走自动分析兜底（回归+假设检验+相关）。
+        # 这不是"代码替 LLM 选择方法"，而是"LLM 已给出 focus 但无匹配方法时，代码补全机械调用序列"。
         if not results:
             results = self._auto_analyze(df, context, target_col, query)
 
@@ -678,8 +680,11 @@ class AnalystAgent(InteractionMixin):
         except Exception:
             return None
 
+    # ==== CHANNEL ZONE: 兜底方法序列，禁止语义推断 ====
+    # 此函数是机械调用序列（回归→假设检验→相关），不做任何方法选择语义判断。
+    # 仅在 _run_analysis 的 focus 匹配全部失败时触发。
     def _auto_analyze(self, df, context, target_col, query) -> list[dict]:
-        """兜底自动分析"""
+        """兜底自动分析：回归 + 假设检验 + 相关（机械序列）"""
         results = []
 
         result = self._do_regression(df, context, target_col, query)

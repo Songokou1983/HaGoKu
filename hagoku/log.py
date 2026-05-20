@@ -1,4 +1,4 @@
-"""HaGoKu 统一日志模块"""
+"""HaGoKu Studio 统一日志模块"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 
 def get_logger(name: str) -> logging.Logger:
     """
-    获取 HaGoKu 模块日志器
+    获取 HaGoKu Studio 模块日志器
 
     Args:
         name: 模块名（如 "analysis", "visualization"）

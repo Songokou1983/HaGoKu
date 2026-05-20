@@ -1,4 +1,4 @@
-"""HaGoKu Manager — 编排器：LLM 决策驱动，代码构建通道"""
+"""HaGoKu Studio Manager — 编排器：LLM 决策驱动，代码构建通道"""
 
 from __future__ import annotations
 
@@ -27,36 +27,6 @@ from ..tools.data_io import save_data
 
 # ── 规则引擎 ──────────────────────────────────────────────────
 
-PLAN_TEMPLATES: dict[str, dict[str, Any]] = {
-    "趋势分析": {
-        "agents": ["scout", "cleaner", "analyst", "reporter"],
-        "analyst_focus": ["trend", "regression"],
-    },
-    "差异比较": {
-        "agents": ["scout", "cleaner", "analyst", "reporter"],
-        "analyst_focus": ["hypothesis_test", "effect_size"],
-    },
-    "因果推断": {
-        "agents": ["scout", "cleaner", "analyst", "reporter"],
-        "analyst_focus": ["regression", "causal"],
-    },
-    "相关性分析": {
-        "agents": ["scout", "cleaner", "analyst", "reporter"],
-        "analyst_focus": ["correlation"],
-    },
-    "数据画像": {
-        "agents": ["scout", "reporter"],
-        "analyst_focus": [],
-    },
-}
-
-KEYWORD_MAP: dict[str, str] = {
-    r"趋势|变化|增长|下降|走势|上升|波动": "趋势分析",
-    r"差异|对比|比较|不同|A/B|ab测试|是否不同": "差异比较",
-    r"因果|影响|导致|因为|效果|是否有效": "因果推断",
-    r"相关|关系|联系|关联|有关": "相关性分析",
-    r"画像|概况|什么数据|什么样|描述|概览": "数据画像",
-}
 
 # WebSocket「重置 / 取消」暂停时使用的哨兵（用户正常回复不会使用此串）
 HAGOKU_CANCEL_PAUSE_TOKEN = "__HAGOKU_CANCEL__"
@@ -166,6 +136,12 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ── 状态机管理判断（非语义决策）────────────────────────────
+# 以下正则为管道状态机转换判断：仅判断用户是「确认放行」还是「有补充内容」，
+# 不做字段语义理解。若判断为「有补充」，仍走 LLM function calling 通道处理语义。
+# 符合 PROJECT.md「看板状态机（确定性状态转换）」定义。
+# ⚠️ 禁止在此区域添加语义判断逻辑（如根据关键词推断字段含义）。
+
 # 用户仅表示「确认」、无字段纠错时，不写 column_descriptions、不污染 query 补充段
 _SCOUT_PURE_CONFIRM_RE = re.compile(
     r"^(确认(?:无误|进清洗|继续)?|可以了|对齐了|就这样|没问题了|好的|是|没问题|对的|正确|已通过|妥当|行|"
@@ -174,6 +150,7 @@ _SCOUT_PURE_CONFIRM_RE = re.compile(
 )
 
 
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
     t = (user_reply or "").strip()
     if not t:
@@ -214,6 +191,7 @@ def _analyst_reply_accepts_proceed(user_reply: str) -> bool:
     return bool(_STAGE_ANALYST_PROCEED_RE.match(t))
 
 
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _is_scout_aligned(context: dict[str, Any], user_reply: str) -> bool:
     """判断 Scout 字段理解是否已对齐：纯确认  OR  所有字段 needs_user_input=False。"""
     if _scout_reply_is_pure_confirm(user_reply):
@@ -241,6 +219,7 @@ _GATE_SUPPLEMENT_RE = re.compile(
 )
 
 
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _is_gate_confirm(user_reply: str) -> bool:
     """闸门回复是否为「确认进入下一阶段」而非「还有补充」。"""
     t = (user_reply or "").strip()
@@ -287,6 +266,7 @@ def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
 
 
 
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def apply_scout_user_field_reply_to_context(
     context: dict[str, Any],
     user_reply: str,
@@ -403,6 +383,7 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
 ]
 
 
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _apply_scout_reply_with_llm(
     context: dict[str, Any],
     raw: str,
@@ -830,22 +811,11 @@ def analyst_review_pause_payload(findings: list[Any]) -> dict[str, Any]:
     }
 
 
-class RuleEngine:
-    """Manager 的规则引擎，覆盖 80% 常见决策"""
-
-    def match_plan(self, query: str) -> dict[str, Any] | None:
-        """关键词匹配计划模板"""
-        for pattern, plan_name in KEYWORD_MAP.items():
-            if re.search(pattern, query):
-                return {**PLAN_TEMPLATES[plan_name], "plan_name": plan_name}
-        return None
-
-
 # ── 编排器 ────────────────────────────────────────────────────
 
 
 class Orchestrator:
-    """HaGoKu 编排器：规则+AI 双驱动，协调四个 Agent"""
+    """HaGoKu Studio 编排器：规则+AI 双驱动，协调四个 Agent"""
 
     def __init__(self, config: HaGoKuConfig | None = None) -> None:
         self.config = config or HaGoKuConfig.load()
@@ -861,9 +831,6 @@ class Orchestrator:
 
         # 订阅显示
         self.event_bus.subscribe(self.display)
-
-        # 规则引擎
-        self.rule_engine = RuleEngine()
 
         # 护栏
         self.guardrails = StatisticalGuardrails()
@@ -1187,18 +1154,11 @@ class Orchestrator:
             strategy_result = cleaner.get_strategy_summary(data_path, context)
             operations = strategy_result.get("operations", [])
             quality = strategy_result.get("data_quality", "unknown")
-            quality_labels = {"good": "数据质量良好", "medium": "数据质量一般", "poor": "数据质量问题较多"}
-            if operations:
-                llm_message = f"数据质量：{quality_labels.get(quality, quality)}。我计划执行 {len(operations)} 个清洗操作："
-                for op in operations[:6]:
-                    col = op.get("column", "")
-                    reason = op.get("reason", "")
-                    llm_message += f"\n• **{col}**：{reason[:50]}{'...' if len(reason) > 50 else ''}"
-                if len(operations) > 6:
-                    llm_message += f"\n... 还有 {len(operations) - 6} 个操作"
-                llm_message += "\n\n这个清洗方案可以吗？或者你想调整某个处理方式？"
-            else:
-                llm_message = f"数据质量：{quality_labels.get(quality, quality)}。未检测到需要清洗的问题，数据可以直接分析。这个清洗方案可以吗？或者你想做其他特殊处理？"
+            llm_message = self._generate_phase_message(
+                "cleaning_strategy",
+                operations=operations,
+                data_quality=quality,
+            )
             if isinstance(strategy_result, dict):
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
                     "result_summary": f"检测完成：{len(operations)} 个计划操作",
@@ -1286,23 +1246,12 @@ class Orchestrator:
                 findings = analyst_result.get("preliminary_findings", [])
                 suggested = analyst_result.get("suggested_focus", "")
                 power_warnings = analyst_result.get("power_warnings", [])[:2]
-                llm_lines = []
-                if power_warnings:
-                    llm_lines.append(f"⚡ {power_warnings[0]}")
-                if findings:
-                    llm_lines.append(f"初步找到了 {len(findings)} 个分析方向：")
-                    for f in findings[:5]:
-                        sig = "✅ 显著" if f.get("significance") == "significant" else "⚪ 不显著"
-                        q = f.get("question", "")
-                        p = f.get("p_value")
-                        p_str = f"（p={p:.4f}）" if p is not None else ""
-                        llm_lines.append(f"• {sig} {p_str}：{q}")
-                else:
-                    llm_lines.append("初步分析没有发现明显的统计规律。")
-                if suggested:
-                    llm_lines.append(f"💡 {suggested}")
-                llm_lines.append("\n你想重点关注哪个方向？或者有其他想看的维度？")
-                llm_message = "\n".join(llm_lines)
+                llm_message = self._generate_phase_message(
+                    "analyst_preliminary",
+                    findings=findings,
+                    power_warnings=power_warnings,
+                    suggested_focus=suggested,
+                )
                 return {
                     "status": "analyst_preliminary",
                     "message": llm_message,
@@ -1738,141 +1687,46 @@ class Orchestrator:
         query: str,
         parsed_intent: Any | None = None,
     ) -> dict[str, Any]:
-        """
-        创建分析计划：规则优先匹配，AI 辅助微调
-        """
-        rule_plan = self.rule_engine.match_plan(query)
-
-        if rule_plan:
-            # 规则匹配成功，AI 做微调
-            llm_plan = self._create_plan_hybrid(query, rule_plan, parsed_intent=parsed_intent)
-            if llm_plan is not None:
-                llm_plan["rule_match"] = True
-                return llm_plan
-            rule_plan["rule_match"] = True
-            if parsed_intent and parsed_intent.target:
-                rule_plan["target"] = parsed_intent.target
-            return rule_plan
-
-        # 无匹配规则，AI 生成
-        new_plan: dict[str, Any] | None = self._create_plan_llm(query, rule_plan, parsed_intent=parsed_intent)
-        if new_plan is not None:
-            return new_plan
-        plan = self._generic_plan(query)
-        if parsed_intent and parsed_intent.target:
-            plan["target"] = parsed_intent.target
-        return plan
-
-    def _generic_plan(self, query: str) -> dict[str, Any]:
-        """返回通用分析计划（探索性分析）"""
+        """创建分析计划：LLM 唯一决策引擎，零硬编码规则。"""
+        plan = self._call_llm_for_plan(query, parsed_intent=parsed_intent)
+        if plan is not None:
+            return plan
+        # LLM 不可达时的最小兜底
         return {
             "plan_name": "通用分析",
             "agents": ["scout", "cleaner", "analyst", "reporter"],
             "analyst_focus": ["regression", "hypothesis_test", "correlation"],
             "query": query,
-            "rule_match": False,
+            "llm_generated": False,
         }
-
-    def _create_plan_hybrid(
-        self,
-        query: str,
-        rule_plan: dict[str, Any],
-        parsed_intent: Any | None = None,
-    ) -> dict[str, Any]:
-        """混合模式：规则计划为基础，LLM 调整优化"""
-        llm_plan = self._call_llm_for_plan(
-            query=query,
-            rule_plan=rule_plan,
-            mode="adjust",
-            parsed_intent=parsed_intent,
-        )
-        if llm_plan is not None:
-            llm_plan["rule_match"] = True
-            llm_plan["llm_adjusted"] = True
-            self.event_bus.emit(EventType.PLAN_ADJUSTED, "manager", {
-                "original": rule_plan.get("plan_name"),
-                "adjusted": llm_plan.get("plan_name"),
-                "reasoning": llm_plan.get("reasoning", ""),
-            })
-            return llm_plan
-        # LLM 失败，返回规则计划不变
-        rule_plan["rule_match"] = True
-        return rule_plan
-
-    def _create_plan_llm(
-        self,
-        query: str,
-        rule_plan: dict[str, Any] | None = None,
-        parsed_intent: Any | None = None,
-    ) -> dict[str, Any] | None:
-        """LLM 从零生成分析计划（rule_plan 可作为参考 hint）"""
-        llm_plan = self._call_llm_for_plan(
-            query=query,
-            rule_plan=rule_plan,
-            mode="generate",
-            parsed_intent=parsed_intent,
-        )
-        if llm_plan is not None:
-            llm_plan["rule_match"] = rule_plan is not None
-            llm_plan["llm_generated"] = True
-            self.event_bus.emit(EventType.PLAN_CREATED, "manager", {
-                "source": "llm",
-                "plan_name": llm_plan.get("plan_name"),
-                "reasoning": llm_plan.get("reasoning", ""),
-            })
-            return llm_plan
-        return None
 
     def _call_llm_for_plan(
         self,
         query: str,
-        rule_plan: dict[str, Any] | None = None,
-        mode: str = "generate",
         parsed_intent: Any | None = None,
     ) -> dict[str, Any] | None:
-        """
-        调用 LLM 生成或调整分析计划
-
-        Args:
-            query: 用户分析问题
-            rule_plan: 规则引擎输出（混合模式下作为上下文）
-            mode: "generate"（从零生成）或 "adjust"（调整规则计划）
+        """LLM 驱动的分析计划生成（唯一路径）。
 
         Returns:
-            计划 dict，LLM 失败时返回 None
+            计划 dict，LLM 失败时返回 None。
         """
         from ..llm.plan_schema import (
             DEFAULT_EXPLORATORY_FOCUS,
             VALID_ANALYST_FOCUS,
             LLMPlanResponse,
         )
-        from ..llm.prompts import PLAN_ADJUSTMENT_USER, PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER
+        from ..llm.prompts import PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER
 
         try:
-            # 懒初始化 LLM 客户端
             if self._llm_client is None:
                 self._llm_client = create_structured_llm_client(self.config.llm)
 
-            # 构建消息
-            messages = [{"role": "system", "content": PLAN_GENERATION_SYSTEM}]
-
-            # 基于解析意图构建更丰富的用户查询上下文
             intent_context = self._build_intent_context(query, parsed_intent)
+            messages = [
+                {"role": "system", "content": PLAN_GENERATION_SYSTEM},
+                {"role": "user", "content": PLAN_GENERATION_USER.format(query=intent_context)},
+            ]
 
-            if mode == "adjust" and rule_plan:
-                user_content = PLAN_ADJUSTMENT_USER.format(
-                    query=intent_context,
-                    plan_name=rule_plan.get("plan_name", ""),
-                    agents=", ".join(rule_plan.get("agents", [])),
-                    analyst_focus=", ".join(rule_plan.get("analyst_focus", [])),
-                    target=rule_plan.get("target") or "null",
-                )
-            else:
-                user_content = PLAN_GENERATION_USER.format(query=intent_context)
-
-            messages.append({"role": "user", "content": user_content})
-
-            # 通过 instructor 获取结构化输出
             response: LLMPlanResponse = self._llm_client.chat.completions.create(
                 model=self.config.llm.model,
                 messages=messages,
@@ -1882,12 +1736,10 @@ class Orchestrator:
                 timeout=30,
             )
 
-            # 服务端二次校验 analyst_focus
             validated_focus = [f for f in response.analyst_focus if f in VALID_ANALYST_FOCUS]
             if not validated_focus:
                 validated_focus = DEFAULT_EXPLORATORY_FOCUS.copy()
 
-            # 确保 agents 包含 scout 和 reporter
             agents = list(response.agents)
             if "scout" not in agents:
                 agents.insert(0, "scout")
@@ -1901,7 +1753,13 @@ class Orchestrator:
                 "target": response.target,
                 "query": response.query,
                 "reasoning": response.reasoning,
+                "llm_generated": True,
             }
+            self.event_bus.emit(EventType.PLAN_CREATED, "manager", {
+                "source": "llm",
+                "plan_name": plan["plan_name"],
+                "reasoning": plan.get("reasoning", ""),
+            })
             return plan
 
         except Exception as e:
@@ -1967,67 +1825,155 @@ class Orchestrator:
         except Exception:
             return None
 
+    def _generate_phase_message(
+        self,
+        phase: str,
+        *,
+        operations: list[dict[str, Any]] | None = None,
+        data_quality: str = "",
+        findings: list[dict[str, Any]] | None = None,
+        power_warnings: list[str] | None = None,
+        suggested_focus: str = "",
+    ) -> str:
+        """LLM 生成阶段用户消息（零硬编码文案）。LLM 不可达时返回最小兜底。"""
+        from openai import OpenAI
+
+        if phase == "cleaning_strategy":
+            n_ops = len(operations) if operations else 0
+            if n_ops == 0:
+                return f"数据质量：{data_quality}。未检测到需要清洗的问题，数据可以直接分析。"
+
+            ops_desc_lines: list[str] = []
+            for op in (operations or [])[:6]:
+                col = op.get("column", "")
+                reason = op.get("reason", "")
+                ops_desc_lines.append(f"  {col}: {reason[:80]}")
+            ops_desc = "\n".join(ops_desc_lines) if ops_desc_lines else "（无详情）"
+
+        elif phase == "analyst_preliminary":
+            n_findings = len(findings) if findings else 0
+            pw = power_warnings[0] if power_warnings else ""
+            finding_lines: list[str] = []
+            for f in (findings or [])[:5]:
+                sig = "显著" if f.get("significance") == "significant" else "不显著"
+                q = f.get("question", "")
+                p = f.get("p_value")
+                p_str = f"（p={p:.4f}）" if p is not None else ""
+                finding_lines.append(f"  [{sig}] {p_str}：{q}")
+            findings_desc = "\n".join(finding_lines) if finding_lines else "（无显著发现）"
+            sf = suggested_focus or "无"
+        else:
+            return ""
+
+        try:
+            client = OpenAI(
+                api_key=self.config.llm.api_key,
+                base_url=self.config.llm.base_url,
+            )
+            system_prompt = (
+                "你是数据分析助手 HaGoKu Studio。请用自然、亲切的中文为用户生成一段对话消息。"
+                "不要使用模板化的句式，用你自己的语言风格来表达。"
+                "保持简洁（3-5句话），像一个同事在群里说话的语气。"
+            )
+
+            if phase == "cleaning_strategy":
+                user_prompt = (
+                    f"你刚完成数据清洗策略检测。数据质量：{data_quality}。"
+                    f"计划执行 {n_ops} 个清洗操作：\n{ops_desc}\n"
+                    "请生成一条消息告知用户，并询问是否可以按此方案清洗（或者想调整）。"
+                )
+            elif phase == "analyst_preliminary":
+                pw_line = f"\n注意：{pw}" if pw else ""
+                user_prompt = (
+                    f"你刚完成初步数据分析。共 {n_findings} 个发现：\n{findings_desc}{pw_line}\n"
+                    f"建议关注方向：{sf}\n"
+                    "请生成一条消息告知用户，并询问用户想关注哪个方向。"
+                )
+            else:
+                return ""
+
+            response = client.chat.completions.create(
+                model=self.config.llm.model_quick or self.config.llm.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.7,
+                max_tokens=300,
+            )
+            msg = response.choices[0].message.content or ""
+            return msg.strip()
+
+        except Exception:
+            # LLM 不可达时返回兜底
+            if phase == "cleaning_strategy":
+                n_ops = len(operations) if operations else 0
+                quality_labels = {"good": "数据质量良好", "medium": "数据质量一般", "poor": "数据质量问题较多"}
+                q = quality_labels.get(data_quality, data_quality)
+                if n_ops == 0:
+                    return f"{q}，未检测到需要清洗的问题，可以直接分析。"
+                return f"{q}，计划执行 {n_ops} 个清洗操作。这个方案可以吗？"
+            elif phase == "analyst_preliminary":
+                n_findings = len(findings) if findings else 0
+                if n_findings == 0:
+                    return "初步分析没有发现明显的统计规律。你想从哪个维度再看一下？"
+                return f"初步发现 {n_findings} 个分析方向。你想重点关注哪个？"
+            return ""
+
     def _describe_intent(self, parsed_intent: Any) -> str:
-        """将解析后的意图译成接在「让我来」后的自然短句（用于分析开场 thinking）。"""
+        """将解析后的意图译成接在「让我来」后的自然短句（LLM thinking 驱动，零硬编码映射）。"""
         if parsed_intent is None:
             return "探索一下这份数据有什么规律"
 
-        intent_names = {
-            "comparison": "对比一下不同组之间的差异",
-            "causation": "找一下某个结果的原因",
-            "correlation": "看看变量之间的关系",
-            "trend": "看看某个指标随时间的变化趋势",
-            "diagnostic": "诊断一下数据中的问题",
-            "exploration": "探索一下数据有什么规律",
-        }
+        # 优先使用 LLM 在意图解析时给出的 thinking
+        thinking = getattr(parsed_intent, "thinking", "") or ""
+        if thinking.strip():
+            return thinking.strip()
 
-        parts = []
-        intent_name = intent_names.get(parsed_intent.intent_type, "探索一下数据里可能有的规律")
-        parts.append(intent_name)
+        # LLM 未提供 thinking 时的最小兜底
+        parts: list[str] = []
+        if getattr(parsed_intent, "target", None):
+            parts.append(f"关注「{parsed_intent.target}」")
+        if getattr(parsed_intent, "time_range", None):
+            parts.append(f"时间范围「{parsed_intent.time_range}」")
+        if getattr(parsed_intent, "group_by", None):
+            parts.append(f"按「{'/'.join(parsed_intent.group_by)}」分组")
 
-        if parsed_intent.target:
-            parts.append(f"，关注「{parsed_intent.target}」")
-
-        if parsed_intent.time_range:
-            parts.append(f"，时间范围「{parsed_intent.time_range}」")
-
-        if parsed_intent.group_by:
-            parts.append(f"，按「{'/'.join(parsed_intent.group_by)}」分组")
-
-        return "".join(parts)
+        base = getattr(parsed_intent, "intent_type", "exploration") or "exploration"
+        kind = {"comparison": "对比差异", "causation": "找原因", "correlation": "看关系",
+                "trend": "看趋势", "diagnostic": "诊断问题"}.get(base, "探索规律")
+        return f"{kind}，{'，'.join(parts)}" if parts else f"{kind}"
 
     def _build_intent_context(self, query: str, parsed_intent: Any) -> str:
-        """将解析后的意图构建成 LLM 可用的上下文"""
+        """将解析后的意图构建成 LLM 可用的上下文（无硬编码标签）。"""
         if parsed_intent is None:
             return query
 
         parts = [query]
+        attrs = [
+            ("intent_type", "意图"),
+            ("target", "目标变量"),
+            ("time_range", "时间范围"),
+            ("group_by", "分组维度"),
+            ("filters", "筛选条件"),
+        ]
+        for attr, label in attrs:
+            v = getattr(parsed_intent, attr, None)
+            if v:
+                if isinstance(v, list):
+                    v = "、".join(str(x) for x in v)
+                parts.append(f"\n【{label}】：{v}")
 
-        if parsed_intent.intent_type != "exploration":
-            intent_labels = {
-                "comparison": "用户想对比不同组的差异",
-                "causation": "用户想找原因",
-                "correlation": "用户想知道变量之间的关系",
-                "trend": "用户想看变化趋势",
-                "diagnostic": "用户想诊断问题",
-            }
-            if parsed_intent.intent_type in intent_labels:
-                parts.append(f"\n【意图】：{intent_labels[parsed_intent.intent_type]}")
-
-        if parsed_intent.target:
-            parts.append(f"\n【目标变量】：{parsed_intent.target}")
-
-        if parsed_intent.time_range:
-            parts.append(f"\n【时间范围】：{parsed_intent.time_range}")
-
-        if parsed_intent.group_by:
-            parts.append(f"\n【分组维度】：{'、'.join(parsed_intent.group_by)}")
-
-        if parsed_intent.filters:
-            parts.append(f"\n【筛选条件】：{parsed_intent.filters}")
+        thinking = getattr(parsed_intent, "thinking", "") or ""
+        if thinking.strip():
+            parts.append(f"\n【LLM 理解】：{thinking.strip()}")
 
         return "".join(parts)
 
+    # ==== CLI 降级模式：允许简化确认匹配 ====
+    # 此方法仅用于 CLI 交互模式（非 Web UI 主路径）。
+    # 在终端环境中，function calling 的多轮确认流程过于繁琐，
+    # 故使用硬编码关键词匹配作为降级方案。Web UI 中走正常的 function calling 通道。
     def _request_field_confirmation(
         self,
         context: dict,

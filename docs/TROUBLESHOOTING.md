@@ -1,4 +1,4 @@
-# HaGoKu 排错录
+# HaGoKu Studio 排错录
 
 记录每个经典 bug 的根因、修复方法和验证手段，防止 regression。
 

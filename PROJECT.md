@@ -4,7 +4,7 @@
 
 > **让每个小模型，都能做专业级商业分析。**
 
-HaGoKu 追求统计分析深度：自动检验假设、报告效应量、做模型诊断，区分因果和相关。同时不牺牲信息设计的吸引力——门面吸引用户走进来，地基让用户留下来。
+HaGoKu Studio 追求统计分析深度：自动检验假设、报告效应量、做模型诊断，区分因果和相关。同时不牺牲信息设计的吸引力——门面吸引用户走进来，地基让用户留下来。
 
 ---
 
@@ -22,7 +22,7 @@ HaGoKu 追求统计分析深度：自动检验假设、报告效应量、做模�
 
 ## 壳子、架构、通道
 
-HaGoKu 由三个要素构成。代码只负责壳子（运行环境）、架构（编排规则）、通道（信息路由）。所有语义理解由 LLM 完成。
+HaGoKu Studio 由三个要素构成。代码只负责壳子（运行环境）、架构（编排规则）、通道（信息路由）。所有语义理解由 LLM 完成。
 
 | 要素 | 含义 | 代码做什么 |
 |------|------|-----------|
@@ -94,7 +94,11 @@ HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，
 
 出现即违规。
 
-> **当前通道区域**：`orchestrator.py` 中 `_apply_scout_reply_with_llm`（function calling 模式，LLM 通过 `update_field_understanding` 工具自主决定更新内容）与 `apply_scout_user_field_reply_to_context`（机械执行层，将 tool_calls 结果写入 context）。`_SCOUT_FIELD_UPDATE_TOOLS` 内的中文字符串是 function calling 工具的 `description`（供 LLM 理解工具用途），不属于代码硬匹配。
+> **当前通道区域**：
+> - **意图解析**（`query_parser.py`）：已彻底 LLM 化。`QueryParser.parse()` 通过 LLM structured output（`PlanRequestFields` schema）输出 `{intent, analysis_type, research_question}`，代码仅做 schema 校验和传输。无正则、无关键词枚举。
+> - **字段理解**（`orchestrator.py`）：`_apply_scout_reply_with_llm`（function calling 模式，LLM 通过 `update_field_understanding` 工具自主决定更新内容）与 `apply_scout_user_field_reply_to_context`（机械执行层，将 tool_calls 结果写入 context）。
+> - **分布判断**（Scout Agent）：Shape analysis 已由 LLM 完成，不再有硬编码的倍数阈值（`maxv > q75v * 10` 等）。
+> - **工具 description**：`_SCOUT_FIELD_UPDATE_TOOLS` 内的中文字符串是 function calling 工具的 `description`（供 LLM 理解工具用途），不属于代码硬匹配。
 
 ### 刹车 2：回归契约（测试级）
 
@@ -253,7 +257,7 @@ Agent 间不直接对话，通过看板交换信息：
 
 ## 可观测性
 
-HaGoKu 全程透明，用户坐副驾驶位：
+HaGoKu Studio 全程透明，用户坐副驾驶位：
 
 ```
 🔍 Scout ──── ✅ 完成 (12s)

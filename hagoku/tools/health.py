@@ -1,4 +1,4 @@
-"""HaGoKu 健康检查 — LLM 连接和系统状态"""
+"""HaGoKu Studio 健康检查 — LLM 连接和系统状态"""
 
 from __future__ import annotations
 

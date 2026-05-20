@@ -1,5 +1,5 @@
 """
-HaGoKu Agent 层共享常量 —— 消除魔术字 / 硬编码阈值。
+HaGoKu Studio Agent 层共享常量 —— 消除魔术字 / 硬编码阈值。
 
 所有模块级常量集中在此，供 analyst / reporter / scout / cleaner 引用。
 """
@@ -56,23 +56,6 @@ INFERRED_TYPE_NUMERIC: str = "numeric"
 INFERRED_TYPE_CATEGORICAL: str = "categorical"
 INFERRED_TYPE_TEXT: str = "text"
 INFERRED_TYPE_UNKNOWN: str = "unknown"
-
-# ═══════════════════════════════════════════════════════════════
-# 分布形状描述
-# ═══════════════════════════════════════════════════════════════
-
-DISTRIBUTION_SEVERELY_RIGHT_SKEWED: str = "严重右偏"
-DISTRIBUTION_RIGHT_SKEWED: str = "右偏"
-DISTRIBUTION_LEFT_SKEWED: str = "左偏"
-DISTRIBUTION_ROUGHLY_SYMMETRIC: str = "大致对称"
-DISTRIBUTION_GENERAL_SKEWED: str = "一般偏态"
-
-# 分布形状判定阈值
-SKEW_SEVERE_RIGHT_RATIO: float = 10.0   # max > q75 * 10 → 严重右偏
-SKEW_RIGHT_RATIO: float = 3.0            # max > q75 * 3  → 右偏
-SKEW_LEFT_RATIO: float = 0.3             # min < q25 * 0.3 → 左偏
-SKEW_SYMMETRY_EPS: float = 1e-9          # 零除保护
-SKEW_SYMMETRY_TOLERANCE: float = 0.3     # |med - mid| / half_iqr < 0.3 → 大致对称
 
 # ═══════════════════════════════════════════════════════════════
 # Reporter — 分析类型 → 展示标签

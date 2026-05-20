@@ -1,4 +1,4 @@
-"""HaGoKu CLI — 命令行入口"""
+"""HaGoKu Studio CLI — 命令行入口"""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def _get_demo_path(name: str) -> Path | None:
 WELCOME_SCREEN = """
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║   HaGoKu  用数学的力量，挖出数据背后真正的信息             ║
+║   HaGoKu Studio  用数学的力量，挖出数据背后真正的信息             ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
 
@@ -92,7 +92,7 @@ WELCOME_SCREEN = """
 @click.group()
 @click.version_option(package_name="hagoku")
 def cli() -> None:
-    """HaGoKu — 用数学的力量，挖出数据背后真正的信息"""
+    """HaGoKu Studio — 用数学的力量，挖出数据背后真正的信息"""
     pass
 
 
@@ -290,7 +290,7 @@ def demo_cmd(dataset: str | None, query: str | None) -> None:
 
 def _list_demos() -> None:
     """列出所有可用的演示数据集"""
-    click.echo("📊 HaGoKu 内置演示数据集\n")
+    click.echo("📊 HaGoKu Studio 内置演示数据集\n")
     for key, info in DEMO_DATASETS.items():
         path = _get_demo_path(key)
         status = "✅" if path else "❌"
@@ -391,7 +391,7 @@ def config_cmd(reset: bool) -> None:
         return
 
     config = HaGoKuConfig.load()
-    click.echo("⚙️ HaGoKu 配置:")
+    click.echo("⚙️ HaGoKu Studio 配置:")
     click.echo(f"   LLM: {config.llm.model} @ {config.llm.base_url}")
     click.echo(f"   工作目录: {config.work_dir}")
     click.echo(f"   输出格式: {', '.join(config.output.formats)}")
@@ -402,7 +402,7 @@ def config_cmd(reset: bool) -> None:
 def list_methods(tag: str | None) -> None:
     """查看所有可用的分析方法
 
-    HaGoKu 支持的分析方法分为两类：
+    HaGoKu Studio 支持的分析方法分为两类：
 
     统计方法 — 数学上严格，每个结论都经过检验
       t 检验、ANOVA、Mann-Whitney、卡方、相关、回归
@@ -410,13 +410,13 @@ def list_methods(tag: str | None) -> None:
     商业方法 — 回答业务问题
       ROI/ROAS、LTV/CAC、回本周期、NPV/IRR、归因、漏斗
 
-    新增方法：放入 ~/.hagoku/plugins/*_plugin.py，HaGoKu 自动加载
+    新增方法：放入 ~/.hagoku/plugins/*_plugin.py，HaGoKu Studio 自动加载
     """
     from .tools import load_plugins
 
     reg = load_plugins()
 
-    click.echo("📊 HaGoKu 分析方法")
+    click.echo("📊 HaGoKu Studio 分析方法")
     click.echo(f"   共 {reg.summary()['total_methods']} 个内置方法")
     click.echo("   插件目录: ~/.hagoku/plugins/*_plugin.py")
     click.echo()
@@ -474,7 +474,7 @@ def doctor_cmd() -> None:
     """
     from .tools.health import check_system, format_health_report
 
-    click.echo("🔍 HaGoKu 系统健康检查...")
+    click.echo("🔍 HaGoKu Studio 系统健康检查...")
     results = check_system()
     click.echo(format_health_report(results))
 

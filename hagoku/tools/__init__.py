@@ -1,4 +1,4 @@
-"""HaGoKu 工具层"""
+"""HaGoKu Studio 工具层"""
 
 from .analysis import (
     anova,

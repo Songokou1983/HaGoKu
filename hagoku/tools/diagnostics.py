@@ -1,4 +1,4 @@
-"""HaGoKu 模型诊断 — 让回归模型经得起审查"""
+"""HaGoKu Studio 模型诊断 — 让回归模型经得起审查"""
 
 from __future__ import annotations
 

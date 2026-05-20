@@ -1,4 +1,4 @@
-"""HaGoKu 数据持久化"""
+"""HaGoKu Studio 数据持久化"""
 
 from .artifact import ArtifactManager, DataArtifact
 from .database import HaGoKuDB

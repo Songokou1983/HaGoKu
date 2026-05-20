@@ -1,4 +1,4 @@
-"""HaGoKu 统计护栏"""
+"""HaGoKu Studio 统计护栏"""
 
 from .statistical import (
     AssumptionsViolated,

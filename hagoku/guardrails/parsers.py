@@ -1,4 +1,4 @@
-"""HaGoKu 结构化输出解析器 — 从 LLM 自由文本中提取统计结论"""
+"""HaGoKu Studio 结构化输出解析器 — 从 LLM 自由文本中提取统计结论"""
 
 from __future__ import annotations
 

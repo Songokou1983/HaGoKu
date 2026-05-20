@@ -1,4 +1,4 @@
-"""HaGoKu 全局配置系统"""
+"""HaGoKu Studio 全局配置系统"""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ class EmbeddingConfig(BaseModel):
 
 
 class HaGoKuConfig(BaseModel):
-    """HaGoKu 全局配置"""
+    """HaGoKu Studio 全局配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)

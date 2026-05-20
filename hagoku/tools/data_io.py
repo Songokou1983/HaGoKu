@@ -1,4 +1,4 @@
-"""HaGoKu 数据加载与保存"""
+"""HaGoKu Studio 数据加载与保存"""
 
 from __future__ import annotations
 

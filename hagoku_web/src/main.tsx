@@ -11,7 +11,7 @@ if (!root) throw new Error("root element missing");
 try {
   initWebSocket();
 } catch (e) {
-  console.error("[HaGoKu] initWebSocket failed", e);
+  console.error("[HaGoKu Studio] initWebSocket failed", e);
 }
 
 createRoot(root).render(

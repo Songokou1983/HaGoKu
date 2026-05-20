@@ -1,4 +1,4 @@
-"""HaGoKu 记忆系统 — 存储后端
+"""HaGoKu Studio 记忆系统 — 存储后端
 
 策略模式：MemoryBackend(ABC) → SqliteMemoryBackend / YamlMemoryBackend
 - SQLite: 程序化查询，所有类别

@@ -1,4 +1,4 @@
-"""HaGoKu 统计护栏核心"""
+"""HaGoKu Studio 统计护栏核心"""
 
 from __future__ import annotations
 

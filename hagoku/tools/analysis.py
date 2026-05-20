@@ -1,4 +1,4 @@
-"""HaGoKu 统计分析核心 — 精、准、狠"""
+"""HaGoKu Studio 统计分析核心 — 精、准、狠"""
 
 from __future__ import annotations
 

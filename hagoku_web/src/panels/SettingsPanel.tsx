@@ -237,7 +237,7 @@ export default function SettingsPanel() {
         )}
 
         <p className="text-ui-sm text-app-text leading-relaxed">
-          这里只管「大模型在哪、叫什么、密钥多少」。不要填本分析页的端口，也不要填 HaGoKu 后端默认的 8000。
+          这里只管「大模型在哪、叫什么、密钥多少」。不要填本分析页的端口，也不要填 HaGoKu Studio 后端默认的 8000。
         </p>
 
         <Field label="大模型服务网址" icon={<Globe size={14} />}>

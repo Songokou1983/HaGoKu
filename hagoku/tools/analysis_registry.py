@@ -1,4 +1,4 @@
-"""HaGoKu 分析方法注册表 — 插件化架构
+"""HaGoKu Studio 分析方法注册表 — 插件化架构
 
 设计原则：
 - 新增分析方法 = 注册到表，不改核心代码
@@ -278,7 +278,7 @@ class AnalysisRegistry:
 
     def register_bundled(self) -> None:
         """
-        注册 HaGoKu 内置的所有分析方法
+        注册 HaGoKu Studio 内置的所有分析方法
 
         这个方法初始化注册表，包含所有内置分析能力。
         新插件可以通过覆写或扩展此方法来添加能力。
@@ -498,7 +498,7 @@ def load_plugins(registry: AnalysisRegistry | None = None) -> AnalysisRegistry:
     加载用户自定义分析方法插件
 
     扩展点：用户可在 ~/.hagoku/plugins/ 目录下放置 Python 文件，
-    HaGoKu 会自动扫描并注册其中的分析方法。
+    HaGoKu Studio 会自动扫描并注册其中的分析方法。
 
     插件文件命名规范：*_plugin.py
     插件中每个分析函数名为 do_xxx

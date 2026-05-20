@@ -1,4 +1,4 @@
-"""HaGoKu 知识库 — 结构化领域知识，可检索，供 Agent 和用户共同使用"""
+"""HaGoKu Studio 知识库 — 结构化领域知识，可检索，供 Agent 和用户共同使用"""
 
 from __future__ import annotations
 

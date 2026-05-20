@@ -1,4 +1,4 @@
-"""HaGoKu Agent 基类"""
+"""HaGoKu Studio Agent 基类"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ..observability.events import Event, EventType
 
 class DataAgentBase:
     """
-    HaGoKu 的 Agent 基类
+    HaGoKu Studio 的 Agent 基类
 
     不直接继承 CrewAI Agent，而是提供统一的事件发射、LLM 调用接口。
     CrewAI Agent 在需要时按需创建。

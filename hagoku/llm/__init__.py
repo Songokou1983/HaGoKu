@@ -1,4 +1,4 @@
-"""HaGoKu LLM 集成包"""
+"""HaGoKu Studio LLM 集成包"""
 
 from .client import create_structured_llm_client
 

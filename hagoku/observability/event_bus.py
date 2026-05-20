@@ -1,4 +1,4 @@
-"""HaGoKu 事件总线"""
+"""HaGoKu Studio 事件总线"""
 
 from __future__ import annotations
 

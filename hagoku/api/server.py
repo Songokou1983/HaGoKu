@@ -1,4 +1,4 @@
-"""HaGoKu FastAPI server — REST + WebSocket"""
+"""HaGoKu Studio FastAPI server — REST + WebSocket"""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="HaGoKu API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="HaGoKu Studio API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -696,7 +696,7 @@ else:
     @app.get("/")
     async def root():
         return {
-            "message": "HaGoKu API running",
+            "message": "HaGoKu Studio API running",
             "docs": "/docs",
             "hint": "Frontend not built. Run `cd hagoku_web && npm run build` then restart server."
         }

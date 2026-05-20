@@ -1,4 +1,4 @@
-# HaGoKu — 开发快速上手
+# HaGoKu Studio — 开发快速上手
 
 > 详细设计文档见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 > 排错指南见 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
@@ -88,6 +88,21 @@ pipeline 启动前执行 `health.check_llm_health()`（`hagoku/tools/health.py`�
 | 5 | JSON mode 可用性 | 警告 |
 
 LLM 不可用 → pipeline 不启动，前端显示明确错误。不存在硬编码兜底。
+
+## 架构净化（P0，2026-05-20 完成）
+
+代码层角色限定为：**serialize → validate → transport**。所有语义判断由 LLM 完成。
+
+| 组件 | 旧行为（已移除） | 新行为 |
+|------|-----------------|--------|
+| `query_parser.py` | 关键词硬匹配（`"分析"→descriptive` 等） | LLM structured output |
+| `scout/agent.py` | `maxv > q75v * 10` 硬编码分布阈值 | LLM shape analysis |
+| `orchestrator.py` | `_parse_llm_field_desc_line()` 正则解析 | 已删除 |
+| `scout/agent.py` | `_format_sample_preview()` 截断格式化 | Scout 只传原始值 |
+| `orchestrator.py` | Plan 构建 `match action_type` 映射表 | `_call_llm_for_plan()` |
+| `orchestrator.py` | `llm_lines` 硬编码阶段消息 | `_generate_phase_message()` |
+
+> 完整审查 → [docs/AGENT_HARDCODED_REVIEW.md](docs/AGENT_HARDCODED_REVIEW.md)。删除的常量在 `hagoku/agents/constants.py`。
 
 ## 提交规范
 

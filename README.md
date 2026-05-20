@@ -1,10 +1,10 @@
-# HaGoKu
+# HaGoKu Studio
 
 > **让每个小模型，都能做专业级商业分析。**
 
 用数学的力量，挖出数据背后真正的信息。
 
-HaGoKu 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（Scout、Cleaner、Analyst、Reporter）和 Scribe 确定性引擎构成。每个结论必须附带 p 值 + 效应量 + 置信区间，受三级 Statistical Guardrails 规则兜底，由仲裁器（Arbitrator）统一编排调度。
+HaGoKu Studio 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（Scout、Cleaner、Analyst、Reporter）和 Scribe 确定性引擎构成。每个结论必须附带 p 值 + 效应量 + 置信区间，受三级 Statistical Guardrails 规则兜底，由仲裁器（Arbitrator）统一编排调度。
 
 ---
 
@@ -24,7 +24,7 @@ HaGoKu 是一个多 Agent 协作的数据分析平台，由 4 个专业 Agent（
 ## 安装要求
 
 - **Python**: 3.10+
-- **后端 API**：`hagoku-api` 默认监听 **http://localhost:8000**（HaGoKu 的 HTTP/WebSocket，**不是** LLM 地址）。
+- **后端 API**：`hagoku-api` 默认监听 **http://localhost:8000**（HaGoKu Studio 的 HTTP/WebSocket，**不是** LLM 地址）。
 - **LLM**：需要单独的 **OpenAI-compatible 推理服务**（如本地 vLLM / llama.cpp 代理等）。`~/.hagoku/.env` 中 `HAGOKYU_LLM_BASE_URL` 默认示例如 [`hagoku/config.py`](hagoku/config.py)、[`.env.example`](.env.example)（常见本机约定 `http://localhost:8080/v1`，**避免占用 8000** 以免与 `hagoku-api` 冲突）。
 
 ## 安装步骤

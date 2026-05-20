@@ -510,6 +510,7 @@ class CleanerAgent(InteractionMixin):
             "请检查 LLM 配置和 API 连通性，解决后再重试。"
         )
 
+    # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
     def _plan_via_llm(
         self,
         df: pd.DataFrame,

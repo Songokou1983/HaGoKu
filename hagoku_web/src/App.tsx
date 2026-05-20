@@ -114,7 +114,7 @@ export default function App() {
       <aside className="flex flex-col border-r border-app-border bg-app-bg-secondary overflow-hidden">
         {/* Logo */}
         <div className="px-4 py-3 border-b border-app-border shrink-0">
-          <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu</div>
+          <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu Studio</div>
           <div className="text-ui-xs text-app-text-muted mt-0.5">多 Agent 数据分析</div>
         </div>
 

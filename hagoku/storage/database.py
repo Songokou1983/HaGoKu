@@ -1,4 +1,4 @@
-"""HaGoKu SQLite 元数据库"""
+"""HaGoKu Studio SQLite 元数据库"""
 
 from __future__ import annotations
 

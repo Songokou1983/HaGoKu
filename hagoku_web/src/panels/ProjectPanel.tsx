@@ -281,8 +281,8 @@ export default function ProjectPanel() {
           (e instanceof Error && e.name === "AbortError");
         setLoadError(
           aborted
-            ? "HaGoKu 分析服务连接超时，请确认服务已启动后刷新页面。"
-            : "无法连接到 HaGoKu 分析服务，请确认服务已启动后刷新页面。",
+            ? "HaGoKu Studio 分析服务连接超时，请确认服务已启动后刷新页面。"
+            : "无法连接到 HaGoKu Studio 分析服务，请确认服务已启动后刷新页面。",
         );
       })
       .finally(() => {

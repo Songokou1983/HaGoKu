@@ -1,4 +1,4 @@
-"""HaGoKu Agent 共享类型"""
+"""HaGoKu Studio Agent 共享类型"""
 
 from __future__ import annotations
 

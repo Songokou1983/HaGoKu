@@ -29,7 +29,7 @@ from hagoku.devtools.interaction_scenarios import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Validate / print HaGoKu interaction scenario fixtures.")
+    p = argparse.ArgumentParser(description="Validate / print HaGoKu Studio interaction scenario fixtures.")
     p.add_argument("--validate-all", action="store_true", help="Validate every JSON in tests/fixtures/interaction_scenarios/")
     p.add_argument("--script", metavar="ID", help="Print human script for scenario id (json stem or id field)")
     p.add_argument("--json", metavar="PATH", help="Validate a single JSON file path")

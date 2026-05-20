@@ -1,4 +1,4 @@
-"""HaGoKu 项目管理器 — 立项、文件组织、生命周期"""
+"""HaGoKu Studio 项目管理器 — 立项、文件组织、生命周期"""
 
 from __future__ import annotations
 

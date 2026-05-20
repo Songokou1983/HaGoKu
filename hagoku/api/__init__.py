@@ -1,1 +1,1 @@
-"""HaGoKu REST API + WebSocket 服务"""
+"""HaGoKu Studio REST API + WebSocket 服务"""

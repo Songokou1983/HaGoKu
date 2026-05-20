@@ -1,8 +1,7 @@
-"""HaGoKu Manager 编排层"""
+"""HaGoKu Studio Manager 编排层"""
 
-from .orchestrator import Orchestrator, RuleEngine
+from .orchestrator import Orchestrator
 
 __all__ = [
     "Orchestrator",
-    "RuleEngine",
 ]

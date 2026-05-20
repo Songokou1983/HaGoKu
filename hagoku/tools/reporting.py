@@ -1,4 +1,4 @@
-"""HaGoKu 报告生成 — 模板驱动，AI 填充内容"""
+"""HaGoKu Studio 报告生成 — 模板驱动，AI 填充内容"""
 
 from __future__ import annotations
 
@@ -184,7 +184,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ report.project_name }} — HaGoKu 分析报告</title>
+    <title>{{ report.project_name }} — HaGoKu Studio 分析报告</title>
     <style>
         :root {
             --primary: #1a73e8;
@@ -205,7 +205,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
     <header>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
-            生成时间: {{ report.generated_at[:19] }} | HaGoKu v0.1.0
+            生成时间: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0
 
         </div>
         <div class="query">
@@ -400,7 +400,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
     </section>
 
     <footer>
-        HaGoKu — 用数学的力量，挖出数据背后真正的信息
+        HaGoKu Studio — 用数学的力量，挖出数据背后真正的信息
     </footer>
 </body>
 </html>
@@ -432,7 +432,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
     <header>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
-            Generated: {{ report.generated_at[:19] }} | HaGoKu v0.1.0
+            Generated: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0
         </div>
         <div class="query">Research Question: {{ report.query }}</div>
     </header>
@@ -488,7 +488,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
     {% endfor %}
 
     <footer>
-        HaGoKu Statistical Analysis Report
+        HaGoKu Studio Statistical Analysis Report
     </footer>
 </body>
 </html>
@@ -552,7 +552,7 @@ BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     {% endfor %}
     </div>
 
-    <footer>HaGoKu Summary</footer>
+    <footer>HaGoKu Studio Summary</footer>
 </body>
 </html>
 """
@@ -590,7 +590,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <header>
         <h1>📊 {{ report.project_name }}</h1>
-        <div class="meta">商业分析报告 | {{ report.generated_at[:10] }} | HaGoKu</div>
+        <div class="meta">商业分析报告 | {{ report.generated_at[:10] }} | HaGoKu Studio</div>
         {% if report.query %}<div class="query"><strong>核心问题：</strong>{{ report.query }}</div>{% endif %}
     </header>
 
@@ -654,7 +654,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
         </ul>
     </div>
 
-    <footer>HaGoKu 商业分析报告 — 用数学的力量，驱动商业决策</footer>
+    <footer>HaGoKu Studio 商业分析报告 — 用数学的力量，驱动商业决策</footer>
 </body>
 </html>
 """
@@ -728,7 +728,7 @@ AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     {% endfor %}
 
-    <footer>HaGoKu A/B 测试报告</footer>
+    <footer>HaGoKu Studio A/B 测试报告</footer>
 </body>
 </html>
 """
@@ -796,7 +796,7 @@ EXECUTIVE_BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
         决策前请考虑效应量大小、业务成本和实施可行性。
     </div>
 
-    <footer>HaGoKu 高管简报</footer>
+    <footer>HaGoKu Studio 高管简报</footer>
 </body>
 </html>
 """
@@ -819,7 +819,7 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <header>
         <h1>🔍 {{ report.project_name }} — 数据审计</h1>
-        <div class="meta">审计时间: {{ report.generated_at[:19] }} | HaGoKu v0.1.0</div>
+        <div class="meta">审计时间: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0</div>
     </header>
 
     <div class="audit-summary">
@@ -898,7 +898,7 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     {% endfor %}
 
-    <footer>HaGoKu 数据审计报告</footer>
+    <footer>HaGoKu Studio 数据审计报告</footer>
 </body>
 </html>
 """
@@ -1117,7 +1117,7 @@ class ReportGenerator:
                 lines.append("")
 
         lines.append("---")
-        lines.append("*HaGoKu — 用数学的力量，挖出数据背后真正的信息*")
+        lines.append("*HaGoKu Studio — 用数学的力量，挖出数据背后真正的信息*")
 
         md = "\n".join(lines)
 

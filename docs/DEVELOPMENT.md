@@ -1,4 +1,4 @@
-# HaGoKu 设计手册
+# HaGoKu Studio 设计手册
 
 > **快速上手** → [DEV.md](../DEV.md)
 > **排错录** → [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md)
@@ -167,6 +167,26 @@ with sync_playwright() as p:
 
 ---
 
+## 架构净化（P0，2026-05-20 已完成）
+
+以下硬编码语义已被移除，相应环节改为 LLM 决策。新增代码**不得**恢复以下模式：
+
+| 已移除的模式 | 原位置 | 犯规类型 |
+|-------------|--------|---------|
+| `if "分析" in text: intent="descriptive"` | `query_parser.py` | 关键词硬匹配 |
+| `maxv > q75v * 10` / `* 3` / `pct < q25 * 0.3` | `scout/agent.py` | 数值阈值硬编码 |
+| `DISTRIBUTION_CATEGORICAL_THRESHOLD` / `_LOW_CARDINALITY` 常量 | `agents/constants.py` | 已删除 |
+| `re.match(r"^([^=]+)=(.+)$", line)` 字段描述解析 | `orchestrator.py` | 正则语义解析 |
+| `s[:17] + "…"` / `_format_sample_preview()` | `scout/agent.py` | 硬编码格式化 |
+| `match action_type: case "descriptive": goals.append(...)` | `orchestrator.py` | 枚举映射表 |
+| `llm_lines = [f"正在{t}..."]` 阶段消息拼装 | `orchestrator.py` | 自然语言硬写 |
+
+**约束**：
+- 审查命令覆盖区已扩展：`orchestrator.py`、`scout/agent.py`、`query_parser.py`
+- 发现同类模式 → 走 `docs/AGENT_HARDCODED_REVIEW.md` 流程录入，非紧急不在此次 P0 范围外自行删除
+
+---
+
 ## 看板协作实现
 
 ### SQLite Schema
@@ -217,9 +237,9 @@ triage → todo → ready → running → blocked → ready → done
                                  archived
 ```
 
-### HaGoKu 适配
+### HaGoKu Studio 适配
 
-| 看板状态 | HaGoKu 含义 |
+| 看板状态 | HaGoKu Studio 含义 |
 |----------|-------------|
 | `triage` | 新建任务，Scout 待启动 |
 | `todo` | Scout 正在理解字段 |
@@ -313,7 +333,7 @@ store.delete(entry_id)
 
 ## 错误处理与兜底原则
 
-HaGoKu 的字段理解完全依赖 LLM。任何「字段含义」相关产出 **不存在硬编码 if-else 兜底**。
+HaGoKu Studio 的字段理解完全依赖 LLM。任何「字段含义」相关产出 **不存在硬编码 if-else 兜底**。
 
 ### 三级防护
 

@@ -19,7 +19,7 @@
 | [UI_CHANGELOG.md](UI_CHANGELOG.md) | 前端有界面改动时按 `CLAUDE.md` 记录 |
 | [CLAUDE.md](CLAUDE.md) | UI 原则、备份与变更日志规则 |
 
-**环境变量**：只认 `~/.hagoku/.env`；模板见仓库 `.env.example`。LLM 默认端口口径与 **HaGoKu API（8000）** 区分见 `PROJECT.md`。
+**环境变量**：只认 `~/.hagoku/.env`；模板见仓库 `.env.example`。LLM 默认端口口径与 **HaGoKu Studio API（8000）** 区分见 `PROJECT.md`。
 
 ---
 

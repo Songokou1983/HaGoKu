@@ -1,4 +1,4 @@
-"""HaGoKu 记忆系统 — 独立、灵活的跨运行学习模块
+"""HaGoKu Studio 记忆系统 — 独立、灵活的跨运行学习模块
 
 核心设计：
 - MemoryManager 是唯一对外接口（Facade）

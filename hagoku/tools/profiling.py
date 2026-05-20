@@ -1,4 +1,4 @@
-"""HaGoKu 数据画像 — 快速了解数据全貌"""
+"""HaGoKu Studio 数据画像 — 快速了解数据全貌"""
 
 from __future__ import annotations
 

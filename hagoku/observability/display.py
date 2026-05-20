@@ -1,4 +1,4 @@
-"""HaGoKu 终端实时显示"""
+"""HaGoKu Studio 终端实时显示"""
 
 from __future__ import annotations
 

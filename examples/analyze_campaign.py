@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HaGoKu 示例：广告效果分析
+HaGoKu Studio 示例：广告效果分析
 
 演示三种使用方式：
 1. 数据画像 (profile)
@@ -33,7 +33,7 @@ def main() -> None:
         sys.exit(1)
 
     print("=" * 60)
-    print("HaGoKu 广告效果分析示例")
+    print("HaGoKu Studio 广告效果分析示例")
     print("=" * 60)
 
     # 1. 数据画像

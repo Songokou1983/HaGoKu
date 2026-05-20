@@ -1,4 +1,4 @@
-"""HaGoKu 可视化 — 吸引力层的实现 + 洞察图/趋势图/对比图"""
+"""HaGoKu Studio 可视化 — 吸引力层的实现 + 洞察图/趋势图/对比图"""
 
 from __future__ import annotations
 

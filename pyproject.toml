@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "HaGoKu Team" },
+    { name = "HaGoKu Studio Team" },
 ]
 keywords = ["data-analysis", "multi-agent", "statistics", "llm"]
 classifiers = [

@@ -33,15 +33,25 @@
 
 ### 第三步：执行分析
 
-根据研究问题选择方法：
+根据研究问题选择方法（以下工具均可直接调用）：
 
-| 问题类型 | 方法 |
-|----------|------|
-| 哪组更好 | t 检验 / Mann-Whitney U |
-| 多组对比 | ANOVA / Kruskal-Wallis |
-| 哪些因素影响结果 | 回归分析 |
-| 趋势/时间序列 | 趋势分析 |
-| 相关性 | Pearson / Spearman |
+| 问题类型 | 可用工具 | 说明 |
+|----------|---------|------|
+| 两组均值对比 | `ttest` | 独立/配对 t 检验，自动检查方差齐性 |
+| 两组非参数对比 | `mann_whitney_u` | Mann-Whitney U 秩和检验，不假设正态 |
+| 多组差异检验 | `kruskal_wallis` | Kruskal-Wallis 秩和检验 |
+| 预测因素 / 回归 | `regression` | 线性回归（含系数、R²、诊断） |
+| 相关性 | `correlation` | Pearson / Spearman 相关系数 |
+| 交叉验证 | `cross_validate` | k 折交叉验证评估模型稳定性 |
+| 多重比较校正 | `multiple_comparison_correction` | Bonferroni / FDR 校正，控制族错误率 |
+| 假设检验前置 | `check_test_assumptions` | 检验正态性、方差齐性等 |
+| 功效分析 | `power_analysis` | 功效预检：需要多少样本？（第二步已用） |
+
+**方法选择原则**：
+- 先做 `check_test_assumptions`，再决定用参数检验还是非参数检验
+- 多组比较做了多次检验后，必须用 `multiple_comparison_correction` 校正
+- 回归模型建议配合 `cross_validate` 检验稳定性
+- 功效预检已在第二步完成，此处可直接调用分析
 
 ### 第四步：结论质量
 

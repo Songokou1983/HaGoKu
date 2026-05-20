@@ -1,4 +1,4 @@
-"""HaGoKu 输出管理器"""
+"""HaGoKu Studio 输出管理器"""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """
-HaGoKu 项目看板 — SQLite 持久化
+HaGoKu Studio 项目看板 — SQLite 持久化
 
 参考 hermes-kanban-mcp (Shin-R2un) 的 SQLite schema 设计
 每个项目独立 kanban.db，不做全局管理
@@ -341,7 +341,7 @@ class KanbanDB:
     def _recompute_ready(self, parent_id: str) -> None:
         """
         当父任务完成时，将其所有子任务从 triage → ready。
-        HaGoKu 流程：Scout 完成 → Cleaner 自动 ready。
+        HaGoKu Studio 流程：Scout 完成 → Cleaner 自动 ready。
         """
         children = self.list_tasks(parent_id=parent_id)
         if not children:

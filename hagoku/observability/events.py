@@ -1,4 +1,4 @@
-"""HaGoKu 事件类型定义"""
+"""HaGoKu Studio 事件类型定义"""
 
 from __future__ import annotations
 

@@ -483,7 +483,9 @@ class ScribeAgent:
                 missing,
             )
 
-        # fallback: 为缺失列生成基础占位描述（不做硬编码假值）
+        # ==== CHANNEL ZONE: 兜底占位，禁止语义推断 ====
+        # 仅生成"字段 xxx（dtype）"格式的占位描述，不根据列名做任何语义猜测。
+        # 此路径仅在 LLM 完全不可达时触发，确保下游至少有字段标识符可用。
         merged = {**existing}
         for col in missing:
             dtype_hint = (dtypes_safe or {}).get(col, "")
@@ -492,3 +494,4 @@ class ScribeAgent:
             else:
                 merged[col] = f"字段 {col}"
         return merged
+

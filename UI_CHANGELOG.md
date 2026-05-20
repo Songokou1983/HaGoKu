@@ -2,7 +2,7 @@
 
 > 带日期的章节为**当时**的改动实录，可能仍出现已弃用的技术或布局描述（例如旧版 dockview / Streamlit）。**当前**产品形态、环境约定与互动流程以 [PROJECT.md](PROJECT.md)、[README.md](README.md) 为准。
 
-- **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu 后端再刷新」的白话。
+- **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu Studio 后端再刷新」的白话。
 
 ## 2026-05-18 — 字段理解交互：从硬编码解析重构为 function calling 模式
 

@@ -1,4 +1,4 @@
-"""HaGoKu Cleaner Agent — 数据清洗员，保守且可追溯"""
+"""HaGoKu Studio Cleaner Agent — 数据清洗员，保守且可追溯"""
 
 from __future__ import annotations
 

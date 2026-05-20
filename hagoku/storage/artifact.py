@@ -1,4 +1,4 @@
-"""HaGoKu 数据制品管理"""
+"""HaGoKu Studio 数据制品管理"""
 
 from __future__ import annotations
 

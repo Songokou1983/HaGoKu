@@ -1,4 +1,4 @@
-"""HaGoKu Scout Agent — 数据侦察员，理解数据上下文，不猜，问"""
+"""HaGoKu Studio Scout Agent — 数据侦察员，理解数据上下文，不猜，问"""
 
 from __future__ import annotations
 

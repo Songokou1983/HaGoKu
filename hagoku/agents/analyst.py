@@ -1,4 +1,4 @@
-"""HaGoKu Analyst Agent — 数理分析核心，精、准、狠"""
+"""HaGoKu Studio Analyst Agent — 数理分析核心，精、准、狠"""
 
 from __future__ import annotations
 

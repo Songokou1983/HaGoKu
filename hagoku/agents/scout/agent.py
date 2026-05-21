@@ -861,10 +861,19 @@ class ScoutAgent(InteractionMixin):
 
         fields_text = "\n".join(field_info)
 
+        # 提取分析角色信息（如果有的话）
+        roles_text = ""
+        target = context.get("target")
+        features = context.get("features") or []
+        if target:
+            roles_text += f"- 目标变量（因变量）：{target}\n"
+        if features:
+            roles_text += f"- 特征变量（自变量）：{', '.join(features)}\n"
+
         system_prompt = """你是一个数据分析助手，正在帮助用户理解数据字段的含义。
 
 你的任务是：
-1. 为每个字段生成三列信息：**字段名**（原始列名）、**理解名称**（后续展示用的简短业务称呼）、**含义理解**（业务含义一句话）
+1. 为每个字段生成四列信息：**字段名**（原始列名）、**理解名称**（后续展示用的简短业务称呼）、**含义理解**（业务含义一句话）、**分析角色**（目标变量/特征变量/其他/不参与分析）
 2. 确认完成后，告知用户如何继续：
    - 如果所有字段理解正确 → 用户可以输入"确认"继续下一步
    - 如果某个字段理解有误 → 用户会告诉你正确含义
@@ -873,17 +882,24 @@ class ScoutAgent(InteractionMixin):
 重要规则：
 - **字段名照抄原始列名**，不要翻译
 - **理解名称要简短**（建议 ≤12 字），后续分析表格第二列会用到
-- **含义理解**说明这个字段在业务中的具体含义"""
+- **含义理解**说明这个字段在业务中的具体含义
+- **分析角色**根据系统推断的目标变量和特征变量来标注，未指定的字段标注"其他"或"不参与分析"（如 ID、时间戳等）"""
+
+        roles_hint = (
+            f"\n\n系统已推断的分析角色：\n{roles_text}\n"
+            "请在上表的「分析角色」一列中按此标注。目标变量的角色为「目标变量（因变量）」，"
+            "特征变量的角色为「特征变量（自变量）」，其余字段标注「其他」或「不参与分析」。"
+        ) if roles_text else ""
 
         user_prompt = f"""请为以下字段生成理解：
 
 {fields_text}
 
-数据概况：{context.get('n_rows', 0)} 行，{context.get('n_cols', 0)} 列
+数据概况：{context.get('n_rows', 0)} 行，{context.get('n_cols', 0)} 列{roles_hint}
 
 只输出一个 Markdown 表格，不要任何说明文字。表格格式：
-| 字段名 | 理解名称 | 含义理解 |
-| --- | --- | --- |"""
+| 字段名 | 理解名称 | 含义理解 | 分析角色 |
+| --- | --- | --- | --- |"""
 
         client = self._create_llm_client()
         response = client.chat.completions.create(

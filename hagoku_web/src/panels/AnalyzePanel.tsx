@@ -40,16 +40,20 @@ function parsePauseInteractionRevision(data: Record<string, unknown>): number | 
 // ── Types ────────────────────────────────────────────────────
 type SessionPhase = "setup" | "running" | "done";
 
-/** Scout 字段核对：后端 `field_review`（列：字段名称 / 中文名称 / 含义理解） */
+/** Scout 字段核对：后端 `field_review`（列：字段名称 / 中文名称 / 含义理解 / 分析角色） */
 interface FieldReviewPayload {
   n_rows: number | string;
   n_cols: number;
+  /** 分析字段摘要：目标变量/特征/标识列的划分概览 */
+  analysis_fields_summary?: string;
   rows: Array<{
     field_name: string;
     /** 中文名称：column_display_names 显式命名；无则占位「—」 */
     chinese_name: string;
     /** AI 对字段的含义理解（column_descriptions 或语义兜底） */
     meaning: string;
+    /** 建议分析角色：target / feature / identifier（由 Scout 语义推断） */
+    suggested_role: string;
     needs_attention?: boolean;
   }>;
 }
@@ -67,6 +71,7 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
       field_name: String(r.field_name ?? ""),
       chinese_name: String(r.chinese_name ?? "—"),
       meaning: String(r.meaning ?? ""),
+      suggested_role: String(r.suggested_role ?? "feature"),
       needs_attention: Boolean(r.needs_attention),
     });
   }
@@ -79,10 +84,14 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
       : typeof nRowsRaw === "string"
         ? nRowsRaw
         : "?";
+  const summaryRaw = o.analysis_fields_summary;
+  const analysis_fields_summary: string | undefined =
+    typeof summaryRaw === "string" && summaryRaw.trim() ? summaryRaw.trim() : undefined;
   return {
     n_rows: nRows,
     n_cols: nCols,
     rows,
+    ...(analysis_fields_summary !== undefined ? { analysis_fields_summary } : {}),
   };
 }
 
@@ -386,21 +395,31 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
   );
 }
 
+function roleLabel(role: string): string {
+  if (role === "target") return "🎯 目标";
+  if (role === "identifier") return "🏷️ 标识";
+  return "📊 特征";
+}
+
 function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
+  const summaryLine = data.analysis_fields_summary
+    ? data.analysis_fields_summary
+    : `共 ${String(data.n_rows)} 行 × ${data.n_cols} 列 · 四列：字段名称 / 中文名称 / 含义理解 / 分析角色`;
   return (
     <div
       className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
-        共 {String(data.n_rows)} 行 × {data.n_cols} 列 · 三列：字段名称 / 中文名称 / 含义理解
+        {summaryLine}
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解</caption>
+        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、分析角色</caption>
         <colgroup>
-          <col className="w-[18%]" />
-          <col className="w-[22%]" />
-          <col className="w-[60%]" />
+          <col className="w-[15%]" />
+          <col className="w-[15%]" />
+          <col className="w-[46%]" />
+          <col className="w-[24%]" />
         </colgroup>
         <thead>
           <tr className="bg-app-bg border-b border-app-border">
@@ -410,8 +429,11 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               中文名称
             </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               含义理解
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              分析角色
             </th>
           </tr>
         </thead>
@@ -432,7 +454,10 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                     r.chinese_name
                   )}
                 </td>
-                <td className="px-2 py-1.5 text-left align-top break-words">{r.meaning}</td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
+                <td className="px-2 py-1.5 text-left align-top break-words text-ui-xs">
+                  {roleLabel(r.suggested_role)}
+                </td>
               </tr>
             );
           })}

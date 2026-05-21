@@ -128,19 +128,38 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
         if len(d) > 400:
             d = d[:397] + "…"
         mean = _scout_ai_meaning_cell(name, d if d else "", s)
+        role = str(s.get("suggested_role", "")).strip() or "feature"
 
         rows.append({
             "field_name": name,
             "chinese_name": dname,
             "meaning": mean,
             "needs_attention": uncertain,
+            "suggested_role": role,
         })
+
+    # 分析涉及字段摘要
+    target = context.get("target")
+    features = context.get("features") or []
+    variable_roles = context.get("variable_roles") or {}
+    ignored_cols = [
+        s.get("column_name") for s in cols
+        if str(s.get("suggested_role", "")).strip() in ("ignore", "identifier")
+    ]
+
     return {
         "message": "",
         "field_review": {
             "n_rows": n_rows,
             "n_cols": n_c,
             "rows": rows,
+        },
+        "analysis_fields_summary": {
+            "target": target,
+            "features": features,
+            "ignored": ignored_cols,
+            "roles": variable_roles,
+            "prompt": "LLM 推断以上字段是本次分析的核心字段（target=目标变量，features=特征变量）。请确认是否正确；如有误请直接说明。",
         },
     }
 
@@ -210,15 +229,88 @@ def _is_scout_aligned(context: dict[str, Any], user_reply: str) -> bool:
     return False
 
 
-def gate_cleaning_pause_payload() -> dict[str, Any]:
-    """跨阶段闸门：字段对齐后、进入清洗前（仅结构化 gate，不注入文案库）。"""
+def analysis_purpose_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
+    """分析目的确认暂停：展示 LLM 推断的 target/features/roles，供用户确认或修正。"""
+    ap = context.get("analysis_purpose") or _build_analysis_purpose_static(context)
+    target = ap.get("target")
+    features = ap.get("features") or []
+    roles = ap.get("variable_roles") or {}
+    cols = context.get("column_semantics") or []
+
+    # 构建分析字段表格行
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    # 先 target
+    if target:
+        seen.add(target)
+        rows.append({"column_name": target, "role": "target", "role_label": "目标变量（因变量）"})
+    # 再 features
+    for f in features:
+        if f not in seen:
+            seen.add(f)
+            rows.append({"column_name": f, "role": "feature", "role_label": "特征变量（自变量）"})
+    # 其余列
+    for s in cols:
+        name = str(s.get("column_name", ""))
+        if name and name not in seen:
+            seen.add(name)
+            role = str(s.get("suggested_role", "")).strip()
+            if role in ("ignore", "identifier"):
+                rows.append({"column_name": name, "role": role, "role_label": "不参与分析"})
+            else:
+                rows.append({"column_name": name, "role": "other", "role_label": "其他"})
+
+    prompt_lines = [
+        "以上是 LLM 推断的本次分析涉及的核心字段。",
+        "请核对目标变量和特征变量是否正确；",
+        "如有调整请直接说明（例如「目标变量应该是 B，特征变量去掉 C」）。",
+        "确认无误后点击「确认继续」进入数据清洗。",
+    ]
+
     return {
+        "message": "",
+        "analysis_purpose_review": {
+            "rows": rows,
+            "prompt": "\n".join(prompt_lines),
+        },
+    }
+
+
+def _build_analysis_purpose_static(context: dict[str, Any]) -> dict[str, Any]:
+    """模块级静态版本的 _build_analysis_purpose（供模块级函数调用）。"""
+    target = context.get("target")
+    features = context.get("features") or []
+    variable_roles = context.get("variable_roles") or {}
+    summary_parts: list[str] = []
+    if target:
+        summary_parts.append(f"目标变量（因变量）：{target}")
+    if features:
+        summary_parts.append(f"特征变量（自变量）：{', '.join(str(f) for f in features)}")
+    if variable_roles:
+        role_lines = [f"  {k}: {v}" for k, v in sorted(variable_roles.items())]
+        summary_parts.append(f"变量角色：\n{chr(10).join(role_lines)}")
+    return {
+        "target": target,
+        "features": features,
+        "variable_roles": variable_roles,
+        "summary": "\n".join(summary_parts) or "（未指定分析字段角色）",
+    }
+
+
+def gate_cleaning_pause_payload(context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """跨阶段闸门：字段对齐后、进入清洗前（附带最终 field_review 供前端展示）。"""
+    payload: dict[str, Any] = {
         "message": "",
         "gate": {
             "phase": "cleaning",
             "prompt": "",
         },
     }
+    if context:
+        fr = scout_field_review_pause_payload(context)
+        payload["field_review"] = fr.get("field_review")
+        payload["analysis_fields_summary"] = fr.get("analysis_fields_summary")
+    return payload
 
 
 # 闸门回复判定：显式纯确认 → 进下一阶段；空字串不视为确认；非确认 → 回 FieldReviewLoop
@@ -389,10 +481,126 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_field_role",
+            "description": (
+                "当用户指定或修正了分析涉及的核心字段角色时，调用此工具来更新分析目标。"
+                "例如用户说「目标变量应该是 B 而不是 A」← 更新 target 和 features。"
+                "又或者用户说「这些字段才是核心分析字段：销售额、店龄、客流量」← 更新 features。"
+                "角色包括：target（目标变量，唯一）、feature（特征变量，多个）、"
+                "identifier（标识列）、ignore（分析不涉及）。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "description": "目标变量（因变量/Y 变量）的字段名，唯一。如果用户未提及则不设置。",
+                    },
+                    "features": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "特征变量（自变量/X 变量）的字段名列表。如果用户未提及则不设置。",
+                    },
+                    "ignored": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "用户明确说不参与分析的字段名列表。",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
+def _apply_role_update(
+    context: dict[str, Any],
+    tool_calls: list[Any],
+    columns: list[str],
+    applied: list[str],
+    semantics: list[dict[str, Any]],
+) -> None:
+    """处理 LLM 的 update_field_role 工具调用，更新 context 中的 target / features / variable_roles。
+
+    将角色变更同步回 column_semantics 的 suggested_role 字段，
+    并在 applied 列表中记录以便日志和持久化。
+    """
+    import json as _json
+
+    for tc in tool_calls:
+        if hasattr(tc, "function"):
+            func_name = tc.function.name
+            func_args_str = tc.function.arguments
+        elif isinstance(tc, dict):
+            f = tc.get("function", {})
+            func_name = f.get("name", "")
+            func_args_str = f.get("arguments", "{}")
+        else:
+            continue
+
+        if func_name != "update_field_role":
+            continue
+
+        try:
+            args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+        except (_json.JSONDecodeError, TypeError):
+            continue
+
+        new_target = str(args.get("target", "") or "").strip()
+        new_features = list(args.get("features") or [])
+        new_ignored = list(args.get("ignored") or [])
+
+        # 解析字段名并更新
+        if new_target:
+            resolved_target = _resolve_scout_column_token(new_target, columns)
+            if resolved_target:
+                old_target = context.get("target")
+                context["target"] = resolved_target
+                applied.append(f"[role]target:{old_target}→{resolved_target}")
+                # 同步 suggested_role
+                for s in semantics:
+                    cname = str(s.get("column_name", ""))
+                    if cname == resolved_target:
+                        s["suggested_role"] = "target"
+                    elif cname == old_target and s.get("suggested_role") == "target":
+                        s["suggested_role"] = "feature"
+
+        if new_features:
+            resolved_features: list[str] = []
+            for ft in new_features:
+                r = _resolve_scout_column_token(str(ft), columns)
+                if r and r not in resolved_features:
+                    resolved_features.append(r)
+            if resolved_features:
+                context["features"] = resolved_features
+                applied.append(f"[role]features:{resolved_features}")
+                # 同步 suggested_role
+                for s in semantics:
+                    cname = str(s.get("column_name", ""))
+                    if cname in resolved_features:
+                        s["suggested_role"] = "feature"
+
+        if new_ignored:
+            for ig in new_ignored:
+                r = _resolve_scout_column_token(str(ig), columns)
+                if r:
+                    applied.append(f"[role]ignore:{r}")
+                    for s in semantics:
+                        if str(s.get("column_name", "")) == r:
+                            s["suggested_role"] = "ignore"
+
+        # 更新 variable_roles 映射
+        roles: dict[str, str] = context.get("variable_roles", {}) or {}
+        if new_target:
+            roles["target"] = new_target
+        context["variable_roles"] = roles
+
+
 def _apply_scout_reply_with_llm(
     context: dict[str, Any],
     raw: str,
@@ -493,6 +701,10 @@ def _apply_scout_reply_with_llm(
                     func_name = f.get("name", "")
                     func_args_str = f.get("arguments", "{}")
                 else:
+                    continue
+
+                if func_name == "update_field_role":
+                    _apply_role_update(context, tool_calls, columns, applied, semantics)
                     continue
 
                 if func_name != "update_field_understanding":
@@ -1332,7 +1544,8 @@ class Orchestrator:
                         interaction_revision += 1
 
                     # ── 跨阶段闸门：字段对齐后、进入清洗前 ────────────────────────
-                    gate_msg = gate_cleaning_pause_payload()
+                    gate_msg = gate_cleaning_pause_payload(context)
+                    gate_msg["interaction_revision"] = interaction_revision
                     gate_msg = self._attach_pause_dialogue_message("scout", gate_msg)
                     gate_reply = self._pause_and_wait("scout", gate_msg)
                     if gate_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
@@ -1364,6 +1577,42 @@ class Orchestrator:
                             )
                         query = f"{query}\n[用户补充] {gate_reply}".strip()
                     # 必须递增 revision，否则下一轮 field_review 与上一轮同号，前端会再插一张表。
+                    interaction_revision += 1
+
+                # ── 分析目的确认暂停点（仅当存在 target/features 时）──
+                # 闸门确认字段对齐后、进入 Cleaner 前，让用户确认分析目的（目标变量、特征变量）
+                analysis_purpose = self._build_analysis_purpose(context)
+                context["analysis_purpose"] = analysis_purpose
+
+                if analysis_purpose.get("target") or analysis_purpose.get("features"):
+                    ap_payload = analysis_purpose_pause_payload(context)
+                    ap_payload["interaction_revision"] = interaction_revision
+                    ap_payload = self._attach_pause_dialogue_message("scout", ap_payload)
+                    ap_reply = self._pause_and_wait("scout", ap_payload)
+                    if ap_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
+                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+                    # 用户可能在此修正 target/features：用 LLM tool calling 解析
+                    if ap_reply and not _scout_reply_is_pure_confirm(ap_reply):
+                        ap_applied = apply_scout_user_field_reply_to_context(
+                            context,
+                            ap_reply,
+                            llm_client=self.llm_quick_raw,
+                            llm_model=self.config.llm.model_quick or self.config.llm.model,
+                        )
+                        if ap_reply:
+                            self.event_bus.emit(
+                                EventType.USER_INPUT_RECEIVED,
+                                "scout",
+                                scout_user_input_received_payload(
+                                    context,
+                                    ap_reply,
+                                    ap_applied,
+                                    interaction_revision,
+                                ),
+                            )
+                        # 重新构建 analysis_purpose（可能因用户修正而改变）
+                        context["analysis_purpose"] = self._build_analysis_purpose(context)
                     interaction_revision += 1
 
                 n_sem = len(context.get("column_semantics", []))
@@ -1468,6 +1717,10 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": "📋 已注入 Cleaner 上游摘要给 Analyst",
                 })
+
+            # 确保 analysis_purpose 仍然在 context 中
+            if "analysis_purpose" not in context:
+                context["analysis_purpose"] = self._build_analysis_purpose(context)
 
             # 6. Analyst: 统计分析
             if df_clean is None or context is None:
@@ -1613,6 +1866,10 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": "📋 已注入 Analyst 上游摘要给 Reporter",
                 })
+
+            # 确保 analysis_purpose 仍然在 context 中
+            if "analysis_purpose" not in context:
+                context["analysis_purpose"] = self._build_analysis_purpose(context)
 
             # 7b. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
@@ -1976,6 +2233,32 @@ class Orchestrator:
         kind = {"comparison": "对比差异", "causation": "找原因", "correlation": "看关系",
                 "trend": "看趋势", "diagnostic": "诊断问题"}.get(base, "探索规律")
         return f"{kind}，{'，'.join(parts)}" if parts else f"{kind}"
+
+    def _build_analysis_purpose(self, context: dict[str, Any]) -> dict[str, Any]:
+        """从 context 提取本次分析涉及的核心字段信息，供下游 Agent 聚焦。
+
+        包含 target（目标变量）、features（特征变量）、roles（变量角色映射），
+        以及一份人类可读的总结字符串。
+        """
+        target = context.get("target")
+        features = context.get("features") or []
+        variable_roles = context.get("variable_roles") or {}
+
+        summary_parts: list[str] = []
+        if target:
+            summary_parts.append(f"目标变量（因变量）：{target}")
+        if features:
+            summary_parts.append(f"特征变量（自变量）：{', '.join(str(f) for f in features)}")
+        if variable_roles:
+            role_lines = [f"  {k}: {v}" for k, v in sorted(variable_roles.items())]
+            summary_parts.append(f"变量角色：\n{chr(10).join(role_lines)}")
+
+        return {
+            "target": target,
+            "features": features,
+            "variable_roles": variable_roles,
+            "summary": "\n".join(summary_parts) or "（未指定分析字段角色）",
+        }
 
     def _get_upstream_summary(self, agent_name: str) -> str | None:
         """获取指定 Agent 的上游交接笔记，供注入到下游 Agent 的上下文中。

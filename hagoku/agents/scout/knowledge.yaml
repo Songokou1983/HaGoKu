@@ -3056,3 +3056,233 @@ knowledge:
     confidence: 1.0
   created_at: '2026-05-19 17:10:08'
   use_count: 0
+- id: 1190b2b7
+  content: 字段名：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一字符串值（B01-B05），符合业务单元编码模式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test002
+    field: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一字符串值（B01-B05），符合业务单元编码模式
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:11'
+  use_count: 0
+- id: f802529b
+  content: 字段名：代表店铺的唯一编号；含义：代表店铺的唯一编号；数据特征：categorical 25个唯一字符串值（A0000001-A0000005），每个值出现25次，符合唯一标识符特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test002
+    field: 代表店铺的唯一编号
+    meaning: 代表店铺的唯一编号
+    data_pattern: categorical 25个唯一字符串值（A0000001-A0000005），每个值出现25次，符合唯一标识符特征
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:11'
+  use_count: 0
+- id: 2a13c7b9
+  content: 字段名：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；含义：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；数据特征：datetime
+    25个唯一整数值，范围202540-202612，符合YYYYWW（年+周）日期格式；推断角色：time_index
+  tags:
+  - datetime
+  - time_index
+  metadata:
+    project: test002
+    field: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    meaning: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    data_pattern: datetime 25个唯一整数值，范围202540-202612，符合YYYYWW（年+周）日期格式
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:11'
+  use_count: 0
+- id: 46febed4
+  content: 字段名：代表店铺的营业收入；含义：代表店铺的营业收入；数据特征：numeric 619个唯一浮点值，范围0.0039-397.6249，均值59.70，中位数16.10，呈右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 代表店铺的营业收入
+    meaning: 代表店铺的营业收入
+    data_pattern: numeric 619个唯一浮点值，范围0.0039-397.6249，均值59.70，中位数16.10，呈右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:12'
+  use_count: 0
+- id: ffaef5a2
+  content: 字段名：可能表示另一项收入或增量指标，与Inc1类似但数值范围较小；含义：可能表示另一项收入或增量指标，与Inc1类似但数值范围较小；数据特征：numeric
+    615个唯一浮点值，范围0-296.32，均值43.45，中位数11.27，呈右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 可能表示另一项收入或增量指标，与Inc1类似但数值范围较小
+    meaning: 可能表示另一项收入或增量指标，与Inc1类似但数值范围较小
+    data_pattern: numeric 615个唯一浮点值，范围0-296.32，均值43.45，中位数11.27，呈右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:12'
+  use_count: 0
+- id: a717a278
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 253个唯一浮点值，范围0-175.25，均值25.14，中位数6.5，呈右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 253个唯一浮点值，范围0-175.25，均值25.14，中位数6.5，呈右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:12'
+  use_count: 0
+- id: 83ec4066
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 202个唯一浮点值，范围0-5.46，均值0.93，中位数0.24，呈右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 202个唯一浮点值，范围0-5.46，均值0.93，中位数0.24，呈右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:13'
+  use_count: 0
+- id: e035e9bd
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 373个唯一浮点值，范围0-6.69，均值1.12，中位数0.51，呈右偏分布；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 373个唯一浮点值，范围0-6.69，均值1.12，中位数0.51，呈右偏分布
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:13'
+  use_count: 0
+- id: bcb07f56
+  content: 字段名：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一值，格式为B01-B05的字母数字组合，符合业务单元编码模式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test002
+    field: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一值，格式为B01-B05的字母数字组合，符合业务单元编码模式
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:44'
+  use_count: 0
+- id: bf434995
+  content: 字段名：代表店铺的唯一编号；含义：代表店铺的唯一编号；数据特征：categorical 25个唯一值，格式为A0000001-A0000005的固定长度编码，每个值出现25次；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test002
+    field: 代表店铺的唯一编号
+    meaning: 代表店铺的唯一编号
+    data_pattern: categorical 25个唯一值，格式为A0000001-A0000005的固定长度编码，每个值出现25次
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:44'
+  use_count: 0
+- id: c3056b16
+  content: 字段名：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；含义：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；数据特征：datetime
+    整数值范围202540-202612，呈现年份加期数的时间序列模式；推断角色：time_index
+  tags:
+  - datetime
+  - time_index
+  metadata:
+    project: test002
+    field: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    meaning: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    data_pattern: datetime 整数值范围202540-202612，呈现年份加期数的时间序列模式
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:44'
+  use_count: 0
+- id: f4194174
+  content: 字段名：代表店铺的营业收入；含义：代表店铺的营业收入；数据特征：numeric 浮点数值，范围0.0039-397.6249，均值59.70，几乎每个值都唯一；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test002
+    field: 代表店铺的营业收入
+    meaning: 代表店铺的营业收入
+    data_pattern: numeric 浮点数值，范围0.0039-397.6249，均值59.70，几乎每个值都唯一
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:45'
+  use_count: 0
+- id: f2d8c808
+  content: 字段名：可能表示另一项收入或增量指标，与Inc1类似但数值范围较小；含义：可能表示另一项收入或增量指标，与Inc1类似但数值范围较小；数据特征：numeric
+    浮点数值，范围0-296.3193，均值43.45，与Inc1类似但数值范围较小；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 可能表示另一项收入或增量指标，与Inc1类似但数值范围较小
+    meaning: 可能表示另一项收入或增量指标，与Inc1类似但数值范围较小
+    data_pattern: numeric 浮点数值，范围0-296.3193，均值43.45，与Inc1类似但数值范围较小
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:45'
+  use_count: 0
+- id: 594350cc
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 浮点数值，范围0-175.25，均值25.14，包含小数位如55.5、49.0；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 浮点数值，范围0-175.25，均值25.14，包含小数位如55.5、49.0
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:46'
+  use_count: 0
+- id: 4ae13afb
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 浮点数值，范围0-5.46，均值0.93，数值较小且多为小数；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 浮点数值，范围0-5.46，均值0.93，数值较小且多为小数
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:46'
+  use_count: 0
+- id: ee076d19
+  content: 字段名：根据积分计算的费用；含义：根据积分计算的费用；数据特征：numeric 浮点数值，范围0-6.6906，均值1.12，数值较小且多为小数；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test002
+    field: 根据积分计算的费用
+    meaning: 根据积分计算的费用
+    data_pattern: numeric 浮点数值，范围0-6.6906，均值1.12，数值较小且多为小数
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-21 15:25:46'
+  use_count: 0

@@ -555,6 +555,21 @@ async def list_project_kanban_tasks(project_name: str):
             "title": r["title"],
             "description": (r.get("description") or ""),
             "status": r["status"],
+            "priority": r.get("priority", 0),
+            "created_at": r.get("created_at"),
+            "updated_at": r.get("updated_at"),
+            "completed_at": r.get("completed_at"),
+            "result": r.get("result"),
+            "comments": [
+                {
+                    "id": c["id"],
+                    "task_id": c["task_id"],
+                    "author": c["author"],
+                    "body": c["body"],
+                    "created_at": c["created_at"],
+                }
+                for c in kb.get_comments(r["id"])
+            ],
         }
         for r in latest
     ]

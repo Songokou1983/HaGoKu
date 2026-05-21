@@ -7,6 +7,7 @@ import ReportPanel from "./panels/ReportPanel";
 import KnowledgePanel from "./panels/KnowledgePanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import EventPanel from "./panels/EventPanel";
+import KanbanPanel from "./panels/KanbanPanel";
 import {
   FolderKanban,
   BarChart3,
@@ -14,6 +15,7 @@ import {
   BookOpen,
   Settings,
   Activity,
+  List,
   X,
 } from "lucide-react";
 
@@ -28,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "analyze",   title: "分析",   Icon: BarChart3 },
   { id: "report",    title: "报告",   Icon: FileText },
   { id: "knowledge", title: "知识库", Icon: BookOpen },
+  { id: "kanban",    title: "看板",   Icon: List },
   { id: "events",    title: "运行日志", Icon: Activity },
   { id: "settings",  title: "设置",   Icon: Settings },
 ];
@@ -37,6 +40,7 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   analyze:   <AnalyzePanel />,
   report:    <ReportPanel />,
   knowledge: <KnowledgePanel />,
+  kanban:    <KanbanPanel />,
   events:    <EventPanel />,
   settings:  <SettingsPanel />,
 };
@@ -47,6 +51,7 @@ const PANEL_ORDER: PanelId[] = [
   "analyze",
   "report",
   "knowledge",
+  "kanban",
   "events",
   "settings",
 ];

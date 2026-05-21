@@ -88,6 +88,15 @@ def _scout_semantic_fallback_label(col: str, sem: dict[str, Any] | None) -> str:
     return _md_table_cell(col)
 
 
+def _scout_description_is_meaningful_for_user(col: str, desc: str) -> bool:
+    """判断字段描述是否对用户有业务含义（非「列名（统计类型）」占位符）。
+
+    委托给 Scout agent 的同名逻辑，保持语义一致性。
+    """
+    from ..agents.scout.agent import _description_is_user_facing_meaningful
+    return _description_is_user_facing_meaningful(col, desc)
+
+
 def _scout_ai_meaning_cell(column_name: str, meaning_text: str, sem: dict[str, Any]) -> str:
     """字段核对表第三列：AI 对字段的含义理解；无描述时保留原文（不再硬编码 type/role 兜底文案）。"""
     d = (meaning_text or "").strip()
@@ -1364,6 +1373,14 @@ class Orchestrator:
                     {"result_summary": f"理解 {n_sem} 个字段（用户已确认）"},
                 )
 
+                # 注入上游摘要（Scout → Cleaner）
+                upstream_note = self._get_upstream_summary("cleaner")
+                if upstream_note:
+                    context["upstream_summary"] = upstream_note
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
+                    })
+
                 # 4. Cleaner: 数据清洗
                 df_raw, df_clean, cleaning_report, _ = cleaner.run(
                     data_path, context,
@@ -1443,6 +1460,14 @@ class Orchestrator:
                         "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
                         "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
                     })
+
+            # 注入上游摘要（Cleaner → Analyst）
+            upstream_note_analyst = self._get_upstream_summary("analyst")
+            if upstream_note_analyst:
+                context["upstream_summary"] = upstream_note_analyst
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                    "thought": "📋 已注入 Cleaner 上游摘要给 Analyst",
+                })
 
             # 6. Analyst: 统计分析
             if df_clean is None or context is None:
@@ -1580,6 +1605,14 @@ class Orchestrator:
                     "n_results": len(results),
                     "duration_ms": duration_ms,
                 }
+
+            # 注入上游摘要（Analyst → Reporter）
+            upstream_note_reporter = self._get_upstream_summary("reporter")
+            if upstream_note_reporter:
+                context["upstream_summary"] = upstream_note_reporter
+                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                    "thought": "📋 已注入 Analyst 上游摘要给 Reporter",
+                })
 
             # 7b. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
@@ -1943,6 +1976,16 @@ class Orchestrator:
         kind = {"comparison": "对比差异", "causation": "找原因", "correlation": "看关系",
                 "trend": "看趋势", "diagnostic": "诊断问题"}.get(base, "探索规律")
         return f"{kind}，{'，'.join(parts)}" if parts else f"{kind}"
+
+    def _get_upstream_summary(self, agent_name: str) -> str | None:
+        """获取指定 Agent 的上游交接笔记，供注入到下游 Agent 的上下文中。
+
+        在启动 Cleaner/Analyst/Reporter 前调用，拉取上游 Agent 的完整产出摘要和交接建议，
+        让 Agent 在启动时就能看到全貌，实现全过程理解。
+        """
+        if self.scribe is None:
+            return None
+        return self.scribe.get_upstream_summary(agent_name)
 
     def _build_intent_context(self, query: str, parsed_intent: Any) -> str:
         """将解析后的意图构建成 LLM 可用的上下文（无硬编码标签）。"""

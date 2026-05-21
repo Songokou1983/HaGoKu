@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -26,12 +27,17 @@ from ...storage.kanban import KanbanDB
 
 class ScribeAgent:
     """
-    Scribe：内部记录员
+    Scribe：内部记录员（项目管家）
 
-    - 监听 EventBus，记录所有事件到 process_log.md
-    - 维护项目 kanban.db（状态机 + 交接记录）
-    - 维护 context.md（接力棒数据）
+    4 大通道：
+    - Channel 1: process_log.md — 项目全过程时间线档案
+    - Channel 2: context.md — Agent 间接力棒（Markdown 叙事 + YAML 数据）
+    - Channel 3: kanban.db — 看板状态机（7 状态流转）
+    - Channel 4: handover_notes.md — LLM 生成的交接笔记（持久的项目知识）
+
+    额外能力：
     - LLM 兜底恢复遗漏字段描述（recover_field_descriptions）
+    - 上游摘要生成（get_upstream_summary）
     """
 
     def __init__(self, llm_config: LLMConfig, event_bus: EventBus, project_path: Path) -> None:
@@ -43,9 +49,10 @@ class ScribeAgent:
         # KanbanDB（每个项目一个）
         self.kanban = KanbanDB.get_instance(self.project_path)
 
-        # 文件路径
-        self.process_log_path = self.project_path / "process_log.md"
-        self.context_path = self.project_path / "context.md"
+        # 文件路径 — 4 通道
+        self.process_log_path = self.project_path / "process_log.md"   # Channel 1
+        self.context_path = self.project_path / "context.md"           # Channel 2
+        self.handover_notes_path = self.project_path / "handover_notes.md"  # Channel 4
 
         # 事件钩子
         self._register_hooks()
@@ -53,6 +60,7 @@ class ScribeAgent:
         # 初始化文件
         self._ensure_process_log()
         self._ensure_context()
+        self._ensure_handover_notes()
 
     # ── 初始化 ────────────────────────────────────────────
 
@@ -165,6 +173,12 @@ class ScribeAgent:
                 self.kanban.unblock_task(task["id"])
                 self.kanban.claim_task(task["id"], f"{agent.lower()}_agent")
                 self.kanban.complete_task(task["id"], result)
+
+        # ── Channel 4: 自动生成交接笔记 ──
+        self._auto_generate_handover(agent, event)
+
+        # ── 自动 promote 下游任务 ──
+        self._auto_promote_next(agent)
 
     def _on_agent_failed(self, event) -> None:
         agent = event.agent
@@ -340,6 +354,172 @@ class ScribeAgent:
 
         self.context_path.write_text(content, encoding="utf-8")
 
+    def generate_handover_note(
+        self,
+        from_agent: str,
+        to_agent: str,
+        source_summary: dict,
+        context: dict | None = None,
+    ) -> str:
+        """
+        生成交接笔记（Handover Note），帮助下游 Agent 快速理解上游的全部产出。
+
+        使用 LLM 从上游产出的结构化数据中生成自然语言交接笔记，
+        包含：上游做了什么、关键决策、边界情况、给下游的建议、产出摘要。
+
+        Args:
+            from_agent: 上游 Agent 名（scout/cleaner/analyst）
+            to_agent: 下游 Agent 名（cleaner/analyst/reporter）
+            source_summary: 上游 Agent 的产出摘要 dict
+            context: 当前项目的完整上下文（DataContext，可选）
+
+        Returns:
+            格式化的交接笔记（Markdown 文本）
+        """
+        import json
+
+        phase_map: dict[str, str] = {
+            "scout": "数据侦察",
+            "cleaner": "数据清洗",
+            "analyst": "统计分析",
+            "reporter": "报告生成",
+        }
+
+        from_label = phase_map.get(from_agent, from_agent)
+        to_label = phase_map.get(to_agent, to_agent)
+
+        prompt = f"""你是一位数据分析项目经理，正在生成 "{from_label}" Agent 到 "{to_label}" Agent 的交接笔记。
+
+上游 Agent（{from_label}）的产出摘要：
+{json.dumps(source_summary, ensure_ascii=False, indent=2)}
+
+{"" if context is None else "项目整体上下文：\n" + json.dumps(
+    {
+        k: v for k, v in context.items()
+        if k not in ("_column_profiles", "_sample_values")
+    },
+    ensure_ascii=False,
+    indent=2,
+)}
+
+请生成一份简洁的交接笔记，使用以下 Markdown 格式：
+
+## {from_label} → {to_label} 交接笔记
+
+**{from_label} 工作总结**：
+（一句话总结，50字以内）
+
+**关键决策**：
+- （列出 2-5 个关键决策及其理由）
+
+**需要注意**：
+- （列出 1-3 个边界情况或限制条件）
+
+**给 {to_label} 的建议**：
+- （具体可操作的建议，2-4 条）
+
+**产出摘要**：
+（用表格展示关键数据，Markdown 表格格式）
+
+要求：
+1. 全部用中文
+2. 面向业务用户，禁止出现 dtype/int64/float64 等技术术语
+3. 给下游的建议要具体可操作，不要空泛
+4. 简洁但不遗漏关键信息
+
+只返回交接笔记内容，不要任何其他文字。"""
+
+        try:
+            from ...llm.client import create_quick_client
+
+            client = create_quick_client(self.llm_config)
+            response = client.chat.completions.create(
+                model=self.llm_config.model_quick or self.llm_config.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是数据分析项目经理，只生成结构化的交接笔记。",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            content = response.choices[0].message.content.strip()
+            self._log(f"HANDOVER generated: {from_agent} → {to_agent}")
+            return content
+
+        except Exception:
+            import logging
+
+            logging.getLogger("hagoku").warning(
+                "Scribe LLM handover generation failed for %s → %s, using fallback",
+                from_agent,
+                to_agent,
+            )
+
+            # Fallback: 结构化但不经 LLM 的交接笔记
+            lines: list[str] = [
+                f"## {from_label} → {to_label} 交接笔记",
+                "",
+                f"**{from_label} 工作总结**：",
+                f"{source_summary.get('summary', '完成')}",
+                "",
+                "**产出摘要**：",
+            ]
+            # 尝试从 source_summary 中提取表格数据
+            if "operations" in source_summary:
+                lines.append("")
+                lines.append("| 操作 | 影响 |")
+                lines.append("|------|------|")
+                for op in source_summary.get("operations", [])[:10]:
+                    if isinstance(op, dict):
+                        lines.append(
+                            f"| {op.get('strategy', op.get('column', '-'))} "
+                            f"| {op.get('reason', op.get('rows_affected', '-'))} |"
+                        )
+            elif "results" in source_summary:
+                lines.append("")
+                lines.append("| 分析 | 结果 |")
+                lines.append("|------|------|")
+                for r in source_summary.get("results", [])[:10]:
+                    if isinstance(r, dict):
+                        lines.append(
+                            f"| {r.get('question', r.get('analysis_type', '-'))[:40]} "
+                            f"| {r.get('conclusion_plain', r.get('significance', '-'))[:40]} |"
+                        )
+
+            return "\n".join(lines)
+
+    def _get_context_data(self) -> dict:
+        """读取 context.md 中所有阶段的产出数据，返回聚合 dict。
+
+        供 generate_handover_note 和编排层使用，提供项目的全过程快照。
+        """
+        if not self.context_path.exists():
+            return {}
+
+        content = self.context_path.read_text(encoding="utf-8")
+        result: dict = {}
+
+        # 提取每个阶段的 completed 状态和 data
+        for phase in ("Scout", "Cleaner", "Analyst", "Reporter"):
+            # 匹配 completed 状态
+            completed_match = re.search(
+                rf"## {phase} 产出\n\n```yaml\n(.*?)\n```",
+                content,
+                re.DOTALL,
+            )
+            if completed_match:
+                try:
+                    block = yaml.safe_load(completed_match.group(1))
+                    if isinstance(block, dict):
+                        result[phase.lower()] = block
+                except yaml.YAMLError:
+                    pass
+
+        return result
+
     def get_task_status(self, agent: str) -> dict | None:
         """获取当前 Agent 任务状态（含 done）"""
         task = self.kanban.get_any_task(agent.lower())
@@ -364,6 +544,197 @@ class ScribeAgent:
     def get_stats(self) -> dict:
         """获取看板统计"""
         return self.kanban.get_stats()
+
+    # ── Channel 4: handover_notes.md ─────────────────────
+
+    def _ensure_handover_notes(self) -> None:
+        """确保 handover_notes.md 存在（Channel 4 初始化）"""
+        if not self.handover_notes_path.exists():
+            self.handover_notes_path.write_text(
+                "# 交接笔记（Handover Notes）\n\n"
+                "> 本文件由 Scribe 自动生成，记录每个 Agent 向下游的交接内容。\n"
+                "> 每次上游 Agent 完成后自动追加，形成完整的项目知识传承链。\n\n"
+                "---\n\n",
+                encoding="utf-8",
+            )
+
+    def append_handover_notes(self, note: str) -> None:
+        """追加交接笔记到 handover_notes.md（Channel 4 写入）"""
+        self._ensure_handover_notes()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = f"\n<!-- 生成时间: {timestamp} -->\n\n{note}\n\n---\n"
+        with open(self.handover_notes_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+
+    def get_upstream_summary(self, agent: str) -> str | None:
+        """
+        获取指定 Agent 的上游交接笔记摘要，供编排层注入到下游 Agent prompt。
+
+        返回最近一次从上游到当前 Agent 的交接笔记内容。
+        若 Agent 是第一个（scout），返回 None（无上游）。
+
+        编排层用法：
+            upstream = scribe.get_upstream_summary("analyst")
+            if upstream:
+                analyst_prompt += f"\\n## 上游摘要\\n{upstream}"
+        """
+        if agent.lower() == "scout":
+            return None  # Scout 无上游
+
+        pipeline_order = ["scout", "cleaner", "analyst", "reporter"]
+        try:
+            idx = pipeline_order.index(agent.lower())
+        except ValueError:
+            return None
+
+        if idx == 0:
+            return None
+
+        from_agent = pipeline_order[idx - 1]
+        to_agent = agent.lower()
+
+        # 从 handover_notes.md 中查找对应的交接笔记
+        if not self.handover_notes_path.exists():
+            return None
+
+        content = self.handover_notes_path.read_text(encoding="utf-8")
+
+        # 匹配标题：## 数据侦察 → 数据清洗 交接笔记
+        phase_labels: dict[str, str] = {
+            "scout": "数据侦察",
+            "cleaner": "数据清洗",
+            "analyst": "统计分析",
+            "reporter": "报告生成",
+        }
+
+        from_label = phase_labels.get(from_agent, from_agent)
+        to_label = phase_labels.get(to_agent, to_agent)
+
+        # 最近一次匹配（倒序查找，取最后一个）
+        pattern = rf"## {from_label} → {to_label} 交接笔记\n(.*?)\n---"
+        matches = list(re.finditer(pattern, content, re.DOTALL))
+        if not matches:
+            return None
+
+        # 取最后一个匹配（最近生成的）
+        last_match = matches[-1]
+        note_block = last_match.group(1).strip()
+
+        # 格式化输出：加上标题和上游标识
+        return (
+            f"## 上游摘要（来自 {from_label} 阶段）\n\n"
+            f"> 以下内容由 Scribe 根据 {from_label} Agent 的实际产出自动生成，"
+            f"帮助你理解项目当前的全过程进展。\n\n"
+            f"{note_block}"
+        )
+
+    def _auto_generate_handover(self, agent: str, event) -> None:
+        """上游 Agent 完成后，自动生成交接笔记（LLM 驱动全过程理解版）。
+
+        在 _on_agent_completed 中调用，为下游 Agent 准备上下文。
+        增强点：
+        1. 聚合 context.md 中所有已完成阶段的完整产出数据
+        2. 纳入看板任务链状态（依赖/阻塞/完成）
+        3. 引用已有的历史交接笔记作为延续性上下文
+        4. 将清洗影响（_cleaning_impact）作为交接内容的一部分传递
+        """
+        pipeline = ["scout", "cleaner", "analyst", "reporter"]
+        try:
+            idx = pipeline.index(agent.lower())
+        except ValueError:
+            return
+
+        # Reporter 完成后无下游，无需生成
+        downstream = pipeline[idx + 1] if idx + 1 < len(pipeline) else None
+        if downstream is None:
+            return
+
+        # ==== 构建丰富的上游产出摘要（不再仅依赖 event 中的简短字符串） ====
+        source_summary: dict[str, Any] = {}
+
+        # 1. 从 event 中提取基础摘要
+        raw_summary = event.data.get("result_summary", {})
+        if isinstance(raw_summary, str):
+            source_summary["summary"] = raw_summary
+        elif isinstance(raw_summary, dict):
+            source_summary.update(raw_summary)
+
+        # 2. 聚合 context.md 中所有阶段产出（全过程上下文）
+        ctx = self._get_context_data()
+        phase_ctx = ctx.get(agent.lower(), {})
+
+        # 将上游阶段的 data 注入 source_summary
+        if "data" in phase_ctx and isinstance(phase_ctx["data"], dict):
+            source_summary["phase_data"] = phase_ctx["data"]
+
+        # 3. 纳入所有已完成阶段的关键信息作为"全过程理解"
+        completed_phases: dict[str, dict] = {}
+        for phase_key, phase_data in ctx.items():
+            if phase_data.get("completed") is True or phase_key == agent.lower():
+                completed_phases[phase_key] = {
+                    "completed": phase_data.get("completed", False),
+                    "data_keys": list(phase_data.get("data", {}).keys()) if isinstance(phase_data.get("data"), dict) else [],
+                }
+        source_summary["completed_phases"] = completed_phases
+
+        # 4. 看板状态：当前 pipeline 状态 + Agent 任务链
+        kanban_status = self.get_pipeline_status()
+        source_summary["kanban_status"] = kanban_status
+
+        # 5. 引用已有的历史交接笔记作为延续性上下文
+        prior_handover = ""
+        if self.handover_notes_path.exists():
+            handover_content = self.handover_notes_path.read_text(encoding="utf-8")
+            # 提取最后一条交接笔记的标题和产出摘要（不超过 500 字）
+            last_sections = handover_content.split("---")
+            if len(last_sections) >= 2:
+                prior_handover = last_sections[-2].strip()[:500]
+        if prior_handover:
+            source_summary["_prior_handover_context"] = prior_handover
+
+        # 生成交接笔记（LLM 将以更丰富的上下文生成全过程理解的笔记）
+        note = self.generate_handover_note(
+            from_agent=agent.lower(),
+            to_agent=downstream,
+            source_summary=source_summary,
+            context=phase_ctx,
+        )
+
+        # 追加到 handover_notes.md (Channel 4)
+        self.append_handover_notes(note)
+
+        self._log(f"HANDOVER_SAVED: {agent} → {downstream}")
+
+    def _auto_promote_next(self, agent: str) -> None:
+        """上游 Agent 完成后，自动 promote 下游任务为 ready。
+
+        Scout done → Cleaner ready
+        Cleaner done → Analyst ready
+        Analyst done → Reporter ready
+        Reporter done → Pipeline 完成（父任务 done）
+        """
+        pipeline = ["scout", "cleaner", "analyst", "reporter"]
+        try:
+            idx = pipeline.index(agent.lower())
+        except ValueError:
+            return
+
+        downstream = pipeline[idx + 1] if idx + 1 < len(pipeline) else None
+        if downstream is None:
+            # Reporter 完成 → 所有任务完成
+            self._log("PIPELINE: All agents completed")
+            # 将所有 remaining 任务标记 done
+            for ag in pipeline:
+                task = self.kanban.get_any_task(ag)
+                if task and task["status"] != "done":
+                    self.kanban.update_status(task["id"], "done")
+            return
+
+        # Promote 下游任务
+        task = self.kanban.get_any_task(downstream)
+        if task and task["status"] in ("todo", "triage"):
+            self.kanban.update_status(task["id"], "ready")
+            self._log(f"PROMOTE: {downstream} → ready")
 
     # ── 字段描述恢复（LLM 兜底） ──────────────────────────
 

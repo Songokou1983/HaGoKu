@@ -40,6 +40,54 @@ from ..constants import (
 
 
 
+# 与编排层展示过滤一致：不把「列名（统计类型）」当业务含义
+_TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
+    "分类型",
+    "数值型",
+    "时间型",
+    "文本型",
+    "布尔型",
+    "标识符",
+    "未知类型",
+)
+
+
+def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
+    """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    s = re.sub(r"^[\-\*\•]\s*", "", s)
+    s = re.sub(r"^\d+[\.)]\s*", "", s)
+    if "：" in s:
+        left, right = s.split("：", 1)
+    elif ":" in s:
+        idx = s.find(":")
+        left, right = s[:idx], s[idx + 1 :]
+        if len(left.strip()) > 64:
+            return None
+    else:
+        return None
+    col = left.strip().strip("`").strip()
+    desc = right.strip()
+    if not col or not desc:
+        return None
+    return col, desc
+
+
+def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
+    """判断描述是否具有业务含义（非「列名（类型）」占位）。"""
+    d = (desc or "").strip()
+    c = (col or "").strip()
+    if not d or d == c:
+        return False
+    for suf in _TYPE_ECHO_SUFFIXES:
+        for o, cl in (("（", "）"), ("(", ")")):
+            if d == f"{c}{o}{suf}{cl}":
+                return False
+    return True
+
+
 def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
     """提取样本值直白串，不做格式判断——让 LLM 自行理解。"""
     try:
@@ -440,6 +488,83 @@ class ScoutAgent(InteractionMixin):
             "columns": column_list,
         }
 
+        # ── 跨项目知识检索（增强版：向量检索 + 项目记忆聚合 + 可观测性）──
+        knowledge_notes_parts: list[str] = []
+        seen_field_refs: set[str] = set()  # 去重：不同列可能匹配到同一条知识
+        total_recalled = 0
+        total_accepted = 0
+
+        for col_info in column_list:
+            col_name = col_info["name"]
+            # 1) 向量检索：列名 + 样本值
+            search_query = f"{col_name} {col_info.get('sample_values', '')}"
+            matches = scout_knowledge.recall(search_query, top_k=3)
+            total_recalled += len(matches)
+
+            for match in matches:
+                sim = match.get("similarity", 0)
+                if sim < 0.45:  # 略放宽阈值，让 LLM 最终判断
+                    continue
+                meta = match.get("metadata") or {}
+                ref_key = meta.get("field", match.get("id", ""))
+                if ref_key in seen_field_refs:
+                    continue
+                seen_field_refs.add(ref_key)
+                total_accepted += 1
+                parts: list[str] = []
+                parts.append(f"    历史字段「{meta.get('field', '?')}」")
+                parts.append(f"含义: {meta.get('meaning', '?')}")
+                parts.append(f"数据特征: {meta.get('data_pattern', '?')}")
+                parts.append(f"推断角色: {meta.get('inferred_role', '?')}")
+                if meta.get("project"):
+                    parts.append(f"来源项目: {meta['project']}")
+                if meta.get("confidence") is not None:
+                    parts.append(f"历史置信度: {meta['confidence']:.0%}")
+                knowledge_notes_parts.append("\n".join(parts))
+
+        # 2) 项目记忆聚合：将 memory_project 中的字段也注入知识区
+        if memory_project:
+            fields = memory_project.get("fields", {})
+            display_names = memory_project.get("display_names", {})
+            if fields:
+                # 检查当前数据集中哪些列在项目记忆中有记录
+                matched_cols = [c for c in df.columns if c in fields]
+                if matched_cols:
+                    proj_parts: list[str] = []
+                    proj_parts.append("【本项目记忆 — 以下字段已在过往分析中确认，请直接沿用：】")
+                    for col in matched_cols:
+                        desc = fields[col]
+                        dn = display_names.get(col, "")
+                        line = f"  - {col}"
+                        if dn:
+                            line += f"（中文名称：{dn}）"
+                        line += f"：{desc}"
+                        proj_parts.append(line)
+                    knowledge_notes_parts.append("\n".join(proj_parts))
+
+                    self._emit(EventType.AGENT_THINKING, {
+                        "thought": f"复用项目记忆：{len(matched_cols)} 个字段来自过往分析"
+                    })
+
+        # 3) 可观测性：记录跨项目知识检索效果
+        if total_recalled > 0:
+            self._emit(EventType.AGENT_THINKING, {
+                "thought": (
+                    f"跨项目知识检索：从 {total_recalled} 条候选中采纳 {total_accepted} 条"
+                    f"（复用率 {total_accepted / total_recalled:.0%}）"
+                )
+            })
+
+        knowledge_section = ""
+        if knowledge_notes_parts:
+            knowledge_section = (
+                "\n\n"
+                "【跨项目知识库参考 — 以下是历史分析中类似字段的经验，供参考而非决定：】\n"
+                "这些字段在数据特征和列名上与当前数据集的某些列相似。"
+                "你可以参考这些历史经验来辅助推断，但最终判断需要基于当前数据集的实际情况。\n\n"
+                + "\n\n".join(knowledge_notes_parts)
+            )
+
         # 拼接记忆上下文到 system_prompt
         memory_notes = ""
         if memory_project:
@@ -475,6 +600,7 @@ class ScoutAgent(InteractionMixin):
             "  - target_keywords_from_query: 从用户问题中提取的目标关键词（字符串数组，拆成中文词组，如 ['收入','销售额']）\n"
             "\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
+            f"{knowledge_section}"
             f"{memory_notes}"
         )
 
@@ -834,6 +960,137 @@ class ScoutAgent(InteractionMixin):
             api_key=self.llm_config.api_key,
             timeout=120.0,
         )
+
+    # ── 确定性列推断（供测试与快速判断用） ──────────────────
+
+    def _infer_column(
+        self,
+        series: pd.Series,
+        name: str,
+        target_keywords: list[str] | None = None,
+    ) -> dict:
+        """单列语义推断（硬编码确定性规则，不依赖 LLM）。
+
+        用于快速回归测试和离线判断场景。
+        生产环境优先使用 _infer_all_semantics（LLM 结构化输出）。
+        """
+        target_keywords = target_keywords or []
+        n_unique = series.nunique()
+        n_total = len(series)
+
+        # 100% 唯一 → ID
+        if n_unique == n_total and n_total > 10:
+            return {
+                "column_name": name,
+                "inferred_type": "id",
+                "confidence": 0.95,
+                "evidence": "100%唯一值",
+                "needs_user_input": False,
+                "suggested_role": "identifier",
+            }
+
+        # 日期
+        if pd.api.types.is_datetime64_any_dtype(series):
+            return {
+                "column_name": name,
+                "inferred_type": "datetime",
+                "confidence": 0.95,
+                "evidence": "日期类型",
+                "needs_user_input": False,
+                "suggested_role": "time_index",
+            }
+
+        # 布尔
+        if n_unique == 2 and pd.api.types.is_numeric_dtype(series):
+            vals = set(series.dropna().unique())
+            if vals <= {0, 1} or vals <= {0.0, 1.0} or vals <= {True, False}:
+                return {
+                    "column_name": name,
+                    "inferred_type": "boolean",
+                    "confidence": 0.90,
+                    "evidence": "二元数值(0/1)",
+                    "needs_user_input": False,
+                    "suggested_role": "binary_feature",
+                }
+
+        if n_unique == 2 and not pd.api.types.is_numeric_dtype(series):
+            return {
+                "column_name": name,
+                "inferred_type": "boolean",
+                "confidence": 0.85,
+                "evidence": "2个唯一值",
+                "needs_user_input": False,
+                "suggested_role": "binary_feature",
+            }
+
+        # 数值
+        if pd.api.types.is_numeric_dtype(series):
+            name_lower = name.lower()
+            if any(kw in name_lower for kw in target_keywords):
+                return {
+                    "column_name": name,
+                    "inferred_type": "target",
+                    "confidence": 0.50,
+                    "evidence": "列名含目标关键词",
+                    "needs_user_input": True,
+                    "suggested_role": "target",
+                }
+
+            # 高唯一值（可能为 ID）
+            if n_unique > n_total * 0.8 and not pd.api.types.is_float_dtype(series):
+                vals = series.dropna().sort_values()
+                val_range = vals.max() - vals.min() + 1
+                if val_range <= n_unique * 1.1:
+                    return {
+                        "column_name": name,
+                        "inferred_type": "id",
+                        "confidence": 0.60,
+                        "evidence": f"高唯一值整数列 {n_unique}/{n_total}",
+                        "needs_user_input": True,
+                        "suggested_role": "identifier",
+                    }
+
+            return {
+                "column_name": name,
+                "inferred_type": "numeric",
+                "confidence": 0.90,
+                "evidence": "数值类型",
+                "needs_user_input": False,
+                "suggested_role": "numeric_feature",
+            }
+
+        # 类别
+        if n_unique < 20:
+            return {
+                "column_name": name,
+                "inferred_type": "categorical",
+                "confidence": 0.70,
+                "evidence": f"{n_unique}个唯一值",
+                "needs_user_input": n_unique > 5,
+                "suggested_role": "categorical_feature",
+            }
+
+        # 文本
+        if n_unique > n_total * 0.5:
+            avg_len = series.dropna().str.len().mean() if series.dtype == object else 0
+            if avg_len > 50:
+                return {
+                    "column_name": name,
+                    "inferred_type": "text",
+                    "confidence": 0.60,
+                    "evidence": "高唯一值比+长文本",
+                    "needs_user_input": True,
+                    "suggested_role": "text_feature",
+                }
+
+        return {
+            "column_name": name,
+            "inferred_type": "unknown",
+            "confidence": 0.0,
+            "evidence": "无法推断",
+            "needs_user_input": True,
+            "suggested_role": "unknown",
+        }
 
     # ── 对话接口（供 UI 调用） ──────────────────────────────
 

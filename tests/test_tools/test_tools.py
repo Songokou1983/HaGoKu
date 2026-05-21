@@ -136,7 +136,11 @@ class TestCleaning:
             "x": [1, 2, None, 4, 5, 6, 7, 8, 9, 10],
             "y": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
         })
-        df_clean, report = clean_data(df, auto_strategy=True)
+        # auto_strategy 已移除，LLM 主导需提供 operations
+        strategy, reason = suggest_cleaning_strategy(df, "x", null_rate=0.1)
+        df_clean, report = clean_data(df, operations=[
+            {"column": "x", "strategy": strategy.value, "reason": reason},
+        ])
         # 应该自动检测并处理 x 的缺失
         assert report.total_rows_after > 0
 
@@ -410,7 +414,8 @@ class TestEdgeCases:
 
     def test_clean_empty_dataframe(self):
         df = pd.DataFrame()
-        df_clean, report = clean_data(df, auto_strategy=True)
+        # auto_strategy 已移除; 空 DataFrame 直接返回
+        df_clean, report = clean_data(df)
         assert len(df_clean) == 0
         assert report.total_rows_original == 0
 

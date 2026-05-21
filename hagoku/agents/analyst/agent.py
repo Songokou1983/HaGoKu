@@ -222,30 +222,35 @@ class AnalystAgent(InteractionMixin):
         for warning in power_warnings:
             self._emit(EventType.AGENT_THINKING, {"thought": warning})
 
-        # 执行分析
-        if "regression" in focus or "causal" in focus:
-            result = self._do_regression(df, context, target_col, query)
-            if result:
-                results.append(result)
+        # ==== CHANNEL ZONE: LLM 自主选择分析方法，禁止硬编码分支 ====
+        # LLM 根据数据画像（列类型/角色/缺失率/清洗影响）和用户提问，
+        # 输出结构化分析计划（JSON），代码仅做机械分发，不做语义判断。
+        analysis_steps = self._plan_analysis_via_llm(df, context, target_col, query)
 
-        if "hypothesis_test" in focus or "effect_size" in focus:
-            result = self._do_hypothesis_test(df, context, target_col)
-            if result:
-                results.append(result)
+        if analysis_steps:
+            for step in analysis_steps:
+                atype = step["analysis_type"]
+                if atype == "regression":
+                    result = self._do_regression(df, context, step.get("target_col") or target_col, step.get("question", query))
+                elif atype == "hypothesis_test":
+                    result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col)
+                elif atype == "correlation":
+                    result = self._do_correlation(df, context)
+                elif atype == "trend_analysis":
+                    result = self._do_trend(df, context, step.get("target_col") or target_col)
+                else:
+                    # check_test_assumptions / cross_validate / multiple_comparison_correction / power_analysis
+                    # 这些方法在 _enhance_with_cv 和多重比较校正环节中处理，
+                    # LLM 计划中包含它们表示"建议做"，但分析驱动仍以 regression/hypothesis_test/correlation/trend 为主
+                    continue
 
-        if "correlation" in focus:
-            result = self._do_correlation(df, context)
-            if result:
-                results.append(result)
+                if result:
+                    # 注入 LLM 选择该方法的理由
+                    result["method_reason"] = step.get("reason", "")
+                    result["method_name"] = step.get("method_name", "")
+                    results.append(result)
 
-        if "trend" in focus or "time_series" in focus:
-            result = self._do_trend(df, context, target_col)
-            if result:
-                results.append(result)
-
-        # ==== CHANNEL ZONE: 兜底路径，禁止语义推断 ====
-        # 当所有定向分析方法均未命中时，走自动分析兜底（回归+假设检验+相关）。
-        # 这不是"代码替 LLM 选择方法"，而是"LLM 已给出 focus 但无匹配方法时，代码补全机械调用序列"。
+        # 如果 LLM 计划为空或全部失败，走机械序列兜底
         if not results:
             results = self._auto_analyze(df, context, target_col, query)
 
@@ -680,9 +685,178 @@ class AnalystAgent(InteractionMixin):
         except Exception:
             return None
 
-    # ==== CHANNEL ZONE: 兜底方法序列，禁止语义推断 ====
+    # ==== CHANNEL ZONE: LLM 驱动分析规划，禁止硬编码方法分发 ====
+    def _plan_analysis_via_llm(
+        self, df: "pd.DataFrame", context: dict, target_col: str | None, query: str
+    ) -> list[dict]:
+        """调用 LLM 根据数据画像和用户提问输出结构化分析计划。
+
+        返回分析步骤列表，每项包含：
+        - analysis_type: 分析方法标识
+        - question: 研究问题
+        - target_col: 目标变量（可选）
+        - group_col: 分组变量（可选）
+        - columns: 参与分析的列列表
+        - reason: 为什么选择这个方法（给用户的解释）
+        - method_name: 中文方法名称
+        """
+        import json as _json
+
+        # 构建数据画像摘要
+        col_summaries = []
+        for colname in df.columns:
+            col_sem = next(
+                (s for s in context.get("column_semantics", []) if s.get("column_name") == colname),
+                {},
+            )
+            col_summaries.append({
+                "列名": colname,
+                "类型": col_sem.get("inferred_type", "未知"),
+                "角色": col_sem.get("suggested_role", "未知"),
+                "说明": col_sem.get("description", ""),
+                "缺失率": f"{df[colname].isna().mean():.1%}",
+                "唯一值数": int(df[colname].nunique()),
+            })
+
+        # 构建可用方法描述
+        available_methods = [
+            {"method": "regression", "name": "回归分析", "适用": "有目标变量，想找预测因素（X→Y 的关系）"},
+            {"method": "hypothesis_test", "name": "假设检验", "适用": "比较两组或多组在某个指标上的差异"},
+            {"method": "correlation", "name": "相关性分析", "适用": "探索数值变量之间的两两关系"},
+            {"method": "trend_analysis", "name": "趋势分析", "适用": "有日期列，想看指标随时间的变化"},
+            {"method": "cross_validate", "name": "交叉验证", "适用": "回归模型建好后，验证稳定性（配合 regression 使用）"},
+            {"method": "multiple_comparison_correction", "name": "多重比较校正", "适用": "假设检验做了多次，需要校正 p 值"},
+            {"method": "check_test_assumptions", "name": "检验前提检测", "适用": "在假设检验前检查正态性/方差齐性"},
+            {"method": "power_analysis", "name": "功效分析", "适用": "样本量偏小时，预估需要多少样本才能检测到效应"},
+        ]
+
+        system_prompt = (
+            "你是一位资深数据分析师。根据数据集信息和用户提问，制定一份结构化的分析计划。\n\n"
+            "## 分析计划生成规则\n"
+            "1. 首先理解用户的提问意图（预测？对比？探索？趋势？）\n"
+            "2. 根据意图从可用方法列表中选择最合适的方法\n"
+            "3. 如果有目标变量和多个特征列 → 优先回归分析\n"
+            "4. 如果有分组列和目标变量 → 考虑假设检验\n"
+            "5. 如果有日期列 → 考虑趋势分析\n"
+            "6. 如果用户问题模糊，用相关性分析进行探索\n"
+            "7. 回归/假设检验前建议先做前提检测\n"
+            "8. 样本量 < 50 时建议补充功效分析\n"
+            "9. 不要过度分析——只选最相关的方法，2-3 个步骤通常足够\n"
+            "10. 清洗影响是上游 Cleaner 留下的信息，用于判断数据可靠性，不是分析步骤\n\n"
+            "输出一个 JSON 对象，字段 `steps` 为数组。每项包含：\n"
+            '  - analysis_type: 方法标识（只能从可用方法列表里选）\n'
+            '  - question: 这个分析步骤要回答什么问题（自然语言）\n'
+            '  - target_col: 目标变量列名（regression/hypothesis_test 需填，没有则为 null）\n'
+            '  - group_col: 分组变量列名（hypothesis_test 需填，没有则为 null）\n'
+            '  - columns: 参与分析的列名列表\n'
+            '  - reason: 为什么选这个方法（自然语言，不要出现技术术语）\n'
+            '  - method_name: 方法的中文名称\n'
+        )
+
+        # 清洗影响信息
+        cleaning_impact = context.get("_cleaning_impact", {})
+        cleaning_section = ""
+        if cleaning_impact:
+            cleaning_section = f"\n\n## 数据清洗影响（来自上游 Cleaner）\n```json\n{_json.dumps(cleaning_impact, ensure_ascii=False, default=str)}\n```\n\n请在选择分析方法时考虑：目标变量是否被清洗过，是否存在均值偏移。"
+
+        user_prompt = (
+            f"## 用户提问\n{query}\n\n"
+            f"## 数据集信息\n样本量: {len(df)} 行\n列数: {len(df.columns)} 列\n"
+        )
+        if target_col:
+            user_prompt += f"已识别目标变量: {target_col}\n"
+        user_prompt += f"\n## 列画像\n```json\n{_json.dumps(col_summaries, ensure_ascii=False, default=str)}\n```"
+        user_prompt += f"\n## 可用分析方法\n```json\n{_json.dumps(available_methods, ensure_ascii=False)}\n```"
+        user_prompt += cleaning_section
+
+        from ...llm.client import create_raw_client
+
+        client = create_raw_client(self.llm_config)
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.0,
+                max_tokens=2048,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+        except Exception as e:
+            self._emit(
+                EventType.AGENT_THINKING,
+                {"thought": f"LLM 分析规划失败，回退到机械序列：{e}"},
+            )
+            return []
+
+        # 解析 JSON
+        try:
+            result = _json.loads(raw)
+        except _json.JSONDecodeError:
+            import re
+            try:
+                cleaned = raw.strip()
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+                cleaned = cleaned.strip()
+                result = _json.loads(cleaned)
+            except _json.JSONDecodeError:
+                try:
+                    match = re.search(r"\{.*\}", raw, re.DOTALL)
+                    if match:
+                        result = _json.loads(match.group())
+                    else:
+                        raise
+                except Exception:
+                    self._emit(
+                        EventType.AGENT_THINKING,
+                        {"thought": f"LLM 分析计划 JSON 解析失败，回退到机械序列"},
+                    )
+                    return []
+
+        steps = result.get("steps") or []
+        if not steps:
+            return []
+
+        # 校验并标准化
+        valid_types = {
+            "regression", "hypothesis_test", "correlation",
+            "trend_analysis", "cross_validate",
+            "multiple_comparison_correction", "check_test_assumptions",
+            "power_analysis",
+        }
+        valid_columns = set(df.columns)
+        normalized: list[dict] = []
+        for step in steps:
+            atype = step.get("analysis_type", "")
+            if atype not in valid_types:
+                continue
+            question = step.get("question", "")
+            if not question or not isinstance(question, str):
+                continue
+            tcol = step.get("target_col")
+            if tcol and tcol not in valid_columns:
+                tcol = None
+            gcol = step.get("group_col")
+            if gcol and gcol not in valid_columns:
+                gcol = None
+            cols = [c for c in (step.get("columns") or []) if c in valid_columns]
+            normalized.append({
+                "analysis_type": atype,
+                "question": question,
+                "target_col": tcol,
+                "group_col": gcol,
+                "columns": cols,
+                "reason": step.get("reason", ""),
+                "method_name": step.get("method_name", ""),
+            })
+
+        return normalized
+
     # 此函数是机械调用序列（回归→假设检验→相关），不做任何方法选择语义判断。
-    # 仅在 _run_analysis 的 focus 匹配全部失败时触发。
+    # 仅在 LLM 分析计划失败时作为兜底方案触发。
     def _auto_analyze(self, df, context, target_col, query) -> list[dict]:
         """兜底自动分析：回归 + 假设检验 + 相关（机械序列）"""
         results = []

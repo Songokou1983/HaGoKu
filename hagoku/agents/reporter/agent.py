@@ -233,6 +233,80 @@ class ReporterAgent(InteractionMixin):
         history = self.memory.get("reports", {}).get(project_name, [])
         history_text = json.dumps(history[-3:] if history else [], ensure_ascii=False, indent=2)
 
+        # ── 构建证据溯源字段映射 ───────────────────────────────
+        field_display_names = context.get("column_display_names", {}) or {}
+        field_descriptions = context.get("column_descriptions", {}) or {}
+        column_semantics = context.get("column_semantics", [])
+
+        # 字段溯源映射表：让 LLM 在写结论时能精准引用字段的中文名称
+        field_evidence_lines = []
+        for sem in column_semantics:
+            col = sem.get("column_name", "")
+            if not col:
+                continue
+            sem_type = sem.get("semantic_type", "")
+            display = field_display_names.get(col, "")
+            desc = field_descriptions.get(col, "")
+            parts = [f"  - `{col}`"]
+            if display:
+                parts.append(f"中文名：{display}")
+            if desc:
+                parts.append(f"含义：{desc}")
+            if sem_type:
+                parts.append(f"类型：{sem_type}")
+            field_evidence_lines.append(" | ".join(parts))
+        field_evidence_text = (
+            "\n".join(field_evidence_lines)
+            if field_evidence_lines
+            else "（暂无字段映射）"
+        )
+
+        # ── 清洗操作详情（供局限性引用）───────────────────────
+        cleaning_ops = cleaning_summary.get("operations", []) if cleaning_summary else []
+        cleaning_ops_text = ""
+        if cleaning_ops:
+            ops_lines = []
+            for op in cleaning_ops[:20]:
+                col = op.get("column", "")
+                strat = op.get("strategy", "")
+                reason = op.get("reason", "")[:100]
+                ra = op.get("rows_affected", 0)
+                ops_lines.append(
+                    f"  - `{col}`: {strat}（影响 {ra} 行，原因：{reason}）"
+                )
+            cleaning_ops_text = "\n".join(ops_lines)
+
+        # ── 上游摘要（Scribe 交接笔记）─────────────────────────
+        upstream_summary = context.get("upstream_summary", "") or ""
+
+        # ── 历史对比结构化指引 ─────────────────────────────────
+        history_guidance = ""
+        if history and isinstance(history, list) and len(history) > 0:
+            prev_keys = set()
+            for prev_report in history[-3:]:
+                prev_findings = prev_report.get("key_findings", [])
+                for pf in prev_findings:
+                    if isinstance(pf, str):
+                        prev_keys.add(pf)
+            hist_count = len(history)
+            prev_keys_str = ", ".join(sorted(prev_keys)) if prev_keys else "无"
+            history_guidance = f"""
+## 历史对比指引
+本项目有历史报告（最近 {hist_count} 份）。请在你的输出中增加一个 `history_comparison` section：
+
+**必须做的事**：
+1. 对比本次结论与历史结论的一致性：上次也显著的，这次还显著吗？效应量变了吗？
+2. 标注新增发现：哪些是本次新出现的？（上次没提到）
+3. 标注消失/变化的发现：哪些上次显著这次不显著了？可能的解释是什么？
+4. 变化诊断：如果同一变量的效应量有变化（如系数从 0.82 → 0.75），给一个可能的原因（数据更新？清洗策略不同？控制变量增减？）
+
+历史结论关键词（供对比）：{prev_keys_str}
+"""
+        else:
+            history_guidance = (
+                "\n## 历史对比\n本项目暂无历史报告，本次为首版报告。可跳过历史对比 section。\n"
+            )
+
         user_prompt = f"""## 系统角色
 {self.prompt}
 
@@ -243,8 +317,18 @@ class ReporterAgent(InteractionMixin):
 ## 数据上下文
 {context_text}
 
+## 字段溯源映射（Scout → 证据链）
+每个字段的中文名称和业务含义如下。撰写"关键发现"时，必须引用对应字段的中文名：
+{field_evidence_text}
+
 ## 数据清洗摘要
 {cleaning_text}
+
+## 清洗操作详情（供局限性引用）
+{cleaning_ops_text if cleaning_ops_text else "（无清洗操作）"}
+
+## 上游交接笔记（Analyst → Reporter）
+{upstream_summary if upstream_summary else "（暂无交接笔记）"}
 
 ## 商业指标
 {biz_text}
@@ -254,6 +338,7 @@ class ReporterAgent(InteractionMixin):
 
 ## 历史报告参考
 {history_text}
+{history_guidance}
 
 ## 输出要求
 请严格按照以下 JSON schema 输出报告内容（只输出 JSON，不要任何额外文本）：
@@ -275,7 +360,9 @@ class ReporterAgent(InteractionMixin):
       "effect_size": 0.5,
       "effect_type": "cohen_d",
       "significance": "significant|not_significant",
-      "limitations": ["局限1", "局限2"]
+      "limitations": ["局限1", "局限2"],
+      "evidence_source_fields": ["引用的字段中文名列表"],
+      "cleaning_impact": "该结论受清洗操作的影响说明"
     }}
   ],
   "sections": [
@@ -288,7 +375,20 @@ class ReporterAgent(InteractionMixin):
       "metric_cards": [...],
       "findings": [{{"同 findings_summary 格式"}}]
     }}
-  ]
+  ],
+  "history_comparison": {{
+    "has_history": true/false,
+    "title": "🔄 与历史对比",
+    "content": "历史对比详情（markdown）",
+    "sustained_findings": ["延续的发现"],
+    "new_findings": ["新增发现"],
+    "changed_findings": [{{
+      "topic": "变化主题",
+      "previous": "历史状态",
+      "current": "当前状态",
+      "possible_reason": "可能原因"
+    }}]
+  }}
 }}
 ```
 
@@ -297,8 +397,10 @@ class ReporterAgent(InteractionMixin):
 2. executive_summary 让非技术人员也能看懂
 3. metric_cards 提取 3-5 个最关键指标
 4. 每个 section 包含吸引力层（headline）+ 核心价值层（plain_explanation）
-5. 如果有历史报告，对比标注新发现/变化
-6. 不要编造数据，所有数值必须来自分析结果
+5. 每个 finding 必须包含 evidence_source_fields（引用字段的中文名称，如「广告支出」「用户评分」）
+6. 每个 finding 必须包含 cleaning_impact（说明该结论是否受清洗操作影响）
+7. 如果有历史报告，必须输出 history_comparison section
+8. 不要编造数据，所有数值必须来自分析结果
 """
 
         system = "你是 HaGoKu Studio 的专业报告员。你的任务是把数据分析结果变成一份谁都看得懂的报告。只输出 JSON，不要任何解释。"

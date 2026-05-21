@@ -3,11 +3,11 @@ import react from '@vitejs/plugin-react'
 
 const API_PROXY = {
   "/api": {
-    target: "http://127.0.0.1:8100",
+    target: "http://127.0.0.1:8000",
     changeOrigin: true,
   },
   "/ws": {
-    target: "ws://127.0.0.1:8100",
+    target: "ws://127.0.0.1:8000",
     ws: true,
   },
 } as const;

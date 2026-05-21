@@ -747,7 +747,7 @@ class CleanerAgent(InteractionMixin):
             "rows_before": report.total_rows_original,
             "rows_after": report.total_rows_after,
             "impact_rate": f"{report.impact_rate:.1%}",
-            "operations": [op for op in report.operations],
+            "operations": [op.to_dict() for op in report.operations],
             "distribution_shifts": report.distribution_shift,
             "bias_risk": report.bias_risk,
             "bias_risk_reason": report.bias_risk_reason,
@@ -801,7 +801,7 @@ class CleanerAgent(InteractionMixin):
             )
             # Fallback: 纯数据事实
             ops_summary = ", ".join(
-                f"{op.get('column', '?')}:{op.get('strategy', '?')}"
+                f"{op.to_dict().get('column', '?')}:{op.to_dict().get('strategy', '?')}"
                 for op in report.operations[:10]
             )
             narrative = (

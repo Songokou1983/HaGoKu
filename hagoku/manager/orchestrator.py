@@ -1393,7 +1393,7 @@ class Orchestrator:
 
                 # ── 暂停：清洗结果待用户确认后再记 Cleaner 完成（多轮：仅显式放行才出子循环）──
                 cleaner_results = {
-                    "operations": cleaning_report.operations if cleaning_report else [],
+                    "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
                     "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
                     "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
                 }

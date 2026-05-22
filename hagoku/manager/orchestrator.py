@@ -703,10 +703,14 @@ def _apply_scout_reply_with_llm(
     analysis_goal = (context.get("query") or "").strip()
     field_match_hint = ""
     if analysis_goal:
-        # 提取可能的业务关键词（去停用词后的名词性短语）
         import re as _re
-        # 去掉常见停用词/分析模板词
-        goal_clean = _re.sub(r'(分析|每个|的|是|了|趋势|增长|变化|比较|评估|了解|查看|请|帮我|我要|想|做|一下|一些|什么|哪个|哪些|各|所有|整体|情况|数据)', '', analysis_goal)
+        # 仅移除纯语法功能词和纯分析模板词，**保留**业务含义词（收入、增长、成本等）
+        # 注意：不再移除「增长」「趋势」「变化」——这些是业务语义关键信号
+        goal_clean = _re.sub(
+            r'(分析|每个|的|是|了|比较|评估|了解|查看|请|帮我|我要|想|做|一下|一些'
+            r'|什么|哪个|哪些|各|所有|整体|情况|数据|你|为什么|不)',
+            '', analysis_goal,
+        )
         keywords = [w.strip() for w in goal_clean.split() if len(w.strip()) >= 2]
         if keywords:
             field_match_hint = (
@@ -714,6 +718,20 @@ def _apply_scout_reply_with_llm(
                 "请扫描下方字段表格，找出字段名或已有含义中**匹配这些业务词**的字段（如关键词「收入」→ 匹配字段名含 Inc/Revenue/income 或含义含「收入」的字段），\n"
                 "然后调用 update_field_role 将匹配字段设为 target，并调用 update_field_understanding 补充含义（如果字段表缺少含义）。\n"
                 "即使用户没有明确写下字段名，你也要**主动推断**哪些字段应当作为 target/feature。\n\n"
+            )
+        # ── 隐式字段推导：分析目的含「增长/趋势/变化」信号 ──
+        has_trend_signal = bool(_re.search(r'(增长|趋势|变化|走势)', analysis_goal))
+        numeric_cols_in_table: list[str] = []
+        for sem in semantics:
+            col = str(sem.get("column_name", ""))
+            role = str(sem.get("suggested_role", ""))
+            if col and role not in ("identifier", "ignore") and sem.get("semantic_type") == "numeric":
+                numeric_cols_in_table.append(col)
+        if has_trend_signal and numeric_cols_in_table:
+            field_match_hint += (
+                "**【隐式字段推导】用户的分析目的涉及「增长/趋势/变化」分析，这表明数值列很可能是分析目标。\n"
+                f"当前数值列：{numeric_cols_in_table}。如果这些列中没有任何一个被标记为 target/suggested_role=target，\n"
+                "则你**必须**调用 update_field_role 将包含金额/收入/数量语义的数值列设为 target，并调用 update_field_understanding 设置 used_in_analysis=true。\n\n"
             )
 
     system_msg = (
@@ -757,7 +775,12 @@ def _apply_scout_reply_with_llm(
         "- 用户提及的字段（说明含义/关心它），used_in_analysis 设置为 true。\n"
         "- 请基于用户的分析目的，主动推断并填写 suggested_role（target/feature/identifier/ignore）。\n"
         "- 不要调用工具更新未被用户提及的字段。\n"
-        "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。"
+        "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。\n\n"
+        "最终强制规则（最高优先级）：\n"
+        "- 如果你识别到用户消息包含「为什么不识别」「漏掉了」「需要分析」「为什么没」「你错了」「不对」等抱怨/纠错关键词，\n"
+        "  你**必须至少调用一次** update_field_role 或 update_field_understanding 工具。\n"
+        "  禁止只回复文本解释说「我已理解了」而不做任何实际更新。\n"
+        "  这是硬性要求，违反此规则意味着你没有正确理解用户的意图。"
     )
 
     user_msg = f"用户说：{raw}"

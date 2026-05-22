@@ -128,14 +128,17 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
         if len(d) > 400:
             d = d[:397] + "…"
         mean = _scout_ai_meaning_cell(name, d if d else "", s)
-        role = str(s.get("suggested_role", "")).strip() or "feature"
+        role = str(s.get("suggested_role", "")).strip()
 
+        # used_in_analysis: 用户是否明确指定该字段参与本次分析
+        used_in_analysis = bool(s.get("used_in_analysis")) if "used_in_analysis" in s else None
         rows.append({
             "field_name": name,
             "chinese_name": dname,
             "meaning": mean,
             "needs_attention": uncertain,
             "suggested_role": role,
+            "used_in_analysis": used_in_analysis,
         })
 
     # 分析涉及字段摘要
@@ -476,6 +479,27 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
                             "则可将此字段设为相同或留空。"
                         ),
                     },
+                    "suggested_role": {
+                        "type": "string",
+                        "enum": ["target", "feature", "identifier", "ignore"],
+                        "description": (
+                            "该字段在分析中的建议角色。请基于用户的分析目的和对话上下文主动推断。"
+                            "target: 分析要预测/解释的目标变量（因变量）。"
+                            "feature: 用于解释目标的特征变量（自变量）。"
+                            "identifier: 非分析维度的标识列（如编码、ID、序号）。"
+                            "ignore: 明确不参与分析的字段。"
+                            "如果无法确定则不填此字段。"
+                        ),
+                    },
+                    "used_in_analysis": {
+                        "type": "boolean",
+                        "description": (
+                            "用户是否明确指定该字段参与本次分析。"
+                            "例如用户回复了该字段的含义解释，说明他们关心该字段 → true；"
+                            "若用户说「某字段不参与分析/忽略/不需要」→ false；"
+                            "若用户未提及该字段 → 不设置此字段。"
+                        ),
+                    },
                 },
                 "required": ["column_name"],
             },
@@ -651,15 +675,29 @@ def _apply_scout_reply_with_llm(
 
     field_state = "\n".join(field_state_lines) if field_state_lines else "（尚无任何字段）"
 
+    # ── 分析目的：让 LLM 基于用户分析目标理解字段 ─────────────
+    analysis_purpose_text = ""
+    query_raw = context.get("query", "") or ""
+    if query_raw:
+        analysis_purpose_text = f"用户分析目的：{query_raw}\n"
+
     system_msg = (
         "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
         "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
+        f"{analysis_purpose_text}"
         "当前字段表格状态：\n"
         f"{field_state}\n\n"
         "规则：\n"
         "- 当用户说明了某个字段的含义时，调用 `update_field_understanding` 工具来更新该字段。\n"
-        "- 如果用户说了中文名称（如'Code 叫店铺编号'），请同时更新 display_name 和 description。\n"
+        "- **重要：中文名称（display_name）必须是用户明确给出的简短中文标签。**\n"
+        "- **重要：含义理解（description）是基于中文名称的业务含义扩展。**\n"
+        "- 如果用户说了中文名称（如'Code 叫店铺编号'），请更新 display_name 为中文名，"
+        "同时根据中文名推断含义填入 description（如'店铺的唯一数字标识'）。\n"
+        "- 如果用户在报告中给了简称（如'店铺收入'），这属于中文名称（display_name），"
+        "description 应从该中文名称出发扩展为完整业务含义（如'该店铺当期的总收入金额'）。\n"
         "- 如果用户只解释了含义（如'Code 代表店铺的唯一编号'），只更新 description。\n"
+        "- 如果用户只解释了含义（如'Code 代表店铺的唯一编号'），只更新 description。\n"
+        "- 请基于用户的分析目的，主动推断并填写 suggested_role（字段在分析中的角色）。\n"
         "- 如果用户的说明同时覆盖多个字段，请多次调用工具，每次更新一个字段。\n"
         "- 不要调用工具更新未被用户提及的字段。\n"
         "- 如果用户的输入不涉及字段含义（如纯确认'好的/确认'、闲聊），不要调用任何工具。"
@@ -723,6 +761,7 @@ def _apply_scout_reply_with_llm(
 
                 d_raw = str(args.get("description", "") or "").strip()
                 dn_raw = str(args.get("display_name", "") or "").strip()
+                role_raw = str(args.get("suggested_role", "") or "").strip()
 
                 updated_something = False
                 if d_raw:
@@ -733,6 +772,20 @@ def _apply_scout_reply_with_llm(
                     display_names[c] = dn_raw
                     applied.append(f"{c}:[display]←{dn_raw}")
                     updated_something = True
+                if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
+                    for s in semantics:
+                        if str(s.get("column_name", "")) == c:
+                            s["suggested_role"] = role_raw
+                            applied.append(f"{c}:[role]←{role_raw}")
+                            updated_something = True
+                # 处理 used_in_analysis
+                uia = args.get("used_in_analysis")
+                if uia is not None:
+                    for s in semantics:
+                        if str(s.get("column_name", "")) == c:
+                            s["used_in_analysis"] = bool(uia)
+                            applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
+                            updated_something = True
                 if updated_something:
                     for s in semantics:
                         if str(s.get("column_name", "")) == c:

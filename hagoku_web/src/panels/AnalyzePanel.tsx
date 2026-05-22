@@ -55,6 +55,8 @@ interface FieldReviewPayload {
     /** 建议分析角色：target / feature / identifier（由 Scout 语义推断） */
     suggested_role: string;
     needs_attention?: boolean;
+    /** 用户是否明确指定该字段参与本次分析（true/false/null） */
+    used_in_analysis?: boolean | null;
   }>;
 }
 
@@ -71,8 +73,9 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
       field_name: String(r.field_name ?? ""),
       chinese_name: String(r.chinese_name ?? "—"),
       meaning: String(r.meaning ?? ""),
-      suggested_role: String(r.suggested_role ?? "feature"),
+      suggested_role: String(r.suggested_role ?? "—"),
       needs_attention: Boolean(r.needs_attention),
+        used_in_analysis: "used_in_analysis" in r ? (r.used_in_analysis === null ? null : Boolean(r.used_in_analysis)) : undefined,
     });
   }
   if (rows.length === 0) return null;
@@ -395,16 +398,10 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
   );
 }
 
-function roleLabel(role: string): string {
-  if (role === "target") return "🎯 目标";
-  if (role === "identifier") return "🏷️ 标识";
-  return "📊 特征";
-}
-
 function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
   const summaryLine = data.analysis_fields_summary
     ? data.analysis_fields_summary
-    : `共 ${String(data.n_rows)} 行 × ${data.n_cols} 列 · 四列：字段名称 / 中文名称 / 含义理解 / 分析角色`;
+    : `共 ${String(data.n_rows)} 行 × ${data.n_cols} 列 · 五列：字段名称 / 中文名称 / 含义理解 / 分析角色 / 参与分析`;
   return (
     <div
       className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
@@ -414,12 +411,13 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
         {summaryLine}
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、分析角色</caption>
+        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、分析角色、参与分析</caption>
         <colgroup>
-          <col className="w-[15%]" />
-          <col className="w-[15%]" />
-          <col className="w-[46%]" />
-          <col className="w-[24%]" />
+          <col className="w-[12%]" />
+          <col className="w-[13%]" />
+          <col className="w-[38%]" />
+          <col className="w-[17%]" />
+          <col className="w-[20%]" />
         </colgroup>
         <thead>
           <tr className="bg-app-bg border-b border-app-border">
@@ -432,8 +430,11 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               含义理解
             </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               分析角色
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              参与分析
             </th>
           </tr>
         </thead>
@@ -455,8 +456,11 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
+                <td className="px-2 py-1.5 text-left align-top break-words text-ui-xs border-r border-app-border">
+                  {r.suggested_role || "—"}
+                </td>
                 <td className="px-2 py-1.5 text-left align-top break-words text-ui-xs">
-                  {roleLabel(r.suggested_role)}
+                  {r.used_in_analysis === true ? "是" : r.used_in_analysis === false ? "否" : "—"}
                 </td>
               </tr>
             );

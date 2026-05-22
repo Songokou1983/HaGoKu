@@ -8,7 +8,8 @@ export type PanelId =
   | "knowledge"
   | "kanban"
   | "settings"
-  | "events";
+  | "events"
+  | "commands";
 
 interface WorkspaceStore {
   activeView: PanelId;

@@ -8,6 +8,7 @@ import KnowledgePanel from "./panels/KnowledgePanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import EventPanel from "./panels/EventPanel";
 import KanbanPanel from "./panels/KanbanPanel";
+import CommandsPanel from "./panels/CommandsPanel";
 import {
   FolderKanban,
   BarChart3,
@@ -17,6 +18,7 @@ import {
   Activity,
   List,
   X,
+  BookOpenCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -33,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "kanban",    title: "看板",   Icon: List },
   { id: "events",    title: "运行日志", Icon: Activity },
   { id: "settings",  title: "设置",   Icon: Settings },
+  { id: "commands",  title: "命令指引", Icon: BookOpenCheck },
 ];
 
 const PANEL_MAP: Record<PanelId, ReactNode> = {
@@ -43,6 +46,7 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   kanban:    <KanbanPanel />,
   events:    <EventPanel />,
   settings:  <SettingsPanel />,
+  commands:  <CommandsPanel />,
 };
 
 /** 固定顺序，保证切换侧栏时面板不卸载（避免分析页 local state 被重置） */
@@ -54,6 +58,7 @@ const PANEL_ORDER: PanelId[] = [
   "kanban",
   "events",
   "settings",
+  "commands",
 ];
 
 function SystemStatus() {

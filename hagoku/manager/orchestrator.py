@@ -699,10 +699,28 @@ def _apply_scout_reply_with_llm(
     if query_raw:
         analysis_purpose_text = f"用户分析目的：{query_raw}\n"
 
+    # ── 从分析目的提取关键词，供 LLM 字段匹配 ─────────────
+    analysis_goal = (context.get("query") or "").strip()
+    field_match_hint = ""
+    if analysis_goal:
+        # 提取可能的业务关键词（去停用词后的名词性短语）
+        import re as _re
+        # 去掉常见停用词/分析模板词
+        goal_clean = _re.sub(r'(分析|每个|的|是|了|趋势|增长|变化|比较|评估|了解|查看|请|帮我|我要|想|做|一下|一些|什么|哪个|哪些|各|所有|整体|情况|数据)', '', analysis_goal)
+        keywords = [w.strip() for w in goal_clean.split() if len(w.strip()) >= 2]
+        if keywords:
+            field_match_hint = (
+                f"【关键提醒】用户的分析目的是：「{analysis_goal}」。从目的中提取的关键业务词：{keywords}。\n"
+                "请扫描下方字段表格，找出字段名或已有含义中**匹配这些业务词**的字段（如关键词「收入」→ 匹配字段名含 Inc/Revenue/income 或含义含「收入」的字段），\n"
+                "然后调用 update_field_role 将匹配字段设为 target，并调用 update_field_understanding 补充含义（如果字段表缺少含义）。\n"
+                "即使用户没有明确写下字段名，你也要**主动推断**哪些字段应当作为 target/feature。\n\n"
+            )
+
     system_msg = (
         "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
         "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
         f"{analysis_purpose_text}"
+        f"{field_match_hint}"
         "当前字段表格状态：\n"
         f"{field_state}\n\n"
         "核心规则——中文名称（display_name）vs 含义理解（description）：\n"
@@ -725,6 +743,15 @@ def _apply_scout_reply_with_llm(
         "  Bos2: display_name='店铺费用2'，description='店铺费用类型2的金额'，used_in_analysis=true\n"
         "  Bos3: display_name='店铺费用3'，description='店铺费用类型3的金额'，used_in_analysis=true\n"
         "  注意：编号是为了区分同义字段，格式为「中文标签+编号」不要另设规则。\n\n"
+        "纠错/抱怨识别规则（非常重要）：\n"
+        "- 当用户说「你为什么不识别 XX」「XX 是需要分析的字段」「你漏掉了 XX」时，这不是含义说明，而是**纠错指令**。\n"
+        "  你必须：\n"
+        "  1) 从用户抱怨中提取业务关键词（如「店铺收入的增长趋势」→ 关键词=「收入」）\n"
+        "  2) 扫描字段表格，查找与该关键词匹配的字段（语义匹配，而非精确字符串匹配）\n"
+        "  3) 调用 update_field_role 将匹配字段设为 target，调用 update_field_understanding 补全含义\n"
+        "  4) 如果字段表格中没有任何字段能匹配该关键词，可以只设置 target/feature 角色而不更新含义\n"
+        "  示例：用户说「我要分析的是每个店铺收入的增长趋势，你为什么不识别收入」\n"
+        "  → 关键词「收入」→ 匹配字段名含 Inc/Revenue 的字段 → update_field_role(target='Inc1') + update_field_understanding(column_name='Inc1', display_name='店铺收入')\n\n"
         "其他规则：\n"
         "- 如果用户只解释了含义但未给短标签，仅更新 description，display_name 留空。\n"
         "- 用户提及的字段（说明含义/关心它），used_in_analysis 设置为 true。\n"
@@ -745,8 +772,8 @@ def _apply_scout_reply_with_llm(
         resp = llm_client.chat.completions.create(
             model=llm_model,
             messages=messages,
-            temperature=0.0,
-            max_tokens=512,
+            temperature=0.1,
+            max_tokens=1024,
             tools=_SCOUT_FIELD_UPDATE_TOOLS,
             tool_choice="auto",
         )

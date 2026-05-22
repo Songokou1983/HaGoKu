@@ -105,6 +105,20 @@ def _scout_ai_meaning_cell(column_name: str, meaning_text: str, sem: dict[str, A
     return ""
 
 
+# `suggested_role` 枚举 → 前端展示中文名（全数据集通用，不针对特定字段硬编码）
+_ROLE_DISPLAY_MAP: dict[str, str] = {
+    "target": "目标变量",
+    "feature": "特征",
+    "numeric_feature": "特征",
+    "categorical_feature": "特征",
+    "binary_feature": "特征",
+    "identifier": "标识列",
+    "time_index": "时间索引",
+    "ignore": "不参与",
+    "text_feature": "文本特征",
+    "unknown": "—",
+}
+
 def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     """Scout 暂停：结构化字段表（供前端 HTML 渲染）；`message` 留空，不冒充 Agent 长文。"""
     cols = context.get("column_semantics") or []
@@ -129,6 +143,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
             d = d[:397] + "…"
         mean = _scout_ai_meaning_cell(name, d if d else "", s)
         role = str(s.get("suggested_role", "")).strip()
+        role_display = _ROLE_DISPLAY_MAP.get(role, role)
 
         # used_in_analysis: 用户是否明确指定该字段参与本次分析
         used_in_analysis = bool(s.get("used_in_analysis")) if "used_in_analysis" in s else None
@@ -137,7 +152,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
             "chinese_name": dname,
             "meaning": mean,
             "needs_attention": uncertain,
-            "suggested_role": role,
+            "suggested_role": role_display,
             "used_in_analysis": used_in_analysis,
         })
 
@@ -690,12 +705,17 @@ def _apply_scout_reply_with_llm(
         f"{analysis_purpose_text}"
         "当前字段表格状态：\n"
         f"{field_state}\n\n"
-        "核心规则——中文名称 vs 含义理解：\n"
+        "核心规则——中文名称（display_name）vs 含义理解（description）：\n"
         "- **中文名称（display_name）**：用户给出的简短中文标签（≤8字），如「产品编码」「店铺收入」「店铺积分」。\n"
-        "  当用户说「X 代表/叫/是 Y」且 Y 是短标签（≤8字）时，Y 必须填入 display_name。\n"
-        "- **含义理解（description）**：基于 display_name 的业务含义扩展（完整一句话），如 display_name='店铺收入'\n"
-        "  → description='该店铺在统计周期内的总收入金额'。description 禁止与 display_name 相同，\n"
-        "  禁止直接复制用户原话中的短标签。\n\n"
+        "  当用户说「X 代表/叫/是 Y」且 Y 是短标签（≤8字）时，Y **只能**填入 display_name，**绝对不能**同时填入 description。\n"
+        "- **含义理解（description）**：基于 display_name 的业务含义扩展（完整一句话，含语境补充），\n"
+        "  如 display_name='店铺收入' → description='该店铺在统计周期内的总收入金额'。\n"
+        "  description **必须是独立完整句**，禁止与 display_name 相同，禁止直接复制用户原话中的短标签，\n"
+        "  禁止填「参见中文名称」之类的敷衍文案。\n"
+        "- **严格反例（以下做法全错）**：\n"
+        "  错：用户说「Inc1代表店铺收入」→ display_name='店铺收入', description='店铺收入'（description 与 display_name 相同）\n"
+        "  错：用户说「Inc1代表店铺收入」→ display_name='', description='店铺收入'（短标签写入了 description 而非 display_name）\n"
+        "  对：用户说「Inc1代表店铺收入」→ display_name='店铺收入', description='该店铺当期的总收入金额'\n\n"
         "示例：\n"
         "- 用户说「code代表产品编码」→ display_name='产品编码'，description='唯一标识每个产品的数字编号'\n"
         "- 用户说「Inc1代表店铺收入」→ display_name='店铺收入'，description='该店铺当期的总收入金额'\n"

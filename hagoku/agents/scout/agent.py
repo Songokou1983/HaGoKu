@@ -582,23 +582,56 @@ class ScoutAgent(InteractionMixin):
                         lines.append(f"  - {col}: 含义：{desc}")
                 memory_notes = "\n".join(lines)
 
+        submit_tool = {
+            "type": "function",
+            "function": {
+                "name": "submit_field_inference",
+                "description": "提交字段语义推断结果。调用此工具来报告你对数据集中每个字段的分析结论，包括数据类型、置信度、业务名称和含义理解。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "columns": {
+                            "type": "array",
+                            "description": "每个字段的推断结果",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "原始列名（照抄）"},
+                                    "inferred_type": {"type": "string", "enum": ["id", "datetime", "boolean", "numeric", "categorical", "text", "unknown"], "description": "数据类型"},
+                                    "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "置信度 0~1"},
+                                    "evidence": {"type": "string", "description": "推断依据（自然语言简述）"},
+                                    "needs_user_input": {"type": "boolean", "description": "是否需要用户确认"},
+                                    "suggested_role": {"type": "string", "enum": ["identifier", "time_index", "binary_feature", "target", "numeric_feature", "categorical_feature", "text_feature", "unknown"], "description": "建议角色"},
+                                    "display_name": {"type": "string", "description": "简短中文业务名称（≤6 字，如「收入」「用户ID」）"},
+                                    "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
+                                },
+                                "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"]
+                            }
+                        },
+                        "target_columns": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "从用户问题中识别到的目标变量候选列表（列名数组）"
+                        },
+                        "feature_columns": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "特征变量列表（列名数组）"
+                        },
+                        "target_keywords_from_query": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "从用户问题中提取的目标关键词（拆成中文词组，如 ['收入','销售额']）"
+                        }
+                    },
+                    "required": ["columns", "target_columns", "feature_columns", "target_keywords_from_query"]
+                }
+            }
+        }
+
         system_prompt = (
             "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
-            "输出一个 JSON 对象，字段 `columns` 为数组，每项包含：\n"
-            "  - name: 原始列名（照抄）\n"
-            "  - inferred_type: 数据类型（id/datetime/boolean/numeric/categorical/text/unknown）\n"
-            "  - confidence: 置信度 0~1\n"
-            "  - evidence: 推断依据（自然语言简述，如「100%唯一整数值」、「日期格式」、「0/1 二元值」）\n"
-            "  - needs_user_input: 是否需要用户确认（boolean）\n"
-            "  - suggested_role: 建议角色（identifier/time_index/binary_feature/target/numeric_feature/categorical_feature/text_feature/unknown）\n"
-            "  - display_name: 简短中文业务名称（≤6 字，面向业务同事，如「收入」「用户ID」）\n"
-            "  - description: 业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）\n"
-            "\n"
-            "此外，在根级别同时输出：\n"
-            "  - target_columns: 从用户问题中识别到的目标变量候选列表（列名数组）\n"
-            "  - feature_columns: 特征变量列表（列名数组）\n"
-            "  - target_keywords_from_query: 从用户问题中提取的目标关键词（字符串数组，拆成中文词组，如 ['收入','销售额']）\n"
-            "\n"
+            "你必须调用 submit_field_inference 工具来提交你的分析结果。\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
             f"{knowledge_section}"
             f"{memory_notes}"
@@ -614,33 +647,38 @@ class ScoutAgent(InteractionMixin):
                 ],
                 temperature=SCOUT_INFER_TEMPERATURE,
                 max_tokens=SCOUT_INFER_MAX_TOKENS,
-                response_format={"type": "json_object"},
+                tools=[submit_tool],
+                tool_choice={"type": "function", "function": {"name": "submit_field_inference"}},
             )
-            raw = response.choices[0].message.content or ""
         except Exception as e:
             raise RuntimeError(f"Scout 字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
 
         import json as _json
-        try:
-            result = _json.loads(raw)
-        except _json.JSONDecodeError:
+        raw_text = response.choices[0].message.content or ""
+        tool_calls = response.choices[0].message.tool_calls
+
+        if tool_calls:
+            # 优先：LLM 支持 tool calling，从结构化参数中解析
+            result = _json.loads(tool_calls[0].function.arguments)
+        elif raw_text:
+            # 兜底：LLM 不支持 tool calling，从文本中提取 JSON
+            cleaned = raw_text.strip()
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+            cleaned = cleaned.strip()
             try:
-                cleaned = raw.strip()
-                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-                cleaned = re.sub(r"\s*```\s*$", "", cleaned)
-                cleaned = cleaned.strip()
                 result = _json.loads(cleaned)
             except _json.JSONDecodeError:
-                try:
-                    match = re.search(r"\{.*\}", raw, re.DOTALL)
-                    if match:
-                        result = _json.loads(match.group())
-                    else:
-                        raise
-                except Exception:
+                match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+                if match:
+                    result = _json.loads(match.group())
+                else:
                     raise ValueError(
-                        f"Scout LLM 返回的格式无法解析为 JSON。原始内容前 500 字: {raw[:500]}"
-                    )
+                        f"Scout LLM 未调用工具且返回文本无法解析为 JSON。"
+                        f"原始文本前 500 字: {raw_text[:500]}"
+                    ) from None
+        else:
+            raise ValueError("Scout LLM 既未调用工具，也未返回文本内容")
 
         columns_out = result.get("columns") or result.get("column_semantics") or []
         if not columns_out:

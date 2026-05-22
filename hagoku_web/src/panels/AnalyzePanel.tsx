@@ -401,7 +401,7 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
 function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
   const summaryLine = data.analysis_fields_summary
     ? data.analysis_fields_summary
-    : `共 ${String(data.n_rows)} 行 × ${data.n_cols} 列 · 五列：字段名称 / 中文名称 / 含义理解 / 分析角色 / 参与分析`;
+    : `共 ${String(data.n_rows)} 行 × ${data.n_cols} 列 · 四列：字段名称 / 中文名称 / 含义理解 / 参与分析`;
   return (
     <div
       className="w-full max-w-full border border-app-border rounded-lg bg-app-bg-secondary overflow-x-auto
@@ -411,13 +411,12 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
         {summaryLine}
       </div>
       <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、分析角色、参与分析</caption>
+        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、参与分析</caption>
         <colgroup>
-          <col className="w-[12%]" />
-          <col className="w-[13%]" />
-          <col className="w-[38%]" />
-          <col className="w-[17%]" />
-          <col className="w-[20%]" />
+          <col className="w-[15%]" />
+          <col className="w-[15%]" />
+          <col className="w-[45%]" />
+          <col className="w-[25%]" />
         </colgroup>
         <thead>
           <tr className="bg-app-bg border-b border-app-border">
@@ -429,9 +428,6 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
               含义理解
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              分析角色
             </th>
             <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
               参与分析
@@ -456,11 +452,8 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
-                <td className="px-2 py-1.5 text-left align-top break-words text-ui-xs border-r border-app-border">
-                  {r.suggested_role || "—"}
-                </td>
-                <td className="px-2 py-1.5 text-left align-top break-words text-ui-xs">
-                  {r.used_in_analysis === true ? "是" : r.used_in_analysis === false ? "否" : "—"}
+                <td className="px-2 py-1.5 text-center align-top break-words text-ui-sm">
+                  {r.used_in_analysis === true ? "✔" : ""}
                 </td>
               </tr>
             );

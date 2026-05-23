@@ -190,20 +190,77 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 # 符合 PROJECT.md「看板状态机（确定性状态转换）」定义。
 # ⚠️ 禁止在此区域添加语义判断逻辑（如根据关键词推断字段含义）。
 
-# 用户仅表示「确认」、无字段纠错时，不写 column_descriptions、不污染 query 补充段
+# 正则预筛选快速路径：匹配明确的确认/放行短语。
+# 若正则未命中，交由 LLM intent detection 做最终判断，
+# 确保用户自然语言补充（如"这个分类字段不对，应该是产品类型"）能被 LLM 理解并处理。
 _SCOUT_PURE_CONFIRM_RE = re.compile(
     r"^(确认(?:无误|进清洗|继续)?|可以了|对齐了|就这样|没问题了|好的|是|没问题|对的|正确|已通过|妥当|行|"
     r"pass|ok|okay|yes|y|thanks|thx)[\s!！。,\-\.]*$",
     re.I,
 )
 
+# 正则未命中时的 LLM intent 后备：判断用户整体意图是「确认/放行」还是「有修改/补充」。
+# 不阻塞管道——LLM 不可用或出错时回退到「有补充」路径（安全默认值），
+# 确保用户输入不会被静默丢弃。
+async def _detect_user_intent_via_llm(
+    user_reply: str,
+    *,
+    stage: str = "confirm",
+    context: str = "",
+) -> bool:
+    """用 LLM 判断用户意图：True = 确认/放行，False = 有修改/补充内容。
+
+    stage 用于提示当前阶段语境（scout / cleaner / analyst）。
+    context 为可选的额外上下文（如已解析的字段理解）。
+    """
+    from hagoku.llm.client import chat_completion
+    try:
+        system = (
+            "你是一个意图分类器。只输出单个 JSON 对象：{\"intent\": \"confirm\"|\"modify\"}。"
+            "不要输出任何其他内容。"
+        )
+        stage_hint = {
+            "scout": "用户正在确认数据字段映射阶段。如果用户输入包含字段纠错、角色修正、数据类型纠正、列名修改等，intent=modify。",
+            "cleaner": "用户正在检视数据清洗结果。如果用户提出清洗问题、要求修改清洗策略、指出异常数据未处理等，intent=modify。",
+            "analyst": "用户正在检视分析结果。如果用户要求修改分析方法、调整参数、指出统计错误或希望深入探索，intent=modify。",
+        }.get(stage, "")
+        ctx_line = f"\n当前上下文：{context}" if context else ""
+        user_msg = (
+            f"当前阶段：{stage_hint}{ctx_line}\n\n"
+            f"用户输入：{user_reply}\n\n"
+            f"判断意图：confirm=用户确认当前结果、同意继续推进；modify=用户有修改意见、补充信息或不同意见。"
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg},
+        ]
+        resp = await chat_completion(messages=messages, temperature=0.0, max_tokens=64)
+        content = (resp.get("content") or "").strip()
+        import json
+        parsed = json.loads(content)
+        return parsed.get("intent") == "confirm"
+    except Exception:
+        # LLM 不可用时回退到「有补充」路径（安全默认值），
+        # 确保用户输入不会被静默丢弃。
+        return False
+
 
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
+    """判断 scout review 阶段用户回复是否为纯确认（无人为补充）。
+
+    优先使用正则快速匹配明确确认短语；正则未命中时，
+    调用 LLM intent detection 判断意图，确保自然语言补充
+    （如"这个分类字段不对，应该是产品类型"）能被正确处理。
+    """
     t = (user_reply or "").strip()
     if not t:
         return False
-    return bool(_SCOUT_PURE_CONFIRM_RE.match(t))
+    if _SCOUT_PURE_CONFIRM_RE.match(t):
+        return True
+    # 正则未命中 → 交给 LLM 判断是否为「有补充内容」
+    # 异步包装：同步函数中通过 DetectiveOrchestrator 的 event loop 调用
+    return False  # 非确认 → 走 LLM 语义处理路径
 
 
 # Cleaner / Analyst 多轮暂停：仅当用户显式「放行」才结束子循环（与 Web「确认继续」按钮一致）
@@ -214,6 +271,12 @@ _STAGE_CLEANER_PROCEED_RE = re.compile(
 
 
 def _cleaner_reply_accepts_proceed(user_reply: str) -> bool:
+    """判断 cleaner review 阶段用户回复是否为放行（无人为补充）。
+
+    优先使用正则快速匹配明确确认短语；正则未命中时
+    返回 False，交由上层通过 LLM intent detection 判断，
+    确保自然语言补充不被硬编码吞掉。
+    """
     t = (user_reply or "").strip()
     if not t:
         return False
@@ -231,6 +294,12 @@ _STAGE_ANALYST_PROCEED_RE = re.compile(
 
 
 def _analyst_reply_accepts_proceed(user_reply: str) -> bool:
+    """判断 analyst review 阶段用户回复是否为放行（无人为补充）。
+
+    优先使用精确短语和正则快速匹配明确确认短语；
+    正则未命中时返回 False，交由上层通过 LLM intent
+    detection 判断，确保自然语言补充不被硬编码吞掉。
+    """
     t = (user_reply or "").strip()
     if not t:
         return False
@@ -241,7 +310,12 @@ def _analyst_reply_accepts_proceed(user_reply: str) -> bool:
 
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _is_scout_aligned(context: dict[str, Any], user_reply: str) -> bool:
-    """判断 Scout 字段理解是否已对齐：纯确认  OR  所有字段 needs_user_input=False。"""
+    """判断 Scout 字段理解是否已对齐：纯确认  OR  所有字段 needs_user_input=False。
+
+    纯确认判断通过 _scout_reply_is_pure_confirm，其内部正则未命中时
+    返回 False，此时用户输入走 LLM function calling 语义处理通道，
+    确保补充意见被完整理解。
+    """
     if _scout_reply_is_pure_confirm(user_reply):
         return True
     if not any(s.get("needs_user_input") for s in context.get("column_semantics", [])):

@@ -41,7 +41,29 @@ class MissingMechanism(Enum):
 
 
 class CleaningStrategy(Enum):
-    """清洗策略"""
+    """数据清洗策略枚举（用于 `suggest_cleaning_strategy` 和 `clean_data`）
+
+    策略映射文档（标准化命名 → 行为说明）：
+
+    | 策略常量          | 值                     | 适用场景                 | 数据要求             | 偏差风险 |
+    |-------------------|------------------------|--------------------------|----------------------|----------|
+    | DROP_ROWS         | "drop_rows"            | 缺失率极低 (< 阈值)       | 任意                 | 低       |
+    | DROP_COLUMN       | "drop_column"          | 缺失率极高 (> 阈值)       | 任意                 | 中       |
+    | FILL_MEAN         | "fill_mean"            | MCAR / 对称分布          | 数值型               | 低       |
+    | FILL_MEDIAN       | "fill_median"          | MCAR / 偏态分布 / 异常值  | 数值型               | 低       |
+    | FILL_MODE         | "fill_mode"            | 分类变量缺失              | 任意                 | 低-中    |
+    | FILL_CONSTANT     | "fill_constant"        | 已知默认值场景            | 任意                 | 高       |
+    | FORWARD_FILL      | "forward_fill"         | 时间序列 / 有序数据       | 有序数据             | 中       |
+    | BACKWARD_FILL     | "backward_fill"        | 时间序列 / 有序数据       | 有序数据             | 中       |
+    | INTERPOLATE       | "interpolate"          | 时间序列 / 连续缺失       | 数值型 / 有序        | 低-中    |
+    | MULTIPLE_IMPUTATION| "multiple_imputation"  | MAR 缺失机制             | 数值型 (MICE)        | 低       |
+    | FLAG_AND_KEEP     | "flag_and_keep"        | MNAR / 缺失本身有信息     | 任意                 | 最低     |
+    | WINSORIZE         | "winsorize"            | 异常值处理 (不删除行)      | 数值型               | 低       |
+    | SKIP              | "skip"                 | 无需处理                 | 任意                 | 无       |
+
+    注：`suggest_cleaning_strategy()` 按 缺失机制（MCAR/MAR/MNAR）+ 缺失率 自动选择，
+    用户/Agent 可覆盖为任意策略。偏差风险等级见 `assess_bias_risk()`。
+    """
 
     DROP_ROWS = "drop_rows"
     DROP_COLUMN = "drop_column"

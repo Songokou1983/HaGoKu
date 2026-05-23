@@ -6,9 +6,36 @@
 
 from __future__ import annotations
 
-from typing import Any
+import os
+from contextlib import contextmanager
+from typing import Any, Generator
 
 from ..config import LLMConfig
+
+# 需要清理的代理环境变量 key 列表，避免 socks:// 等不被 httpx 支持的 scheme
+_PROXY_ENV_KEYS = [
+    "ALL_PROXY", "all_proxy",
+    "HTTP_PROXY", "http_proxy",
+    "HTTPS_PROXY", "https_proxy",
+]
+
+
+@contextmanager
+def _clear_proxy_env() -> Generator[None, None, None]:
+    """清理代理环境变量，避免 httpx 对 socks:// 等不支持 scheme 抛出 ValueError。
+
+    适用于 LLM 服务为本地/内网访问、无需代理的场景。
+    退出上下文时自动恢复原始值。
+    """
+    _saved = {k: os.environ.pop(k, None) for k in _PROXY_ENV_KEYS}
+    try:
+        yield
+    finally:
+        for k, v in _saved.items():
+            if v is not None:
+                os.environ[k] = v
+            elif k in os.environ:
+                del os.environ[k]
 
 
 def create_structured_llm_client(llm_config: LLMConfig) -> Any:
@@ -25,21 +52,10 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
         ImportError: 如果 openai 未安装
     """
     try:
-        import httpx
         import instructor
-        import os
         from openai import OpenAI
 
-        # 清除 ALL_PROXY 等环境变量，避免 socks:// 等不被 httpx 支持的 scheme
-        # 导致 ValueError（LLM 服务为本地/内网访问，无需代理）
-        _proxy_keys = [
-            "ALL_PROXY", "all_proxy",
-            "HTTP_PROXY", "http_proxy",
-            "HTTPS_PROXY", "https_proxy",
-        ]
-        _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
-
-        try:
+        with _clear_proxy_env():
             client = instructor.from_openai(
                 OpenAI(
                     base_url=llm_config.base_url,
@@ -49,37 +65,16 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
                 mode=instructor.Mode.JSON,
             )
             return client
-        finally:
-            # 恢复环境变量
-            for k, v in _saved.items():
-                if v is not None:
-                    os.environ[k] = v
-                elif k in os.environ:
-                    del os.environ[k]
     except ImportError:
         # 退回原始 OpenAI（无结构化输出）
-        import os
         from openai import OpenAI
 
-        _proxy_keys = [
-            "ALL_PROXY", "all_proxy",
-            "HTTP_PROXY", "http_proxy",
-            "HTTPS_PROXY", "https_proxy",
-        ]
-        _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
-
-        try:
+        with _clear_proxy_env():
             return OpenAI(
                 base_url=llm_config.base_url,
                 api_key=llm_config.api_key,
                 timeout=120.0,
             )
-        finally:
-            for k, v in _saved.items():
-                if v is not None:
-                    os.environ[k] = v
-                elif k in os.environ:
-                    del os.environ[k]
 
 
 def create_raw_client(config: Any) -> Any:
@@ -88,30 +83,16 @@ def create_raw_client(config: Any) -> Any:
 
     适用于需要 raw chat.completions.create() 的场景（如 Scout 的 JSON mode）。
     """
-    import os
     from openai import OpenAI
 
     llm = _unwrap_llm(config)
 
-    _proxy_keys = [
-        "ALL_PROXY", "all_proxy",
-        "HTTP_PROXY", "http_proxy",
-        "HTTPS_PROXY", "https_proxy",
-    ]
-    _saved = {k: os.environ.pop(k, None) for k in _proxy_keys}
-
-    try:
+    with _clear_proxy_env():
         return OpenAI(
             base_url=llm.base_url,
             api_key=llm.api_key,
             timeout=120.0,
         )
-    finally:
-        for k, v in _saved.items():
-            if v is not None:
-                os.environ[k] = v
-            elif k in os.environ:
-                del os.environ[k]
 
 
 def _unwrap_llm(config: Any) -> LLMConfig:

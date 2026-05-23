@@ -34,9 +34,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HaGoKu Studio API", version="0.1.0", lifespan=lifespan)
 
+# 环境区分：生产环境锁定 CORS，开发环境开放
+_hagoku_env = os.environ.get("HAGOKU_ENV", "").strip().lower()
+if _hagoku_env in ("production", "prod"):
+    _cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+else:
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -284,10 +291,9 @@ async def test_llm_connection(req: LlmTestBody):
 
     try:
         from openai import OpenAI
+        from hagoku.llm.client import _clear_proxy_env
 
-        _proxy_keys = ["ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"]
-        _saved = {k: _os.environ.pop(k, None) for k in _proxy_keys}
-        try:
+        with _clear_proxy_env():
             client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
             response = client.chat.completions.create(
                 model=model,
@@ -295,12 +301,6 @@ async def test_llm_connection(req: LlmTestBody):
                 max_tokens=4,
                 temperature=0,
             )
-        finally:
-            for k, v in _saved.items():
-                if v is not None:
-                    _os.environ[k] = v
-                elif k in _os.environ:
-                    del _os.environ[k]
 
         content = response.choices[0].message.content or ""
         return {

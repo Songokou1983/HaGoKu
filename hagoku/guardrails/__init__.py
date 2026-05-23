@@ -1,5 +1,18 @@
 """HaGoKu Studio 统计护栏"""
 
+from .parsers import (
+    check_p_ci_consistency,
+    deep_validate,
+    detect_hallucination_indicators,
+    is_valid_ci,
+    is_valid_effect_size,
+    is_valid_pvalue,
+    parse_confidence_interval,
+    parse_conclusion_count,
+    parse_effect_size,
+    parse_pvalue,
+    validate_analysis_output,
+)
 from .statistical import (
     AssumptionsViolated,
     CleaningHighImpact,
@@ -22,6 +35,7 @@ from .statistical import (
 )
 
 __all__ = [
+    # statistical rules
     "AssumptionsViolated",
     "CleaningHighImpact",
     "ConsiderPowerAnalysis",
@@ -40,4 +54,16 @@ __all__ = [
     "StatisticalGuardrails",
     "SuggestInteraction",
     "SuggestNonlinear",
+    # parsers — 提取 & 校验
+    "check_p_ci_consistency",
+    "deep_validate",
+    "detect_hallucination_indicators",
+    "is_valid_ci",
+    "is_valid_effect_size",
+    "is_valid_pvalue",
+    "parse_confidence_interval",
+    "parse_conclusion_count",
+    "parse_effect_size",
+    "parse_pvalue",
+    "validate_analysis_output",
 ]

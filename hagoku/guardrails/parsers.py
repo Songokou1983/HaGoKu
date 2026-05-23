@@ -116,3 +116,146 @@ def validate_analysis_output(text: str) -> dict[str, bool]:
         "has_conclusion": parse_conclusion_count(text) is not None,
         "has_confidence": parse_confidence_interval(text) is not None,
     }
+
+
+# ── 合理性校验层 ────────────────────────────────────────────────
+
+
+def is_valid_pvalue(p: float | None) -> bool:
+    """p 值必须在 [0, 1] 范围内。超出此范围说明 LLM 幻觉或解析错误。"""
+    if p is None:
+        return False
+    return 0.0 <= p <= 1.0
+
+
+def is_valid_effect_size(d: float | None) -> bool:
+    """效应量必须 ≥ 0（Cohen's d 取绝对值，η² 天然非负）。
+    允许一个宽松上界 (10.0) 来捕获异常大的幻觉值。"""
+    if d is None:
+        return False
+    return 0.0 <= d <= 10.0
+
+
+def is_valid_ci(lower: float | None, upper: float | None) -> bool:
+    """置信区间：lower < upper，且区间宽度不超过 1000（防幻觉）。"""
+    if lower is None or upper is None:
+        return False
+    width = upper - lower
+    return lower < upper and abs(width) <= 1000.0
+
+
+def check_p_ci_consistency(p: float | None, ci: tuple[float, float] | None) -> dict[str, any]:
+    """
+    检查 p 值与置信区间的一致性。
+
+    如果 p < 0.05（显著），则 95% CI 不应跨越零（均值差场景）。
+    如果 p ≥ 0.05（不显著），则 CI 应包含零。
+
+    返回 {"consistent": bool, "detail": str}
+    """
+    if p is None or ci is None:
+        return {"consistent": True, "detail": "无法判断（缺少 p 或 CI）"}
+    lower, upper = ci
+    crosses_zero = (lower <= 0 <= upper)
+    is_significant = p < 0.05
+
+    if is_significant and crosses_zero:
+        return {
+            "consistent": False,
+            "detail": f"p={p:.4f}<0.05（显著）但 CI=[{lower:.3f}, {upper:.3f}] 跨越零，存在矛盾",
+        }
+    if (not is_significant) and (not crosses_zero):
+        return {
+            "consistent": False,
+            "detail": f"p={p:.4f}≥0.05（不显著）但 CI=[{lower:.3f}, {upper:.3f}] 不跨越零，存在矛盾",
+        }
+    return {"consistent": True, "detail": "p 值与 CI 一致"}
+
+
+def detect_hallucination_indicators(text: str) -> list[str]:
+    """
+    检测 LLM 输出中可能的幻觉指标。
+
+    检查项：
+      - 无法识别的统计测试名称
+      - 数值超出合理范围（p > 1, 样本量为负等）
+      - 自相矛盾的陈述（同时声称"显著"和"不显著"）
+
+    返回发现的可疑项列表。
+    """
+    warnings: list[str] = []
+
+    # 1. 检查 p 值是否超出 [0,1]
+    p = parse_pvalue(text)
+    if p is not None and not is_valid_pvalue(p):
+        warnings.append(f"p 值 {p} 不在 [0,1] 范围，可能存在幻觉")
+
+    # 2. 检查效应量是否异常
+    d = parse_effect_size(text)
+    if d is not None and not is_valid_effect_size(d):
+        warnings.append(f"效应量 {d} 异常，可能存在幻觉")
+
+    # 3. 检查 CI 是否合法
+    ci = parse_confidence_interval(text)
+    if ci is not None and not is_valid_ci(*ci):
+        warnings.append(f"置信区间 [{ci[0]}, {ci[1]}] 不合法")
+
+    # 4. 检查自相矛盾陈述
+    has_significant = bool(re.search(r"(?:显著|significant|p\s*[<≤]\s*0\.0[0-5])", text, re.IGNORECASE))
+    has_not_significant = bool(re.search(r"(?:不显著|not\s*significant|无显著|no\s*significant|p\s*[>≥]\s*0\.0[0-5])", text, re.IGNORECASE))
+    if has_significant and has_not_significant:
+        # 在相同上下文中同时声称显著和不显著（可能在讨论不同变量，所以只是警告级别）
+        warnings.append('文本中同时包含「显著」和「不显著」陈述，请确认是否有矛盾')
+
+    # 5. 检查 p 值与 CI 一致性
+    if p is not None and ci is not None:
+        consistency = check_p_ci_consistency(p, ci)
+        if not consistency["consistent"]:
+            warnings.append(consistency["detail"])
+
+    return warnings
+
+
+def deep_validate(text: str) -> dict[str, any]:
+    """
+    深度校验 LLM 分析输出，合并结构完整性和合理性检查。
+
+    返回：
+      - structure: 结构完整性 dict
+      - p_value_valid: p 值是否在合理范围
+      - effect_size_valid: 效应量是否合理
+      - ci_valid: 置信区间是否合法
+      - p_ci_consistent: p 值与 CI 是否一致
+      - hallucination_warnings: 幻觉可疑项列表
+      - overall_healthy: 整体是否健康（无结构缺失且无幻觉）
+    """
+    structure = validate_analysis_output(text)
+    p = parse_pvalue(text)
+    d = parse_effect_size(text)
+    ci = parse_confidence_interval(text)
+
+    p_ok = is_valid_pvalue(p) if p is not None else None  # None = 无 p 值，不算错
+    d_ok = is_valid_effect_size(d) if d is not None else None
+    ci_ok = is_valid_ci(*ci) if ci is not None else None
+    consistency = check_p_ci_consistency(p, ci) if p is not None and ci is not None else {"consistent": True, "detail": "无足够数据比较"}
+
+    warnings = detect_hallucination_indicators(text)
+
+    overall = bool(
+        structure.get("has_conclusion", False)
+        and len(warnings) == 0
+    )
+
+    return {
+        "structure": structure,
+        "p_value_raw": p,
+        "p_value_valid": p_ok,
+        "effect_size_raw": d,
+        "effect_size_valid": d_ok,
+        "ci_raw": ci,
+        "ci_valid": ci_ok,
+        "p_ci_consistent": consistency["consistent"],
+        "p_ci_detail": consistency["detail"],
+        "hallucination_warnings": warnings,
+        "overall_healthy": overall,
+    }

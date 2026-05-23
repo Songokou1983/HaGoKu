@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from ...config import LLMConfig
+from ...config import KnowledgeConfig, LLMConfig
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.data_io import load_data
@@ -25,6 +25,9 @@ from ...tools.profiling import generate_profile
 from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as scout_knowledge
+
+# 模块级知识库配置（可通过 YAML 覆盖）
+_kconfig = KnowledgeConfig()
 
 from ..constants import (
     SCOUT_CONFIRM_MAX_TOKENS,
@@ -503,7 +506,7 @@ class ScoutAgent(InteractionMixin):
 
             for match in matches:
                 sim = match.get("similarity", 0)
-                if sim < 0.45:  # 略放宽阈值，让 LLM 最终判断
+                if sim < _kconfig.similarity_threshold:
                     continue
                 meta = match.get("metadata") or {}
                 ref_key = meta.get("field", match.get("id", ""))
@@ -1016,6 +1019,18 @@ class ScoutAgent(InteractionMixin):
         )
 
     # ── 确定性列推断（供测试与快速判断用） ──────────────────
+    #
+    # ==== CHANNEL ZONE 警告 ====
+    # 此函数包含硬编码语义规则（如 "n_unique == n_total → ID"），
+    # 与项目核心的 CHANNEL ZONE 设计原则（代码不做语义理解）存在张力。
+    #
+    # 设计意图：
+    #   - 本函数仅用于：1) 自动化回归测试  2) LLM 不可用时的离线兜底
+    #   - **生产数据路径应始终走 _infer_all_semantics（LLM 结构化输出）**
+    #   - 新增硬编码规则前必须评估：LLM 能否覆盖此场景？能 → 不添加
+    #
+    # 如果未来 LLM 推理可靠性持续提升，此函数应考虑废弃。
+    # ==================================================
 
     def _infer_column(
         self,
@@ -1025,8 +1040,24 @@ class ScoutAgent(InteractionMixin):
     ) -> dict:
         """单列语义推断（硬编码确定性规则，不依赖 LLM）。
 
-        用于快速回归测试和离线判断场景。
-        生产环境优先使用 _infer_all_semantics（LLM 结构化输出）。
+        **离线/测试专用函数。生产数据路径优先使用 _infer_all_semantics（LLM 结构化输出）。**
+
+        硬编码规则覆盖以下场景（按优先级排序）：
+          1. 100% 唯一值 → ID（置信度 0.95）
+          2. datetime64 类型 → datetime（置信度 0.95）
+          3. 二元值 (0/1) → boolean（置信度 0.90）
+          4. 2 个唯一值 → boolean（置信度 0.85）
+          5. 数值 + 列名含目标关键词 → target（置信度 0.50，需确认）
+          6. 80%+ 唯一值的整数列 → id（置信度 0.60，需确认）
+          7. 数值类型 → numeric（置信度 0.90）
+          8. <20 个唯一值 → categorical
+          9. 高唯一值比 + 长文本 → text
+          10. 其他 → unknown
+
+        局限性：
+          - 无法理解列名的业务语义（如 "AOV" 是什么）
+          - 无法处理混合类型列（如 "是"/"否" 中文编码的布尔值）
+          - 高唯一值整数列的 ID/数值区分精度不高
         """
         target_keywords = target_keywords or []
         n_unique = series.nunique()

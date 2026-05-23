@@ -4,6 +4,17 @@
 > 审计范围: `hagoku/agents/` 下全部 Agent 实现及其交叉引用链路
 > 审计方法: 全项目 `import` 扫描 + 逐文件对比
 
+## 背景
+
+在对 `hagoku/agents/` 目录进行代码与文档审计时，发现项目中同时存在两套 Agent 实现结构：
+
+1. **扁平 `.py` 文件**（如 `scout.py`、`analyst.py`、`cleaner.py`），继承自 `DataAgentBase`，prompt 硬编码于代码内
+2. **包目录**（如 `scout/`、`analyst/`、`cleaner/`、`reporter/`、`_scribe/`），各自包含 `agent.py`、`prompt.md`、`memory.md`、`knowledge.py` 等文件，继承自 `InteractionMixin`
+
+这两套结构并存引发了核心疑问：**究竟是项目存在两套独立可运行的 Agent 代码（旧版 + 新版），还是两套代码在运行时被交叉调用、混合使用？** 如果是后者，哪些文件实际参与运行，哪些是未完成的迁移遗留？
+
+本报告旨在通过全项目 `import` 扫描 + 逐文件对比，彻底厘清所有 Agent 类的运行时引用关系，为后续代码清理或统一迁移提供事实依据。
+
 ## 一、文件清单
 
 ### 扁平 `.py` 文件（顶层）

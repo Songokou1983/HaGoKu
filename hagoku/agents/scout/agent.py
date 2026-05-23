@@ -52,29 +52,6 @@ _TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
 )
 
 
-def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
-    """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
-    s = (raw or "").strip()
-    if not s:
-        return None
-    s = re.sub(r"^[\-\*\•]\s*", "", s)
-    s = re.sub(r"^\d+[\.)]\s*", "", s)
-    if "：" in s:
-        left, right = s.split("：", 1)
-    elif ":" in s:
-        idx = s.find(":")
-        left, right = s[:idx], s[idx + 1 :]
-        if len(left.strip()) > 64:
-            return None
-    else:
-        return None
-    col = left.strip().strip("`").strip()
-    desc = right.strip()
-    if not col or not desc:
-        return None
-    return col, desc
-
-
 def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
     """判断描述是否具有业务含义（非「列名（类型）」占位）。"""
     d = (desc or "").strip()

@@ -35,9 +35,9 @@
 
 | 缺口 | 说明 |
 |------|------|
-| **Phase 0 未书面闭合** | 口语「对齐」词表仍主要依赖 `_scout_reply_is_pure_confirm` 正则；**「可以了」等**若未写入词表，在仍有 `needs_user_input=True` 时会**继续循环暂停**（用户须改字段或发已支持短句，或点「重置分析」）。产品应在 Phase 0 定稿词表或改为显式 intent。 |
+| **Phase 0 未书面闭合（正则栈）** | 口语「对齐」词表仍主要依赖 `_scout_reply_is_pure_confirm` 正则；注：`_detect_user_intent_via_llm` 已在 `orchestrator.py:205` 声明但**未被调用**（死代码），docstring 暗示集成但实际走 `_apply_scout_reply_with_llm` function calling 通道。Cleaner/Analyst 放行判定同样仅靠正则（`_cleaner_reply_accepts_proceed` / `_analyst_reply_accepts_proceed`），正则未命中 → `False` → 子循环继续暂停。「可以了」等若未录入词表且在仍有 `needs_user_input=True` 时会继续循环暂停（用户须改字段或点「重置分析」）。产品应定稿词表或启用 LLM intent 后备。 |
 
-**结论**：Scout **阶段内多轮对齐**、**跨阶段闸门**与 **Cleaner / Analyst 阶段内多轮 + 显式放行（C5）**已具备工程形态；Phase 0 词表书面闭合等仍按 §5 推进。
+**结论**：Scout **阶段内多轮对齐**、**跨阶段闸门**与 **Cleaner / Analyst 阶段内多轮 + 显式放行（C5）**已具备工程形态；**确认/纠错判定仍为纯正则栈**（`_detect_user_intent_via_llm` 声明未调用），Phase 0 词表书面闭合与 LLM intent 后备启用仍按 §5 推进。
 
 ### 2.3 Cleaner / Analyst（同路径）
 

@@ -9,8 +9,8 @@
 | C1 | **Cleaner 暂停**不得再走「冒充 Agent 长谈」的写死客服话术路径 | 旧版 `_fallback_pause_message("cleaner")` 中「数据质量检测完成…特别想保留/排除…」整段 |
 | C2 | **Scout / Cleaner / Analyst 暂停**：`user_input_requested` 主载荷须为结构化 `field_review` / `cleaning_review` / `analyst_review`，`message` 可为空；**不得**把整表 Markdown 或「冒充 Agent」长段塞进单一 `message` | 旧 Markdown 三列表串；Analyst 仅用 LLM 生成整段暂停台词 |
 | C3 | **用户纠错须写进状态**：Scout 暂停后用户自然语言/结构化纠错须进入 `context`（如 `column_descriptions`），**不得**仅追加 `[用户补充]` 到 `query` 而无上下文更新。通过 function calling 工具 `update_field_understanding` 的参数（`column_name`, `display_name`, `description`）直达字段状态，LLM 自主决定更新哪些字段。 | 「code means …」被忽略 |
-| C4 | **Scout 多轮对齐 + 闸门**：在仍有 `needs_user_input=True` 或用户未发「纯确认」前，编排**须**保持 Scout 子循环；每次 `user_input_requested` 的 Scout 载荷**须**含递增的 **`interaction_revision`**；Scout 对齐后**不得**跳过闸门直接调用 `cleaner.run()`；闸门拒绝（回复含「补充/还有/改」）须回 FieldReviewLoop | 单次 `respond` 后无条件进清洗；无 `interaction_revision`；对齐后不经闸门直接进 Cleaner |
-| C5 | **Cleaner / Analyst 多轮 + 显式放行**：阶段内可多次 `user_input_requested`（载荷含递增的 `interaction_revision`）；**不得**在用户未发「放行」短语（如「确认继续」及契约列出的同义短句）前结束该子循环并 `emit AGENT_COMPLETED` | 任意自然语言一句即结束清洗/分析暂停并进入下一阶段 |
+| C4 | **Scout 多轮对齐 + 闸门**：在仍有 `needs_user_input=True` 或用户未发「纯确认」前，编排**须**保持 Scout 子循环；每次 `user_input_requested` 的 Scout 载荷**须**含递增的 **`interaction_revision`**；Scout 对齐后**不得**跳过闸门直接调用 `cleaner.run()`；闸门拒绝（回复含「补充/还有/改」）须回 FieldReviewLoop。确认/纠错判定分两层：快速正则匹配明确短语（`_scout_reply_is_pure_confirm`）；正则未命中时返回 `False`（非确认），用户输入走 `_apply_scout_reply_with_llm` function calling 通道解析自然语言纠错，随后由 `_is_scout_aligned`（全列 `needs_user_input=False`）判定是否对齐。 | 单次 `respond` 后无条件进清洗；无 `interaction_revision`；对齐后不经闸门直接进 Cleaner |
+| C5 | **Cleaner / Analyst 多轮 + 显式放行**：阶段内可多次 `user_input_requested`（载荷含递增的 `interaction_revision`）；**不得**在用户未发「放行」短语（如「确认继续」及契约列出的同义短句）前结束该子循环并 `emit AGENT_COMPLETED`。放行判定当前由正则明确短语匹配（`_cleaner_reply_accepts_proceed` / `_analyst_reply_accepts_proceed`），正则未命中时返回 `False`（非放行），子循环继续暂停等待用户显式确认。 | 任意自然语言一句即结束清洗/分析暂停并进入下一阶段 |
 
 ## 2. 当前实现锚点（便于审查 PR）
 

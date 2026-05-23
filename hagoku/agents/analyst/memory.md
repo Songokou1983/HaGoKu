@@ -60,3 +60,10 @@ preferences: {}
 ---
 
 > **LLM 主导原则**：记忆是 LLM 的参考，不是硬约束。每次分析时 LLM 自主决定是否复用、如何复用。
+
+## 架构变更记录
+
+| 日期 | 变更 | 说明 |
+|---|---|---|
+| 2026-05-20 | P0 净化：`_call_llm_for_plan()` | 分析计划（假设检验 / 回归）的选择从硬编码关键词映射表改为 LLM structured output（`PlanRequestFields` schema）；Analyst 不再做分析策略分支判断 |
+| 2026-05-20 | `_detect_user_intent_via_llm` | 用户多轮对话中「确认继续」vs「修正分析」的判断从硬编码 `True` 改为 LLM 意图检测；确保用户修正请求不被静默忽略 |

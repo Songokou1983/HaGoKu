@@ -32,8 +32,8 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 |---|------|------|------|
 | P0-1 | 意图解析 LLM 化 | `hagoku/manager/query_parser.py` | 移除关键词硬匹配，改为 LLM structured output（`PlanRequestFields` schema）|
 | P0-2 | Scout 分布判断 LLM 化 | `hagoku/agents/scout/agent.py` | 移除硬编码倍数阈值（`maxv > q75v * 10` 等），shape analysis 由 LLM 完成 |
-| P0-3 | 删除 `_parse_llm_field_desc_line()` | `hagoku/manager/orchestrator.py` | 移除正则字段描述解析器 |
-| P0-4 | 删除 `_format_sample_preview()` | `hagoku/agents/scout/agent.py` | Scout 只传原始 top-10 值，格式化由 LLM 决定 |
+| P0-3 | 删除 `_parse_llm_field_desc_line()` | `hagoku/agents/scout/agent.py` | 死代码已清除（无调用方），列语义由 LLM structured output 接管 |
+| P0-4 | 保留 `_format_sample_preview()` | `hagoku/agents/scout/agent.py` | 纯数据工具函数（列值取样 → 字符串），不含业务语义决策；LLM 需要看到具体样本值才能做语义推理 |
 | P0-5 | Plan 构建 LLM 化 | `hagoku/manager/orchestrator.py` | 移除关键词映射表，改为 `_call_llm_for_plan()` |
 | P0-6 | 阶段消息 LLM 化 | `hagoku/manager/orchestrator.py` | 移除 `llm_lines` 硬编码消息，改为 `_generate_phase_message()` LLM 生成 |
 

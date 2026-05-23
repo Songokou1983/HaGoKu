@@ -24,7 +24,7 @@
 | `scout.py` | 649 | `ScoutAgent(DataAgentBase)`, `COMMON_COLUMN_ALIASES`, `SemanticType`, `DataContext` |
 | `analyst.py` | 1373 | `AnalystAgent(DataAgentBase)`, `AnalysisResult` |
 | `cleaner.py` | 326 | `CleanerAgent(DataAgentBase)` |
-| `reporter.py` | 10 | 桥接文件：`from .reporter.agent import ReporterAgent` |
+| `reporter.py` | 9 | 桥接文件：`from .reporter.agent import ReporterAgent` |
 | `base.py` | — | `DataAgentBase` |
 | `types.py` | — | `ColumnSemantic`, `DataContext`, `SemanticType`, `InteractionResult` |
 | `_interactive.py` | 71 | `InteractionMixin` |
@@ -75,14 +75,14 @@ storage/memory.py:484  →  from ..agents.scout import SemanticType             
 ### 2.4 目录下 agent.py 的 import
 
 ```
-scout/agent.py:19   →  from . import knowledge as scout_knowledge           →  scout/knowledge.py
-scout/agent.py:26   →  from .._interactive import InteractionMixin           →  _interactive.py
-scout/agent.py:27   →  from ..types import InteractionResult                →  types.py
+scout/agent.py:27   →  from . import knowledge as scout_knowledge           →  scout/knowledge.py
+scout/agent.py:25   →  from .._interactive import InteractionMixin           →  _interactive.py
+scout/agent.py:26   →  from ..types import InteractionResult                →  types.py
 analyst/agent.py:39 →  from . import knowledge as analyst_knowledge         →  analyst/knowledge.py
 analyst/agent.py:37 →  from .._interactive import InteractionMixin           →  _interactive.py
 analyst/agent.py:38 →  from ..types import InteractionResult                →  types.py
 cleaner/agent.py:36 →  from . import knowledge as cleaner_knowledge         →  cleaner/knowledge.py
-cleaner/agent.py:35 →  from .._interactive import InteractionMixin           →  _interactive.py
+cleaner/agent.py:34 →  from .._interactive import InteractionMixin           →  _interactive.py
 ```
 
 目录下的 `agent.py` 均引用扁平的 `_interactive.py`（`InteractionMixin`）和 `types.py`（`InteractionResult`），但不引用扁平 Agent 文件（`scout.py`、`analyst.py`、`cleaner.py`）。
@@ -103,7 +103,7 @@ cleaner/agent.py:35 →  from .._interactive import InteractionMixin           �
 
 | 属性 | `analyst.py` | `analyst/agent.py` |
 |------|-------------|-------------------|
-| 继承 | `DataAgentBase` | `InteractionMixin` |
+| 继承 | `DataAgentBase, InteractionMixin` | `InteractionMixin` |
 | prompt 来源 | 硬编码在 `__init__` 中 | 从文件 `prompt.md` 加载 |
 | 入口方法 | LLM 调用 | `begin()` / `respond()` |
 | 知识库 | 无 | `knowledge.py` + `knowledge.yaml` |

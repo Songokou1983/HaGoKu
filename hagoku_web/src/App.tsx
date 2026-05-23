@@ -32,10 +32,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "analyze",   title: "分析",   Icon: BarChart3 },
   { id: "report",    title: "报告",   Icon: FileText },
   { id: "knowledge", title: "知识库", Icon: BookOpen },
+  { id: "commands",  title: "命令指引", Icon: BookOpenCheck },
   { id: "kanban",    title: "看板",   Icon: List },
   { id: "events",    title: "运行日志", Icon: Activity },
   { id: "settings",  title: "设置",   Icon: Settings },
-  { id: "commands",  title: "命令指引", Icon: BookOpenCheck },
 ];
 
 const PANEL_MAP: Record<PanelId, ReactNode> = {
@@ -55,10 +55,10 @@ const PANEL_ORDER: PanelId[] = [
   "analyze",
   "report",
   "knowledge",
+  "commands",
   "kanban",
   "events",
   "settings",
-  "commands",
 ];
 
 function SystemStatus() {

@@ -145,6 +145,38 @@ grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.
 
 ---
 
+## 命令系统
+
+命令是用户对 **LLM 的定向沟通通道**。用户输入 `/` 开头的命令，系统剥离前缀后原样转发给当前阶段 LLM，绕过流程控制拦截。
+
+### 设计原则
+
+- 流程控制（确认/跳过/取消）→ **UI 按钮**，不占用命令
+- 命令 = `/<命令> <固定结构参数>`，结构由代码定义，内容由 LLM 理解
+- 阶段命令自动路由到当前停留阶段 LLM（Scout / Cleaner / Analyst / Reporter）
+- 全局命令（`/goal`）补充分析目标，所有阶段通用
+- 后续阶段按需扩充，全部命令遵循统一格式规范
+
+### Scout 阶段 · 字段理解
+
+Scout 向用户展示字段核对表（三列：`field_name` | `chinese_name` | `meaning`）。
+
+| 命令 | 格式 | 作用 |
+|------|------|------|
+| `/goal` | `/goal <分析目的>` | 补充/修正分析目标 |
+| `/rename` | `/rename <原始列名>=<中文名称> [, ...]` | 纠正 LLM 猜错的中文显示名（第二列），更新 `column_display_names` |
+| `/use` | `/use <列名1>, <列名2>, ...` | 指定本次分析参与字段，超出范围的标记 `used_in_analysis=False` |
+
+### 实现
+
+- **命令解析器**：`hagoku/manager/command_parser.py`，将 `/command args` 解析为 `{command, args}`
+- **路由**：`orchestrator.py` 在暂停点入口判定：命令 → 转发 LLM；自然语言 → 现有流程
+- **前端指引**：`CommandsPanel.tsx` 按阶段展示命令速查表
+
+> 完整设计：`docs/COMMAND_SYSTEM.md`
+
+---
+
 ## 报告设计 — 双轨输出
 
 | 层 | 面向 | 内容 |
@@ -345,6 +377,7 @@ hagoku/
 | `docs/AGENT_INTERACTION_CONTRACT.md` | Agent 交互可执行契约 | 开发者 |
 | `docs/INTERACTION_MULTITURN_PLAN.md` | 多轮对齐分期方案 | 开发者 |
 | `DEVELOPMENT_PROMPT.md` | 路线图跟踪 + 任务传递 + 审查约定 | 协作者 |
+| `docs/COMMAND_SYSTEM.md` | 命令系统完整设计 | 开发者 |
 | `CLAUDE.md` | AI 编码助手上下文 | AI 助手 |
 
 ---

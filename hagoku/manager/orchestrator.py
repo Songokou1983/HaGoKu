@@ -25,6 +25,8 @@ from ..storage.output import OutputManager
 from ..storage.project_manager import ProjectManager
 from ..tools.data_io import save_data
 
+from .command_parser import parse as parse_command, ParsedCommand
+
 # ── 规则引擎 ──────────────────────────────────────────────────
 
 
@@ -1238,6 +1240,40 @@ class Orchestrator:
         self._is_paused = False
         self._pause_event.set()
 
+    def _handle_command_if_present(
+        self, raw: str, agent: str, context: dict | None = None
+    ) -> str | None:
+        """检测用户输入是否为命令。若是则路由到 LLM 并返回 LLM 的响应消息；否则返回 None。
+
+        命令绕过流程控制拦截，原样转发给当前阶段 LLM。LLM 的响应作为
+        Agent 思考消息展示给用户（不修改 context，由后续 function calling 处理）。
+        """
+        cmd = parse_command(raw)
+        if cmd is None:
+            return None
+
+        if cmd.command == "goal":
+            self.event_bus.emit(EventType.AGENT_THINKING, agent, {
+                "thought": f"📋 已收到分析目标补充，待后续阶段整合：\n> {cmd.args}",
+            })
+            return f"[命令 /goal 已转发 LLM] 分析目标已更新为：{cmd.args}"
+
+        if cmd.command == "rename":
+            summary_lines = [f"  {k} → {v}" for k, v in cmd.args] if isinstance(cmd.args, list) else []
+            self.event_bus.emit(EventType.AGENT_THINKING, agent, {
+                "thought": f"🏷️ 收到字段重命名：\n" + "\n".join(summary_lines),
+            })
+            return f"[命令 /rename] 字段重命名请求：{cmd.args}"
+
+        if cmd.command == "use":
+            cols = cmd.args if isinstance(cmd.args, list) else []
+            self.event_bus.emit(EventType.AGENT_THINKING, agent, {
+                "thought": f"🎯 用户指定参与分析字段：{', '.join(cols)}",
+            })
+            return f"[命令 /use] 指定字段：{', '.join(cols)}"
+
+        return None
+
     def _pause_and_wait(self, agent: str, payload: str | dict[str, Any], timeout: float = 300.0) -> str:
         """
         发射 user_input_requested 事件，然后阻塞当前线程直到用户回复。
@@ -1649,6 +1685,8 @@ class Orchestrator:
                         user_reply_scout = self._pause_and_wait("scout", scout_msg)
                         if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
                             return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                        # 命令检测：先给用户反馈，再原样转发给 LLM 理解
+                        self._handle_command_if_present(user_reply_scout, "scout", context)
                         applied_scout = apply_scout_user_field_reply_to_context(
                             context,
                             user_reply_scout or "",
@@ -1683,6 +1721,7 @@ class Orchestrator:
                     gate_reply = self._pause_and_wait("scout", gate_msg)
                     if gate_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                    self._handle_command_if_present(gate_reply, "scout", context)
                     if _is_gate_confirm(gate_reply):
                         # 确认进清洗 → 出外层循环，继续执行 Cleaner
                         break
@@ -1724,6 +1763,7 @@ class Orchestrator:
                     ap_reply = self._pause_and_wait("scout", ap_payload)
                     if ap_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                    self._handle_command_if_present(ap_reply, "scout", context)
 
                     # 用户可能在此修正 target/features：用 LLM tool calling 解析
                     if ap_reply and not _scout_reply_is_pure_confirm(ap_reply):
@@ -1791,6 +1831,7 @@ class Orchestrator:
                     user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
                     if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                    self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
                     if user_reply_cleaner:
                         self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
                             "reply": user_reply_cleaner,
@@ -1892,6 +1933,7 @@ class Orchestrator:
                 user_reply_analyst = self._pause_and_wait("analyst", analyst_pause)
                 if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                self._handle_command_if_present(user_reply_analyst, "analyst", context)
                 if user_reply_analyst:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
                         "reply": user_reply_analyst,

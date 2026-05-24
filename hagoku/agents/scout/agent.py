@@ -91,6 +91,17 @@ def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
     return True
 
 
+def _load_prompt_md_text(agent_name: str) -> str:
+    """加载 agent 的 prompt.md 作为 LLM system prompt 的后半部分（行为约束 + 判断规则）。"""
+    try:
+        path = Path(__file__).parent.parent / agent_name / "prompt.md"
+        if path.exists():
+            return "\n\n" + path.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    return ""
+
+
 def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
     """提取样本值直白串，不做格式判断——让 LLM 自行理解。"""
     try:
@@ -632,12 +643,25 @@ class ScoutAgent(InteractionMixin):
             }
         }
 
+        # ── 注入 Agent 行为约束（prompt.md）和用户命令上下文 ──
+        prompt_md_text = _load_prompt_md_text("scout")
+        command_context = ""
+        try:
+            ctx = getattr(self, "_context", {}) or {}
+            pt = (ctx.get("_pending_command_text") or "").strip()
+            if pt:
+                command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
+        except Exception:
+            pass
+
         system_prompt = (
             "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
             "你必须调用 submit_field_inference 工具来提交你的分析结果。\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
             f"{knowledge_section}"
             f"{memory_notes}"
+            f"{prompt_md_text}"
+            f"{command_context}"
         )
 
         client = create_raw_client(self.llm_config)
@@ -911,20 +935,24 @@ class ScoutAgent(InteractionMixin):
         if features:
             roles_text += f"- 特征变量（自变量）：{', '.join(features)}\n"
 
-        system_prompt = """你是一个数据分析助手，正在帮助用户理解数据字段的含义。
+        # ── 注入 Agent 行为约束（prompt.md） ──
+        prompt_md_text = _load_prompt_md_text("scout")
 
-你的任务是：
-1. 为每个字段生成四列信息：**字段名**（原始列名）、**理解名称**（后续展示用的简短业务称呼）、**含义理解**（业务含义一句话）、**分析角色**（目标变量/特征变量/其他/不参与分析）
-2. 确认完成后，告知用户如何继续：
-   - 如果所有字段理解正确 → 用户可以输入"确认"继续下一步
-   - 如果某个字段理解有误 → 用户会告诉你正确含义
-   - 如果某字段完全不认识 → 用户会补充说明
-
-重要规则：
-- **字段名照抄原始列名**，不要翻译
-- **理解名称要简短**（建议 ≤12 字），后续分析表格第二列会用到
-- **含义理解**说明这个字段在业务中的具体含义
-- **分析角色**根据系统推断的目标变量和特征变量来标注，未指定的字段标注"其他"或"不参与分析"（如 ID、时间戳等）"""
+        system_prompt = (
+            "你是一个数据分析助手，正在帮助用户理解数据字段的含义。\n\n"
+            "你的任务是：\n"
+            "1. 为每个字段生成四列信息：**字段名**（原始列名）、**理解名称**（后续展示用的简短业务称呼）、**含义理解**（业务含义一句话）、**分析角色**（目标变量/特征变量/其他/不参与分析）\n"
+            "2. 确认完成后，告知用户如何继续：\n"
+            "   - 如果所有字段理解正确 → 用户可以输入\"确认\"继续下一步\n"
+            "   - 如果某个字段理解有误 → 用户会告诉你正确含义\n"
+            "   - 如果某字段完全不认识 → 用户会补充说明\n\n"
+            "重要规则：\n"
+            "- **字段名照抄原始列名**，不要翻译\n"
+            "- **理解名称要简短**（建议 ≤12 字），后续分析表格第二列会用到\n"
+            "- **含义理解**说明这个字段在业务中的具体含义\n"
+            "- **分析角色**根据系统推断的目标变量和特征变量来标注，未指定的字段标注\"其他\"或\"不参与分析\"（如 ID、时间戳等）"
+            f"{prompt_md_text}"
+        )
 
         roles_hint = (
             f"\n\n系统已推断的分析角色：\n{roles_text}\n"

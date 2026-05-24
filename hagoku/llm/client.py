@@ -135,3 +135,44 @@ def create_quick_client(config: Any) -> Any:
         max_tokens=8192,  # 快速模型用较短上下文
     )
     return create_structured_llm_client(quick_config)
+
+
+async def chat_completion(
+    messages: list[dict[str, str]],
+    *,
+    temperature: float = 0.0,
+    max_tokens: int = 256,
+) -> dict[str, str]:
+    """轻量异步 chat completion，用于意图分类等无状态场景。
+
+    自动加载环境配置，使用快速模型（model_quick）以降低延迟。
+    不依赖 instructor，直接调用 OpenAI chat.completions.create。
+
+    Returns:
+        dict with keys "content" and "role"（兼容 resp.get("content") 访问方式）
+    """
+    from openai import AsyncOpenAI
+
+    from ..config import HaGoKuConfig
+
+    config = HaGoKuConfig.load()
+    llm = config.llm
+
+    with _clear_proxy_env():
+        client = AsyncOpenAI(
+            base_url=llm.base_url,
+            api_key=llm.api_key,
+            timeout=30.0,
+        )
+        response = await client.chat.completions.create(
+            model=llm.model_quick or llm.model,
+            messages=messages,  # type: ignore[arg-type]
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    choice = response.choices[0]
+    return {
+        "content": choice.message.content or "",
+        "role": choice.message.role,
+    }

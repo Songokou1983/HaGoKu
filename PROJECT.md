@@ -131,6 +131,65 @@ grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.
 | 📝 **Reporter** | 双轨 HTML 报告渲染 | LLM 生成叙述 |
 | 📋 **Scribe** | 记录 + 知识调度 + 看板维护 | 确定性引擎；仅字段描述不完整时用 LLM 补全遗漏列 |
 
+### Scribe 4 通道架构
+
+Scribe 是项目管家，通过 4 个持久化通道实现管道可观测性和 Agent 间接力：
+
+| 通道 | 文件 | 内容 | 写入者 |
+|------|------|------|--------|
+| Channel 1 | `process_log.md` | 项目全过程时间线档案，每次运行的阶段、耗时、LLM 提示词追踪 | Scribe 确定性写入 |
+| Channel 2 | `context.md` | Agent 间接力棒（Markdown 叙事 + YAML 数据），Scout/Cleaner/Analyst 产出 | Scribe 汇总各阶段结果 |
+| Channel 3 | `kanban.db` | 看板状态机（SQLite），7 状态流转 | KanbanDB 确定性写入 |
+| Channel 4 | `handover_notes.md` | LLM 生成的交接笔记，记录 Agent 间传递的关键信息和决策理由 | Scribe 调用 Quick LLM 生成 |
+
+**额外能力**：
+- `recover_field_descriptions()`：当 LLM 返回的字段描述缺少某些列时，用 **Quick LLM** 专门补全遗漏列。若仍失败，生成机械占位描述（`字段 {col}（{dtype}）`），保证数据结构完整性但不做语义推断
+- `get_upstream_summary()`：为下游 Agent 生成上游阶段的摘要，供 prompt 注入
+
+> 实现：`hagoku/agents/_scribe/agent.py`
+
+### 多模型分派
+
+HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策略权衡：
+
+| 模型层级 | 配置变量 | 使用场景 | 默认 |
+|---------|---------|---------|------|
+| **默认模型** | `HAGOKYU_LLM_MODEL` | 所有 Agent 的基础模型 | `Qwen3.6-35B-A3B` |
+| **深度推理** | `HAGOKYU_LLM_MODEL_DEEP` | Analyst（假设检验/回归诊断）、仲裁器 | 复用默认模型 |
+| **快速模型** | `HAGOKYU_LLM_MODEL_QUICK` | Scout（字段语义）、Reporter（叙述生成）、Scribe（交接笔记/字段恢复）、QueryParser（意图解析） | 复用默认模型 |
+
+**分派策略**：
+- `create_deep_client()` → `model_deep or model`，使用 instructor 结构化输出
+- `create_quick_client()` → `model_quick or model`，使用 instructor 结构化输出（`max_tokens=8192`）
+- `create_raw_client()` → 原始 OpenAI 客户端（无 instructor 包装），用于 JSON mode 直接调用
+- `create_structured_llm_client()` → 默认 instructor 包装，用于 plan 生成等通用场景
+
+各 Agent 在调用 LLM 时显式选择模型：`model=self.llm_config.model_quick or self.llm_config.model`。
+
+> 实现：`hagoku/llm/client.py`、`hagoku/config.py`
+
+### 分析计划生成
+
+用户查询到达后，系统通过 LLM 两阶段生成分析计划（pipeline 编排的决策依据）：
+
+| 阶段 | 组件 | 作用 |
+|------|------|------|
+| **意图解析** | `QueryParser.parse()` → LLM Structured Output | 从自然语言提取意图、目标变量、分组维度、过滤条件等 |
+| **计划生成** | `plan_schema.LLMPlanResponse` + `llm/prompts.py` | LLM 依据意图和上下文，决定 Agent 编队、分析焦点（regression/causal/hypothesis_test 等 7 种）、计划名、目标变量 |
+
+**Schema 定义**（`llm/plan_schema.py`）：
+- `LLMPlanResponse`（Pydantic）：`plan_name`、`agents`、`analyst_focus`（7 种可选）、`target`、`query`、`reasoning`
+- 默认探索焦点：`["regression", "hypothesis_test", "correlation"]`
+- LLM 失败兜底：`QueryIntent(intent_type="exploration")`
+
+**Prompt 模板**（`llm/prompts.py`）：
+- 系统 prompt：定义分析规划师角色、决策依据、6 种分析类型描述、决策规则
+- 调整模式：在规则计划基础上由 LLM 判断是否需调整
+
+**代码职责**：仅定义 schema 形状和 prompt 模板，不参与决策。LLM 选方法、定焦点；代码机械校验 schema 并调度 Agent。
+
+> 实现：`hagoku/llm/plan_schema.py`、`hagoku/llm/prompts.py`、`hagoku/manager/query_parser.py`
+
 ---
 
 ## 人机互动
@@ -138,7 +197,8 @@ grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.
 - **流程内暂停**：流水线在关键阶段结束后暂停（`USER_INPUT_REQUESTED`），Agent 主动引导
 - **结构化卡片优先**：暂停时先交付结构化数据（字段表/清洗表/护栏摘要），若附带短消息由 LLM 依结果生成
 - **自然语言回复**：用户用自然语言回复（`respond`），后端 `unblock` 继续
-- **多轮对齐**：阶段内可多轮对话直到对齐（`interaction_revision` 递增）
+- **多轮对齐**：阶段内可多轮对话直到对齐（`interaction_revision` 递增）。Scout（C4）含字段纠错→再展示→闸门确认；Cleaner/Analyst（C5）含多轮暂停+显式放行短语
+- **字段理解持久化**：Scout 对齐后，用户确认的字段描述（`column_descriptions` / `column_display_names`）通过 `MemoryManager.persist_field_descriptions()` 写入 SQLite + YAML。下次同一项目分析时自动复用，避免重复询问
 
 > 可执行契约：`docs/AGENT_INTERACTION_CONTRACT.md`  
 > 多轮分期方案：`docs/INTERACTION_MULTITURN_PLAN.md`
@@ -194,7 +254,31 @@ Layer 2: agent/knowledge.yaml  方法经验（手动维护，V2 计划自动积�
 Layer 3: LLM 自由发挥（前两层无匹配时兜底）
 ```
 
-Scribe 在 Agent 启动前检索知识库并注入 prompt。Agent 不主动查知识库。
+### 知识向量存储
+
+每个 Agent 配备双层知识系统，实现语义检索和人工维护的有机结合：
+
+| 层 | 文件 | 内容 | 操作方式 |
+|---|------|------|---------|
+| **YAML** | `{agent}/knowledge.yaml` | 人可读的知识条目（字段经验 / 清洗策略 / 分析经验 / 报告模板） | 人工编辑、代码同步 |
+| **向量 DB** | `{agent}/knowledge.db` | sqlite_vec 向量索引，语义检索 | 自动同步、余弦相似度排序 |
+
+**核心能力**（`storage/knowledge_vector.py`）：
+- **入库**：`add_entry(content, metadata)` → 调用 embedding API 生成向量 → 写入 YAML + 向量 DB
+- **检索**：`recall(query, top_k)` → embedding query → 余弦相似度 → 返回 top-k 条目
+- **同步**：`sync_missing_vectors()` → YAML 有条目但 DB 无向量时自动补全
+- **语义退化**：embedding API 不可达时返回空列表，不影响主流程（Agent 仍可用 fallback 知识）
+
+**各 Agent 的 knowledge.py 包装**：
+- **Scout**：字段理解经验（`recall_field_experience()`、`add_field_experience()`）
+- **Cleaner**：清洗策略经验（`recall_cleaning_experience()`、`add_cleaning_experience()`）
+- **Analyst**：分析方法选择经验（`recall_analysis_experience()`、`add_analysis_experience()`）
+- **Reporter**：报表模板经验（`recall_report_experience()`、`add_report_experience()`）
+
+Scribe 在 Agent 启动前检索知识库并注入 prompt。Agent 不主动查知识库。embedding API 需要配置 `HAGOKYU_EMBEDDING_*` 环境变量；未配置时知识库仅做 YAML 索引（无向量检索）。
+
+> 实现：`hagoku/storage/knowledge_vector.py`、`hagoku/agents/{agent}/knowledge.py`、`hagoku/agents/{agent}/knowledge.yaml`
+
 
 ---
 
@@ -242,16 +326,37 @@ Agent 间不直接对话，通过看板交换信息：
 
 ---
 
-## 降级策略
+## 失败处理
 
-| Agent | 失败场景 | 方案 |
-|-------|---------|------|
-| Scout | 语义推断失败 | 标记 UNKNOWN，等待用户确认 |
-| Analyst | 回归失败 | LLM 依据失败上下文决定替代方法；代码执行计算 |
-| Cleaner | 填补失败 | 保留缺失值，标注未处理 |
-| Reporter | 模板渲染失败 | 降级到 Markdown 纯文本 |
+HaGoKu 中失败只有两条路径，不做任何「降级到次优路径」的设计。
 
-> **LLM 不可用前置拦截**：pipeline 启动前 `health.check_llm_health()` 验证 LLM 可达性；失败则返回错误，不进 pipeline。
+### 路径 1：LLM 异常
+
+| 场景 | 处理 |
+|------|------|
+| LLM 超时 / 不可达 / 返回格式异常 | 终止当前 run，通知用户修复 LLM 配置（API key、网络、模型名）后重试 |
+
+> **前置拦截**：pipeline 启动前 `health.check_llm_health()` 验证 LLM 可达性；失败则返回错误，不进 pipeline。
+
+### 路径 2：通道失败 = 项目失败
+
+通道（Agent 输入输出 serialize → transport → validate 链路）是 HaGoKu 的脊梁，**通道失败即项目失败**。
+
+| 场景 | 处理 |
+|------|------|
+| 任一通道环节（序列化、传输、解析）抛异常 | **项目失败，必须修复通道后重跑**，不允许降级、不允许绕过、不允许兜底 |
+
+> 通道范畴：
+> - `orchestrator.py` 对 Agent 的上下文组装与结果写入
+> - `storage/` 读写（parquet / yaml / sqlite / JSON）
+> - `guardrails/parsers.py` 结构化输出校验
+> - `api/ws_handler.py` WebSocket 消息序列化
+> - `tools/` 工具函数签名与返回值约定
+> - 任一环节抛非 LLM 类异常（`ValueError` / `TypeError` / `FileNotFoundError` 等）均属通道异常
+
+### 设计原则
+
+> **不做降级，只做两种响应：提醒用户修 LLM，或修代码修通道。**
 
 ---
 

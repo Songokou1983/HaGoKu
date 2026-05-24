@@ -19,6 +19,21 @@ HaGoKu Studio 设计的核心理念受以下项目启发，并在此基础上做
 - 看板局限于单项目内部，不跨项目整合
 - 增加 Scribe Agent 作为后台仲裁器，监听 EventBus 驱动看板状态变更
 
+### Scribe Agent 4 通道架构
+
+Scribe 是项目管家，通过 4 个持久化通道实现管道可观测性和 Agent 间接力：
+
+| 通道 | 文件 | 内容 | 写入者 |
+|------|------|------|--------|
+| Channel 1 | `process_log.md` | 项目全过程时间线档案，每次运行的阶段、耗时、LLM 提示词追踪 | Scribe 确定性写入 |
+| Channel 2 | `context.md` | Agent 间接力棒（Markdown 叙事 + YAML 数据），Scout/Cleaner/Analyst 产出 | Scribe 汇总各阶段结果 |
+| Channel 3 | `kanban.db` | 看板状态机（SQLite），7 状态流转 | KanbanDB 确定性写入 |
+| Channel 4 | `handover_notes.md` | LLM 生成的交接笔记，记录 Agent 间传递的关键信息和决策理由 | Scribe 调用 Quick LLM 生成 |
+
+**额外能力**：
+- `recover_field_descriptions()`：当 LLM 返回的字段描述缺少某些列时，用 Quick LLM 专门补全遗漏列。若仍失败，生成机械占位描述（`字段 {col}（{dtype}）`），保证数据结构完整性但不做语义推断
+- `get_upstream_summary()`：为下游 Agent 生成上游阶段的摘要，供 prompt 注入
+
 > 看板实现：`hagoku/storage/kanban.py`  
 > Scribe Agent：`hagoku/agents/_scribe/agent.py`
 

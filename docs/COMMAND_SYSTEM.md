@@ -66,6 +66,21 @@ Scout 向用户展示字段核对表（三列：`field_name` | `chinese_name` | 
 
 ---
 
+## 前端命令面板
+
+**组件**：`hagoku_web/src/panels/CommandsPanel.tsx`
+
+前端已实现完整的命令速查面板（457 行），按阶段（Scout / Cleaner / Analyst / Reporter）分类展示：
+- **FastCommand 卡片**：`/goal`（补充分析目的）、`/rename`（字段重命名）、`/use`（选择参与字段）
+- **StageRefCommands**：每个 Agent 阶段的结构化命令列表，含命令格式、描述、示例
+- **FAQ 区**：命令系统的常见问题解答
+- **搜索过滤**：支持按命令名搜索
+- **快捷插入**：点击命令卡片可快速填入当前输入框
+
+**当前状态**：前端命令面板已完备，但后端命令路由（命令 → LLM 转发）尚未完全对接（`_detect_user_intent_via_llm` 已定义但未调用）。命令解析器（`command_parser.py`）已就绪，解析结果在 `orchestrator.py` 暂停入口被检查，但尚未进入 LLM 转发通道。
+
+---
+
 ## 预留阶段命令
 
 ### Cleaner 阶段 · 清洗核对

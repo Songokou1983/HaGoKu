@@ -86,6 +86,48 @@ print('ALL 3 PHASES OK')
 
 > 契约全文：[AGENT_INTERACTION_CONTRACT.md](AGENT_INTERACTION_CONTRACT.md)（与 [PROJECT.md](../PROJECT.md)「人机互动」一致）。
 
+### 交互场景测试（JSON 剧本驱动）
+
+将"用户在分析页会看到什么"写成可执行、可回归的 JSON 剧本，避免只靠口头描述或临时抓包。
+
+**剧本结构**（`tests/fixtures/interaction_scenarios/*.json`）：
+```json
+{
+  "id": "scout_field_review",
+  "name": "字段确认流程",
+  "steps": [
+    {
+      "note": "用户看到字段表格后，回复字段含义修正",
+      "ws": { "action": "respond", "message": "转化率 = 购买人数/总访问人数*100%" },
+      "expected": { "status": "scout_done" }
+    }
+  ]
+}
+```
+
+**核心组件**：
+
+| 组件 | 文件 | 作用 |
+|------|------|------|
+| 剧本加载器 | `hagoku/devtools/interaction_scenarios.py` | 加载、校验 JSON 剧本（`id`/`steps` 结构验证） |
+| 场景模拟器 | `scripts/simulate_interaction_scenario.py` | 按剧本步骤驱动 orchestrator，断言每步预期状态 |
+| 产品契约测试 | `tests/test_product/test_interaction_scenarios.py` | 跑通所有场景的 pytest adapter |
+
+**脚本用法**：
+```bash
+# 跑单个场景
+.venv/bin/python scripts/simulate_interaction_scenario.py --scenario scout_field_review
+
+# 列出所有可用场景
+.venv/bin/python scripts/simulate_interaction_scenario.py --list
+```
+
+**剧本编写规则**：
+- 每个 step 必须有 `note`（人类叙述，给作者看的）
+- `ws` 可选字段：`action`（`respond`/`command`）、`message`（自然语言内容）
+- `expected` 可选字段：`status`（预期的 orchestrator 返回状态）、`event`（预期的 WebSocket 事件类型）
+- 校验失败时 `validation_errors` 列出人类可读错误
+
 ### UI 手动测试步骤
 1. 浏览器打开前端界面（本地多为 Vite 终端打印的地址，常见形如 `http://localhost:5173`）
 2. **项目** 页选择或创建项目，确认描述与数据文件

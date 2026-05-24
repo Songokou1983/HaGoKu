@@ -750,7 +750,8 @@ class AnalystAgent(InteractionMixin):
             '  - group_col: 分组变量列名（hypothesis_test 需填，没有则为 null）\n'
             '  - columns: 参与分析的列名列表\n'
             '  - reason: 为什么选这个方法（自然语言，不要出现技术术语）\n'
-            '  - method_name: 方法的中文名称\n'
+            '  - method_name: 方法的中文名称'
+            f"\n\n{self.prompt}"
         )
 
         # 清洗影响信息

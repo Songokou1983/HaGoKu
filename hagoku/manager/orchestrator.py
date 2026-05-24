@@ -1317,34 +1317,46 @@ class Orchestrator:
     def _handle_command_if_present(
         self, raw: str, agent: str, context: dict | None = None
     ) -> str | None:
-        """检测用户输入是否为命令。若是则路由到 LLM 并返回 LLM 的响应消息；否则返回 None。
+        """检测用户输入是否为命令。若是则应用到 context 并返回 LLM 可理解的消息；否则返回 None。
 
-        命令绕过流程控制拦截，原样转发给当前阶段 LLM。LLM 的响应作为
-        Agent 思考消息展示给用户（不修改 context，由后续 function calling 处理）。
+        命令绕过流程控制拦截，原样转发给当前阶段（或后续阶段）LLM。
+        返回的字符串应该被追加到 query 或注入到 agent 消息列表中，
+        确保 LLM 在下一轮交互中能理解命令意图。
         """
         cmd = parse_command(raw)
         if cmd is None:
             return None
 
         if cmd.command == "goal":
+            goal_text = str(cmd.args).strip() if isinstance(cmd.args, str) else ""
             self.event_bus.emit(EventType.AGENT_THINKING, agent, {
-                "thought": f"📋 已收到分析目标补充，待后续阶段整合：\n> {cmd.args}",
+                "thought": f"📋 已收到分析目标补充，待后续阶段整合：\n> {goal_text}",
             })
-            return f"[命令 /goal 已转发 LLM] 分析目标已更新为：{cmd.args}"
+            # 注入到 context 供下游 agent 使用
+            if context is not None:
+                context["_user_goal_update"] = goal_text
+            return f"[用户通过 /goal 命令补充分析目标] {goal_text}"
 
         if cmd.command == "rename":
-            summary_lines = [f"  {k} → {v}" for k, v in cmd.args] if isinstance(cmd.args, list) else []
+            rename_pairs: list[tuple[str, str]] = cmd.args if isinstance(cmd.args, list) else []
+            summary_lines = [f"  {k} → {v}" for k, v in rename_pairs]
             self.event_bus.emit(EventType.AGENT_THINKING, agent, {
                 "thought": f"🏷️ 收到字段重命名：\n" + "\n".join(summary_lines),
             })
-            return f"[命令 /rename] 字段重命名请求：{cmd.args}"
+            # 注入到 context 供下游 agent 使用
+            if context is not None and rename_pairs:
+                context.setdefault("_user_column_renames", []).extend(rename_pairs)
+            return f"[用户通过 /rename 命令重命名字段] {rename_pairs}"
 
         if cmd.command == "use":
-            cols = cmd.args if isinstance(cmd.args, list) else []
+            cols: list[str] = cmd.args if isinstance(cmd.args, list) else []
             self.event_bus.emit(EventType.AGENT_THINKING, agent, {
                 "thought": f"🎯 用户指定参与分析字段：{', '.join(cols)}",
             })
-            return f"[命令 /use] 指定字段：{', '.join(cols)}"
+            # 注入到 context 供下游 agent 使用
+            if context is not None and cols:
+                context["_user_specified_columns"] = cols
+            return f"[用户通过 /use 命令指定分析字段] {', '.join(cols)}"
 
         return None
 
@@ -1760,7 +1772,7 @@ class Orchestrator:
                         if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
                             return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                         # 命令检测：先给用户反馈，再原样转发给 LLM 理解
-                        self._handle_command_if_present(user_reply_scout, "scout", context)
+                        cmd_result = self._handle_command_if_present(user_reply_scout, "scout", context)
                         applied_scout = apply_scout_user_field_reply_to_context(
                             context,
                             user_reply_scout or "",
@@ -1781,6 +1793,12 @@ class Orchestrator:
                                     interaction_revision,
                                 ),
                             )
+                        # 命令文本注入到上下文，供下一轮 Scout LLM 理解
+                        if cmd_result:
+                            context.setdefault("_pending_command_text", "")
+                            if context["_pending_command_text"]:
+                                context["_pending_command_text"] += "\n"
+                            context["_pending_command_text"] += cmd_result
                             if not _scout_reply_is_pure_confirm(user_reply_scout):
                                 query = f"{query}\n[用户补充] {user_reply_scout}".strip()
                         # 对齐判定：已对齐则出内层循环、进 gate；未对齐则继续内层（revision 递增）
@@ -1795,7 +1813,12 @@ class Orchestrator:
                     gate_reply = self._pause_and_wait("scout", gate_msg)
                     if gate_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    self._handle_command_if_present(gate_reply, "scout", context)
+                    cmd_result = self._handle_command_if_present(gate_reply, "scout", context)
+                    if cmd_result:
+                        context.setdefault("_pending_command_text", "")
+                        if context["_pending_command_text"]:
+                            context["_pending_command_text"] += "\n"
+                        context["_pending_command_text"] += cmd_result
                     if _is_gate_confirm(gate_reply):
                         # 确认进清洗 → 出外层循环，继续执行 Cleaner
                         break
@@ -1837,7 +1860,12 @@ class Orchestrator:
                     ap_reply = self._pause_and_wait("scout", ap_payload)
                     if ap_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    self._handle_command_if_present(ap_reply, "scout", context)
+                    cmd_result = self._handle_command_if_present(ap_reply, "scout", context)
+                    if cmd_result:
+                        context.setdefault("_pending_command_text", "")
+                        if context["_pending_command_text"]:
+                            context["_pending_command_text"] += "\n"
+                        context["_pending_command_text"] += cmd_result
 
                     # 用户可能在此修正 target/features：用 LLM tool calling 解析
                     if ap_reply and not _scout_reply_is_pure_confirm(ap_reply):
@@ -1905,7 +1933,7 @@ class Orchestrator:
                     user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
                     if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
+                    cmd_result = self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
                     if user_reply_cleaner:
                         self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
                             "reply": user_reply_cleaner,
@@ -1913,7 +1941,31 @@ class Orchestrator:
                             "proceed_accepted": _cleaner_reply_accepts_proceed(user_reply_cleaner),
                         })
                         if not _cleaner_reply_accepts_proceed(user_reply_cleaner):
-                            query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
+                            # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
+                            if cmd_result:
+                                query = f"{query}\n{cmd_result}".strip()
+                            else:
+                                query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
+                            # 重新运行 cleaner agent 以响应用户修改
+                            self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
+                                "thought": f"🔄 根据用户反馈重新清洗数据（第 {cleaning_revision + 1} 轮修订）",
+                            })
+                            upstream_note = self._get_upstream_summary("cleaner")
+                            if upstream_note:
+                                context["upstream_summary"] = upstream_note
+                            context["query_update"] = user_reply_cleaner
+                            df_raw, df_clean, cleaning_report, _ = cleaner.run(
+                                data_path, context,
+                                impact_warning=self.config.manager.cleaning_impact_warning,
+                                emit_completed=False,
+                            )
+                            if self._is_cancel_requested():
+                                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                            cleaner_results = {
+                                "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
+                                "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
+                                "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
+                            }
                     if _cleaner_reply_accepts_proceed(user_reply_cleaner or ""):
                         break
                     cleaning_revision += 1
@@ -2007,7 +2059,7 @@ class Orchestrator:
                 user_reply_analyst = self._pause_and_wait("analyst", analyst_pause)
                 if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                self._handle_command_if_present(user_reply_analyst, "analyst", context)
+                cmd_result = self._handle_command_if_present(user_reply_analyst, "analyst", context)
                 if user_reply_analyst:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
                         "reply": user_reply_analyst,
@@ -2015,7 +2067,24 @@ class Orchestrator:
                         "proceed_accepted": _analyst_reply_accepts_proceed(user_reply_analyst),
                     })
                     if not _analyst_reply_accepts_proceed(user_reply_analyst):
-                        query = f"{query}\n[用户补充] {user_reply_analyst}".strip()
+                        # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
+                        if cmd_result:
+                            query = f"{query}\n{cmd_result}".strip()
+                        else:
+                            query = f"{query}\n[用户补充] {user_reply_analyst}".strip()
+                        # 重新运行 analyst agent 以响应用户修改
+                        self.event_bus.emit(EventType.AGENT_THINKING, "analyst", {
+                            "thought": f"🔄 根据用户反馈重新分析（第 {analyst_revision + 1} 轮修订）",
+                        })
+                        upstream_note_analyst = self._get_upstream_summary("analyst")
+                        if upstream_note_analyst:
+                            context["upstream_summary"] = upstream_note_analyst
+                        context["query_update"] = user_reply_analyst
+                        results, business_metrics = analyst.run(
+                            df_clean, context, plan, emit_completed=False
+                        )
+                        if self._is_cancel_requested():
+                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                 if _analyst_reply_accepts_proceed(user_reply_analyst or ""):
                     break
                 analyst_revision += 1

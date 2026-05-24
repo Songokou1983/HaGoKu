@@ -46,6 +46,9 @@ class ScribeAgent:
         self.event_bus = event_bus
         self.project_path = Path(project_path)
 
+        # 加载 prompt.md（角色定义）
+        self.prompt = self._load_prompt()
+
         # KanbanDB（每个项目一个）
         self.kanban = KanbanDB.get_instance(self.project_path)
 
@@ -63,6 +66,13 @@ class ScribeAgent:
         self._ensure_handover_notes()
 
     # ── 初始化 ────────────────────────────────────────────
+
+    def _load_prompt(self) -> str:
+        """从 prompt.md 加载角色定义"""
+        path = Path(__file__).parent / "prompt.md"
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return ""
 
     def _ensure_process_log(self) -> None:
         if not self.process_log_path.exists():
@@ -433,12 +443,13 @@ class ScribeAgent:
             from ...llm.client import create_quick_client
 
             client = create_quick_client(self.llm_config)
+            system_content = self.prompt if self.prompt else "你是数据分析项目经理，只生成结构化的交接笔记。"
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是数据分析项目经理，只生成结构化的交接笔记。",
+                        "content": system_content,
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -818,10 +829,11 @@ class ScribeAgent:
             from ...llm.client import create_quick_client
 
             client = create_quick_client(self.llm_config)
+            system_content = self.prompt if self.prompt else "你是数据分析助手，只返回 JSON 对象。"
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,
                 messages=[
-                    {"role": "system", "content": "你是数据分析助手，只返回 JSON 对象。"},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.1,

@@ -172,6 +172,60 @@
 
 ---
 
+## 文档 vs 代码 比对（2026-05-23 全项目走读）
+
+### 类别 1：文档写了，代码没实现
+
+| ID | 文档来源 | 文档描述 | 代码现状 | 差距 |
+|----|---------|---------|---------|------|
+| **D1** | `docs/COMMAND_SYSTEM.md` §「命令解析器」 | `command_parser.parse_command()` 代码解析 `/command`，区分全局/阶段命令 | `command_parser.py` 存在且工作，但解析后**不转发给当前阶段 LLM**，阶段命令不生效 | 命令解析是 serialize 层，缺失的是 LLM 转发环节 |
+| **D2** | `PROJECT.md` §「失败处理」（原「降级策略」） | 失败仅两条路径：① LLM 异常→提醒用户修复配置后重试；② 通道异常→视为系统 bug，必须修通道，不做降级 | `orchestrator.py` 顶层 `except Exception` → `fail_run` + `raise` **硬终止**，未区分 LLM 异常 vs 通道异常 | 文档已更新（2026-05-23），代码需对齐：区分异常类型，LLM 异常提醒用户、通道异常 assert/raise |
+| **D3** | `docs/COMMAND_SYSTEM.md` §「设计原则」 | "Cleaner/Analyst/Reporter 阶段命令按需扩充" — 命令由 LLM 按阶段上下文解释 | Cleaner/Analyst/Reporter 的 `_pause_and_wait` 均**无命令转发 LLM** 逻辑 | 预留阶段命令扩展点，**无代码接管设计**，仅未实现 |
+| **D4** | `docs/COMMAND_SYSTEM.md` §「前端展示」 | 输入 `/` 时弹出命令补全提示（`/goal` `/rename` `/use`） | `CommandsPanel.tsx` 已实现速查面板，但**消息输入框无补全逻辑** | 前端纯 UI 功能缺失，与 LLM/代码接管无关 |
+| **D5** | `docs/INTERACTION_MULTITURN_PLAN.md` | Cleaner/Analyst 多轮对齐分期（Phase 3 同构）：**LLM 判定对齐**，不写代码规则 | Cleaner/Analyst 的 `_pause_and_wait` **仅单轮暂停**，无 LLM 对齐判定循环 | 文档设计正确（LLM 判定），仅交互轮次未闭环 |
+
+### 类别 2：代码实现了，文档没更新
+
+| ID | 代码位置 | 代码实现内容 | 相关文档 | 差距 |
+|----|---------|-------------|---------|------|
+| **C1** | `hagoku/manager/orchestrator.py` `_apply_scout_reply_with_llm` → `update_field_understanding` tool | **Function calling 模式**：Scout 字段纠错通过 LLM `tool_calls` 自主完成，代码仅机械执行 | `docs/INTERACTION_MULTITURN_PLAN.md` | **已更新**（2026-05-18）；`PROJECT.md`「通道首选机制」已覆盖function calling |
+| **C2** | `hagoku/manager/orchestrator.py` `_is_scout_aligned` + `_is_gate_confirm` + `interaction_revision` | Scout 多轮对齐（字段纠错→再展示→闸门确认）完整子状态机 | `PROJECT.md`「人机互动」、`docs/INTERACTION_MULTITURN_PLAN.md` | **已更新**（本次）；PROJECT.md 已补 C4/C5 多轮描述 |
+| **C3** | `hagoku/agents/_scribe/agent.py` `persist_field_descriptions()` | 字段理解持久化：写入 `memory.db` SQLite + `field_descriptions.yaml`，下次分析自动复用 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「人机互动」已补字段理解持久化 |
+| **C4** | `hagoku/agents/_scribe/agent.py` 4 通道架构 | Channel 1–4：`process_log.md` / `context.md` / `kanban.db` / `handover_notes.md` | `PROJECT.md`「Scribe 4 通道架构」、`docs/EXTERNAL_REFERENCES.md` | **已更新**（本次）；EXTERNAL_REFERENCES.md 已补 4 通道架构 |
+| **C5** | `hagoku/agents/_scribe/agent.py` `recover_field_descriptions()` + `get_upstream_summary()` | 字段描述遗漏补全（Quick LLM）+ 上游摘要生成 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「Scribe 4 通道架构」已补额外能力 |
+| **C6** | `hagoku_web/src/panels/CommandsPanel.tsx` 457 行 | 完整的命令速查面板：FastCommand 卡片、StageRefCommands、FAQ、搜索过滤、快捷插入 | `docs/COMMAND_SYSTEM.md` | **已更新**（本次）；COMMAND_SYSTEM.md 已补前端命令面板章节 |
+| **C7** | `hagoku/manager/command_parser.py` | `parse_command()` 方法：解析 `/command` 格式，区分全局/阶段命令，返回 `{command, args}` 字典 | `docs/COMMAND_SYSTEM.md`「命令解析器」 | 文档已完整（解析格式、输出结构、支持的命令均记录） |
+| **C8** | `hagoku/devtools/interaction_scenarios.py` + `scripts/simulate_interaction_scenario.py` | 交互场景夹具系统：JSON 剧本驱动 orchestrator，断言预期状态 | `docs/DEVELOPMENT.md` §「交互场景测试」 | 已完整 |
+| **C9** | `hagoku/agents/analyst/knowledge.py` / `hagoku/agents/cleaner/knowledge.py` / `hagoku/agents/scout/knowledge.py` | 各 Agent 知识向量存储包装：`recall_*_experience()` / `add_*_experience()` | `PROJECT.md`「知识向量存储」 | 已完整 |
+| **C10** | `hagoku/agents/reporter.py` (顶层文件，55 行) | `hagoku/agents/reporter.py` 顶层模块（包装 `ReporterAgent`） | 无对应文档 | 此文件是 `reporter/agent.py` 的包装，功能已被 Reporter Agent 文档覆盖，无需单独文档 |
+
+### 代码接管审查（2026-05-23）
+
+> **核心原则：语义判断全由 LLM 包揽，代码只做 serialize → validate → transport。**
+> 已逐项审查所有文档，**未发现文档中存在代码接管设计**。
+>
+> - `command_parser.py` 的 `/command` 解析确为 **serialize**（纯格式解析），不负责任何语义路由。
+> - `PROJECT.md` 降级策略明确描述 **LLM 决定**降级路径，设计正确。
+> - 统计护栏 `guardrails/statistical.py` 的 `check()` / `can_output()` 是 **validate**（统计规则校验），非语义判断。
+> - 所有 Agent prompt 均明确 LLM 自主判定，无硬编码阈值或关键词路由。
+>
+> 结论：**当前文档不包含需要删除的代码接管内容。**
+
+### 路线图状态更新建议
+
+基于以上比对，以下路线图项状态建议更新：
+
+| ID | 当前状态 | 建议状态 | 依据 |
+|----|---------|---------|------|
+| **D1→2.x** | 未列 | `[ ]` | 命令 LLM 转发闭环应列为阶段 2 项（代码仅做 serialize，语义由 LLM） |
+| **D2→1.5** | `[/]` | 保持 `[/]` | 降级已在 1.5 备案（LLM 接管降级，非代码降级） |
+| **D5→2.8.3** | `[/]` | 保持 `[/]` | Cleaner/Analyst 同构已标记待拆（LLM 判定对齐，非代码规则） |
+| **C2→2.8.1** | `[x]` | 保持 `[x]` | 已确认 |
+| **C3/C4/C5→新 2.9** | 未列 | 建议新增 | 持久化 + 4 通道架构应可勾选 |
+| **C6→新 2.10** | 未列 | 建议新增 | 前端命令面板已完成，可勾选 |
+
+---
+
 ## 审查约定（交 PR / 合并前）
 
 **审查人**：默认由**指派审查者**（或主仓维护者）执行；可要求**本会话 AI** 只做只读审查（对照本文件 + `PROJECT.md`，不改业务口径）。

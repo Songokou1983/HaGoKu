@@ -58,7 +58,7 @@ function startPing() {
   _pingTimer = setInterval(() => {
     if (_ws?.readyState === WebSocket.OPEN) {
       const pingSentAt = Date.now();
-      _ws.send(JSON.stringify({ type: "ping" }));
+      _ws.send(JSON.stringify({ cmd: "ping" }));
       // 延迟 10 秒后再检查：只有 pong 在此次 ping 发送之后仍未到达，才判定超时断开
       setTimeout(() => {
         if (_lastPong < pingSentAt && _ws?.readyState === WebSocket.OPEN) {

@@ -20,39 +20,6 @@ class TestScoutAgent:
     def llm_config(self):
         return LLMConfig()
 
-    def test_infer_id_column(self, event_bus, llm_config):
-        scout = ScoutAgent(llm_config, event_bus)
-        series = pd.Series(range(100))
-        result = scout._infer_column(series, "user_id", target_keywords=[])
-        assert result["inferred_type"] == "id"
-        assert result["confidence"] > 0.9
-
-    def test_infer_numeric_column(self, event_bus, llm_config):
-        scout = ScoutAgent(llm_config, event_bus)
-        # Use non-unique values to avoid ID detection
-        series = pd.Series([1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0] * 10)
-        result = scout._infer_column(series, "value", target_keywords=[])
-        assert result["inferred_type"] == "numeric"
-
-    def test_infer_boolean_column(self, event_bus, llm_config):
-        scout = ScoutAgent(llm_config, event_bus)
-        series = pd.Series([0, 1, 0, 1, 1, 0, 0, 1])
-        result = scout._infer_column(series, "is_active", target_keywords=[])
-        assert result["inferred_type"] == "boolean"
-
-    def test_infer_categorical_column(self, event_bus, llm_config):
-        scout = ScoutAgent(llm_config, event_bus)
-        series = pd.Series(["A", "B", "C", "A", "B", "C", "A", "B"])
-        result = scout._infer_column(series, "region", target_keywords=[])
-        assert result["inferred_type"] == "categorical"
-
-    def test_infer_target_from_column_name(self, event_bus, llm_config):
-        scout = ScoutAgent(llm_config, event_bus)
-        # Use non-unique values to avoid ID detection
-        series = pd.Series([100.0, 200.0, 150.0, 300.0, 250.0, 100.0, 200.0, 150.0, 300.0, 250.0] * 10)
-        result = scout._infer_column(series, "revenue", target_keywords=["revenue"])
-        assert result["inferred_type"] == "target"
-        assert result["needs_user_input"]
 
     def test_infer_all_semantics(self, event_bus, llm_config):
         scout = ScoutAgent(llm_config, event_bus)

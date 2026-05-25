@@ -6,6 +6,7 @@ Scout Agent — 数据侦察员
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,7 +24,7 @@ from ...observability.events import EventType
 from ...tools.data_io import load_data
 from ...tools.profiling import generate_profile
 from .._interactive import InteractionMixin
-from ..types import InteractionResult
+from ..types import InteractionResult, build_submit_field_inference_schema
 from . import knowledge as scout_knowledge
 
 # 模块级知识库配置（可通过 YAML 覆盖）
@@ -97,8 +98,8 @@ def _load_prompt_md_text(agent_name: str) -> str:
         path = Path(__file__).parent.parent / agent_name / "prompt.md"
         if path.exists():
             return "\n\n" + path.read_text(encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger("hagoku").warning(f"加载 {agent_name}/prompt.md 失败: {e}")
     return ""
 
 
@@ -106,7 +107,8 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
     """提取样本值直白串，不做格式判断——让 LLM 自行理解。"""
     try:
         vals = df[col].dropna().unique()
-    except Exception:
+    except Exception as e:
+        logging.getLogger("hagoku").warning(f"提取列 {col} 样本值失败: {e}")
         return ""
     if len(vals) == 0:
         return ""
@@ -596,50 +598,14 @@ class ScoutAgent(InteractionMixin):
                         lines.append(f"  - {col}: 含义：{desc}")
                 memory_notes = "\n".join(lines)
 
+        # P4 修复：由 FieldInferenceResult 数据模型驱动 schema，新增字段无需改 Agent 代码
+        _schema = build_submit_field_inference_schema()
         submit_tool = {
             "type": "function",
             "function": {
                 "name": "submit_field_inference",
                 "description": "提交字段语义推断结果。调用此工具来报告你对数据集中每个字段的分析结论，包括数据类型、置信度、业务名称和含义理解。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "columns": {
-                            "type": "array",
-                            "description": "每个字段的推断结果",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {"type": "string", "description": "原始列名（照抄）"},
-                                    "inferred_type": {"type": "string", "enum": ["id", "datetime", "boolean", "numeric", "categorical", "text", "unknown"], "description": "数据类型"},
-                                    "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "置信度 0~1"},
-                                    "evidence": {"type": "string", "description": "推断依据（自然语言简述）"},
-                                    "needs_user_input": {"type": "boolean", "description": "是否需要用户确认"},
-                                    "suggested_role": {"type": "string", "enum": ["identifier", "time_index", "binary_feature", "target", "numeric_feature", "categorical_feature", "text_feature", "unknown"], "description": "建议角色"},
-                                    "display_name": {"type": "string", "description": "简短中文业务名称（≤6 字，如「收入」「用户ID」）"},
-                                    "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
-                                },
-                                "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"]
-                            }
-                        },
-                        "target_columns": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "从用户问题中识别到的目标变量候选列表（列名数组）"
-                        },
-                        "feature_columns": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "特征变量列表（列名数组）"
-                        },
-                        "target_keywords_from_query": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "从用户问题中提取的目标关键词（拆成中文词组，如 ['收入','销售额']）"
-                        }
-                    },
-                    "required": ["columns", "target_columns", "feature_columns", "target_keywords_from_query"]
-                }
+                "parameters": _schema,
             }
         }
 
@@ -651,8 +617,8 @@ class ScoutAgent(InteractionMixin):
             pt = (ctx.get("_pending_command_text") or "").strip()
             if pt:
                 command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
 
         system_prompt = (
             "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
@@ -983,7 +949,6 @@ class ScoutAgent(InteractionMixin):
         result = response.choices[0].message.content or ""
 
         # 提取思考标签外的内容（MiniMax 模型输出 <think>...</think>）
-        import re
         result = re.sub(r'<think>.*?</think>\s*', '', result, flags=re.DOTALL).strip()
 
         return result.strip() if result.strip() else ""
@@ -1046,164 +1011,6 @@ class ScoutAgent(InteractionMixin):
             timeout=120.0,
         )
 
-    # ── 确定性列推断（供测试与快速判断用） ──────────────────
-    #
-    # ==== CHANNEL ZONE 警告 ====
-    # 此函数包含硬编码语义规则（如 "n_unique == n_total → ID"），
-    # 与项目核心的 CHANNEL ZONE 设计原则（代码不做语义理解）存在张力。
-    #
-    # 设计意图：
-    #   - 本函数仅用于：1) 自动化回归测试  2) LLM 不可用时的离线兜底
-    #   - **生产数据路径应始终走 _infer_all_semantics（LLM 结构化输出）**
-    #   - 新增硬编码规则前必须评估：LLM 能否覆盖此场景？能 → 不添加
-    #
-    # 如果未来 LLM 推理可靠性持续提升，此函数应考虑废弃。
-    # ==================================================
-
-    def _infer_column(
-        self,
-        series: pd.Series,
-        name: str,
-        target_keywords: list[str] | None = None,
-    ) -> dict:
-        """单列语义推断（硬编码确定性规则，不依赖 LLM）。
-
-        **离线/测试专用函数。生产数据路径优先使用 _infer_all_semantics（LLM 结构化输出）。**
-
-        硬编码规则覆盖以下场景（按优先级排序）：
-          1. 100% 唯一值 → ID（置信度 0.95）
-          2. datetime64 类型 → datetime（置信度 0.95）
-          3. 二元值 (0/1) → boolean（置信度 0.90）
-          4. 2 个唯一值 → boolean（置信度 0.85）
-          5. 数值 + 列名含目标关键词 → target（置信度 0.50，需确认）
-          6. 80%+ 唯一值的整数列 → id（置信度 0.60，需确认）
-          7. 数值类型 → numeric（置信度 0.90）
-          8. <20 个唯一值 → categorical
-          9. 高唯一值比 + 长文本 → text
-          10. 其他 → unknown
-
-        局限性：
-          - 无法理解列名的业务语义（如 "AOV" 是什么）
-          - 无法处理混合类型列（如 "是"/"否" 中文编码的布尔值）
-          - 高唯一值整数列的 ID/数值区分精度不高
-        """
-        target_keywords = target_keywords or []
-        n_unique = series.nunique()
-        n_total = len(series)
-
-        # 100% 唯一 → ID
-        if n_unique == n_total and n_total > 10:
-            return {
-                "column_name": name,
-                "inferred_type": "id",
-                "confidence": 0.95,
-                "evidence": "100%唯一值",
-                "needs_user_input": False,
-                "suggested_role": "identifier",
-            }
-
-        # 日期
-        if pd.api.types.is_datetime64_any_dtype(series):
-            return {
-                "column_name": name,
-                "inferred_type": "datetime",
-                "confidence": 0.95,
-                "evidence": "日期类型",
-                "needs_user_input": False,
-                "suggested_role": "time_index",
-            }
-
-        # 布尔
-        if n_unique == 2 and pd.api.types.is_numeric_dtype(series):
-            vals = set(series.dropna().unique())
-            if vals <= {0, 1} or vals <= {0.0, 1.0} or vals <= {True, False}:
-                return {
-                    "column_name": name,
-                    "inferred_type": "boolean",
-                    "confidence": 0.90,
-                    "evidence": "二元数值(0/1)",
-                    "needs_user_input": False,
-                    "suggested_role": "binary_feature",
-                }
-
-        if n_unique == 2 and not pd.api.types.is_numeric_dtype(series):
-            return {
-                "column_name": name,
-                "inferred_type": "boolean",
-                "confidence": 0.85,
-                "evidence": "2个唯一值",
-                "needs_user_input": False,
-                "suggested_role": "binary_feature",
-            }
-
-        # 数值
-        if pd.api.types.is_numeric_dtype(series):
-            name_lower = name.lower()
-            if any(kw in name_lower for kw in target_keywords):
-                return {
-                    "column_name": name,
-                    "inferred_type": "target",
-                    "confidence": 0.50,
-                    "evidence": "列名含目标关键词",
-                    "needs_user_input": True,
-                    "suggested_role": "target",
-                }
-
-            # 高唯一值（可能为 ID）
-            if n_unique > n_total * 0.8 and not pd.api.types.is_float_dtype(series):
-                vals = series.dropna().sort_values()
-                val_range = vals.max() - vals.min() + 1
-                if val_range <= n_unique * 1.1:
-                    return {
-                        "column_name": name,
-                        "inferred_type": "id",
-                        "confidence": 0.60,
-                        "evidence": f"高唯一值整数列 {n_unique}/{n_total}",
-                        "needs_user_input": True,
-                        "suggested_role": "identifier",
-                    }
-
-            return {
-                "column_name": name,
-                "inferred_type": "numeric",
-                "confidence": 0.90,
-                "evidence": "数值类型",
-                "needs_user_input": False,
-                "suggested_role": "numeric_feature",
-            }
-
-        # 类别
-        if n_unique < 20:
-            return {
-                "column_name": name,
-                "inferred_type": "categorical",
-                "confidence": 0.70,
-                "evidence": f"{n_unique}个唯一值",
-                "needs_user_input": n_unique > 5,
-                "suggested_role": "categorical_feature",
-            }
-
-        # 文本
-        if n_unique > n_total * 0.5:
-            avg_len = series.dropna().str.len().mean() if series.dtype == object else 0
-            if avg_len > 50:
-                return {
-                    "column_name": name,
-                    "inferred_type": "text",
-                    "confidence": 0.60,
-                    "evidence": "高唯一值比+长文本",
-                    "needs_user_input": True,
-                    "suggested_role": "text_feature",
-                }
-
-        return {
-            "column_name": name,
-            "inferred_type": "unknown",
-            "confidence": 0.0,
-            "evidence": "无法推断",
-            "needs_user_input": True,
-            "suggested_role": "unknown",
-        }
 
     # ── 对话接口（供 UI 调用） ──────────────────────────────
 

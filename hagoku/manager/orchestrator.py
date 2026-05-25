@@ -418,25 +418,24 @@ def gate_cleaning_pause_payload(context: dict[str, Any] | None = None) -> dict[s
     return payload
 
 
-# 闸门回复判定：显式纯确认 → 进下一阶段；空字串不视为确认；非确认 → 回 FieldReviewLoop
-_GATE_SUPPLEMENT_RE = re.compile(
-    r"补充|还有|改|不对|不对的|纠正|修正|更正|重新|再想想|再看看",
-    re.I,
-)
+# 闸门回复判定：仅精确 UI 确认信号 → 进下一阶段；其余全部回 FieldReviewLoop
+# 禁止在代码层用正则做语义判断——语义判断必须交给 LLM
 
 
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _is_gate_confirm(user_reply: str) -> bool:
-    """闸门回复是否为「确认进入下一阶段」而非「还有补充」。"""
+    """闸门回复是否为「确认进入下一阶段」。
+
+    仅 UI 按钮的精确确认信号返回 True；其余全部回 FieldReviewLoop。
+    语义判断（纠错、补充、反驳）必须由 LLM 完成，代码不参与。
+    """
     t = (user_reply or "").strip()
     if not t:
         return False
-    if _scout_reply_is_pure_confirm(t):
+    # 仅精确 UI 确认短语 → True；其余全部 False（返回内层循环，走 LLM 通道）
+    if _SCOUT_PURE_CONFIRM_RE.match(t):
         return True
-    # 含「补充 / 还有 / 改」等词 → 拒绝闸门，回 FieldReviewLoop
-    if _GATE_SUPPLEMENT_RE.search(t):
-        return False
-    return True
+    return False
 
 
 def _known_scout_columns(context: dict[str, Any]) -> list[str]:
@@ -769,11 +768,14 @@ def _apply_scout_reply_with_llm(
             continue
         current_desc = str(descs.get(col, "") or "").strip()
         current_dn = str(display_names.get(col, "") or "").strip()
+        current_role = str(sem.get("suggested_role", "") or "").strip()
         parts = [f"  - {col}"]
         if current_dn:
             parts.append(f"中文名: {current_dn}")
         if current_desc:
             parts.append(f"含义: {current_desc}")
+        if current_role:
+            parts.append(f"当前角色: {current_role}")
         if not current_dn and not current_desc:
             parts.append("(尚未理解)")
         field_state_lines.append(" | ".join(parts))
@@ -821,10 +823,23 @@ def _apply_scout_reply_with_llm(
                 "则你**必须**调用 update_field_role 将包含金额/收入/数量语义的数值列设为 target，并调用 update_field_understanding 设置 used_in_analysis=true。\n\n"
             )
 
+    # ── 当前分析目的状态（target/features），供 LLM 判断用户纠错是否合理 ──
+    ap_summary = ""
+    ap = context.get("analysis_purpose") or {}
+    current_target = str(ap.get("target") or "").strip()
+    current_features = [str(f).strip() for f in (ap.get("features") or []) if str(f).strip()]
+    if current_target or current_features:
+        ap_summary = (
+            "当前分析目的状态：\n"
+            f"  - 目标变量 (target): {current_target if current_target else '（未设置）'}\n"
+            f"  - 特征变量 (features): {', '.join(current_features) if current_features else '（未设置）'}\n\n"
+        )
+
     system_msg = (
         "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
         "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
         f"{analysis_purpose_text}"
+        f"{ap_summary}"
         f"{field_match_hint}"
         "当前字段表格状态：\n"
         f"{field_state}\n\n"

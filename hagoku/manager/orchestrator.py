@@ -147,8 +147,19 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
         role = str(s.get("suggested_role", "")).strip()
         role_display = _ROLE_DISPLAY_MAP.get(role, role)
 
-        # used_in_analysis: 用户是否明确指定该字段参与本次分析
-        used_in_analysis = bool(s.get("used_in_analysis")) if "used_in_analysis" in s else None
+        # used_in_analysis: 若 LLM 显式设置了该字段则使用，否则根据 suggested_role 推导
+        if "used_in_analysis" in s:
+            used_in_analysis = bool(s.get("used_in_analysis"))
+        else:
+            # target 和各类 feature 角色默认参与分析
+            if role in ("target", "feature") or role.endswith("_feature"):
+                used_in_analysis = True
+            elif role in ("identifier", "ignore", "unknown") or role == "text_feature":
+                # 明确不参与分析的角色
+                used_in_analysis = False
+            else:
+                # time_index 等中间角色保持待定
+                used_in_analysis = None
         rows.append({
             "field_name": name,
             "chinese_name": dname,
@@ -1442,29 +1453,161 @@ class Orchestrator:
             out["message"] = ""
         return out
 
-    def _mandatory_guardrails_block_report(self, results: list[dict[str, Any]]) -> tuple[bool, str]:
-        """逐条检查 Analyst 结果：任一强制级护栏未通过则不应调用 Reporter。
+    def _check_mandatory_guardrails(self, results: list[dict[str, Any]]) -> tuple[list[dict], str]:
+        """逐条检查 Analyst 结果，收集所有未通过的强制级护栏。
+
+        与旧版 _mandatory_guardrails_block_report 的区别：
+        这里只收集违规详情，不做"阻断/跳过 Reporter"的硬编码决策。
+        护栏失败本质是统计问题，应由 LLM 分析原因并向用户解释风险，
+        让用户选择处理方式（加警告继续/修正/跳过）。
 
         Returns:
-            (True, markdown_body) 若应阻止正式报告；否则 (False, "").
+            (violations, report_md) — violations 列表，每个元素包含
+            {result_index, label, guardrail_results}；report_md 为违规详情
+            Markdown（用于交给 LLM 分析和展示给用户）。
         """
         if not results:
-            return False, ""
+            return [], ""
+        violations: list[dict] = []
         sections: list[str] = []
         for i, result in enumerate(results):
             grs = self.guardrails.check(result)
             if self.guardrails.can_output(grs):
                 continue
             label = str(result.get("question") or result.get("result_id") or f"结果 {i + 1}")
+            violations.append({
+                "result_index": i,
+                "label": label,
+                "guardrail_results": grs,
+                "result": result,
+            })
             sections.append(f"## {label}\n\n{self.guardrails.format_report(grs)}")
-        if not sections:
-            return False, ""
+        if not violations:
+            return [], ""
         header = (
             "# 统计护栏：强制级未通过\n\n"
-            "按产品约定，**未生成正式 HTML 报告**（Reporter 已跳过）。\n\n"
+            "以下分析结果未通过强制级统计护栏。**由 LLM 分析原因并向用户解释风险**，"
+            "让用户选择处理方式（加警告继续 / 修正后重跑 / 跳过本次分析）。\n\n"
             "---\n\n"
         )
-        return True, header + "\n\n---\n\n".join(sections)
+        return violations, header + "\n\n---\n\n".join(sections)
+
+    def _handle_mandatory_violations(
+        self,
+        violations: list[dict],
+        results: list[dict[str, Any]],
+        run_dir: Path,
+    ) -> dict | None:
+        """护栏违规后交给 LLM 解释风险，等待用户决策。
+
+        护栏失败本质是统计问题（如无检验就下结论、多重比较未校正），
+        应该由 LLM 分析违规原因并向用户解释风险，让用户选择：
+        1) 加警告继续 — Reporter 正常生成，但报告中标注统计风险
+        2) 修正后重跑 — 返回 Analyst 重新分析
+        3) 跳过本次分析 — 仅输出护栏报告
+
+        此方法是非阻塞的交互方法，会把 LLM 风险分析和用户决策也
+        写入审计链路。
+
+        Returns:
+            None 若用户选择继续（调用方继续走 Reporter 流程）；
+            或 dict(status="guardrails_blocked" 或 "guardrails_retry")。
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # 无违规 → 直接返回 None，继续正常流程
+        if not violations:
+            return None
+
+        # 1) 构建违规摘要让 LLM 分析
+        violation_summary_parts = []
+        for v in violations:
+            r = v["result"]
+            analysis_type = r.get("analysis_type", "")
+            conclusion = r.get("conclusion_plain", "")
+            p_value = r.get("p_value")
+            effect_size = r.get("effect_size")
+            violation_summary_parts.append(
+                f"### {v['label']}\n"
+                f"- 分析类型: {analysis_type}\n"
+                f"- 问题: {r.get('question', '')}\n"
+                f"- 结论: {conclusion}\n"
+                f"- p 值: {p_value}\n"
+                f"- 效应量: {effect_size}\n"
+                f"- 护栏违规:\n{self.guardrails.format_report(v['guardrail_results'])}\n"
+            )
+        violation_summary = "\n\n---\n\n".join(violation_summary_parts)
+
+        risk_prompt = (
+            "你是一名统计专家。以下分析结果未通过强制级统计护栏。"
+            "请用非技术语言向用户解释每个违规项的风险（如：结论可能不可靠、"
+            "可能受混淆因素影响、多重比较未校正等）。\n\n"
+            "对于每个违规项，给出你的建议：\n"
+            "- 风险是否可接受（可以加警告后展示）\n"
+            "- 是否需要修正重跑\n"
+            "- 影响程度（高/中/低）\n\n"
+            f"{violation_summary}"
+        )
+
+        try:
+            from ..llm.client import create_raw_client
+
+            llm_config = self.config.llm
+            client = create_raw_client(llm_config)
+            response = client.chat.completions.create(
+                model=llm_config.model_quick or llm_config.model,
+                messages=[
+                    {"role": "system", "content": "你是数据统计专家，用清晰易懂的中文解释统计风险。"},
+                    {"role": "user", "content": risk_prompt},
+                ],
+                temperature=0.0,
+                max_tokens=1024,
+            )
+            risk_analysis = response.choices[0].message.content or ""
+        except Exception as e:
+            logger.warning(f"LLM 风险分析失败，使用默认护栏报告: {e}")
+            risk_analysis = (
+                "无法生成风险分析（LLM 调用失败）。请人工审核以下护栏违规详情。\n\n"
+                f"{violation_summary}"
+            )
+
+        # 2) 生成完整护栏报告交给用户决策
+        guardrail_report = (
+            "# ⚠️ 统计护栏未通过 — 需要你的决策\n\n"
+            "> 护栏失败本质是**统计问题**，不是代码 bug。"
+            "以下分析结果存在统计方法风险，已在下方解释。\n\n"
+            "---\n\n"
+            "## 🤖 LLM 风险分析\n\n"
+            f"{risk_analysis}\n\n"
+            "---\n\n"
+            "## 📋 违规详情\n\n"
+            f"{violation_summary}\n\n"
+            "---\n\n"
+            "## 你的选择\n\n"
+            "1. **加警告继续** — Reporter 正常生成 HTML 报告，报告中标注统计风险\n"
+            "2. **修正后重跑** — 返回分析师重新分析（需指定修正项）\n"
+            "3. **跳过** — 仅输出本护栏报告，不生成正式报告\n\n"
+            "请回复数字 1 / 2 / 3，或直接说出你的想法。"
+        )
+
+        notice_path = run_dir / "output" / "GUARDRAILS_REVIEW.md"
+        notice_path.parent.mkdir(parents=True, exist_ok=True)
+        notice_path.write_text(guardrail_report, encoding="utf-8")
+
+        self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
+            "verdict": "mandatory_violations",
+            "detail": f"强制级护栏未通过 {len(violations)} 项，已交 LLM 分析并等待用户决策",
+            "report_path": str(notice_path),
+        })
+
+        return {
+            "violations": violations,
+            "risk_analysis": risk_analysis,
+            "report_path": str(notice_path),
+            "pending_decision": True,
+        }
 
     def run(
         self,
@@ -1799,8 +1942,6 @@ class Orchestrator:
                             if context["_pending_command_text"]:
                                 context["_pending_command_text"] += "\n"
                             context["_pending_command_text"] += cmd_result
-                            if not _scout_reply_is_pure_confirm(user_reply_scout):
-                                query = f"{query}\n[用户补充] {user_reply_scout}".strip()
                         # 对齐判定：已对齐则出内层循环、进 gate；未对齐则继续内层（revision 递增）
                         if _is_scout_aligned(context, user_reply_scout):
                             break
@@ -1844,7 +1985,7 @@ class Orchestrator:
                                     interaction_revision,
                                 ),
                             )
-                        query = f"{query}\n[用户补充] {gate_reply}".strip()
+                    # 闸门补充内容只更新 context，不追加到 query，避免累积噪音污染
                     # 必须递增 revision，否则下一轮 field_review 与上一轮同号，前端会再插一张表。
                     interaction_revision += 1
 
@@ -2095,24 +2236,17 @@ class Orchestrator:
                 {"result_summary": f"完成 {n_res} 项分析（用户已确认）"},
             )
 
-            # 7. 统计护栏（编排层）：强制级未通过则跳过 Reporter
-            blocked, blocked_md = self._mandatory_guardrails_block_report(
+            # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
+            violations, violations_md = self._check_mandatory_guardrails(
                 results if isinstance(results, list) else [],
             )
-            if blocked:
-                notice_path = run_dir / "output" / "GUARDRAILS_BLOCKED.md"
-                notice_path.parent.mkdir(parents=True, exist_ok=True)
-                notice_path.write_text(blocked_md, encoding="utf-8")
-                output_path = str(notice_path)
-                self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
-                    "verdict": "fail",
-                    "detail": "强制级统计护栏未通过，已跳过 Reporter（未生成正式 HTML 报告）",
-                })
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "reporter", {
-                    "result_summary": "已跳过：强制级护栏未通过",
-                    "skipped": True,
-                })
-                # 保存 findings（便于审计）
+            if violations:
+                # 护栏失败本质是统计问题 — 交给 LLM 解释风险并让用户决策
+                decision = self._handle_mandatory_violations(
+                    violations, results if isinstance(results, list) else [],
+                    run_dir,
+                )
+                # 保存 findings（供审计）
                 for result in results:
                     self.db.save_finding({
                         "id": result["result_id"],
@@ -2127,24 +2261,13 @@ class Orchestrator:
                         "confidence_interval": result.get("confidence_interval"),
                         "significance": result.get("significance", ""),
                     })
-                run_meta = {
-                    "run_id": run_id,
-                    "project": project_name,
-                    "query": query,
-                    "plan": plan,
-                    "n_results": len(results),
-                    "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
-                    "output_path": output_path,
-                    "guardrails_blocked": True,
-                }
-                self.output_mgr.save_run_meta(run_dir, run_meta)
-                duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
-                self.db.complete_run(run_id, duration_ms=duration_ms, output_path=output_path)
-                learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
-                if learned > 0:
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
-                    })
+                # 把护栏违规信息注入 plan，让 Reporter 必要时在报告中标注
+                if isinstance(plan, dict):
+                    plan.setdefault("extra", {})
+                    plan["extra"]["guardrails_violations"] = {
+                        "decision_snapshot": decision,
+                        "violations_md": violations_md,
+                    }
                 self.memory.save_resume_state(
                     project_name, "analyzed",
                     cleaned_path=cleaned_path_str,
@@ -2444,7 +2567,6 @@ class Orchestrator:
         suggested_focus: str = "",
     ) -> str:
         """LLM 生成阶段用户消息（零硬编码文案）。LLM 不可达时返回最小兜底。"""
-        from openai import OpenAI
 
         if phase == "cleaning_strategy":
             n_ops = len(operations) if operations else 0
@@ -2474,10 +2596,7 @@ class Orchestrator:
             return ""
 
         try:
-            client = OpenAI(
-                api_key=self.config.llm.api_key,
-                base_url=self.config.llm.base_url,
-            )
+            client = create_raw_client(self.config.llm)
             system_prompt = (
                 "你是数据分析助手 HaGoKu Studio。请用自然、亲切的中文为用户生成一段对话消息。"
                 "不要使用模板化的句式，用你自己的语言风格来表达。"
@@ -2697,14 +2816,11 @@ class Orchestrator:
     ) -> dict[str, dict[str, str]] | None:
         """让 LLM 理解用户说的字段更新，返回更新的字段字典"""
         try:
-            from openai import OpenAI
+            from ..llm.client import create_raw_client
 
             columns = [s["column_name"] for s in context["column_semantics"]]
 
-            client = OpenAI(
-                api_key=self.config.llm.api_key,
-                base_url=self.config.llm.base_url,
-            )
+            client = create_raw_client(self.config.llm)
 
             response = client.chat.completions.create(
                 model=self.config.llm.model,

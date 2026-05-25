@@ -57,11 +57,14 @@ function startPing() {
   _lastPong = Date.now();
   _pingTimer = setInterval(() => {
     if (_ws?.readyState === WebSocket.OPEN) {
+      const pingSentAt = Date.now();
       _ws.send(JSON.stringify({ cmd: "ping" }));
-      // If no pong within 10s, treat as dead connection
-      if (Date.now() - _lastPong > 10_000) {
-        _ws.close();
-      }
+      // 延迟 10 秒后再检查：只有 pong 在此次 ping 发送之后仍未到达，才判定超时断开
+      setTimeout(() => {
+        if (_lastPong < pingSentAt && _ws?.readyState === WebSocket.OPEN) {
+          _ws.close();
+        }
+      }, 10_000);
     }
   }, 30_000);
 }

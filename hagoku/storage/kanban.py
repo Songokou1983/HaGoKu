@@ -338,6 +338,61 @@ class KanbanDB:
 
         return True
 
+    def complete_agent_task_atomic(self, agent: str, lock_holder: str, result: str = "") -> bool:
+        """
+        原子操作：获取 agent 当前 active 任务 → claim（若需要）→ complete。
+        解决 _on_agent_completed 中 claim_task → complete_task 之间崩溃导致
+        任务卡在 running 状态的一致性风险。
+
+        处理三种场景：
+        1. ready → claim → done（从 ready 直接完成）
+        2. running → done（已 claim，直接完成）
+        3. blocked → unblock → claim → done（先解阻塞再完成）
+        """
+        now = datetime.now().isoformat()
+        tasks = self.list_tasks(agent=agent, status="running")
+        if not tasks:
+            tasks = self.list_tasks(agent=agent, status="ready")
+        if not tasks:
+            tasks = self.list_tasks(agent=agent, status="blocked")
+
+        if not tasks:
+            return False
+
+        task = tasks[0]
+        task_id = task["id"]
+        current_status = task["status"]
+
+        with self.transaction() as conn:
+            if current_status == "blocked":
+                conn.execute(
+                    "UPDATE kanban_tasks SET status = 'ready', updated_at = ? WHERE id = ?",
+                    (now, task_id),
+                )
+                self._log_event(conn, task_id, "unblocked", lock_holder)
+
+            if current_status in ("ready", "blocked"):
+                expires_ts = int((datetime.now() + timedelta(minutes=15)).timestamp())
+                conn.execute(
+                    """UPDATE kanban_tasks
+                       SET status = 'running', claim_lock = ?, claim_expires = ?, updated_at = ?
+                       WHERE id = ? AND status = 'ready'""",
+                    (lock_holder, expires_ts, now, task_id),
+                )
+                self._log_event(conn, task_id, "claimed", lock_holder)
+
+            conn.execute(
+                """UPDATE kanban_tasks
+                   SET status = 'done', completed_at = ?, result = ?,
+                       claim_lock = NULL, claim_expires = NULL, updated_at = ?
+                   WHERE id = ?""",
+                (now, result, now, task_id),
+            )
+            self._log_event(conn, task_id, "completed", lock_holder, result)
+
+        self._recompute_ready(task_id)
+        return True
+
     def _recompute_ready(self, parent_id: str) -> None:
         """
         当父任务完成时，将其所有子任务从 triage → ready。

@@ -52,8 +52,8 @@ manager:
         assert config.llm.model == "Qwen3.6-35B-A3B"  # 默认值
 
     def test_env_override(self, monkeypatch):
-        monkeypatch.setenv("HAGOKYU_LLM_BASE_URL", "http://env:7000/v1")
-        monkeypatch.setenv("HAGOKYU_LLM_MODEL", "env-model")
+        monkeypatch.setenv("HAGOKU_LLM_BASE_URL", "http://env:7000/v1")
+        monkeypatch.setenv("HAGOKU_LLM_MODEL", "env-model")
 
         config = HaGoKuConfig()
         config = HaGoKuConfig._merge_env(config)

@@ -173,16 +173,13 @@ class ScribeAgent:
         result = event.data.get("result_summary", "")
         self._log(f"{agent} COMPLETED: {result}")
 
-        # claim 并完成当前 running 任务
-        task = self.kanban.get_active_task(agent.lower())
-        if task:
-            if task["status"] == "running":
-                self.kanban.complete_task(task["id"], result)
-            elif task["status"] == "blocked":
-                # 被 block 的任务：先 unblock 再 complete
-                self.kanban.unblock_task(task["id"])
-                self.kanban.claim_task(task["id"], f"{agent.lower()}_agent")
-                self.kanban.complete_task(task["id"], result)
+        # 原子操作：claim → complete，防止中间崩溃导致任务卡死
+        lock_holder = f"{agent.lower()}_agent"
+        self.kanban.complete_agent_task_atomic(
+            agent=agent.lower(),
+            lock_holder=lock_holder,
+            result=result,
+        )
 
         # ── Channel 4: 自动生成交接笔记 ──
         self._auto_generate_handover(agent, event)
@@ -323,46 +320,68 @@ class ScribeAgent:
         """记录与用户的对话"""
         self._log(f"INTERACTION {agent}: user='{user_input}' → agent='{agent_response}'")
 
-        # 更新 context.md
+        # 更新 context.md — 使用 YAML 解析而非正则替换
         if self.context_path.exists():
             content = self.context_path.read_text(encoding="utf-8")
-            new_entry = (
-                f'\n  - agent: {agent}\n'
-                f'    timestamp: "{datetime.now().isoformat()}"\n'
-                f'    user: "{user_input}"\n'
-                f'    agent: "{agent_response[:80]}"'
+            try:
+                doc = yaml.safe_load(content)
+            except yaml.YAMLError:
+                return
+
+            if not isinstance(doc, dict):
+                return
+
+            interactions = doc.get("interactions", [])
+            if not isinstance(interactions, list):
+                interactions = []
+            interactions.append({
+                "agent": agent,
+                "timestamp": datetime.now().isoformat(),
+                "user": user_input,
+                "agent_response": agent_response[:80],
+            })
+            doc["interactions"] = interactions
+
+            # 重新序列化：保留 YAML 注释区域之外的内容
+            # 策略：用 yaml.dump 重写整个文件，保证 YAML 结构正确
+            self.context_path.write_text(
+                yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
             )
-            if "interactions: []" in content:
-                content = content.replace("interactions: []", f"interactions:[{new_entry}\n  ]")
-            elif "interactions:" in content:
-                content = re.sub(r"(\n  \]:)", f"{new_entry}\\1", content)
-            self.context_path.write_text(content, encoding="utf-8")
 
     def update_context(self, phase: str, data: dict) -> None:
-        """更新 context.md 中的某个阶段产出"""
+        """更新 context.md 中的某个阶段产出 — 使用 YAML 解析而非正则替换"""
         if not self.context_path.exists():
             return
 
         content = self.context_path.read_text(encoding="utf-8")
+        try:
+            doc = yaml.safe_load(content)
+        except yaml.YAMLError:
+            return
 
-        # 替换对应 phase 的 data 块
-        yaml_str = yaml.dump(data, default_flow_style=False, allow_unicode=True)
-        indent_yaml = "\n".join(f"  {line}" for line in yaml_str.strip().split("\n"))
+        if not isinstance(doc, dict):
+            return
 
-        # 匹配 phase 名下的 data 块
-        pattern = rf"({phase} 产出\n\n```yaml\n)data:.*?(\n```)"
-        if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, rf"\1{indent_yaml}\2", content, flags=re.DOTALL)
-        else:
-            # 找不到就只更新 completed
-            pattern2 = rf"({phase} 产出\n\n```yaml\n)completed: (true|false)"
-            if re.search(pattern2, content):
-                content = re.sub(pattern2, r"\1completed: true", content)
+        # 更新对应 phase 的 data
+        phases = doc.get("phases", doc)  # 支持 phases 键或顶层 phase 键
+        if isinstance(phases, dict) and phase in phases:
+            target = phases[phase]
+            if isinstance(target, dict):
+                target["data"] = data
+                target["completed"] = True
+        elif isinstance(doc, dict):
+            # 顶层直接有 phase 键
+            doc[phase] = {"data": data, "completed": True}
 
         # 更新 current_phase
-        content = re.sub(r"(current_phase: )\w+", rf"\1{phase}", content)
+        doc["current_phase"] = phase
 
-        self.context_path.write_text(content, encoding="utf-8")
+        # 重新序列化
+        self.context_path.write_text(
+            yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
 
     def generate_handover_note(
         self,
@@ -506,6 +525,11 @@ class ScribeAgent:
         """读取 context.md 中所有阶段的产出数据，返回聚合 dict。
 
         供 generate_handover_note 和编排层使用，提供项目的全过程快照。
+
+        M5 修复：用完整的 yaml.safe_load 解析整个文件替代正则提取阶段产出。
+        context.md 是 YAML 前端数据 + Markdown 叙述的混合格式，
+        不能直接用 yaml.safe_load 整个文件。
+        但拆分为 YAML fenced 代码块逐个解析即可。
         """
         if not self.context_path.exists():
             return {}
@@ -513,21 +537,20 @@ class ScribeAgent:
         content = self.context_path.read_text(encoding="utf-8")
         result: dict = {}
 
-        # 提取每个阶段的 completed 状态和 data
-        for phase in ("Scout", "Cleaner", "Analyst", "Reporter"):
-            # 匹配 completed 状态
-            completed_match = re.search(
-                rf"## {phase} 产出\n\n```yaml\n(.*?)\n```",
-                content,
-                re.DOTALL,
-            )
-            if completed_match:
-                try:
-                    block = yaml.safe_load(completed_match.group(1))
-                    if isinstance(block, dict):
-                        result[phase.lower()] = block
-                except yaml.YAMLError:
-                    pass
+        # 使用 yaml.safe_load_all 处理多文档 YAML，先提取所有 fenced yaml 块
+        blocks = re.findall(r"```yaml\n(.*?)\n```", content, re.DOTALL)
+
+        # 按顺序分配给各阶段（context.md 中顺序固定）
+        phases = ("Scout", "Cleaner", "Analyst", "Reporter")
+        for i, block in enumerate(blocks):
+            if i >= len(phases):
+                break
+            try:
+                parsed = yaml.safe_load(block)
+                if isinstance(parsed, dict):
+                    result[phases[i].lower()] = parsed
+            except yaml.YAMLError:
+                pass
 
         return result
 

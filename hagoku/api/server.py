@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from hagoku.api.ws_handler import ws_handler
+from hagoku.api.middleware import ApiAuthMiddleware
 
 
 @asynccontextmanager
@@ -48,6 +49,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# M4: API 认证 + 速率限制中间件（在 CORS 之后注册）
+app.add_middleware(ApiAuthMiddleware)
 
 
 @app.get("/api/health")
@@ -224,8 +228,8 @@ async def post_llm_config(req: LlmConfigBody):
     """
     将 LLM 连接参数写入 ~/.hagoku/.env（仅本机开发场景；生产环境应加鉴权或禁用）。
     已运行的 hagoku-api 进程仍使用旧环境变量，需重启后生效。
-    模型名称写入 HAGOKYU_LLM_MODEL 与 HAGOKYU_LLM_MODEL_DEEP；可选的「前面几步」模型名
-    写入 HAGOKYU_LLM_MODEL_QUICK（留空则与上面相同）。
+    模型名称写入 HAGOKU_LLM_MODEL 与 HAGOKU_LLM_MODEL_DEEP；可选的「前面几步」模型名
+    写入 HAGOKU_LLM_MODEL_QUICK（留空则与上面相同）。
     """
     path = _hagoku_dotenv_path()
     base_url = req.base_url.strip()
@@ -234,19 +238,19 @@ async def post_llm_config(req: LlmConfigBody):
     if not base_url or not main:
         raise HTTPException(status_code=400, detail="网址和模型名称不能为空")
     try:
-        _dotenv_set(path, "HAGOKYU_LLM_BASE_URL", base_url)
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL", main)
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL_DEEP", main)
-        _dotenv_set(path, "HAGOKYU_LLM_MODEL_QUICK", sub)
+        _dotenv_set(path, "HAGOKU_LLM_BASE_URL", base_url)
+        _dotenv_set(path, "HAGOKU_LLM_MODEL", main)
+        _dotenv_set(path, "HAGOKU_LLM_MODEL_DEEP", main)
+        _dotenv_set(path, "HAGOKU_LLM_MODEL_QUICK", sub)
         if req.api_key.strip():
-            _dotenv_set(path, "HAGOKYU_LLM_API_KEY", req.api_key.strip())
+            _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
         from dotenv import dotenv_values
 
         vals = dotenv_values(path) or {}
-        akv = str(vals.get("HAGOKYU_LLM_API_KEY") or "").strip()
+        akv = str(vals.get("HAGOKU_LLM_API_KEY") or "").strip()
         api_key_configured = bool(akv and akv.lower() != "none")
-        mq_eff = str(vals.get("HAGOKYU_LLM_MODEL_QUICK") or sub).strip() or main
-        md_eff = str(vals.get("HAGOKYU_LLM_MODEL_DEEP") or main).strip() or main
+        mq_eff = str(vals.get("HAGOKU_LLM_MODEL_QUICK") or sub).strip() or main
+        md_eff = str(vals.get("HAGOKU_LLM_MODEL_DEEP") or main).strip() or main
         sub_display = "" if mq_eff == main else mq_eff
     except HTTPException:
         raise
@@ -257,7 +261,7 @@ async def post_llm_config(req: LlmConfigBody):
         "restart_required": True,
         "hint": "已经存到本机配置文件。请重新启动一次后端（运行 hagoku-api 的那个窗口关掉再开），新设置才会用在分析里。",
         "llm": {
-            "base_url": str(vals.get("HAGOKYU_LLM_BASE_URL") or base_url),
+            "base_url": str(vals.get("HAGOKU_LLM_BASE_URL") or base_url),
             "main_model": main,
             "sub_model": sub_display,
             "model": main,

@@ -44,18 +44,6 @@ from ..constants import (
 
 
 
-# 与编排层展示过滤一致：不把「列名（统计类型）」当业务含义
-_TYPE_ECHO_SUFFIXES: tuple[str, ...] = (
-    "分类型",
-    "数值型",
-    "时间型",
-    "文本型",
-    "布尔型",
-    "标识符",
-    "未知类型",
-)
-
-
 def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
     """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
     s = (raw or "").strip()
@@ -77,19 +65,6 @@ def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
     if not col or not desc:
         return None
     return col, desc
-
-
-def _description_is_user_facing_meaningful(col: str, desc: str) -> bool:
-    """判断描述是否具有业务含义（非「列名（类型）」占位）。"""
-    d = (desc or "").strip()
-    c = (col or "").strip()
-    if not d or d == c:
-        return False
-    for suf in _TYPE_ECHO_SUFFIXES:
-        for o, cl in (("（", "）"), ("(", ")")):
-            if d == f"{c}{o}{suf}{cl}":
-                return False
-    return True
 
 
 def _load_prompt_md_text(agent_name: str) -> str:

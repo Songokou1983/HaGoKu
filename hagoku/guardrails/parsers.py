@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 
 def parse_pvalue(text: str) -> Optional[float]:
@@ -98,6 +98,99 @@ def parse_confidence_interval(text: str) -> Optional[tuple[float, float]]:
     return None
 
 
+def parse_test_statistic(text: str) -> Optional[dict[str, Any]]:
+    """
+    从 LLM 输出中提取检验统计量（t / F / χ² / z）。
+
+    匹配模式:
+      - "t = 2.34", "t(23) = 2.34", "t-statistic = 2.34"
+      - "F = 5.67", "F(2, 45) = 5.67"
+      - "χ² = 12.34", "chi-square = 12.34", "chi2 = 12.34"
+      - "z = 1.96", "z-score = 1.96"
+
+    返回 {"type": "t"|"F"|"chi2"|"z", "value": float, "df": int|None} 或 None。
+    """
+    # t 检验
+    t_pattern = r"""(?ix)
+        t(?:[\s-]*stat(?:istic)?)?\s*(?:\(\s*(\d+)\s*\))?\s*[=：:]\s*
+        (-?\d+\.?\d*)
+    """
+    m = re.search(t_pattern, text)
+    if m:
+        return {"type": "t", "value": float(m.group(2)), "df": int(m.group(1)) if m.group(1) else None}
+
+    # F 检验
+    f_pattern = r"""(?ix)
+        F(?:[\s-]*stat(?:istic)?)?\s*(?:\(\s*(\d+)\s*,\s*(\d+)\s*\))?\s*[=：:]\s*
+        (\d+\.?\d*)
+    """
+    m = re.search(f_pattern, text)
+    if m:
+        return {"type": "F", "value": float(m.group(3)), "df": None}
+
+    # χ² 检验
+    chi_pattern = r"""(?ix)
+        (?:χ\s*2|chi[\s-]*square|chi\s*2)\s*(?:\(\s*(\d+)\s*\))?\s*[=：:]\s*
+        (\d+\.?\d*)
+    """
+    m = re.search(chi_pattern, text)
+    if m:
+        return {"type": "chi2", "value": float(m.group(2)), "df": int(m.group(1)) if m.group(1) else None}
+
+    # z 检验
+    z_pattern = r"""(?ix)
+        z(?:[\s-]*score)?\s*[=：:]\s*
+        (-?\d+\.?\d*)
+    """
+    m = re.search(z_pattern, text)
+    if m:
+        return {"type": "z", "value": float(m.group(1)), "df": None}
+
+    return None
+
+
+def parse_r_squared(text: str) -> Optional[float]:
+    """
+    从 LLM 输出中提取 R² / 调整 R² 值。
+
+    匹配模式:
+      - "R² = 0.72", "R-squared = 0.72", "R2 = 0.72"
+      - "adjusted R² = 0.68", "Adj. R² = 0.68"
+
+    返回 float 或 None。
+    """
+    pattern = r"""(?ix)
+        (?:adj(?:usted)?\.?\s*)?R\s*(?:²|2|[\s-]*squared)\s*[=：:]\s*
+        (\d+\.?\d*)
+    """
+    m = re.search(pattern, text)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+def parse_sample_size(text: str) -> Optional[int]:
+    """
+    从 LLM 输出中提取样本量。
+
+    匹配模式:
+      - "n = 120", "N = 120"
+      - "样本量 = 120", "sample size = 120"
+      - "共 120 个观测", "120 observations"
+
+    返回 int 或 None。
+    """
+    patterns = [
+        r"""(?ix)(?:n|样本量|sample\s*size)\s*[=：:]\s*(\d+)""",
+        r"""(?ix)(\d+)\s*(?:个观测|observations|条记录|个样本)""",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text)
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def validate_analysis_output(text: str) -> dict[str, bool]:
     """
     综合验证 Analyst 输出的结构完整性。
@@ -115,6 +208,9 @@ def validate_analysis_output(text: str) -> dict[str, bool]:
         "has_effect_size": parse_effect_size(text) is not None,
         "has_conclusion": parse_conclusion_count(text) is not None,
         "has_confidence": parse_confidence_interval(text) is not None,
+        "has_test_statistic": parse_test_statistic(text) is not None,
+        "has_r_squared": parse_r_squared(text) is not None,
+        "has_sample_size": parse_sample_size(text) is not None,
     }
 
 
@@ -172,6 +268,35 @@ def check_p_ci_consistency(p: float | None, ci: tuple[float, float] | None) -> d
     return {"consistent": True, "detail": "p 值与 CI 一致"}
 
 
+def is_valid_r_squared(r2: float | None) -> bool:
+    """R² 必须在 [0, 1] 范围内。"""
+    if r2 is None:
+        return False
+    return 0.0 <= r2 <= 1.0
+
+
+def is_valid_sample_size(n: int | None) -> bool:
+    """样本量必须为正整数且不超过合理上界 (10^9)。"""
+    if n is None:
+        return False
+    return 1 <= n <= 1_000_000_000
+
+
+def is_valid_test_statistic(stat: dict[str, Any] | None) -> bool:
+    """检验统计量值必须为有限数。"""
+    if stat is None:
+        return False
+    v = stat.get("value")
+    if v is None:
+        return False
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return False
+    import math
+    return math.isfinite(fv)
+
+
 def detect_hallucination_indicators(text: str) -> list[str]:
     """
     检测 LLM 输出中可能的幻觉指标。
@@ -180,6 +305,8 @@ def detect_hallucination_indicators(text: str) -> list[str]:
       - 无法识别的统计测试名称
       - 数值超出合理范围（p > 1, 样本量为负等）
       - 自相矛盾的陈述（同时声称"显著"和"不显著"）
+      - R² 超出 [0,1] 范围
+      - 检验统计量值非有限
 
     返回发现的可疑项列表。
     """
@@ -213,6 +340,21 @@ def detect_hallucination_indicators(text: str) -> list[str]:
         if not consistency["consistent"]:
             warnings.append(consistency["detail"])
 
+    # 6. 检查 R² 是否合法
+    r2 = parse_r_squared(text)
+    if r2 is not None and not is_valid_r_squared(r2):
+        warnings.append(f"R² = {r2} 不在 [0,1] 范围，可能存在幻觉")
+
+    # 7. 检查检验统计量是否合法
+    stat = parse_test_statistic(text)
+    if stat is not None and not is_valid_test_statistic(stat):
+        warnings.append(f"检验统计量 {stat.get('type')}={stat.get('value')} 非合法数值")
+
+    # 8. 检查样本量是否合理
+    n = parse_sample_size(text)
+    if n is not None and not is_valid_sample_size(n):
+        warnings.append(f"样本量 n={n} 不在合理范围，可能存在幻觉")
+
     return warnings
 
 
@@ -233,10 +375,16 @@ def deep_validate(text: str) -> dict[str, any]:
     p = parse_pvalue(text)
     d = parse_effect_size(text)
     ci = parse_confidence_interval(text)
+    r2 = parse_r_squared(text)
+    stat = parse_test_statistic(text)
+    n = parse_sample_size(text)
 
     p_ok = is_valid_pvalue(p) if p is not None else None  # None = 无 p 值，不算错
     d_ok = is_valid_effect_size(d) if d is not None else None
     ci_ok = is_valid_ci(*ci) if ci is not None else None
+    r2_ok = is_valid_r_squared(r2) if r2 is not None else None
+    stat_ok = is_valid_test_statistic(stat) if stat is not None else None
+    n_ok = is_valid_sample_size(n) if n is not None else None
     consistency = check_p_ci_consistency(p, ci) if p is not None and ci is not None else {"consistent": True, "detail": "无足够数据比较"}
 
     warnings = detect_hallucination_indicators(text)
@@ -256,6 +404,12 @@ def deep_validate(text: str) -> dict[str, any]:
         "ci_valid": ci_ok,
         "p_ci_consistent": consistency["consistent"],
         "p_ci_detail": consistency["detail"],
+        "r_squared_raw": r2,
+        "r_squared_valid": r2_ok,
+        "test_statistic_raw": stat,
+        "test_statistic_valid": stat_ok,
+        "sample_size_raw": n,
+        "sample_size_valid": n_ok,
         "hallucination_warnings": warnings,
         "overall_healthy": overall,
     }

@@ -6,6 +6,8 @@ Cleaner Agent — 数据清洗员
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -80,6 +82,18 @@ class CleanerAgent(InteractionMixin):
                 except yaml.YAMLError:
                     return {}
         return {"cleaning_preferences": {}}
+
+    def _load_cleaning_rules(self) -> str:
+        """从 prompt.md 提取 CLEANING_PLAN_RULES 区块作为 LLM system prompt。"""
+        path = Path(__file__).parent / "prompt.md"
+        if not path.exists():
+            return ""
+        content = path.read_text(encoding="utf-8")
+        # 提取 "## CLEANING_PLAN_RULES" 到下一个 "## " 标题之间的内容
+        match = re.search(r"## CLEANING_PLAN_RULES\s*\n(.*?)(?=\n##\s)", content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return ""
 
     def _save_memory(self) -> None:
         path = Path(__file__).parent / "memory.md"
@@ -171,7 +185,11 @@ class CleanerAgent(InteractionMixin):
                     mcar_result = littles_mcar_test(df)
                     self._emit(EventType.TOOL_RESULT, {"summary": mcar_result["conclusion"]})
                 except Exception:
-                    pass
+                    logging.getLogger("hagoku").warning(
+                        "Little's MCAR 检验不可用（缺少 scipy 或样本不足），"
+                        "缺失机制检测降级：将使用列级缺失模式分析代替。"
+                        "这不会影响清洗质量，仅缺少 MCAR 统计检验的 p 值。"
+                    )
 
                 self._emit(EventType.AGENT_THINKING, {"thought": "检测各列缺失机制..."})
                 for col in null_cols:
@@ -193,7 +211,8 @@ class CleanerAgent(InteractionMixin):
                 operations = user_operations
                 self._emit(EventType.AGENT_THINKING, {"thought": "使用用户指定的清洗操作"})
             else:
-                operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
+                cleaning_rules = self._load_cleaning_rules()
+                operations = self._plan_operations(df, context, mechanisms, outliers_iqr, cleaning_rules)
 
             # phase="strategy_only"：只检测+计划，返回策略供用户确认
             if phase == "strategy_only":
@@ -319,7 +338,11 @@ class CleanerAgent(InteractionMixin):
                     mcar_result = littles_mcar_test(df)
                     self._emit(EventType.TOOL_RESULT, {"summary": mcar_result["conclusion"]})
                 except Exception:
-                    pass
+                    logging.getLogger("hagoku").warning(
+                        "Little's MCAR 检验不可用（缺少 scipy 或样本不足），"
+                        "缺失机制检测降级：将使用列级缺失模式分析代替。"
+                        "这不会影响清洗质量，仅缺少 MCAR 统计检验的 p 值。"
+                    )
 
                 self._emit(EventType.AGENT_THINKING, {"thought": "检测各列缺失机制..."})
                 for col in null_cols:
@@ -329,15 +352,27 @@ class CleanerAgent(InteractionMixin):
                     except Exception:
                         mechanisms[col] = "unknown"
 
+            # 从 prompt.md 读取清洗规划规则
+            cleaning_rules = self._load_cleaning_rules()
             # 检索相关清洗策略经验
-            query = f"{context.get('target', '')} {','.join(context.get('features', [])[:5])} 缺失率{len(null_cols)/len(df):.0%}"
-            recalled = cleaner_knowledge.recall(query, top_k=2)
+            query_text = (
+                f"{context.get('target', '')} "
+                f"{','.join(context.get('features', [])[:5])} "
+                f"缺失率{len(null_cols)/len(df):.0%}"
+            )
+            recalled = cleaner_knowledge.recall(query_text, top_k=2)
             if recalled:
-                hint = "参考经验：" + " | ".join(f"{r['metadata'].get('action','?')}({r['similarity']:.0%})" for r in recalled)
+                hint = (
+                    "参考经验："
+                    + " | ".join(
+                        f"{r['metadata'].get('action','?')}({r['similarity']:.0%})"
+                        for r in recalled
+                    )
+                )
                 self._emit(EventType.AGENT_THINKING, {"thought": hint})
 
             # 规划清洗操作
-            operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
+            operations = self._plan_operations(df, context, mechanisms, outliers_iqr, cleaning_rules)
             self._operations = operations
 
             self._phase = "confirm_strategy"
@@ -496,13 +531,14 @@ class CleanerAgent(InteractionMixin):
         context: dict,
         mechanisms: dict,
         outliers: dict,
+        cleaning_rules: str = "",
     ) -> list[dict]:
         """规划清洗操作 — LLM 原生模式
 
         LLM 不可达或返回无效结果时，直接抛出异常。
         框架不做硬编码兜底：LLM 有问题就去解决 LLM 的问题。
         """
-        llm_ops = self._plan_via_llm(df, context, mechanisms, outliers)
+        llm_ops = self._plan_via_llm(df, context, mechanisms, outliers, cleaning_rules)
         if llm_ops:
             self._emit(EventType.AGENT_THINKING, {
                 "thought": f"LLM 生成了 {len(llm_ops)} 个清洗操作"
@@ -520,11 +556,13 @@ class CleanerAgent(InteractionMixin):
         context: dict,
         mechanisms: dict,
         outliers: dict,
+        cleaning_rules: str = "",
     ) -> list[dict] | None:
         """LLM 原生清洗规划：让 LLM 直接看数据并决定清洗策略
 
         对标 Scout._infer_all_semantics() 的 LLM 原生模式：
         - 构建每列数据画像 + 字段语义 + 分析目标
+        - 从 prompt.md 读取清洗策略规则（cleaning_rules），作为 LLM system prompt
         - 发送给 LLM
         - 解析 JSON 输出
         """
@@ -572,8 +610,8 @@ class CleanerAgent(InteractionMixin):
             try:
                 sample_vals = df[col].dropna().unique()[:3]
                 col_info["sample_values"] = [str(v) for v in sample_vals]
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger("hagoku").debug(f"无法获取 {col} 列的样本值: {e}")
 
             column_list.append(col_info)
 
@@ -590,42 +628,46 @@ class CleanerAgent(InteractionMixin):
             "columns": column_list,
         }
 
-        system_prompt = (
-            "你是专业数据清洗员。你收到的每列数据画像仅包含原始统计量（count/min/q25/median/q75/max/mean/null_rate），"
-            "没有任何预判信息。你需要自行决策：\n"
-            "\n"
-            "核心原则：\n"
-            "1. 清洗策略必须匹配分析目标：\n"
-            "   - 看分布/画像 → 不截断极端值，极端值就是用户想看的\n"
-            "   - 算均值/比较 → 温和截断极端值，保护均值不被拉偏\n"
-            "   - 预测建模 → 保守处理特征列，目标变量绝对不碰\n"
-            "   - 找高价值/异常 → 极端值就是答案，不做截断\n"
-            "2. 自行判断列的语义边界（不要依赖代码预判，数据里没有'known_range'字段）：\n"
-            "   - 比较 min/max 与样本值判断是否为评分列（如 1-5 / 1-10 / 0-100 百分比）→ 是评分则 skip\n"
-            "   - 比较 q75 与 max 的差距判断有无极端值（如 max > q75 * 3 可能有极端值，max > q75 * 10 几乎确定是异常）\n"
-            "   - 比较 mean 与 median 的偏离判断分布偏态\n"
-            "3. 标识列(identifier)、分组列 — 不处理\n"
-            "4. 缺失率 > 50% → 建议标记缺失（fill_mcar），不要盲目删行\n"
-            "5. 缺失率 < 1% 且非目标变量 → 可删行\n"
-            "6. 目标变量绝对不删行、不截断 → skip\n"
-            "\n"
-            "输出一个 JSON 对象，字段 `operations` 为数组，仅包含需要处理的列。每项包含：\n"
-            "  - column: 列名（照抄）\n"
-            "  - strategy: 清洗策略（winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip）\n"
-            "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'最大值为中位数的15倍，存在极端偏离'这样）\n"
-            "  - impact_estimate: 预估影响行数或比例（字符串，如'约5%'）\n"
-            "\n"
-            "不需要清洗的列不要出现在 operations 中。"
-        )
+        # 优先使用 prompt.md 中的 CLEANING_PLAN_RULES
+        if cleaning_rules.strip():
+            system_prompt = cleaning_rules.strip()
+        else:
+            # 回退：保持原有硬编码（向后兼容，prompt.md 未配置时仍可用）
+            system_prompt = (
+                "你是专业数据清洗员。你收到的每列数据画像仅包含原始统计量（count/min/q25/median/q75/max/mean/null_rate），"
+                "没有任何预判信息。你需要自行决策：\n"
+                "\n"
+                "核心原则：\n"
+                "1. 清洗策略必须匹配分析目标：\n"
+                "   - 看分布/画像 → 不截断极端值，极端值就是用户想看的\n"
+                "   - 算均值/比较 → 温和截断极端值，保护均值不被拉偏\n"
+                "   - 预测建模 → 保守处理特征列，目标变量绝对不碰\n"
+                "   - 找高价值/异常 → 极端值就是答案，不做截断\n"
+                "2. 自行判断列的语义边界（不要依赖代码预判，数据里没有'known_range'字段）：\n"
+                "   - 比较 min/max 与样本值判断是否为评分列（如 1-5 / 1-10 / 0-100 百分比）→ 是评分则 skip\n"
+                "   - 比较 q75 与 max 的差距判断有无极端值（如 max > q75 * 3 可能有极端值，max > q75 * 10 几乎确定是异常）\n"
+                "   - 比较 mean 与 median 的偏离判断分布偏态\n"
+                "3. 标识列(identifier)、分组列 — 不处理\n"
+                "4. 缺失率 > 50% → 建议标记缺失（fill_mcar），不要盲目删行\n"
+                "5. 缺失率 < 1% 且非目标变量 → 可删行\n"
+                "6. 目标变量绝对不删行、不截断 → skip\n"
+                "\n"
+                "输出一个 JSON 对象，字段 `operations` 为数组，仅包含需要处理的列。每项包含：\n"
+                "  - column: 列名（照抄）\n"
+                "  - strategy: 清洗策略（winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip）\n"
+                "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'最大值为中位数的15倍，存在极端偏离'这样）\n"
+                "  - impact_estimate: 预估影响行数或比例（字符串，如'约5%'）\n"
+                "\n"
+                "不需要清洗的列不要出现在 operations 中。"
+            )
 
         client = create_raw_client(self.llm_config)
-        import json as _json
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请分析以下数据集的清洗需求：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
+                    {"role": "user", "content": f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
                 ],
                 temperature=0.0,
                 max_tokens=4096,
@@ -636,19 +678,19 @@ class CleanerAgent(InteractionMixin):
             raise RuntimeError(f"Cleaner LLM 清洗规划失败：LLM 不可达。原始错误: {e}") from e
 
         try:
-            result = _json.loads(raw)
-        except _json.JSONDecodeError:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
             try:
                 cleaned = raw.strip()
                 cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
                 cleaned = re.sub(r"\s*```\s*$", "", cleaned)
                 cleaned = cleaned.strip()
-                result = _json.loads(cleaned)
-            except _json.JSONDecodeError:
+                result = json.loads(cleaned)
+            except json.JSONDecodeError:
                 try:
                     match = re.search(r"\{.*\}", raw, re.DOTALL)
                     if match:
-                        result = _json.loads(match.group())
+                        result = json.loads(match.group())
                     else:
                         raise
                 except Exception:
@@ -753,8 +795,6 @@ class CleanerAgent(InteractionMixin):
             "bias_risk_reason": report.bias_risk_reason,
         }
 
-        import json
-
         prompt = f"""你是专业数据清洗员，刚完成一次数据清洗。请根据以下事实，生成一段面向分析师和报告撰写员的「清洗影响叙述」。
 
 清洗事实：
@@ -794,8 +834,6 @@ class CleanerAgent(InteractionMixin):
             narrative = response.choices[0].message.content.strip()
 
         except Exception:
-            import logging
-
             logging.getLogger("hagoku").warning(
                 "Cleaner LLM impact narrative generation failed, using fallback"
             )
@@ -842,7 +880,8 @@ class CleanerAgent(InteractionMixin):
             except Exception:
                 mechanisms[col] = "unknown"
 
-        operations = self._plan_operations(df, context, mechanisms, outliers_iqr)
+        cleaning_rules = self._load_cleaning_rules()
+        operations = self._plan_operations(df, context, mechanisms, outliers_iqr, cleaning_rules)
 
         # 数据质量统计（由 LLM 解读，代码不做评级）
         n_rows = len(df)

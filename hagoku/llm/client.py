@@ -137,6 +137,34 @@ def create_quick_client(config: Any) -> Any:
     return create_structured_llm_client(quick_config)
 
 
+# 全局 AsyncOpenAI 客户端单例（连接复用）
+_async_client: Any = None
+_async_client_config: tuple[str, str] | None = None  # (base_url, api_key)
+
+
+def _get_async_client() -> Any:
+    """获取或创建全局 AsyncOpenAI 客户端，复用底层 HTTP 连接池。"""
+    global _async_client, _async_client_config
+
+    from openai import AsyncOpenAI
+    from ..config import HaGoKuConfig
+
+    config = HaGoKuConfig.load()
+    llm = config.llm
+    cache_key = (llm.base_url, llm.api_key)
+
+    if _async_client is None or _async_client_config != cache_key:
+        with _clear_proxy_env():
+            _async_client = AsyncOpenAI(
+                base_url=llm.base_url,
+                api_key=llm.api_key,
+                timeout=30.0,
+            )
+            _async_client_config = cache_key
+
+    return _async_client
+
+
 async def chat_completion(
     messages: list[dict[str, str]],
     *,
@@ -147,29 +175,23 @@ async def chat_completion(
 
     自动加载环境配置，使用快速模型（model_quick）以降低延迟。
     不依赖 instructor，直接调用 OpenAI chat.completions.create。
+    复用全局 AsyncOpenAI 客户端以复用底层 HTTP 连接池。
 
     Returns:
         dict with keys "content" and "role"（兼容 resp.get("content") 访问方式）
     """
-    from openai import AsyncOpenAI
-
     from ..config import HaGoKuConfig
 
     config = HaGoKuConfig.load()
     llm = config.llm
 
-    with _clear_proxy_env():
-        client = AsyncOpenAI(
-            base_url=llm.base_url,
-            api_key=llm.api_key,
-            timeout=30.0,
-        )
-        response = await client.chat.completions.create(
-            model=llm.model_quick or llm.model,
-            messages=messages,  # type: ignore[arg-type]
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    client = _get_async_client()
+    response = await client.chat.completions.create(
+        model=llm.model_quick or llm.model,
+        messages=messages,  # type: ignore[arg-type]
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
 
     choice = response.choices[0]
     return {

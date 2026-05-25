@@ -90,15 +90,6 @@ def _scout_semantic_fallback_label(col: str, sem: dict[str, Any] | None) -> str:
     return _md_table_cell(col)
 
 
-def _scout_description_is_meaningful_for_user(col: str, desc: str) -> bool:
-    """判断字段描述是否对用户有业务含义（非「列名（统计类型）」占位符）。
-
-    委托给 Scout agent 的同名逻辑，保持语义一致性。
-    """
-    from ..agents.scout.agent import _description_is_user_facing_meaningful
-    return _description_is_user_facing_meaningful(col, desc)
-
-
 def _scout_ai_meaning_cell(column_name: str, meaning_text: str, sem: dict[str, Any]) -> str:
     """字段核对表第三列：AI 对字段的含义理解；无描述时保留原文（不再硬编码 type/role 兜底文案）。"""
     d = (meaning_text or "").strip()
@@ -2610,8 +2601,50 @@ class Orchestrator:
         else:
             return ""
 
+        # 一层：LLM 主模型生成消息
+        msg = self._try_generate_phase_llm(
+            phase=phase, data_quality=data_quality,
+            n_ops=n_ops, ops_desc=ops_desc,
+            n_findings=n_findings, findings_desc=findings_desc,
+            sf=sf, pw=pw,
+            retry=False,
+        )
+        if msg is not None:
+            return msg
+
+        # 二层：LLM 快速模型重试
+        msg = self._try_generate_phase_llm(
+            phase=phase, data_quality=data_quality,
+            n_ops=n_ops, ops_desc=ops_desc,
+            n_findings=n_findings, findings_desc=findings_desc,
+            sf=sf, pw=pw,
+            retry=True,
+        )
+        if msg is not None:
+            return msg
+
+        # 三层：LLM 完全不可达时的纯数据兜底（零语义归因）
+        return self._build_fallback_phase_message(
+            phase=phase, data_quality=data_quality,
+            operations=operations, findings=findings,
+        )
+
+    def _try_generate_phase_llm(
+        self,
+        phase: str,
+        data_quality: str,
+        n_ops: int,
+        ops_desc: str,
+        n_findings: int,
+        findings_desc: str,
+        sf: str,
+        pw: str,
+        retry: bool,
+    ) -> str | None:
+        """尝试使用 LLM 生成阶段消息。retry=True 时使用快速模型作为二层回退。"""
         try:
-            client = create_raw_client(self.config.llm)
+            from hagoku.llm.client import create_raw_client
+
             system_prompt = (
                 "你是数据分析助手 HaGoKu Studio。请用自然、亲切的中文为用户生成一段对话消息。"
                 "不要使用模板化的句式，用你自己的语言风格来表达。"
@@ -2632,10 +2665,16 @@ class Orchestrator:
                     "请生成一条消息告知用户，并询问用户想关注哪个方向。"
                 )
             else:
-                return ""
+                return None
 
+            client = create_raw_client(self.config.llm)
+            model = (
+                (self.config.llm.model_quick or self.config.llm.model)
+                if retry
+                else self.config.llm.model
+            )
             response = client.chat.completions.create(
-                model=self.config.llm.model_quick or self.config.llm.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -2645,22 +2684,45 @@ class Orchestrator:
             )
             msg = response.choices[0].message.content or ""
             return msg.strip()
-
         except Exception:
-            # LLM 不可达时返回兜底
-            if phase == "cleaning_strategy":
-                n_ops = len(operations) if operations else 0
-                quality_labels = {"good": "数据质量良好", "medium": "数据质量一般", "poor": "数据质量问题较多"}
-                q = quality_labels.get(data_quality, data_quality)
-                if n_ops == 0:
-                    return f"{q}，未检测到需要清洗的问题，可以直接分析。"
-                return f"{q}，计划执行 {n_ops} 个清洗操作。这个方案可以吗？"
-            elif phase == "analyst_preliminary":
-                n_findings = len(findings) if findings else 0
-                if n_findings == 0:
-                    return "初步分析没有发现明显的统计规律。你想从哪个维度再看一下？"
-                return f"初步发现 {n_findings} 个分析方向。你想重点关注哪个？"
-            return ""
+            logger.warning(
+                "_try_generate_phase_llm: LLM 不可达（retry=%s）", retry, exc_info=True
+            )
+            return None
+
+    def _build_fallback_phase_message(
+        self,
+        phase: str,
+        data_quality: str,
+        operations: list | None = None,
+        findings: list | None = None,
+    ) -> str:
+        """LLM 完全不可达时的纯数据兜底（零语义归因）。"""
+        if phase == "cleaning_strategy":
+            n_ops = len(operations) if operations else 0
+            quality_labels = {
+                "good": "数据质量良好",
+                "medium": "数据质量一般",
+                "poor": "数据质量问题较多",
+            }
+            q = quality_labels.get(data_quality, data_quality)
+            if n_ops == 0:
+                return f"{q}，未检测到需要清洗的问题，可以直接分析。"
+            lines = [f"共 {n_ops} 个清洗操作："]
+            for op in (operations or [])[:6]:
+                lines.append(f"  • {op.get('column', '?')}: {op.get('reason', '')}")
+            lines.append("请确认是否按此方案清洗。")
+            return "\n".join(lines)
+        elif phase == "analyst_preliminary":
+            n_findings = len(findings) if findings else 0
+            if n_findings == 0:
+                return "初步分析没有发现明显的统计规律。你想从哪个维度再看一下？"
+            lines = [f"初步发现 {n_findings} 个分析方向："]
+            for f_item in (findings or [])[:6]:
+                lines.append(f"  • {f_item.get('question', '?')}")
+            lines.append("你想重点关注哪个方向？")
+            return "\n".join(lines)
+        return ""
 
     def _describe_intent(self, parsed_intent: Any) -> str:
         """将解析后的意图译成接在「让我来」后的自然短句（LLM thinking 驱动，零硬编码映射）。"""
@@ -2682,8 +2744,22 @@ class Orchestrator:
             parts.append(f"按「{'/'.join(parsed_intent.group_by)}」分组")
 
         base = getattr(parsed_intent, "intent_type", "exploration") or "exploration"
-        kind = {"comparison": "对比差异", "causation": "找原因", "correlation": "看关系",
-                "trend": "看趋势", "diagnostic": "诊断问题"}.get(base, "探索规律")
+        kind_map: dict[str, str] = {
+            "comparison": "对比差异",
+            "causation": "找原因",
+            "correlation": "看关系",
+            "trend": "看趋势",
+            "diagnostic": "诊断问题",
+            "roi_analysis": "看投入产出",
+            "ltv_analysis": "看用户生命周期价值",
+            "cac_analysis": "看获客成本",
+            "funnel_conversion": "看转化漏斗",
+            "attribution": "看归因",
+            "investment_decision": "看投资决策",
+            "cohort_analysis": "看人群分层",
+            "growth_rate": "看增长率",
+        }
+        kind = kind_map.get(base, "探索规律")
         return f"{kind}，{'，'.join(parts)}" if parts else f"{kind}"
 
     def _build_analysis_purpose(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -2748,10 +2824,8 @@ class Orchestrator:
 
         return "".join(parts)
 
-    # ==== CLI 降级模式：允许简化确认匹配 ====
-    # 此方法仅用于 CLI 交互模式（非 Web UI 主路径）。
-    # 在终端环境中，function calling 的多轮确认流程过于繁琐，
-    # 故使用硬编码关键词匹配作为降级方案。Web UI 中走正常的 function calling 通道。
+    # ==== CLI 交互模式：全程 LLM 驱动 ====
+    # 用户确认/纠正/混合意图都由 LLM 判断，代码只做结构化路由和兜底。
     def _request_field_confirmation(
         self,
         context: dict,
@@ -2759,8 +2833,7 @@ class Orchestrator:
     ) -> dict | None:
         """
         Scout 识别完字段后，和用户对话确认字段含义。
-        Scout 展示理解，用户纠正，直到用户确认。
-        必须用户明确说"好"才能继续。
+        全程 LLM 驱动：用户意图由 LLM 分类为 confirm/correction/mixed。
         """
         print("\n" + "=" * 60)
         print("📋 字段理解")
@@ -2789,9 +2862,11 @@ class Orchestrator:
             if not user_input:
                 continue
 
-            # 用户说"好"或"继续"或"是"表示确认
-            if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
-                # Scout 展示最终理解，建议进入数据清洗
+            # LLM 判断：确认 / 纠正 / 混合（确认+纠正）
+            action = self._llm_classify_confirmation(user_input, context)
+
+            if action["type"] == "confirm":
+                # 用户确认，进入最终展示
                 print("\n📋 最终字段理解：")
                 for sem in context["column_semantics"]:
                     col = sem["column_name"]
@@ -2799,30 +2874,97 @@ class Orchestrator:
                     print(f"  {col} = {desc}")
                 print("\n我准备进入数据清洗阶段，可以吗？")
                 confirm = input("➜ (回车确认，或继续纠正) ").strip()
-                if confirm.lower() in ("好", "是", "ok", "y", "yes", ""):
+                if not confirm:
                     break
-                elif confirm:
-                    user_input = confirm
-                else:
+                c_action = self._llm_classify_confirmation(confirm, context)
+                if c_action["type"] == "confirm":
+                    break
+                # 有纠正内容则继续处理
+                updates = c_action.get("updates", {})
+                if updates:
+                    self._apply_field_corrections(context, corrections, updates)
+            else:
+                # correction 或 mixed：先应用纠正，再继续确认循环
+                updates = action.get("updates", {})
+                if updates:
+                    self._apply_field_corrections(context, corrections, updates)
+                if action["type"] == "mixed":
+                    # 用户确认+纠正，纠正后展示最终结果再让用户确认
+                    print("\n📋 更新后的字段理解：")
+                    for sem in context["column_semantics"]:
+                        col = sem["column_name"]
+                        desc = context["column_descriptions"].get(col, sem["inferred_type"])
+                        print(f"  {col} = {desc}")
+                    print("\n可以进入数据清洗了吗？")
+                    # 继续循环等用户确认
                     continue
-
-            # 让 LLM 理解用户说的话，更新 context
-            understood = self._llm_understand_field_update(context, user_input)
-            if understood:
-                corrections.update(understood)
 
         if corrections:
             print(f"\n📝 保存 {len(corrections)} 个字段...")
-            for col, info in corrections.items():
-                context["column_descriptions"][col] = f"{info['chinese_name']}（{info['business_meaning']}）"
-                for s in context["column_semantics"]:
-                    if s["column_name"] == col:
-                        s["evidence"] = info['business_meaning']
-                        break
             self._save_field_descriptions(project_name, corrections)
 
         print("\n✅ 进入数据清洗...")
         return context
+
+    def _apply_field_corrections(
+        self,
+        context: dict,
+        corrections: dict,
+        updates: dict,
+    ) -> None:
+        """将 LLM 识别的字段纠正应用到 context 和 corrections 记录中。"""
+        for col, info in updates.items():
+            corrections[col] = info
+            context["column_descriptions"][col] = f"{info['chinese_name']}（{info['business_meaning']}）"
+            for s in context["column_semantics"]:
+                if s["column_name"] == col:
+                    s["evidence"] = info["business_meaning"]
+                    s["needs_user_input"] = False
+                    break
+            print(f"   ✅ {col} = {info['chinese_name']}（{info['business_meaning']}）")
+
+    def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
+        """LLM 判断用户输入是「确认」还是「纠正」还是「混合（确认+纠正）」。
+
+        返回 {"type": "confirm|correction|mixed", "updates": {col: {chinese_name, business_meaning}}}
+        """
+        try:
+            from hagoku.llm.client import create_raw_client
+
+            columns = [s["column_name"] for s in context["column_semantics"]]
+
+            client = create_raw_client(self.config.llm)
+            response = client.chat.completions.create(
+                model=self.config.llm.model_quick or self.config.llm.model,
+                messages=[
+                    {"role": "system", "content": (
+                        "你是意图分类器。判断用户在字段确认阶段的输入属于：\n"
+                        "- confirm: 用户确认字段理解正确，同意继续（如「好」「对的」「没问题」「确认」「可以」）\n"
+                        "- correction: 用户纠正字段含义（如「Inc1 是销售额」「渠道错了，应该是来源」）\n"
+                        "- mixed: 用户先确认再纠正（如「好，但是 Inc1 应该是收入」）\n\n"
+                        "输出纯 JSON:\n"
+                        '{"type": "confirm|correction|mixed", '
+                        '"updates": {"字段名": {"chinese_name": "...", "business_meaning": "..."}}}'
+                    )},
+                    {"role": "user", "content": f"字段列表：{', '.join(columns)}\n用户说：{user_input}"},
+                ],
+                temperature=0.0,
+                max_tokens=256,
+                response_format={"type": "json_object"},
+            )
+            import json
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+            return json.loads(result_text.strip())
+        except Exception:
+            # 兜底：保持向后兼容的最小关键词匹配
+            if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
+                return {"type": "confirm", "updates": {}}
+            return {"type": "correction", "updates": {}}
+
 
     def _llm_understand_field_update(
         self,

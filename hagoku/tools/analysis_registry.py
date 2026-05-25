@@ -262,6 +262,27 @@ class AnalysisRegistry:
             methods = [m for m in methods if m.enabled]
         return sorted(methods, key=lambda m: m.name)
 
+    def describe_all(self, enabled_only: bool = True) -> list[dict[str, Any]]:
+        """返回所有方法的结构化描述（供 LLM 提示构建）
+
+        每个方法返回一个 dict，包含:
+        - method: 方法标识名
+        - name: 显示名称 (display_name 或 name)
+        - 适用: 描述文本
+        - tags: 方法标签列表
+        """
+        result = []
+        for m in self.list_all(enabled_only=enabled_only):
+            item = {
+                "method": m.name,
+                "name": getattr(m, "display_name", "") or m.name,
+                "适用": m.description or f"执行 {m.name} 分析",
+            }
+            if m.tags:
+                item["tags"] = m.tags
+            result.append(item)
+        return result
+
     def enable(self, name: str) -> bool:
         """启用方法"""
         if name in self._methods:

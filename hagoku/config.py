@@ -59,6 +59,7 @@ class AnalysisConfig(BaseModel):
     p_value_threshold: float = 0.05
     shapiro_sample_limit: int = 5000
     overfitting_gap_threshold: float = 0.2
+    k_folds: int = 5  # cross_validate 的折数
 
 
 class KnowledgeConfig(BaseModel):
@@ -156,26 +157,27 @@ class HaGoKuConfig(BaseModel):
 
     @classmethod
     def _merge_env(cls, config: "HaGoKuConfig") -> "HaGoKuConfig":
-        """环境变量覆盖已有配置"""
-        if v := os.getenv("HAGOKYU_LLM_MODEL"):
+        """环境变量覆盖已有配置（HAGOKU_ 前缀，HAGOKYU_ 前缀向后兼容）"""
+        # 优先使用 HAGOKU_ 前缀，回退到 HAGOKYU_ 前缀
+        if v := os.getenv("HAGOKU_LLM_MODEL") or os.getenv("HAGOKYU_LLM_MODEL"):
             config.llm.model = v
-        if v := os.getenv("HAGOKYU_LLM_BASE_URL"):
+        if v := os.getenv("HAGOKU_LLM_BASE_URL") or os.getenv("HAGOKYU_LLM_BASE_URL"):
             config.llm.base_url = v
-        if v := os.getenv("HAGOKYU_LLM_API_KEY"):
+        if v := os.getenv("HAGOKU_LLM_API_KEY") or os.getenv("HAGOKYU_LLM_API_KEY"):
             config.llm.api_key = v
-        if v := os.getenv("HAGOKYU_WORK_DIR"):
+        if v := os.getenv("HAGOKU_WORK_DIR") or os.getenv("HAGOKYU_WORK_DIR"):
             config.work_dir = Path(v).expanduser()
-        if v := os.getenv("HAGOKYU_PROJECT_DIR"):
+        if v := os.getenv("HAGOKU_PROJECT_DIR") or os.getenv("HAGOKYU_PROJECT_DIR"):
             config.output.project_dir = Path(v).expanduser()
-        if v := os.getenv("HAGOKYU_EMBEDDING_BASE_URL"):
+        if v := os.getenv("HAGOKU_EMBEDDING_BASE_URL") or os.getenv("HAGOKYU_EMBEDDING_BASE_URL"):
             config.embedding.base_url = v
-        if v := os.getenv("HAGOKYU_EMBEDDING_API_KEY"):
+        if v := os.getenv("HAGOKU_EMBEDDING_API_KEY") or os.getenv("HAGOKYU_EMBEDDING_API_KEY"):
             config.embedding.api_key = v
-        if v := os.getenv("HAGOKYU_EMBEDDING_MODEL"):
+        if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
-        if v := os.getenv("HAGOKYU_LLM_MODEL_DEEP"):
+        if v := os.getenv("HAGOKU_LLM_MODEL_DEEP") or os.getenv("HAGOKYU_LLM_MODEL_DEEP"):
             config.llm.model_deep = v
-        if v := os.getenv("HAGOKYU_LLM_MODEL_QUICK"):
+        if v := os.getenv("HAGOKU_LLM_MODEL_QUICK") or os.getenv("HAGOKYU_LLM_MODEL_QUICK"):
             config.llm.model_quick = v
         return config
 

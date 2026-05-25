@@ -6,6 +6,7 @@ Analyst Agent — 数理分析员
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -38,6 +39,8 @@ from .._interactive import InteractionMixin
 from ..types import InteractionResult
 from . import knowledge as analyst_knowledge
 
+logger = logging.getLogger("hagoku.analyst")
+
 from ..constants import (
     ANALYST_DEDUP_SIMILARITY,
     CLEANING_IMPACT_HIGH_THRESHOLD,
@@ -64,6 +67,15 @@ from ..constants import (
     SIGNIFICANCE_LABEL_SIG,
     SIGNIFICANCE_THRESHOLD,
 )
+
+
+class NeedUserClarification(Exception):
+    """LLM 无法确定分析策略时需要用户澄清"""
+    def __init__(self, message: str, *, options: list[str] | None = None, context: dict | None = None):
+        super().__init__(message)
+        self.message = message
+        self.options = options or []
+        self.context = context or {}
 
 
 @dataclass
@@ -153,17 +165,29 @@ class AnalystAgent(InteractionMixin):
         path = Path(__file__).parent / "memory.md"
         content = path.read_text(encoding="utf-8")
 
-        patterns_yaml = yaml.dump(
-            self.memory.get("analysis_patterns", {}),
+        # 使用 yaml.dump 序列化整个 memory 结构，避免正则替换脆弱性
+        memory_yaml = yaml.dump(
+            self.memory,
             default_flow_style=False,
-            allow_unicode=True
+            allow_unicode=True,
+            sort_keys=False,
         )
 
-        pattern = r"```yaml\nanalysis_patterns:.*?```"
-        if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, f"```yaml\nanalysis_patterns:\n{patterns_yaml}```", content, flags=re.DOTALL)
-        else:
-            content = re.sub(r"analysis_patterns: \{\}", f"analysis_patterns:\n{patterns_yaml}", content)
+        # 找到 yaml 代码块的起止边界并完整替换
+        fence_start = "```yaml\n"
+        fence_end = "\n```"
+        start_idx = content.find(fence_start)
+        if start_idx != -1:
+            # 找到 fence_start 之后的第一个 fence_end
+            after_start = start_idx + len(fence_start)
+            end_idx = content.find(fence_end, after_start)
+            if end_idx != -1:
+                content = (
+                    content[:start_idx]
+                    + fence_start
+                    + memory_yaml.strip()
+                    + content[end_idx:]
+                )
 
         path.write_text(content, encoding="utf-8")
 
@@ -233,7 +257,7 @@ class AnalystAgent(InteractionMixin):
                 if atype == "regression":
                     result = self._do_regression(df, context, step.get("target_col") or target_col, step.get("question", query))
                 elif atype == "hypothesis_test":
-                    result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col)
+                    result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col, step.get("group_col"))
                 elif atype == "correlation":
                     result = self._do_correlation(df, context)
                 elif atype == "trend_analysis":
@@ -250,9 +274,38 @@ class AnalystAgent(InteractionMixin):
                     result["method_name"] = step.get("method_name", "")
                     results.append(result)
 
-        # 如果 LLM 计划为空或全部失败，走机械序列兜底
+        # 如果 LLM 计划为空或全部失败，不执行代码预设的机械序列
+        # 而是增强上下文后重试一次，仍失败则抛出异常请求用户澄清
         if not results:
-            results = self._auto_analyze(df, context, target_col, query)
+            self._emit(EventType.AGENT_THINKING, {"thought": "LLM 未生成分析计划，正在增强上下文重试..."})
+            retry_steps = self._plan_analysis_via_llm(
+                df, context, target_col, query, retry=True
+            )
+            if retry_steps:
+                for step in retry_steps:
+                    atype = step["analysis_type"]
+                    if atype == "regression":
+                        result = self._do_regression(df, context, step.get("target_col") or target_col, step.get("question", query))
+                    elif atype == "hypothesis_test":
+                        result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col, step.get("group_col"))
+                    elif atype == "correlation":
+                        result = self._do_correlation(df, context)
+                    elif atype == "trend_analysis":
+                        result = self._do_trend(df, context, step.get("target_col") or target_col)
+                    else:
+                        continue
+                    if result:
+                        result["method_reason"] = step.get("reason", "")
+                        result["method_name"] = step.get("method_name", "")
+                        results.append(result)
+
+            if not results:
+                # 两次 LLM 调用都失败 → 向用户请求澄清，不执行机械分析
+                raise NeedUserClarification(
+                    f"无法自动确定「{query or '当前数据'}」的分析策略。"
+                    f"数据包含 {len(df.columns)} 列、{len(df)} 行。"
+                    f"请告诉我您更关注哪些方面？例如：差异对比、相关性、趋势、预测建模等。"
+                )
 
         # phase="preliminary"：只返回初步发现，不做增强诊断
         if phase == "preliminary":
@@ -454,9 +507,10 @@ class AnalystAgent(InteractionMixin):
             }
 
         except Exception:
+            logger.warning("回归分析执行失败", exc_info=True)
             return None
 
-    def _do_hypothesis_test(self, df, context, target_col) -> dict | None:
+    def _do_hypothesis_test(self, df, context, target_col, group_col=None) -> dict | None:
         """假设检验"""
         cat_cols = [
             s["column_name"]
@@ -479,7 +533,33 @@ class AnalystAgent(InteractionMixin):
         if not target_col or not cat_cols:
             return None
 
-        group_col = cat_cols[0]
+        # 优先使用 LLM 选择的 group_col；回退方案也要让用户知情
+        if group_col and group_col in df.columns and df[group_col].nunique() >= 2:
+            pass  # LLM 选择有效
+        elif cat_cols:
+            # P1 修复：不再静默回退 cat_cols[0]
+            candidates = [(c, int(df[c].nunique())) for c in cat_cols if df[c].nunique() >= 2]
+            if len(candidates) == 1:
+                group_col = candidates[0][0]
+            elif len(candidates) > 1:
+                parts = [f"{c} ({n} 组)" for c, n in candidates]
+                raise NeedUserClarification(
+                    f"请选择用于比较 '{target_col}' 的分组变量：\n" +
+                    "\n".join(f"  · {p}" for p in parts),
+                    options=[c for c, _ in candidates],
+                    context={"target_col": target_col, "candidates": [c for c, _ in candidates]},
+                )
+            else:
+                group_col = None
+        else:
+            group_col = None
+
+        if not group_col:
+            raise NeedUserClarification(
+                f"需要为 '{target_col}' 指定分组变量进行假设检验，但当前数据中没有可用"
+                "的分类列（需要至少 2 组且每组不少于 2 个样本）。",
+                context={"target_col": target_col},
+            )
         n_groups = df[group_col].nunique()
 
         self._emit(EventType.AGENT_THINKING, {"thought": f"假设检验: {target_col} by {group_col} ({n_groups} 组)"})
@@ -574,6 +654,7 @@ class AnalystAgent(InteractionMixin):
                 }
 
         except Exception:
+            logger.warning("假设检验执行失败", exc_info=True)
             return None
 
     def _do_correlation(self, df, context) -> dict | None:
@@ -603,6 +684,7 @@ class AnalystAgent(InteractionMixin):
                         best_corr = result
                         best_pair = (col1, col2)
                 except Exception:
+                    logger.debug("correlation 计算异常，跳过该列对", exc_info=True)
                     continue
 
         if best_corr is None:
@@ -683,11 +765,13 @@ class AnalystAgent(InteractionMixin):
             }
 
         except Exception:
+            logger.warning("趋势分析执行失败", exc_info=True)
             return None
 
     # ==== CHANNEL ZONE: LLM 驱动分析规划，禁止硬编码方法分发 ====
     def _plan_analysis_via_llm(
-        self, df: "pd.DataFrame", context: dict, target_col: str | None, query: str
+        self, df: "pd.DataFrame", context: dict, target_col: str | None, query: str,
+        retry: bool = False
     ) -> list[dict]:
         """调用 LLM 根据数据画像和用户提问输出结构化分析计划。
 
@@ -718,17 +802,9 @@ class AnalystAgent(InteractionMixin):
                 "唯一值数": int(df[colname].nunique()),
             })
 
-        # 构建可用方法描述
-        available_methods = [
-            {"method": "regression", "name": "回归分析", "适用": "有目标变量，想找预测因素（X→Y 的关系）"},
-            {"method": "hypothesis_test", "name": "假设检验", "适用": "比较两组或多组在某个指标上的差异"},
-            {"method": "correlation", "name": "相关性分析", "适用": "探索数值变量之间的两两关系"},
-            {"method": "trend_analysis", "name": "趋势分析", "适用": "有日期列，想看指标随时间的变化"},
-            {"method": "cross_validate", "name": "交叉验证", "适用": "回归模型建好后，验证稳定性（配合 regression 使用）"},
-            {"method": "multiple_comparison_correction", "name": "多重比较校正", "适用": "假设检验做了多次，需要校正 p 值"},
-            {"method": "check_test_assumptions", "name": "检验前提检测", "适用": "在假设检验前检查正态性/方差齐性"},
-            {"method": "power_analysis", "name": "功效分析", "适用": "样本量偏小时，预估需要多少样本才能检测到效应"},
-        ]
+        # 从分析注册表动态构建可用方法描述（支持插件扩展）
+        from ...tools.analysis_registry import analysis_registry
+        available_methods = analysis_registry.describe_all(enabled_only=True)
 
         system_prompt = (
             "你是一位资深数据分析师。根据数据集信息和用户提问，制定一份结构化的分析计划。\n\n"
@@ -760,15 +836,21 @@ class AnalystAgent(InteractionMixin):
         if cleaning_impact:
             cleaning_section = f"\n\n## 数据清洗影响（来自上游 Cleaner）\n```json\n{_json.dumps(cleaning_impact, ensure_ascii=False, default=str)}\n```\n\n请在选择分析方法时考虑：目标变量是否被清洗过，是否存在均值偏移。"
 
-        user_prompt = (
-            f"## 用户提问\n{query}\n\n"
-            f"## 数据集信息\n样本量: {len(df)} 行\n列数: {len(df.columns)} 列\n"
-        )
-        if target_col:
-            user_prompt += f"已识别目标变量: {target_col}\n"
-        user_prompt += f"\n## 列画像\n```json\n{_json.dumps(col_summaries, ensure_ascii=False, default=str)}\n```"
-        user_prompt += f"\n## 可用分析方法\n```json\n{_json.dumps(available_methods, ensure_ascii=False)}\n```"
-        user_prompt += cleaning_section
+        if retry:
+            # 重试模式：使用增强上下文
+            user_prompt = self._enrich_for_retry(df, context, query)
+            user_prompt += f"\n## 可用分析方法\n```json\n{_json.dumps(available_methods, ensure_ascii=False)}\n```"
+            user_prompt += cleaning_section
+        else:
+            user_prompt = (
+                f"## 用户提问\n{query}\n\n"
+                f"## 数据集信息\n样本量: {len(df)} 行\n列数: {len(df.columns)} 列\n"
+            )
+            if target_col:
+                user_prompt += f"已识别目标变量: {target_col}\n"
+            user_prompt += f"\n## 列画像\n```json\n{_json.dumps(col_summaries, ensure_ascii=False, default=str)}\n```"
+            user_prompt += f"\n## 可用分析方法\n```json\n{_json.dumps(available_methods, ensure_ascii=False)}\n```"
+            user_prompt += cleaning_section
 
         from ...llm.client import create_raw_client
 
@@ -822,8 +904,12 @@ class AnalystAgent(InteractionMixin):
             return []
 
         # 校验并标准化
-        valid_types = {
-            "regression", "hypothesis_test", "correlation",
+        # valid_types 从分析注册表动态获取，新增方法无需改代码（P2 修复）
+        from ...tools.analysis_registry import analysis_registry as _reg
+        _all_methods = _reg.list_all(enabled_only=True)
+        valid_types = {m.name for m in _all_methods}
+        # 合并内置类型（非注册表方法但代码支持）
+        valid_types |= {
             "trend_analysis", "cross_validate",
             "multiple_comparison_correction", "check_test_assumptions",
             "power_analysis",
@@ -856,25 +942,68 @@ class AnalystAgent(InteractionMixin):
 
         return normalized
 
-    # 此函数是机械调用序列（回归→假设检验→相关），不做任何方法选择语义判断。
-    # 仅在 LLM 分析计划失败时作为兜底方案触发。
-    def _auto_analyze(self, df, context, target_col, query) -> list[dict]:
-        """兜底自动分析：回归 + 假设检验 + 相关（机械序列）"""
-        results = []
+    def _enrich_for_retry(
+        self, df: "pd.DataFrame", context: dict, query: str
+    ) -> str:
+        """增强 LLM 重试上下文：注入更多列语义、上游笔记。
 
-        result = self._do_regression(df, context, target_col, query)
-        if result:
-            results.append(result)
+        当首次 LLM 调用未能生成有效分析计划时，此方法构建更详细的
+        上下文提示，帮助 LLM 做出决策。
+        """
+        # 提取 Scribe 笔记（如果有）
+        scribe_notes = context.get("_scribe_note", "")
+        # 提取数据分布信息
+        import json as _json
 
-        result = self._do_hypothesis_test(df, context, target_col)
-        if result:
-            results.append(result)
+        enriched = [
+            f"## 用户提问\n{query or '无明确提问，请根据数据特征选择探索性分析'}",
+            f"\n## 数据集概览\n- 样本量: {len(df)} 行\n- 列数: {len(df.columns)} 列\n- 数值列: {len(df.select_dtypes(include='number').columns)} 个\n- 分类列: {len(df.select_dtypes(include=['object', 'category']).columns)} 个",
+        ]
 
-        result = self._do_correlation(df, context)
-        if result:
-            results.append(result)
+        # 列角色汇总（比 col_summaries 更精炼）
+        col_roles = {}
+        for s in context.get("column_semantics", []):
+            col_roles[s.get("column_name", "")] = s.get("suggested_role", "unknown")
+        enriched.append(f"\n## 列角色: {_json.dumps(col_roles, ensure_ascii=False)}")
 
-        return results
+        # 日期列提示
+        time_cols = [
+            s["column_name"]
+            for s in context.get("column_semantics", [])
+            if s.get("inferred_type") == "datetime"
+        ]
+        if time_cols:
+            enriched.append(f"\n⚠️ 检测到日期列: {time_cols}，强烈建议考虑趋势分析")
+
+        # 分类列提示（用于假设检验group_col选择）
+        cat_cols = [
+            s["column_name"]
+            for s in context.get("column_semantics", [])
+            if s.get("inferred_type") in ("categorical", "boolean", "ordinal")
+        ]
+        if cat_cols:
+            enriched.append(f"\n⚠️ 可用的分组列: {cat_cols}，请从中选择 group_col")
+
+        # 上游笔记
+        if scribe_notes:
+            enriched.append(f"\n## 上游 Scribe 笔记\n{scribe_notes}")
+
+        # 清洗影响
+        cleaning_impact = context.get("_cleaning_impact", {})
+        if cleaning_impact:
+            enriched.append(f"\n## 数据清洗影响\n{_json.dumps(cleaning_impact, ensure_ascii=False, default=str)}")
+            enriched.append("选择分析方法时请考虑目标变量是否被清洗过，是否存在均值偏移")
+
+        # 指导性建议
+        enriched.append("\n## 分析方向建议")
+        enriched.append("- 如果数据有明确的数值目标列+多个数值特征 → 用回归分析")
+        enriched.append("- 如果有分组列+数值指标 → 用假设检验")
+        enriched.append("- 如果问题模糊 → 用相关性分析做探索")
+        enriched.append("- 如果有日期列 → 优先趋势分析")
+        enriched.append("- 选 1-2 个最合适的方法即可，不要过度分析")
+
+        return "\n".join(enriched)
+
 
     def _check_power(self, df, context, focus, n) -> list[str]:
         """功效预检"""
@@ -885,18 +1014,41 @@ class AnalystAgent(InteractionMixin):
             return warnings
 
         if "hypothesis_test" in focus:
-            cat_cols = [s["column_name"] for s in context.get("column_semantics", []) if s.get("inferred_type") in ("categorical", "boolean")]
+            cat_cols = [
+                s["column_name"] for s in context.get("column_semantics", [])
+                if s.get("inferred_type") in ("categorical", "boolean", "ordinal")
+                and s["column_name"] in df.columns
+            ]
             if cat_cols:
-                n_groups = df[cat_cols[0]].nunique()
-                n_per_group = n // n_groups
-                if n_per_group < POWER_MIN_PER_GROUP_SAMPLE:
-                    warnings.append(f"⚠️ 每组样本量偏少（n={n_per_group}），检测中等效应功效可能不足。")
-                elif n_per_group >= POWER_ADEQUATE_PER_GROUP:
-                    power_info = power_ttest(n_per_group, n_per_group, effect_size=POWER_EFFECT_SIZE_DEFAULT)
-                    if "error" not in power_info:
-                        power_pct = power_info.get("power", 0) * 100
-                        if power_pct >= POWER_TARGET_PCT:
-                            warnings.append(f"✅ 每组 n={n_per_group}，检测中等效应功效约 {power_pct:.0f}%，足够。")
+                # 从 plan / context 推断分组列；不静默回退 cat_cols[0]
+                group_candidate = (
+                    context.get("_plan_group_col") or
+                    next(
+                        (s["column_name"] for s in context.get("column_semantics", [])
+                         if s.get("suggested_role") == "group"),
+                        None,
+                    ) or
+                    next(
+                        (s["column_name"] for s in context.get("column_semantics", [])
+                         if s.get("column_name") in cat_cols
+                         and s.get("suggested_role") not in ("identifier", "ignore")),
+                        None,
+                    )
+                )
+                if group_candidate:
+                    n_groups = df[group_candidate].nunique()
+                    n_per_group = n // n_groups
+                    if n_per_group < POWER_MIN_PER_GROUP_SAMPLE:
+                        warnings.append(f"⚠️ 每组样本量偏少（n={n_per_group}），检测中等效应功效可能不足。")
+                    elif n_per_group >= POWER_ADEQUATE_PER_GROUP:
+                        try:
+                            power_info = power_ttest(n_per_group, n_per_group, effect_size=POWER_EFFECT_SIZE_DEFAULT)
+                            if "error" not in power_info:
+                                power_pct = power_info.get("power", 0.0)
+                                if power_pct >= POWER_TARGET_PCT:
+                                    warnings.append(f"✅ 每组 n={n_per_group}，检测中等效应功效约 {power_pct:.0f}%，足够。")
+                        except Exception:
+                            pass
 
         if "regression" in focus:
             n_predictors = len([f for f in context.get("features", []) if f in df.columns])
@@ -915,13 +1067,13 @@ class AnalystAgent(InteractionMixin):
             return
 
         try:
-            cv_result = cross_validate(df, target, features, k_folds=5)
+            cv_result = cross_validate(df, target, features, k_folds=self._config.analysis.k_folds)
             if "error" not in cv_result:
                 if result.get("diagnostics") is None:
                     result["diagnostics"] = {}
                 result["diagnostics"]["cross_validation"] = cv_result
         except Exception:
-            pass
+            logger.warning("交叉验证增强失败", exc_info=True)
 
     def _apply_multiple_comparison(self, results) -> None:
         """多重比较校正"""
@@ -948,7 +1100,7 @@ class AnalystAgent(InteractionMixin):
                     if not correction["significant"][i] and result["significance"] == "significant":
                         result["significance"] = SIGNIFICANCE_LABEL_CORRECTED
         except Exception:
-            pass
+            logger.warning("多重比较校正失败", exc_info=True)
 
     def _update_own_memory(self, results: list[dict], project_id: str | None) -> None:
         """更新分析模式记忆"""

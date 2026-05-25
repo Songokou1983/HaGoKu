@@ -180,18 +180,18 @@ class TestConfigEndpoints:
         assert data["llm"]["sub_model"] == ""
         assert data["llm"]["api_key_configured"] is True
         text = env_file.read_text(encoding="utf-8")
-        assert "HAGOKYU_LLM_BASE_URL" in text
+        assert "HAGOKU_LLM_BASE_URL" in text
         assert "http://llm.test:9999/v1" in text
-        assert "HAGOKYU_LLM_MODEL" in text
+        assert "HAGOKU_LLM_MODEL" in text
         assert "test-model-x" in text
-        assert "HAGOKYU_LLM_API_KEY" in text
-        assert "HAGOKYU_LLM_MODEL_QUICK" in text
-        assert "HAGOKYU_LLM_MODEL_DEEP" in text
+        assert "HAGOKU_LLM_API_KEY" in text
+        assert "HAGOKU_LLM_MODEL_QUICK" in text
+        assert "HAGOKU_LLM_MODEL_DEEP" in text
         from dotenv import dotenv_values
 
         v = dotenv_values(env_file) or {}
-        assert v.get("HAGOKYU_LLM_MODEL_DEEP") == "test-model-x"
-        assert v.get("HAGOKYU_LLM_MODEL_QUICK") == "test-model-x"
+        assert v.get("HAGOKU_LLM_MODEL_DEEP") == "test-model-x"
+        assert v.get("HAGOKU_LLM_MODEL_QUICK") == "test-model-x"
 
     def test_post_llm_sub_model_writes_quick_only(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
@@ -215,9 +215,9 @@ class TestConfigEndpoints:
         assert data["llm"]["main_model"] == "big-model"
         assert data["llm"]["sub_model"] == "small-model"
         v = dotenv_values(env_file) or {}
-        assert v.get("HAGOKYU_LLM_MODEL") == "big-model"
-        assert v.get("HAGOKYU_LLM_MODEL_DEEP") == "big-model"
-        assert v.get("HAGOKYU_LLM_MODEL_QUICK") == "small-model"
+        assert v.get("HAGOKU_LLM_MODEL") == "big-model"
+        assert v.get("HAGOKU_LLM_MODEL_DEEP") == "big-model"
+        assert v.get("HAGOKU_LLM_MODEL_QUICK") == "small-model"
 
     def test_post_llm_400_when_missing_model(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
@@ -238,7 +238,7 @@ class TestConfigEndpoints:
     def test_projects_root_respects_hagokyu_project_dir(self, tmp_path, monkeypatch):
         custom = tmp_path / "custom_projects"
         custom.mkdir()
-        monkeypatch.setenv("HAGOKYU_PROJECT_DIR", str(custom))
+        monkeypatch.setenv("HAGOKU_PROJECT_DIR", str(custom))
         from hagoku.api.server import _projects_root
 
         assert _projects_root().resolve() == custom.resolve()

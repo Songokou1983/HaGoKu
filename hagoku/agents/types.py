@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class SemanticType(Enum):
@@ -18,6 +21,92 @@ class SemanticType(Enum):
     TARGET = "target"
     TEXT = "text"
     UNKNOWN = "unknown"
+
+
+# ── Scout 语义推断的数据模型（P4 修复：由数据模型驱动 JSON Schema）
+# 新增字段角色只需修改此模型，无需改动 Agent 代码。
+
+FIELD_INFERRED_TYPES = [
+    "id", "datetime", "boolean", "numeric",
+    "categorical", "text", "unknown",
+]
+
+FIELD_SUGGESTED_ROLES = [
+    "identifier", "time_index", "binary_feature", "target",
+    "numeric_feature", "categorical_feature", "text_feature",
+    "unknown",
+]
+
+
+class FieldInferenceItem(BaseModel):
+    """单列语义推断结果 — Scout LLM 结构化输出中的一项"""
+    name: str = Field(..., description="原始列名（照抄）")
+    inferred_type: str = Field(..., description="数据类型", json_schema_extra={"enum": FIELD_INFERRED_TYPES})
+    confidence: float = Field(..., ge=0, le=1, description="置信度 0~1")
+    evidence: str = Field(..., description="推断依据（自然语言简述）")
+    needs_user_input: bool = Field(..., description="是否需要用户确认")
+    suggested_role: str = Field(..., description="建议角色", json_schema_extra={"enum": FIELD_SUGGESTED_ROLES})
+    display_name: str = Field(..., description="简短中文业务名称（≤6 字，如「收入」「用户ID」）")
+    description: str = Field(
+        ...,
+        description=(
+            "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；"
+            "不确定时写「可能表示…」并点出观察到的现象；"
+            "禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"
+        ),
+    )
+
+
+class FieldInferenceResult(BaseModel):
+    """Scout 语义推断完整输出 — 由 LLM function calling 生成"""
+    columns: list[FieldInferenceItem] = Field(..., description="每个字段的推断结果")
+    target_columns: list[str] = Field(default_factory=list, description="从用户问题中识别到的目标变量候选列表（列名数组）")
+    feature_columns: list[str] = Field(default_factory=list, description="特征变量列表（列名数组）")
+    target_keywords_from_query: list[str] = Field(default_factory=list, description="从用户问题中提取的目标关键词（拆成中文词组，如 ['收入','销售额']）")
+
+
+def build_submit_field_inference_schema() -> dict[str, Any]:
+    """根据 FieldInferenceResult 模型生成 Scout submit_field_inference 工具的 function schema。
+    
+    新增字段只需修改 FieldInferenceItem，无需改动 Agent 代码（P4 修复）。
+    """
+    try:
+        return FieldInferenceResult.model_json_schema()
+    except Exception:
+        # Pydantic v1 / v2 兼容：降级为手动生成
+        warnings.warn("FieldInferenceResult.model_json_schema() 不可用，使用降级 schema")
+        return _build_fallback_schema()
+
+
+def _build_fallback_schema() -> dict[str, Any]:
+    """降级 schema 生成（Pydantic v1 兼容）"""
+    return {
+        "type": "object",
+        "properties": {
+            "columns": {
+                "type": "array",
+                "description": "每个字段的推断结果",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "原始列名（照抄）"},
+                        "inferred_type": {"type": "string", "enum": FIELD_INFERRED_TYPES, "description": "数据类型"},
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "置信度 0~1"},
+                        "evidence": {"type": "string", "description": "推断依据（自然语言简述）"},
+                        "needs_user_input": {"type": "boolean", "description": "是否需要用户确认"},
+                        "suggested_role": {"type": "string", "enum": FIELD_SUGGESTED_ROLES, "description": "建议角色"},
+                        "display_name": {"type": "string", "description": "简短中文业务名称（≤6 字，如「收入」「用户ID」）"},
+                        "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
+                    },
+                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"],
+                },
+            },
+            "target_columns": {"type": "array", "items": {"type": "string"}, "description": "从用户问题中识别到的目标变量候选列表（列名数组）"},
+            "feature_columns": {"type": "array", "items": {"type": "string"}, "description": "特征变量列表（列名数组）"},
+            "target_keywords_from_query": {"type": "array", "items": {"type": "string"}, "description": "从用户问题中提取的目标关键词（拆成中文词组，如 ['收入','销售额']）"},
+        },
+        "required": ["columns", "target_columns", "feature_columns", "target_keywords_from_query"],
+    }
 
 
 @dataclass
@@ -191,6 +280,53 @@ class DataContext:
             self.confounders = confounders
         if not self.variable_roles:
             self.variable_roles = variable_roles
+
+
+# ── Refinement Schema（P0 修复：Refinement 由 LLM function calling 驱动，零正则）
+
+
+def build_submit_refinement_schema() -> dict[str, Any]:
+    """构建 submit_refinement 工具的 JSON Schema。
+
+    RefinementParser 不再使用硬编码正则，全部由 LLM 通过此工具的 function calling
+    完成语义理解，仅保留退出口令的快速路径。
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "refine_type": {
+                "type": "string",
+                "enum": [
+                    "filter", "switch_target", "simplify", "more_detail", "explain",
+                    "new_direction", "regenerate", "speculate", "explore", "exit", "unknown",
+                ],
+                "description": (
+                    "用户调整意图的类型：\n"
+                    "- filter: 筛选/缩小数据范围\n"
+                    "- switch_target: 切换分析指标\n"
+                    "- simplify: 简化报告\n"
+                    "- more_detail: 详细展开\n"
+                    "- explain: 解释已有结论\n"
+                    "- new_direction: 提出新的分析方向（超出当前调整范围）\n"
+                    "- regenerate: 要求重新生成\n"
+                    "- speculate: 要求推测原因\n"
+                    "- explore: 要求开放性探索\n"
+                    "- exit: 退出当前分析\n"
+                    "- unknown: 无法分类"
+                ),
+            },
+            "filter_column": {"type": "string", "description": "要筛选的维度名称"},
+            "filter_value": {"type": "string", "description": "筛选值"},
+            "filter_exclude": {"type": "boolean", "description": "是否排除（true=排除，false=只看）"},
+            "new_target": {"type": "string", "description": "要切换的目标指标名称"},
+            "verbosity": {"type": "string", "enum": ["simpler", "more_detailed"]},
+            "explain_target": {"type": "string", "description": "要解释的结论主题"},
+            "can_explain_from_data": {"type": "boolean", "description": "是否能从已有数据结论中解释"},
+            "guidance": {"type": "string", "description": "当 refine_type 为 blocked/unknown 时，给用户的引导建议"},
+            "thinking": {"type": "string", "description": "LLM 对用户意图的判断依据"},
+        },
+        "required": ["refine_type"],
+    }
 
 
 @dataclass

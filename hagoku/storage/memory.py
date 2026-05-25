@@ -18,8 +18,11 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+import logging
 from .database import HaGoKuDB
 from .memory_backends import SqliteMemoryBackend, YamlMemoryBackend
+
+logger = logging.getLogger("hagoku")
 
 # ── 数据模型 ──────────────────────────────────────────────────
 
@@ -214,8 +217,8 @@ class MemoryManager:
         for col_name, col_dict in merged.items():
             try:
                 result[col_name] = ColumnSemanticDef(**col_dict)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to parse column semantic for %s: %s", col_name, exc)
 
         return result
 
@@ -271,8 +274,8 @@ class MemoryManager:
             if isinstance(val, dict):
                 try:
                     result[e["key"]] = CleaningPrefDef(**val)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to parse cleaning pref for %s: %s", e.get("key"), exc)
         return result
 
     # ── 分析模式 ────────────────────────────────────────────
@@ -306,8 +309,8 @@ class MemoryManager:
                         analysis_type=e["key"],
                         **val_clean,
                     ))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to parse analysis pattern for %s: %s", e.get("key"), exc)
         return result
 
     # ── 用户笔记 ────────────────────────────────────────────

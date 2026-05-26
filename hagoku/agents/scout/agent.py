@@ -43,30 +43,6 @@ from ..constants import (
 )
 
 
-
-def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
-    """解析「列名：描述」行；兼容半角冒号、列表前缀、反引号。"""
-    s = (raw or "").strip()
-    if not s:
-        return None
-    s = re.sub(r"^[\-\*\•]\s*", "", s)
-    s = re.sub(r"^\d+[\.)]\s*", "", s)
-    if "：" in s:
-        left, right = s.split("：", 1)
-    elif ":" in s:
-        idx = s.find(":")
-        left, right = s[:idx], s[idx + 1:]
-        if len(left.strip()) > 64:
-            return None
-    else:
-        return None
-    col = left.strip().strip("`").strip()
-    desc = right.strip()
-    if not col or not desc:
-        return None
-    return col, desc
-
-
 # 结构性检查：描述是否为「列名（任意内容）」格式。
 # 这是纯字符串形状匹配——任何 col_name（...）形式都被视为结构回显。
 # 代码不判断括号内内容的语义——那是 LLM 的职责。

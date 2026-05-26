@@ -442,18 +442,15 @@ class ReporterAgent(InteractionMixin):
             except json.JSONDecodeError:
                 pass
 
-        # ==== CHANNEL ZONE: 保底输出，禁止语义推断 ====
-        # 当 LLM 返回的 JSON 无法解析时，用原始文本作为报告内容的兜底占位。
-        # 这不是"代码替代 LLM 生成报告"，而是"LLM 已产出文本但格式损坏时，保留内容不丢失"。
+        # ==== CHANNEL ZONE: LLM JSON 解析失败，保留原始文本，禁止代码生成语义内容 ====
+        # LLM 已产出文本但格式损坏——代码不编造任何面向用户的内容。
+        # 将 LLM 原始输出完整传递，标记 degraded=true，由调用方决定如何处理。
         self._emit(EventType.AGENT_THINKING, {
-            "thought": f"⚠️ 无法解析 LLM 输出为 JSON，使用 fallback。原始输出前 200 字：{response[:200]}"
+            "thought": f"⚠️ 无法解析 LLM 输出为 JSON，保留原始文本。原始输出前 200 字：{response[:200]}"
         })
         return {
-            "headline": "分析报告",
-            "executive_summary": response[:500] if response else "报告生成中...",
-            "metric_cards": [],
-            "findings_summary": [],
-            "sections": [{"title": "📊 分析结果", "content": response[:1000] if response else "", "level": 2}],
+            "degraded": True,
+            "raw_text": response or "",
         }
 
     def _build_report_data(

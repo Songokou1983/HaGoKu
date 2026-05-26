@@ -2067,7 +2067,15 @@ class Orchestrator:
                             upstream_note = self._get_upstream_summary("cleaner")
                             if upstream_note:
                                 context["upstream_summary"] = upstream_note
-                            context["query_update"] = user_reply_cleaner
+                            context["query"] = query
+                            # 同步字段理解到结构化 context（用户可能在清洗审查中纠正字段含义）
+                            if user_reply_cleaner and not cmd_result:
+                                apply_scout_user_field_reply_to_context(
+                                    context,
+                                    user_reply_cleaner,
+                                    llm_client=self.llm_quick_raw,
+                                    llm_model=self.config.llm.model_quick or self.config.llm.model,
+                                )
                             df_raw, df_clean, cleaning_report, _ = cleaner.run(
                                 data_path, context,
                                 impact_warning=self.config.manager.cleaning_impact_warning,
@@ -2194,7 +2202,15 @@ class Orchestrator:
                         upstream_note_analyst = self._get_upstream_summary("analyst")
                         if upstream_note_analyst:
                             context["upstream_summary"] = upstream_note_analyst
-                        context["query_update"] = user_reply_analyst
+                        plan["query"] = query
+                        # 同步字段理解到结构化 context（用户可能在分析审查中纠正字段含义）
+                        if user_reply_analyst and not cmd_result:
+                            apply_scout_user_field_reply_to_context(
+                                context,
+                                user_reply_analyst,
+                                llm_client=self.llm_quick_raw,
+                                llm_model=self.config.llm.model_quick or self.config.llm.model,
+                            )
                         results, business_metrics = analyst.run(
                             df_clean, context, plan, emit_completed=False
                         )

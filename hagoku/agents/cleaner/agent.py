@@ -628,38 +628,15 @@ class CleanerAgent(InteractionMixin):
             "columns": column_list,
         }
 
-        # 优先使用 prompt.md 中的 CLEANING_PLAN_RULES
-        if cleaning_rules.strip():
-            system_prompt = cleaning_rules.strip()
-        else:
-            # 回退：保持原有硬编码（向后兼容，prompt.md 未配置时仍可用）
-            system_prompt = (
-                "你是专业数据清洗员。你收到的每列数据画像仅包含原始统计量（count/min/q25/median/q75/max/mean/null_rate），"
-                "没有任何预判信息。你需要自行决策：\n"
-                "\n"
-                "核心原则：\n"
-                "1. 清洗策略必须匹配分析目标：\n"
-                "   - 看分布/画像 → 不截断极端值，极端值就是用户想看的\n"
-                "   - 算均值/比较 → 温和截断极端值，保护均值不被拉偏\n"
-                "   - 预测建模 → 保守处理特征列，目标变量绝对不碰\n"
-                "   - 找高价值/异常 → 极端值就是答案，不做截断\n"
-                "2. 自行判断列的语义边界（不要依赖代码预判，数据里没有'known_range'字段）：\n"
-                "   - 比较 min/max 与样本值判断是否为评分列（如 1-5 / 1-10 / 0-100 百分比）→ 是评分则 skip\n"
-                "   - 比较 q75 与 max 的差距判断有无极端值（如 max > q75 * 3 可能有极端值，max > q75 * 10 几乎确定是异常）\n"
-                "   - 比较 mean 与 median 的偏离判断分布偏态\n"
-                "3. 标识列(identifier)、分组列 — 不处理\n"
-                "4. 缺失率 > 50% → 建议标记缺失（fill_mcar），不要盲目删行\n"
-                "5. 缺失率 < 1% 且非目标变量 → 可删行\n"
-                "6. 目标变量绝对不删行、不截断 → skip\n"
-                "\n"
-                "输出一个 JSON 对象，字段 `operations` 为数组，仅包含需要处理的列。每项包含：\n"
-                "  - column: 列名（照抄）\n"
-                "  - strategy: 清洗策略（winsorize / drop_rows / fill_median / fill_mean / fill_mode / fill_mcar / skip）\n"
-                "  - reason: 业务理由（面向用户的自然语言，禁止出现'IQR''p值'等统计术语，要说'最大值为中位数的15倍，存在极端偏离'这样）\n"
-                "  - impact_estimate: 预估影响行数或比例（字符串，如'约5%'）\n"
-                "\n"
-                "不需要清洗的列不要出现在 operations 中。"
+        # 清洗规则必须来自 prompt.md 中的 CLEANING_PLAN_RULES 区块
+        # LLM 主导原则：代码不注入任何形式的 system prompt 内容。
+        # prompt.md 未配置时直接报错，逼促用户修复配置而非静默降级。
+        if not cleaning_rules.strip():
+            raise RuntimeError(
+                "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块，"
+                "或该区块为空。请在 hagoku/agents/cleaner/prompt.md 中配置清洗规则后重试。"
             )
+        system_prompt = cleaning_rules.strip()
 
         client = create_raw_client(self.llm_config)
         try:

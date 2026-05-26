@@ -188,7 +188,8 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     spy = LLMSpy(
         response_factory=lambda messages: _make_tool_call_response(
             '{"columns": [{"name": "Inc1", "inferred_type": "numeric"}, '
-            '{"name": "Period", "inferred_type": "ordinal"}]}'
+            '{"name": "Period", "inferred_type": "ordinal"}]}',
+            function_name="infer_column_semantics",
         )
     )
 
@@ -209,7 +210,7 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     ).format(intent=intent, actual=spy.all_messages_text()[:800])
 
 
-def _make_tool_call_response(arguments_json: str) -> Any:
+def _make_tool_call_response(arguments_json: str, function_name: str = "update_field_understanding") -> Any:
     """构造 OpenAI 风格的 tool_call 响应。"""
     resp = MagicMock()
     resp.choices = [MagicMock()]
@@ -217,6 +218,7 @@ def _make_tool_call_response(arguments_json: str) -> Any:
     msg.content = ""
     tc = MagicMock()
     tc.function = MagicMock()
+    tc.function.name = function_name
     tc.function.arguments = arguments_json
     msg.tool_calls = [tc]
     resp.choices[0].message = msg
@@ -249,7 +251,8 @@ def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     # 第 1 轮：LLM 调用 tool 把 Inc1 标为「收入」
     spy = LLMSpy(
         response_factory=lambda messages: _make_tool_call_response(
-            '{"column_name": "Inc1", "display_name": "收入"}'
+            '{"column_name": "Inc1", "display_name": "收入"}',
+            function_name="update_field_understanding",
         )
     )
     _apply_scout_reply_with_llm(ctx, "Inc1 是收入", ["Inc1"], spy.client, "test-model")
@@ -261,6 +264,202 @@ def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     assert spy.calls[1]["messages"][-2]["role"] == "assistant", (
         "律 3 违反：第 2 轮 LLM messages 缺少第 1 轮 assistant 历史。\n"
         f"第 2 轮 messages 角色序列: {[m['role'] for m in spy.calls[1]['messages']]}"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 真实场景回归 — test0526：「只有店铺编号、时间周期、店铺收入需要参与分析」
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 现行犯剧本（用户 2026-05-26 报告）：
+#   分析目标：分析店铺的收入变动趋势
+#   字段：BU, Code, Period, Inc1, Inc2, Inc3, StoreID, Bos1（示例性）
+#   Scout 第一轮：所有字段 used_in_analysis=True（错）
+#   用户原话：只有店铺编号、时间周期、店铺收入需要参与分析
+#   系统回复：本轮 0 条写入（回复 22 字）。仍需确认的列：（无）
+#
+# 此场景测试三件事：
+#   - 律 1（意图穿透）：query "分析店铺的收入变动趋势" 抵达 LLM ✅ 应通过
+#   - 律 2（原话抵达）：用户原话 22 字抵达 LLM ✅ 应通过
+#   - 律 4 + 律 7：当 LLM 因任务复杂返回空 tool_calls（实际现场），
+#                  当前代码路径默默返回空 applied，无任何"未理解"信号给用户
+
+_REAL_SCENE_QUERY = "分析店铺的收入变动趋势"
+_REAL_SCENE_REPLY = "只有店铺编号、时间周期、店铺收入需要参与分析"
+_REAL_SCENE_COLUMNS = ["BU", "Code", "Period", "Inc1", "Inc2", "Inc3", "StoreID", "Bos1"]
+
+
+def _make_real_scene_context() -> dict[str, Any]:
+    return {
+        "query": _REAL_SCENE_QUERY,
+        "column_semantics": [
+            {"column_name": c, "needs_user_input": False, "used_in_analysis": True,
+             "suggested_role": "feature"}
+            for c in _REAL_SCENE_COLUMNS
+        ],
+        "column_descriptions": {c: "" for c in _REAL_SCENE_COLUMNS},
+        "column_display_names": {},
+    }
+
+
+def test_真实场景_律1律2_意图与原话均抵达LLM():
+    """test0526 现行犯：分析意图 + 用户原话都进入 LLM messages（信息通道无残缺）。"""
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
+    ctx = _make_real_scene_context()
+    spy = LLMSpy()  # 默认 response：空 tool_calls，模拟 LLM 在复杂任务上"放弃"
+
+    _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
+
+    msgs = spy.all_messages_text()
+    assert _REAL_SCENE_QUERY in msgs, f"律 1 漏水：分析意图未抵达 LLM。\nmessages: {msgs[:600]}"
+    assert _REAL_SCENE_REPLY in msgs, f"律 2 漏水：用户原话未抵达 LLM。\nmessages: {msgs[:600]}"
+
+
+def test_真实场景_律4_工具覆盖补集排除():
+    """律 4 ✅：restrict_analysis_to 工具存在，LLM 可直接表达「只保留 X、Y、Z」。
+
+    正向断言 — 修复前此测试为反向探针（断言工具不存在），现已落地：
+      - restrict_analysis_to(column_names) 让 LLM 列出参与列，代码自动算补集
+      - 同时 update_field_role(ignored=[...]) 作为备选路径
+    """
+    from hagoku.manager.orchestrator import _SCOUT_FIELD_UPDATE_TOOLS
+
+    tool_names = [t["function"]["name"] for t in _SCOUT_FIELD_UPDATE_TOOLS]
+
+    # 正向断言：restrict_analysis_to 工具已落地
+    assert "restrict_analysis_to" in tool_names, (
+        f"律 4：restrict_analysis_to 工具缺失。当前工具: {tool_names}"
+    )
+    # 验证参数完整性
+    restrict_tool = next(t for t in _SCOUT_FIELD_UPDATE_TOOLS if t["function"]["name"] == "restrict_analysis_to")
+    restrict_params = restrict_tool["function"]["parameters"]["properties"]
+    assert "included_fields" in restrict_params, "restrict_analysis_to 缺 included_fields 参数"
+    assert "included_fields" in restrict_tool["function"]["parameters"]["required"], (
+        "included_fields 应为必填参数"
+    )
+
+    # update_field_role 仍保留 ignored 作为备选
+    assert "update_field_role" in tool_names
+
+
+def test_真实场景_律7_LLM未理解时写入未理解信号():
+    """律 7 ✅：LLM 返回空 tool_calls 时，context 写入 _last_understanding_failure。
+
+    修复前：代码静默返回 []，前端显示「本轮 0 条写入」误导用户。
+    修复后：context 含未理解信号 → scout_user_input_received_payload 传递 →
+           前端 formatScoutUserInputFactLine 展示「系统未理解你的输入」。
+    """
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
+    ctx = _make_real_scene_context()
+    spy = LLMSpy()  # 默认 response：tool_calls=None, content=""
+
+    applied = _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
+
+    # LLM 没产出 → applied 为空
+    assert applied == [], "LLM 无 tool_calls 时 applied 应为空"
+    # 律 7 正向断言：context 必须写入未理解信号
+    uf = ctx.get("_last_understanding_failure")
+    assert uf is not None, (
+        "律 7：LLM 未产生有效工具调用时，须在 context 写入未理解信号供前端展示"
+    )
+    assert isinstance(uf, dict), "_last_understanding_failure 应为 dict"
+    assert uf.get("raw_text") == _REAL_SCENE_REPLY, "未理解信号应包含用户原话"
+    assert uf.get("stage") == "scout_field_review", "未理解信号应标记阶段为 scout_field_review"
+    assert uf.get("had_tool_calls") is False, "未理解信号应标记无 tool_calls"
+    assert isinstance(uf.get("model_reply_text"), str), "未理解信号应含模型回复文本"
+
+
+def test_真实场景_律2_用户原话保存到context():
+    """律 2 ✅：用户原话通过 utterances 结构化数组保留在 context 中。
+
+    修复前：raw 只在 _apply_scout_reply_with_llm 局部变量中存活，函数返回后丢失。
+    修复后：入口处追加到 context.utterances，含 raw_text/stage/revision/timestamp/consumed。
+    """
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
+    ctx = _make_real_scene_context()
+    spy = LLMSpy()
+    _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
+
+    # 正向断言：原始话通过 utterances 结构化保留
+    utts = ctx.get("utterances", [])
+    assert isinstance(utts, list) and len(utts) >= 1, (
+        "律 2：用户输入后 context.utterances 应至少含 1 条记录"
+    )
+    last = utts[-1]
+    assert last.get("raw_text") == _REAL_SCENE_REPLY, (
+        f"utterances 应含用户原话。期望「{_REAL_SCENE_REPLY}」，"
+        f"实际「{last.get('raw_text')}」"
+    )
+    assert last.get("stage") == "scout_field_review"
+    assert isinstance(last.get("timestamp"), str)
+
+
+def test_真实场景_restrict_analysis_to_e2e():
+    """端到端 mock：用户说「只有店铺编号、时间周期、店铺收入需要参与分析」
+    → LLM 调用 restrict_analysis_to(included_fields=['Code','Period','Inc1'])
+    → 补集 used_in_analysis=False，保留列 used_in_analysis=True
+    → _pending_reinference=True，无 _last_understanding_failure。
+
+    验证律 4（工具覆盖）+ 律 9（重推断触发）的完整执行路径。
+    """
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
+    ctx = _make_real_scene_context()
+    # 模拟 LLM 正确理解用户意图，调用 restrict_analysis_to
+    spy = LLMSpy(
+        response_factory=lambda messages: _make_tool_call_response(
+            '{"included_fields": ["Code", "Period", "Inc1"]}',
+            function_name="restrict_analysis_to",
+        )
+    )
+
+    applied = _apply_scout_reply_with_llm(
+        ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model"
+    )
+
+    # 1. 补集字段应标记 used_in_analysis=False
+    complement = {"BU", "Inc2", "Inc3", "StoreID", "Bos1"}
+    kept = {"Code", "Period", "Inc1"}
+    semantics = ctx.get("column_semantics", [])
+
+    for s in semantics:
+        col = str(s.get("column_name", ""))
+        if col in complement:
+            assert s.get("used_in_analysis") is False, (
+                f"补集字段 {col} 应标记 used_in_analysis=False"
+            )
+        elif col in kept:
+            assert s.get("used_in_analysis") is True, (
+                f"保留字段 {col} 应标记 used_in_analysis=True"
+            )
+        else:
+            pytest.fail(f"未知字段 {col} 不在测试列集合中")
+
+    # 2. 应触发重推断信号（律 9）
+    assert ctx.get("_pending_reinference") is True, (
+        "restrict_analysis_to 调用后应设 _pending_reinference=True（律 9）"
+    )
+
+    # 3. 不应有未理解信号（LLM 成功理解并调用了工具）
+    assert ctx.get("_last_understanding_failure") is None, (
+        "LLM 成功调用 restrict_analysis_to 时不应设 _last_understanding_failure"
+    )
+
+    # 4. applied 应包含补集和保留列的标记记录
+    applied_joined = " | ".join(applied)
+    for c in complement:
+        assert f"{c}:[used_in_analysis]←false" in applied, (
+            f"applied 应记录补集 {c} 的排除。实际: {applied_joined}"
+        )
+    for c in kept:
+        assert f"{c}:[used_in_analysis]←true" in applied, (
+            f"applied 应记录保留列 {c} 的参与。实际: {applied_joined}"
+        )
+    assert "[signal]_pending_reinference←true" in applied, (
+        "applied 应记录重推断信号"
     )
 
 

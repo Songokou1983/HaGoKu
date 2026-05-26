@@ -4,6 +4,28 @@
 
 - **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu Studio 后端再刷新」的白话。
 
+## 2026-05-27 — 律 4 + 律 7 修复：restrict_analysis_to 工具 + 未理解信号
+
+### 变更概要
+
+- **`hagoku/manager/orchestrator.py`**：
+  - `_SCOUT_FIELD_UPDATE_TOOLS` 新增第三个工具 `restrict_analysis_to(column_names)`：LLM 可直接列出参与分析的列，代码自动算补集并设 `used_in_analysis=False`（律 4 落地）。
+  - 新增 `_apply_restrict_analysis_to()`：纯机械运算（集合差 + 字段标记），设 `_pending_reinference=True`（律 9）。
+  - `_apply_scout_reply_with_llm`：空 tool_calls 路径（含异常路径）写入 `_last_understanding_failure` 信号（律 7 落地）。
+  - `scout_user_input_received_payload`：返回字典新增 `understanding_failure` 字段，前端可读。
+- **`hagoku_web/src/panels/AnalyzePanel.tsx`**：`formatScoutUserInputFactLine` 首行检查 `understanding_failure`，存在时显示「⚠️ 系统未理解你的输入，请换一种说法重新描述」。
+- **`tests/test_product/test_information_arrival.py`**：
+  - 律 4 测试：反向探针 → 正向断言（`restrict_analysis_to in tool_names` + 参数完整性校验）。
+  - 律 7 测试：激活 TODO 断言（`_last_understanding_failure` 已设置）。
+  - 律 2 测试：改为正向断言（`_last_understanding_failure` 含用户原话）。
+  - 新增 `test_真实场景_restrict_analysis_to_e2e`：mock LLM 调用 `restrict_analysis_to`，验证补集排除 + 重推断信号 + 无未理解信号。
+  - `_make_tool_call_response` 增加 `function_name` 参数，修正 MagicMock 工具路由错配。
+- 测试结果：12 collected, 11 passed, 1 xfailed（律 3 多轮历史，P3 待实施）。
+
+### 依据
+
+[PROJECT.md §「通道完备性十律」律 4 + 律 7 + 律 9](PROJECT.md)；[刹车 4 正向契约](PROJECT.md)。
+
 ## 2026-05-18 — 字段理解交互：从硬编码解析重构为 function calling 模式
 
 ### 变更概要

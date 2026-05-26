@@ -560,6 +560,38 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "restrict_analysis_to",
+            "description": (
+                "当用户用「只有 X、Y、Z 参与分析」「我只关心 A 和 B」等**包含集**语义"
+                "限定参与分析的字段时调用此工具。"
+                "代码会自动把未列出的字段 used_in_analysis 设为 false，无需你计算补集。"
+                "字段可用列名（Code/Inc1）或业务名（店铺编号/店铺收入）任一种表达，"
+                "代码会基于当前 column_descriptions/display_names 做映射。"
+                "调用此工具后，系统会自动触发重推断以同步角色分配。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "included_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "用户明确希望参与分析的字段，列名或业务名均可。"
+                            "代码会自动将业务名映射到真实列名并对补集做排除。"
+                        ),
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "你为何这样理解用户原话的简要说明（可选，便于审计）。",
+                    },
+                },
+                "required": ["included_fields"],
+            },
+        },
+    },
 ]
 
 
@@ -647,6 +679,98 @@ def _apply_role_update(
         context["variable_roles"] = roles
 
 
+def _resolve_to_column_names(
+    tokens: list[str],
+    columns: list[str],
+    display_names: dict[str, Any],
+    descriptions: dict[str, Any],
+) -> list[str]:
+    """把用户给的业务名 / 列名混合 token 映射为真实列名。
+
+    优先级：精确列名 > display_name 完全匹配 > description 包含 > 列名前缀。
+    无映射的 token 静默丢弃（由律 7 在外层判定空集时报「未理解」）。
+    纯机械运算，不涉及语义判断。
+    """
+    col_set = set(columns)
+    dn_to_col: dict[str, str] = {}
+    for c in columns:
+        dv = str(display_names.get(c, "") or "").strip()
+        if dv:
+            dn_to_col[dv] = c
+    out: list[str] = []
+    for t in tokens:
+        t = (t or "").strip()
+        if not t:
+            continue
+        if t in col_set:
+            out.append(t)
+        elif t in dn_to_col:
+            out.append(dn_to_col[t])
+        else:
+            # description 包含匹配
+            matched = [c for c in columns if t in (str(descriptions.get(c, "") or ""))]
+            # 前缀匹配（如「店铺收入」→ Inc 前缀的列）
+            matched += [c for c in columns if c.lower().startswith(t.lower()) and c not in matched]
+            out.extend(matched)
+    return list(dict.fromkeys(out))  # 去重保序
+
+
+def _apply_restrict_analysis_to(
+    context: dict[str, Any],
+    columns: list[str],
+    applied: list[str],
+    semantics: list[dict[str, Any]],
+    func_args_str: str,
+) -> None:
+    """处理 LLM 的 restrict_analysis_to 工具调用：机械执行补集排除。
+
+    律 4 落地：LLM 表达「只保留 X、Y、Z」的正向工具。
+    LLM 传业务名或列名均可——_resolve_to_column_names 做映射。
+    代码只做机械运算（映射 + 集合差 + 字段标记），不涉及任何语义判断。
+    """
+    import json as _json
+
+    try:
+        args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+    except (_json.JSONDecodeError, TypeError):
+        return
+
+    keep_raw = list(args.get("included_fields") or [])
+    if not keep_raw:
+        return
+
+    descs: dict[str, Any] = context.get("column_descriptions", {}) or {}
+    dnames: dict[str, Any] = context.get("column_display_names", {}) or {}
+    resolved = _resolve_to_column_names(keep_raw, columns, dnames, descs)
+    if not resolved:
+        return
+
+    keep_set: set[str] = set(resolved)
+
+    # 补集 = 全部列 - 保留列
+    complement = [c for c in columns if c not in keep_set]
+
+    # 保留列 → used_in_analysis=True
+    for c in keep_set:
+        for s in semantics:
+            if str(s.get("column_name", "")) == c:
+                s["used_in_analysis"] = True
+                s["needs_user_input"] = False
+                applied.append(f"{c}:[used_in_analysis]←true")
+
+    # 补集 → used_in_analysis=False
+    for c in complement:
+        for s in semantics:
+            if str(s.get("column_name", "")) == c:
+                s["used_in_analysis"] = False
+                s["needs_user_input"] = False
+                applied.append(f"{c}:[used_in_analysis]←false")
+
+    # 触发重推断信号（律 9）
+    context["_pending_reinference"] = True
+    applied.append("[signal]_pending_reinference←true")
+
+
 def _apply_scout_reply_with_llm(
     context: dict[str, Any],
     raw: str,
@@ -671,6 +795,17 @@ def _apply_scout_reply_with_llm(
     """
     if not columns or not raw:
         return []
+
+    # ── 律 2：结构化保留用户原话 ──
+    if raw.strip():
+        utterances: list[dict[str, Any]] = context.setdefault("utterances", [])
+        utterances.append({
+            "raw_text": raw,
+            "stage": "scout_field_review",
+            "revision": context.get("interaction_revision", 0),
+            "timestamp": datetime.now().isoformat(),
+            "consumed": False,
+        })
 
     descs: dict[str, Any] = context.setdefault("column_descriptions", {})
     display_names: dict[str, Any] = context.setdefault("column_display_names", {})
@@ -800,6 +935,11 @@ def _apply_scout_reply_with_llm(
         "- 请基于用户的分析目的，主动推断并填写 suggested_role（target/feature/identifier/ignore）。\n"
         "- 不要调用工具更新未被用户提及的字段。\n"
         "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。\n\n"
+        "包含集纠错规则（最高优先级，优先于笼统纠错）：\n"
+        "- 当用户说「只有 X、Y、Z 参与分析」「我只要看 A 和 B」「除了 XX 都不参与」时，\n"
+        "  **必须**调用 restrict_analysis_to(included_fields=[...])，把用户提到的字段（业务名或列名都可）放入参数。\n"
+        "  代码会自动做业务名→列名映射和补集运算，你无需算补集。\n"
+        "  注意：此规则优先级高于笼统纠错规则——包含集是用户最明确的意图表达，不可用笼统纠错替代。\n\n"
         "最终强制规则（最高优先级）：\n"
         "- 如果你识别到用户消息包含任何抱怨/纠错/否定意图（包括笼统纠错），\n"
         "  你**必须至少调用一次** update_field_role 或 update_field_understanding 工具。\n"
@@ -850,6 +990,10 @@ def _apply_scout_reply_with_llm(
                     _apply_role_update(context, tool_calls, columns, applied, semantics)
                     continue
 
+                if func_name == "restrict_analysis_to":
+                    _apply_restrict_analysis_to(context, columns, applied, semantics, func_args_str)
+                    continue
+
                 if func_name != "update_field_understanding":
                     continue
 
@@ -896,6 +1040,11 @@ def _apply_scout_reply_with_llm(
                         if str(s.get("column_name", "")) == c:
                             s["needs_user_input"] = False
 
+            # 成功时清除上次的未理解信号
+            context.pop("_last_understanding_failure", None)
+            utts = context.get("utterances")
+            if isinstance(utts, list) and utts:
+                utts[-1]["consumed"] = True
             return applied
 
         # ── 无 tool_calls：尝试 JSON fallback（兼容旧模型）─────
@@ -932,10 +1081,33 @@ def _apply_scout_reply_with_llm(
                                     s["needs_user_input"] = False
                 return applied
 
+        # ── 律 7：LLM 未产生有效工具调用 → 写入未理解信号 ──
+        if raw and not applied:
+            context["_last_understanding_failure"] = {
+                "raw_text": raw,
+                "model_reply_text": _raw_text or "",
+                "had_tool_calls": bool(tool_calls),
+                "stage": "scout_field_review",
+            }
+        else:
+            # 成功时清除上次的未理解信号（如果有）
+            context.pop("_last_understanding_failure", None)
+            # 标记 utterances 为已消费
+            utts = context.get("utterances")
+            if isinstance(utts, list) and utts:
+                utts[-1]["consumed"] = True
+
         return []
 
     except Exception as e:
         # LLM 失败 → 记录日志，返回 []，不阻断流程
+        if raw and not applied:
+            context["_last_understanding_failure"] = {
+                "raw_text": raw,
+                "model_reply_text": _raw_text or "",
+                "had_tool_calls": bool(tool_calls),
+                "stage": "scout_field_review",
+            }
         import traceback
         import logging
 
@@ -974,6 +1146,7 @@ def scout_user_input_received_payload(
         raw
         and len(applied_scout) == 0
     )
+    uf = context.get("_last_understanding_failure")
     return {
         "reply": user_reply,
         "applied_field_updates": list(applied_scout),
@@ -981,6 +1154,11 @@ def scout_user_input_received_payload(
         "parse_applied_count": len(applied_scout),
         "parse_failed": parse_failed,
         "columns_still_needing_input": pending,
+        "understanding_failure": (
+            {"raw_text": uf.get("raw_text", ""), "stage": uf.get("stage", "")}
+            if isinstance(uf, dict)
+            else None
+        ),
     }
 
 

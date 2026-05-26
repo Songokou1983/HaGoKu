@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 from hagoku.tools.data_io import load_data, save_data, get_data_info, compute_data_hash
-from hagoku.tools.profiling import generate_profile, suggest_column_roles
+from hagoku.tools.profiling import generate_profile
 from hagoku.tools.cleaning import (
     clean_data,
     detect_outliers_iqr,
@@ -104,15 +104,8 @@ class TestProfiling:
         assert p["missing_summary"]["total_nulls"] == 3
         assert p["missing_summary"]["columns_with_nulls"] == 2
 
-    def test_suggest_column_roles(self):
-        df = pd.DataFrame({
-            "user_id": range(50),
-            "revenue": [100.0, 200.0, 150.0, 300.0, 250.0] * 10,  # non-unique
-            "region": np.random.choice(["East", "West"], 50),
-        })
-        roles = suggest_column_roles(df)
-        assert roles["user_id"]["role"] == "identifier"
-        assert roles["region"]["type"] == "categorical"
+    # test_suggest_column_roles 已随 commit 07aac73 删除
+    # （硬编码角色分支已迁移到 LLM，函数不再存在）
 
 
 class TestCleaning:

@@ -68,7 +68,6 @@ from .power_analysis import (
 from .profiling import (
     generate_full_profile,
     generate_profile,
-    suggest_column_roles,
 )
 from .reporting import (
     ReportData,
@@ -139,7 +138,6 @@ __all__ = [
     # profiling
     "generate_full_profile",
     "generate_profile",
-    "suggest_column_roles",
     # reporting
     "ReportData",
     "ReportGenerator",

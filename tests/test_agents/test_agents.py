@@ -68,13 +68,8 @@ class TestScoutUserFacingDescriptionFilter:
 
 
 class TestScoutFieldDescriptionParsing:
-    def test_parse_fullwidth_and_ascii_colon(self):
-        from hagoku.agents.scout.agent import _parse_llm_field_desc_line
-
-        assert _parse_llm_field_desc_line("BU：事业部划分") == ("BU", "事业部划分")
-        assert _parse_llm_field_desc_line("Code: 产品编码") == ("Code", "产品编码")
-        assert _parse_llm_field_desc_line("- Period: 2024-01") == ("Period", "2024-01")
-        assert _parse_llm_field_desc_line("`Inc1`: 收入项") == ("Inc1", "收入项")
+    # test_parse_fullwidth_and_ascii_colon 已随 commit 07aac73 删除
+    # （_parse_llm_field_desc_line 死代码已移除，字段描述统一走 function calling）
 
     def test_partition_understanding_pipe(self):
         desc = "事业部｜多为事业部/业务线（例：B01, B02）"

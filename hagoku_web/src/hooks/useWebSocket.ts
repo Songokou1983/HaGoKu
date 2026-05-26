@@ -23,6 +23,7 @@ let _reconnectAttempt = 0;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _pingTimer: ReturnType<typeof setInterval> | null = null;
 let _lastPong = 0;
+const _pongCheckTimers: ReturnType<typeof setTimeout>[] = [];
 const _listeners = new Set<Listener>();
 const _statusSubs = new Set<() => void>();
 
@@ -50,6 +51,10 @@ function clearTimers() {
     clearInterval(_pingTimer);
     _pingTimer = null;
   }
+  for (const t of _pongCheckTimers) {
+    clearTimeout(t);
+  }
+  _pongCheckTimers.length = 0;
 }
 
 function startPing() {
@@ -60,11 +65,12 @@ function startPing() {
       const pingSentAt = Date.now();
       _ws.send(JSON.stringify({ cmd: "ping" }));
       // 延迟 10 秒后再检查：只有 pong 在此次 ping 发送之后仍未到达，才判定超时断开
-      setTimeout(() => {
+      const pongCheck = setTimeout(() => {
         if (_lastPong < pingSentAt && _ws?.readyState === WebSocket.OPEN) {
           _ws.close();
         }
       }, 10_000);
+      _pongCheckTimers.push(pongCheck);
     }
   }, 30_000);
 }

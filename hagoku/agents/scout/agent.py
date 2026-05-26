@@ -624,10 +624,23 @@ class ScoutAgent(InteractionMixin):
         except Exception as e:
             logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
 
+        # ── 将用户分析目标前置为最高优先级指令 ──
+        analysis_goal_line = ""
+        if query and query.strip():
+            analysis_goal_line = (
+                f"\n\n【最高优先级 — 用户分析目标】\n"
+                f"「{query.strip()}」\n"
+                f"你必须逐一检查每个字段是否能服务于上述分析目标。\n"
+                f"将最相关的字段设为 target（目标变量），辅助字段设为 feature（特征变量），\n"
+                f"无关字段设为 ignore 或 identifier。\n"
+                f"不要仅根据数据类型（数值/文本/日期）推断角色——必须结合分析目标做语义判断。\n"
+            )
+
         system_prompt = (
             "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
             "你必须调用 submit_field_inference 工具来提交你的分析结果。\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
+            f"{analysis_goal_line}"
             f"{knowledge_section}"
             f"{memory_notes}"
             f"{prompt_md_text}"

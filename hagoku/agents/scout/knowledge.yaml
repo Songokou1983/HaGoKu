@@ -3976,3 +3976,233 @@ knowledge:
     confidence: 1.0
   created_at: '2026-05-25 17:29:25'
   use_count: 0
+- id: 6ab9bf56
+  content: 字段名：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，分布较均匀（B01最多225条，B03最少25条）；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test
+    field: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，分布较均匀（B01最多225条，B03最少25条）
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:03'
+  use_count: 0
+- id: 9fd4061d
+  content: 字段名：唯一标识每个店铺的数字编号；含义：唯一标识每个店铺的数字编号；数据特征：categorical 25个唯一值（A0000001~A0000025），每个值出现约25次（620/25≈24.8），格式为A+6位数字，符合店铺编号特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test
+    field: 唯一标识每个店铺的数字编号
+    meaning: 唯一标识每个店铺的数字编号
+    data_pattern: categorical 25个唯一值（A0000001~A0000025），每个值出现约25次（620/25≈24.8），格式为A+6位数字，符合店铺编号特征
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:04'
+  use_count: 0
+- id: c5f8014c
+  content: 字段名：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；含义：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；数据特征：categorical
+    25个唯一值，范围202540~202612，格式为年份+期数（如202540=2025年第40期），每个值出现约25次；推断角色：time_index
+  tags:
+  - categorical
+  - time_index
+  metadata:
+    project: test
+    field: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    meaning: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    data_pattern: categorical 25个唯一值，范围202540~202612，格式为年份+期数（如202540=2025年第40期），每个值出现约25次
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:04'
+  use_count: 0
+- id: f48a8c18
+  content: 字段名：店铺收入，代表该店铺的收入金额；含义：店铺收入，代表该店铺的收入金额；数据特征：numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.7远大于中位数16.1，呈明显右偏分布，符合收入金额特征；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺收入，代表该店铺的收入金额
+    meaning: 店铺收入，代表该店铺的收入金额
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.7远大于中位数16.1，呈明显右偏分布，符合收入金额特征
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:05'
+  use_count: 0
+- id: 8641cf61
+  content: 字段名：店铺积分，代表该店铺的积分数量；含义：店铺积分，代表该店铺的积分数量；数据特征：numeric 615个唯一值，范围0~296.32，均值43.4大于中位数11.3，右偏分布，与Inc1分布形态相似但数值略低；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺积分，代表该店铺的积分数量
+    meaning: 店铺积分，代表该店铺的积分数量
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.4大于中位数11.3，右偏分布，与Inc1分布形态相似但数值略低
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:05'
+  use_count: 0
+- id: 1ccee4f1
+  content: 字段名：店铺费用，与积分挂钩的费用指标；含义：店铺费用，与积分挂钩的费用指标；数据特征：numeric 253个唯一值，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，与Bos2同属费用类指标但数值量级更大；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺费用，与积分挂钩的费用指标
+    meaning: 店铺费用，与积分挂钩的费用指标
+    data_pattern: numeric 253个唯一值，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，与Bos2同属费用类指标但数值量级更大
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:06'
+  use_count: 0
+- id: eb040a81
+  content: 字段名：店铺费用，与积分挂钩的费用指标；含义：店铺费用，与积分挂钩的费用指标；数据特征：numeric 202个唯一值，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，数值量级较小；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺费用，与积分挂钩的费用指标
+    meaning: 店铺费用，与积分挂钩的费用指标
+    data_pattern: numeric 202个唯一值，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，数值量级较小
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:06'
+  use_count: 0
+- id: b061ee34
+  content: 字段名：可能表示第三项业务评分指标，数值范围与Bos2相近；含义：可能表示第三项业务评分指标，数值范围与Bos2相近；数据特征：numeric
+    373个唯一值，范围0~6.69，均值1.12大于中位数0.51，右偏分布，q25为0说明有大量低值；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 可能表示第三项业务评分指标，数值范围与Bos2相近
+    meaning: 可能表示第三项业务评分指标，数值范围与Bos2相近
+    data_pattern: numeric 373个唯一值，范围0~6.69，均值1.12大于中位数0.51，右偏分布，q25为0说明有大量低值
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 10:19:07'
+  use_count: 0
+- id: c0477e92
+  content: 字段名：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；含义：可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，分布较均匀（B01最多225条，B03最少25条）；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test
+    field: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    meaning: 可能表示业务单元或部门代码，如B01、B02等，用于区分不同业务板块
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，分布较均匀（B01最多225条，B03最少25条）
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:24'
+  use_count: 0
+- id: 7ae996a1
+  content: 字段名：唯一标识每个店铺的数字编号；含义：唯一标识每个店铺的数字编号；数据特征：categorical 25个唯一值（A0000001~A0000025），每个值出现约25次（620/25≈24.8），格式为A+6位数字，符合店铺编号特征；推断角色：identifier
+  tags:
+  - categorical
+  - identifier
+  metadata:
+    project: test
+    field: 唯一标识每个店铺的数字编号
+    meaning: 唯一标识每个店铺的数字编号
+    data_pattern: categorical 25个唯一值（A0000001~A0000025），每个值出现约25次（620/25≈24.8），格式为A+6位数字，符合店铺编号特征
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:25'
+  use_count: 0
+- id: d53245f0
+  content: 字段名：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；含义：可能表示统计周期，格式为年份加期数，如202540代表2025年第40期；数据特征：categorical
+    25个唯一值，范围202540~202612，格式为年份+期数（如202540=2025年第40期），每个值出现约25次；推断角色：time_index
+  tags:
+  - categorical
+  - time_index
+  metadata:
+    project: test
+    field: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    meaning: 可能表示统计周期，格式为年份加期数，如202540代表2025年第40期
+    data_pattern: categorical 25个唯一值，范围202540~202612，格式为年份+期数（如202540=2025年第40期），每个值出现约25次
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:25'
+  use_count: 0
+- id: 59366aef
+  content: 字段名：店铺收入，代表该店铺的收入金额；含义：店铺收入，代表该店铺的收入金额；数据特征：numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.7远大于中位数16.1，呈明显右偏分布，符合收入金额特征；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺收入，代表该店铺的收入金额
+    meaning: 店铺收入，代表该店铺的收入金额
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.7远大于中位数16.1，呈明显右偏分布，符合收入金额特征
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:26'
+  use_count: 0
+- id: 1c61d67e
+  content: 字段名：店铺积分，代表该店铺的积分数量；含义：店铺积分，代表该店铺的积分数量；数据特征：numeric 615个唯一值，范围0~296.32，均值43.4大于中位数11.3，右偏分布，与Inc1分布形态相似但数值略低；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺积分，代表该店铺的积分数量
+    meaning: 店铺积分，代表该店铺的积分数量
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.4大于中位数11.3，右偏分布，与Inc1分布形态相似但数值略低
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:26'
+  use_count: 0
+- id: 40db22ea
+  content: 字段名：店铺费用，与积分挂钩的费用指标；含义：店铺费用，与积分挂钩的费用指标；数据特征：numeric 253个唯一值，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，与Bos2同属费用类指标但数值量级更大；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺费用，与积分挂钩的费用指标
+    meaning: 店铺费用，与积分挂钩的费用指标
+    data_pattern: numeric 253个唯一值，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，与Bos2同属费用类指标但数值量级更大
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:27'
+  use_count: 0
+- id: eb953981
+  content: 字段名：店铺费用，与积分挂钩的费用指标；含义：店铺费用，与积分挂钩的费用指标；数据特征：numeric 202个唯一值，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，数值量级较小；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 店铺费用，与积分挂钩的费用指标
+    meaning: 店铺费用，与积分挂钩的费用指标
+    data_pattern: numeric 202个唯一值，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，数值量级较小
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:27'
+  use_count: 0
+- id: 2ded5cce
+  content: 字段名：可能表示第三项业务评分指标，数值范围与Bos2相近；含义：可能表示第三项业务评分指标，数值范围与Bos2相近；数据特征：numeric
+    373个唯一值，范围0~6.69，均值1.12大于中位数0.51，右偏分布，q25为0说明有大量低值；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test
+    field: 可能表示第三项业务评分指标，数值范围与Bos2相近
+    meaning: 可能表示第三项业务评分指标，数值范围与Bos2相近
+    data_pattern: numeric 373个唯一值，范围0~6.69，均值1.12大于中位数0.51，右偏分布，q25为0说明有大量低值
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-26 11:10:28'
+  use_count: 0

@@ -721,8 +721,14 @@ def _apply_scout_reply_with_llm(
     # ── 当前分析目的状态（target/features），供 LLM 判断用户纠错是否合理 ──
     ap_summary = ""
     ap = context.get("analysis_purpose") or {}
-    current_target = str(ap.get("target") or "").strip()
-    current_features = [str(f).strip() for f in (ap.get("features") or []) if str(f).strip()]
+    # 分析目的可能尚未构建（对齐循环中），回落读取 context 中已由 _derive_roles 设置的 target/features
+    current_target = str(
+        ap.get("target")
+        or context.get("target")
+        or ""
+    ).strip()
+    current_features_raw = ap.get("features") or context.get("features") or []
+    current_features = [str(f).strip() for f in current_features_raw if str(f).strip()]
     if current_target or current_features:
         ap_summary = (
             "当前分析目的状态：\n"
@@ -730,12 +736,22 @@ def _apply_scout_reply_with_llm(
             f"  - 特征变量 (features): {', '.join(current_features) if current_features else '（未设置）'}\n\n"
         )
 
+    # ── 注入用户历史命令/纠错（与初始 Scout 推理一致的通道）─────────────
+    command_context = ""
+    try:
+        pt = (context.get("_pending_command_text") or "").strip()
+        if pt:
+            command_context = f"\n【用户最近提出的指令/纠错（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}\n"
+    except Exception:
+        pass
+
     system_msg = (
         "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
         "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{field_match_hint}"
+        f"{command_context}"
         "当前字段表格状态：\n"
         f"{field_state}\n\n"
         "核心规则——中文名称（display_name）vs 含义理解（description）：\n"
@@ -767,6 +783,18 @@ def _apply_scout_reply_with_llm(
         "  4) 如果字段表格中没有任何字段能匹配该关键词，可以只设置 target/feature 角色而不更新含义\n"
         "  示例：用户说「我要分析的是每个店铺收入的增长趋势，你为什么不识别收入」\n"
         "  → 关键词「收入」→ 匹配字段名含 Inc/Revenue 的字段 → update_field_role(target='Inc1') + update_field_understanding(column_name='Inc1', display_name='店铺收入')\n\n"
+        "笼统纠错规则（用户未指明具体字段）：\n"
+        "- 当用户说「字段理解错误」「你不理解我的分析目标」「参与分析的字段不对」「请根据分析目标判断」等笼统纠错，\n"
+        "  **但未指明具体哪个字段错了**时，你不能以此为由不调用工具。你必须：\n"
+        "  1) 重新理解分析目的（已在提示词开头给出），提取目标变量概念（如「收入增长」「转化率」「销量趋势」）\n"
+        "  2) 扫描全部字段表格，逐一将字段名与目标变量概念做语义匹配\n"
+        "  3) 对明确匹配的字段，调用 update_field_role 设置 target；对可能相关的字段，设置 feature\n"
+        "  4) 对明显无关的字段（如纯 ID、时间戳、常量列），调用 update_field_role 设置 ignore\n"
+        "  5) 同时调用 update_field_understanding 为 target/feature 字段补充基于分析目的的推断含义\n"
+        "  示例：分析目的=「每个店铺收入的增长趋势」，用户说「字段理解完全错误，根据分析目标重新判断」\n"
+        "  → 目标概念=「收入」「增长」→ 匹配字段: Inc1→target, Inc2→feature, Period→feature, StoreID→identifier\n"
+        "  → 调用 update_field_role(target='Inc1', features=['Inc2','Period'], ignored=['StoreID'])\n"
+        "  → 调用 update_field_understanding(column_name='Inc1', display_name='店铺收入', description='…')\n\n"
         "其他规则：\n"
         "- 如果用户只解释了含义但未给短标签，仅更新 description，display_name 留空。\n"
         "- 用户提及的字段（说明含义/关心它），used_in_analysis 设置为 true。\n"
@@ -774,9 +802,10 @@ def _apply_scout_reply_with_llm(
         "- 不要调用工具更新未被用户提及的字段。\n"
         "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。\n\n"
         "最终强制规则（最高优先级）：\n"
-        "- 如果你识别到用户消息包含「为什么不识别」「漏掉了」「需要分析」「为什么没」「你错了」「不对」等抱怨/纠错关键词，\n"
+        "- 如果你识别到用户消息包含任何抱怨/纠错/否定意图（包括笼统纠错），\n"
         "  你**必须至少调用一次** update_field_role 或 update_field_understanding 工具。\n"
-        "  禁止只回复文本解释说「我已理解了」而不做任何实际更新。\n"
+        "  禁止只回复文本解释说「我已理解了」「我会重新分析」而不做任何实际更新。\n"
+        "  禁止以「用户未指明具体字段」为由不调用工具——笼统纠错时你必须主动扫描全部字段并做出判断。\n"
         "  这是硬性要求，违反此规则意味着你没有正确理解用户的意图。"
     )
 
@@ -1855,6 +1884,15 @@ class Orchestrator:
                             llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
                         )
+                        # LLM 未产出任何字段更新时记日志（纯可观测性，不做兜底判断）
+                        if user_reply_scout and not applied_scout:
+                            import logging as _logging
+
+                            _log = _logging.getLogger("hagoku.orchestrator")
+                            _log.warning(
+                                "Scout 字段对齐：LLM 未对用户输入产生任何字段更新 | user_input=%.200s",
+                                user_reply_scout,
+                            )
                         # 用户字段回复：持久化到项目记忆，避免下次重复询问
                         if applied_scout and self.memory:
                             self._persist_scout_field_updates(project_name, applied_scout, context)

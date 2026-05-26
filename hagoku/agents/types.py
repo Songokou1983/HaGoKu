@@ -152,6 +152,7 @@ class DataContext:
     correlation_highlights: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
     target: str | None = None
+    targets: list = field(default_factory=list)  # P1.3: 支持多目标变量
     features: list = field(default_factory=list)
     confounders: list = field(default_factory=list)
     time_column: str | None = None
@@ -175,6 +176,7 @@ class DataContext:
             "correlation_highlights": self.correlation_highlights,
             "warnings": self.warnings,
             "target": self.target,
+            "targets": self.targets,
             "features": self.features,
             "confounders": self.confounders,
             "time_column": self.time_column,
@@ -245,8 +247,9 @@ class DataContext:
         return None
 
     def derive_from_column_semantics(self) -> None:
-        """从 column_semantics 推导 target/features/confounders"""
+        """从 column_semantics 推导 target/features/confounders（支持多目标变量）"""
         features = []
+        targets = []
         confounders = []
         variable_roles = {}
 
@@ -257,8 +260,8 @@ class DataContext:
 
             if role in ("ignore", "identifier"):
                 continue
-            if role == "target" and not self.target:
-                self.target = col
+            if role == "target":
+                targets.append(col)
                 continue
             if role == "control":
                 confounders.append(col)
@@ -272,6 +275,10 @@ class DataContext:
                 continue
             features.append(col)
 
+        # 兼容旧接口：target 保留第一个，targets 保留全部
+        self.targets = targets
+        if not self.target and targets:
+            self.target = targets[0]
         if not self.features:
             self.features = features
         if not self.confounders:

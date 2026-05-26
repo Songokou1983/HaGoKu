@@ -844,9 +844,9 @@ class ScoutAgent(InteractionMixin):
                 sem["needs_user_input"] = False  # 记忆中的名称减少确认需求
 
     def _derive_roles(self, context: dict) -> None:
-        """从 column_semantics 推导 target/features"""
+        """从 column_semantics 推导 target/features（支持多目标变量）"""
         features = []
-        target = None
+        targets = []
         variable_roles = {}
 
         for sem in context["column_semantics"]:
@@ -856,12 +856,14 @@ class ScoutAgent(InteractionMixin):
 
             if role in ("ignore", "identifier"):
                 continue
-            if role == "target" and not target:
-                target = col
+            if role == "target":
+                targets.append(col)
                 continue
             features.append(col)
 
-        context["target"] = target
+        # 兼容旧接口：target 保留第一个目标变量，同时提供 targets 列表
+        context["target"] = targets[0] if targets else None
+        context["targets"] = targets
         context["features"] = features
         context["variable_roles"] = variable_roles
 
@@ -1041,15 +1043,11 @@ class ScoutAgent(InteractionMixin):
         self._save_memory()
 
     def _create_llm_client(self):
-        """创建 LLM 客户端（原始 OpenAI，不走 instructor）"""
+        """创建 LLM 客户端（通过工厂函数，确保 instructor 包装和代理清理）"""
         if self._llm_client is not None:
             return self._llm_client
-        from openai import OpenAI
-        return OpenAI(
-            base_url=self.llm_config.base_url,
-            api_key=self.llm_config.api_key,
-            timeout=120.0,
-        )
+        from ...llm.client import create_raw_client
+        return create_raw_client(self.llm_config)
 
 
     # ── 对话接口（供 UI 调用） ──────────────────────────────

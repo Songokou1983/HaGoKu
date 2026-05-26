@@ -22,6 +22,7 @@ import yaml
 
 from ...config import LLMConfig
 from ...guardrails.statistical import StatisticalGuardrails
+from ...guardrails.parsers import deep_validate
 from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.analysis import (
@@ -45,13 +46,7 @@ from ..constants import (
     ANALYST_DEDUP_SIMILARITY,
     CLEANING_IMPACT_HIGH_THRESHOLD,
     CLEANING_IMPACT_MEDIUM_THRESHOLD,
-    CORRELATION_DIRECTION_NEG,
-    CORRELATION_DIRECTION_POS,
-    CORRELATION_LABEL_MODERATE,
-    CORRELATION_LABEL_STRONG,
-    CORRELATION_LABEL_WEAK,
-    CORRELATION_THRESHOLD_MODERATE_ABS,
-    CORRELATION_THRESHOLD_STRONG_ABS,
+
     CROSS_VALIDATION_FOLDS_DEFAULT,
     DW_LOWER_BOUND,
     DW_UPPER_BOUND,
@@ -118,6 +113,34 @@ class AnalysisResult:
 
 class AnalystAgent(InteractionMixin):
     """数理分析员：用统计方法挖出数据背后的真相"""
+
+    # ── 分析方法注册表（P1.1 修复：支持 LLM 动态扩展分析类型） ──
+    # 格式：{ analysis_type: handler_method_name }
+    # 所有 handler 统一签名为 (df, context, step: dict) → dict | None
+    # 子类或运行时可通过 register_analysis_type() 扩展
+    _ANALYSIS_DISPATCH: dict[str, str] = {
+        "regression": "_do_regression",
+        "hypothesis_test": "_do_hypothesis_test",
+        "correlation": "_do_correlation",
+        "trend_analysis": "_do_trend",
+    }
+
+    @classmethod
+    def register_analysis_type(cls, analysis_type: str, method_name: str) -> None:
+        """注册新的分析方法类型，支持 LLM 动态扩展。"""
+        cls._ANALYSIS_DISPATCH[analysis_type] = method_name
+
+    def _dispatch_analysis(self, atype: str, df, context, step: dict) -> dict | None:
+        """通过注册表分发——所有 handler 统一接收 (df, context, step)，自行提取所需参数。"""
+        method_name = self._ANALYSIS_DISPATCH.get(atype)
+        if method_name is None:
+            logger.debug("未注册的分析类型 '%s'，跳过", atype)
+            return None
+        handler = getattr(self, method_name, None)
+        if handler is None:
+            logger.warning("注册表指向不存在的方法 '%s' for '%s'", method_name, atype)
+            return None
+        return handler(df, context, step)
 
     def __init__(
         self,
@@ -254,22 +277,8 @@ class AnalystAgent(InteractionMixin):
         if analysis_steps:
             for step in analysis_steps:
                 atype = step["analysis_type"]
-                if atype == "regression":
-                    result = self._do_regression(df, context, step.get("target_col") or target_col, step.get("question", query))
-                elif atype == "hypothesis_test":
-                    result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col, step.get("group_col"))
-                elif atype == "correlation":
-                    result = self._do_correlation(df, context)
-                elif atype == "trend_analysis":
-                    result = self._do_trend(df, context, step.get("target_col") or target_col)
-                else:
-                    # check_test_assumptions / cross_validate / multiple_comparison_correction / power_analysis
-                    # 这些方法在 _enhance_with_cv 和多重比较校正环节中处理，
-                    # LLM 计划中包含它们表示"建议做"，但分析驱动仍以 regression/hypothesis_test/correlation/trend 为主
-                    continue
-
+                result = self._dispatch_analysis(atype, df, context, step)
                 if result:
-                    # 注入 LLM 选择该方法的理由
                     result["method_reason"] = step.get("reason", "")
                     result["method_name"] = step.get("method_name", "")
                     results.append(result)
@@ -283,17 +292,7 @@ class AnalystAgent(InteractionMixin):
             )
             if retry_steps:
                 for step in retry_steps:
-                    atype = step["analysis_type"]
-                    if atype == "regression":
-                        result = self._do_regression(df, context, step.get("target_col") or target_col, step.get("question", query))
-                    elif atype == "hypothesis_test":
-                        result = self._do_hypothesis_test(df, context, step.get("target_col") or target_col, step.get("group_col"))
-                    elif atype == "correlation":
-                        result = self._do_correlation(df, context)
-                    elif atype == "trend_analysis":
-                        result = self._do_trend(df, context, step.get("target_col") or target_col)
-                    else:
-                        continue
+                    result = self._dispatch_analysis(step["analysis_type"], df, context, step)
                     if result:
                         result["method_reason"] = step.get("reason", "")
                         result["method_name"] = step.get("method_name", "")
@@ -336,7 +335,7 @@ class AnalystAgent(InteractionMixin):
         if len(results) > 1:
             self._apply_multiple_comparison(results)
 
-        # 统计护栏
+        # 统计护栏 + 结构化输出验证
         for result in results:
             guardrail_results = self.guardrails.check(result)
             result["guardrail_results"] = [gr.model_dump() for gr in guardrail_results]
@@ -347,6 +346,18 @@ class AnalystAgent(InteractionMixin):
                     "verdict": "fail" if violations.get("mandatory") else "warning",  # type: ignore[call-overload]
                     "detail": f"{sum(len(v) for v in violations.values())} 个护栏问题",
                 })
+
+            # P1.2 接线：对结论文本做深度校验（解析器已接入，不再死代码）
+            conclusion_text = result.get("conclusion_plain", "")
+            if conclusion_text:
+                deep_result = deep_validate(conclusion_text)
+                if deep_result.get("hallucination_warnings"):
+                    logger.warning("Analyst 结论疑似幻觉: %s", deep_result["hallucination_warnings"])
+                    self._emit(EventType.QUALITY_CHECK, {
+                        "verdict": "warning",
+                        "detail": f"结论文本可疑: {'; '.join(deep_result['hallucination_warnings'][:3])}",
+                    })
+                result["_deep_validation"] = deep_result
 
         # 更新记忆
         self._update_own_memory(results, project_id)
@@ -438,8 +449,10 @@ class AnalystAgent(InteractionMixin):
                 self.scribe.unblock_task("analyst")
             return self._done("done", "分析已结束", {})
 
-    def _do_regression(self, df, context, target_col, query) -> dict | None:
+    def _do_regression(self, df, context, step: dict) -> dict | None:
         """回归分析"""
+        target_col = step.get("target_col", "")
+        query = step.get("question", "")
         if not target_col:
             target_candidates = [s for s in context.get("column_semantics", []) if s.get("suggested_role") == "target"]
             if not target_candidates:
@@ -510,8 +523,10 @@ class AnalystAgent(InteractionMixin):
             logger.warning("回归分析执行失败", exc_info=True)
             return None
 
-    def _do_hypothesis_test(self, df, context, target_col, group_col=None) -> dict | None:
+    def _do_hypothesis_test(self, df, context, step: dict) -> dict | None:
         """假设检验"""
+        target_col = step.get("target_col", "")
+        group_col = step.get("group_col")
         cat_cols = [
             s["column_name"]
             for s in context.get("column_semantics", [])
@@ -657,7 +672,7 @@ class AnalystAgent(InteractionMixin):
             logger.warning("假设检验执行失败", exc_info=True)
             return None
 
-    def _do_correlation(self, df, context) -> dict | None:
+    def _do_correlation(self, df, context, step: dict | None = None) -> dict | None:
         """相关性分析"""
         num_cols = [
             s["column_name"]
@@ -714,8 +729,9 @@ class AnalystAgent(InteractionMixin):
             "raw_result": best_corr,
         }
 
-    def _do_trend(self, df, context, target_col) -> dict | None:
+    def _do_trend(self, df, context, step: dict) -> dict | None:
         """趋势分析"""
+        target_col = step.get("target_col", "")
         time_cols = [
             s["column_name"]
             for s in context.get("column_semantics", [])

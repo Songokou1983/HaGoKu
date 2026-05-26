@@ -316,6 +316,17 @@ def generate_insight_charts(
     else:
         output_dir = None
 
+    # ── 可视化类型注册表（P1.2 修复：支持 LLM 动态扩展） ──
+    _CHART_DISPATCH: dict[str, Any] = {
+        "regression": _chart_regression,
+        "hypothesis_test": _chart_hypothesis_test,
+        "hypothesis_test_mann_whitney": _chart_hypothesis_test,
+        "hypothesis_test_kruskal_wallis": _chart_hypothesis_test,
+        "correlation": _chart_correlation,
+        "trend_analysis": _chart_trend,
+        "interaction_analysis": _chart_interaction,
+    }
+
     charts: list[dict[str, Any]] = []
 
     for i, result in enumerate(results):
@@ -323,31 +334,11 @@ def generate_insight_charts(
         raw = result.get("raw_result", result)
 
         try:
-            if analysis_type == "regression":
-                chart = _chart_regression(df, raw, i, output_dir, interactive)
+            chart_fn = _CHART_DISPATCH.get(analysis_type)
+            if chart_fn:
+                chart = chart_fn(df, raw, i, output_dir, interactive)
                 if chart:
                     charts.extend(chart)
-
-            elif analysis_type in ("hypothesis_test", "hypothesis_test_mann_whitney", "hypothesis_test_kruskal_wallis"):
-                chart = _chart_hypothesis_test(df, raw, i, output_dir, interactive)
-                if chart:
-                    charts.extend(chart)
-
-            elif analysis_type == "correlation":
-                chart = _chart_correlation(df, raw, i, output_dir, interactive)
-                if chart:
-                    charts.extend(chart)
-
-            elif analysis_type == "trend_analysis":
-                chart = _chart_trend(df, raw, i, output_dir, interactive)
-                if chart:
-                    charts.extend(chart)
-
-            elif analysis_type == "interaction_analysis":
-                chart = _chart_interaction(df, raw, i, output_dir, interactive)
-                if chart:
-                    charts.extend(chart)
-
         except Exception as e:
             # 图表生成失败不应阻止报告生成
             logger.warning("Chart generation failed for result %d (%s): %s", i, analysis_type, e)

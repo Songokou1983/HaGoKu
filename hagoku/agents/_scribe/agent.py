@@ -391,135 +391,24 @@ class ScribeAgent:
         context: dict | None = None,
     ) -> str:
         """
-        生成交接笔记（Handover Note），帮助下游 Agent 快速理解上游的全部产出。
+        生成交接笔记：纯数据搬运，不做任何格式化或语义转换。
 
-        使用 LLM 从上游产出的结构化数据中生成自然语言交接笔记，
-        包含：上游做了什么、关键决策、边界情况、给下游的建议、产出摘要。
+        P0 通道原则：代码只负责 serialize → transport。
+        下游 Agent 的 LLM 自行解读 raw JSON。
 
         Args:
-            from_agent: 上游 Agent 名（scout/cleaner/analyst）
-            to_agent: 下游 Agent 名（cleaner/analyst/reporter）
+            from_agent: 上游 Agent 名
+            to_agent: 下游 Agent 名
             source_summary: 上游 Agent 的产出摘要 dict
-            context: 当前项目的完整上下文（DataContext，可选）
+            context: 当前项目的完整上下文（未使用，保留接口兼容）
 
         Returns:
-            格式化的交接笔记（Markdown 文本）
+            source_summary 的 JSON 序列化文本
         """
         import json
 
-        phase_map: dict[str, str] = {
-            "scout": "数据侦察",
-            "cleaner": "数据清洗",
-            "analyst": "统计分析",
-            "reporter": "报告生成",
-        }
-
-        from_label = phase_map.get(from_agent, from_agent)
-        to_label = phase_map.get(to_agent, to_agent)
-
-        prompt = f"""你是一位数据分析项目经理，正在生成 "{from_label}" Agent 到 "{to_label}" Agent 的交接笔记。
-
-上游 Agent（{from_label}）的产出摘要：
-{json.dumps(source_summary, ensure_ascii=False, indent=2)}
-
-{"" if context is None else "项目整体上下文：\n" + json.dumps(
-    {
-        k: v for k, v in context.items()
-        if k not in ("_column_profiles", "_sample_values")
-    },
-    ensure_ascii=False,
-    indent=2,
-)}
-
-请生成一份简洁的交接笔记，使用以下 Markdown 格式：
-
-## {from_label} → {to_label} 交接笔记
-
-**{from_label} 工作总结**：
-（一句话总结，50字以内）
-
-**关键决策**：
-- （列出 2-5 个关键决策及其理由）
-
-**需要注意**：
-- （列出 1-3 个边界情况或限制条件）
-
-**给 {to_label} 的建议**：
-- （具体可操作的建议，2-4 条）
-
-**产出摘要**：
-（用表格展示关键数据，Markdown 表格格式）
-
-要求：
-1. 全部用中文
-2. 面向业务用户，禁止出现 dtype/int64/float64 等技术术语
-3. 给下游的建议要具体可操作，不要空泛
-4. 简洁但不遗漏关键信息
-
-只返回交接笔记内容，不要任何其他文字。"""
-
-        try:
-            from ...llm.client import create_quick_client
-
-            client = create_quick_client(self.llm_config)
-            system_content = self.prompt if self.prompt else "你是数据分析项目经理，只生成结构化的交接笔记。"
-            response = client.chat.completions.create(
-                model=self.llm_config.model_quick or self.llm_config.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_content,
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                max_tokens=1024,
-            )
-            content = response.choices[0].message.content.strip()
-            self._log(f"HANDOVER generated: {from_agent} → {to_agent}")
-            return content
-
-        except Exception:
-            import logging
-
-            logging.getLogger("hagoku").warning(
-                "Scribe LLM handover generation failed for %s → %s, using fallback",
-                from_agent,
-                to_agent,
-            )
-
-            # Fallback: 结构化但不经 LLM 的交接笔记
-            lines: list[str] = [
-                f"## {from_label} → {to_label} 交接笔记",
-                "",
-                f"**{from_label} 工作总结**：",
-                f"{source_summary.get('summary', '完成')}",
-                "",
-                "**产出摘要**：",
-            ]
-            # 尝试从 source_summary 中提取表格数据
-            if "operations" in source_summary:
-                lines.append("")
-                lines.append("| 操作 | 影响 |")
-                lines.append("|------|------|")
-                for op in source_summary.get("operations", [])[:10]:
-                    if isinstance(op, dict):
-                        lines.append(
-                            f"| {op.get('strategy', op.get('column', '-'))} "
-                            f"| {op.get('reason', op.get('rows_affected', '-'))} |"
-                        )
-            elif "results" in source_summary:
-                lines.append("")
-                lines.append("| 分析 | 结果 |")
-                lines.append("|------|------|")
-                for r in source_summary.get("results", [])[:10]:
-                    if isinstance(r, dict):
-                        lines.append(
-                            f"| {r.get('question', r.get('analysis_type', '-'))[:40]} "
-                            f"| {r.get('conclusion_plain', r.get('significance', '-'))[:40]} |"
-                        )
-
-            return "\n".join(lines)
+        self._log(f"HANDOVER transport: {from_agent} → {to_agent}")
+        return json.dumps(source_summary, ensure_ascii=False, indent=2, default=str)
 
     def _get_context_data(self) -> dict:
         """读取 context.md 中所有阶段的产出数据，返回聚合 dict。

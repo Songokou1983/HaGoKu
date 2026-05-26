@@ -776,93 +776,30 @@ class CleanerAgent(InteractionMixin):
         context: dict,
         project_id: str | None,
     ) -> None:
-        """通过 LLM 生成「清洗影响叙述」并写入 context.md（反馈通道）。
+        """写入清洗影响数据到 context dict（纯数据搬运，不做语义转换）。
 
-        让下游 Analyst/Reporter 理解数据在清洗阶段发生了哪些变化，
-        以及这些变化可能对分析结论产生什么影响。
+        P0 通道原则：只搬运结构化清洗数据。下游 Analyst/Reporter 的 LLM 自行解读。
         """
-        if not self.scribe or not self.scribe.context_path.exists():
-            return
-
-        # 组装清洗事实
-        facts = {
+        cleaning_data = {
             "rows_before": report.total_rows_original,
             "rows_after": report.total_rows_after,
-            "impact_rate": f"{report.impact_rate:.1%}",
+            "impact_rate": report.impact_rate,
+            "operations_count": len(report.operations),
             "operations": [op.to_dict() for op in report.operations],
-            "distribution_shifts": report.distribution_shift,
             "bias_risk": report.bias_risk,
             "bias_risk_reason": report.bias_risk_reason,
+            "distribution_shifts": report.distribution_shift,
         }
 
-        prompt = f"""你是专业数据清洗员，刚完成一次数据清洗。请根据以下事实，生成一段面向分析师和报告撰写员的「清洗影响叙述」。
+        # 写入 context dict（供 Analyst 直接访问结构化清洗数据）
+        context["_cleaning_impact"] = cleaning_data
 
-清洗事实：
-{json.dumps(facts, ensure_ascii=False, indent=2)}
-
-项目上下文：
-- 分析目标：{context.get('analysis_goal', context.get('query', '未指定'))}
-- 目标变量：{context.get('target', '未指定')}
-
-请生成一段 150-300 字的叙述，包含：
-1. 清洗概况（几行→几行，影响率）
-2. 关键操作及其业务理由
-3. 清洗对后续分析的潜在影响（分布偏移、偏差风险）
-4. 对分析师/报告员的使用建议
-
-要求：
-- 面向后续使用者，语气为「提醒」而非「报告」
-- 全部用中文
-- 禁止出现 dtype/int64/float64/IQR/p值 等技术术语
-- 偏差风险若为 high，必须在叙述中明确警告
-
-只返回叙述文字，不要标题、不要格式标记。"""
-
-        try:
-            from ...llm.client import create_quick_client
-
-            client = create_quick_client(self.llm_config)
-            response = client.chat.completions.create(
-                model=self.llm_config.model_quick or self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": "你是专业数据清洗员，只生成清洗影响叙述。"},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                max_tokens=512,
-            )
-            narrative = response.choices[0].message.content.strip()
-
-        except Exception:
-            logging.getLogger("hagoku").warning(
-                "Cleaner LLM impact narrative generation failed, using fallback"
-            )
-            # Fallback: 纯数据事实
-            ops_summary = ", ".join(
-                f"{op.to_dict().get('column', '?')}:{op.to_dict().get('strategy', '?')}"
-                for op in report.operations[:10]
-            )
-            narrative = (
-                f"清洗完成：{report.total_rows_original} 行 → {report.total_rows_after} 行，"
-                f"影响率 {report.impact_rate:.1%}，共 {len(report.operations)} 个操作"
-                + (f"（{ops_summary}）" if ops_summary else "")
-                + (f"。偏差风险：{report.bias_risk}，{report.bias_risk_reason}"
-                   if report.bias_risk != "low" else "")
-            )
-
-        # 写入 context.md 的 Cleaner 产出块
-        self.scribe.update_context("Cleaner", {
-            "data": {
-                "rows_before": report.total_rows_original,
-                "rows_after": report.total_rows_after,
-                "impact_rate": f"{report.impact_rate:.1%}",
-                "operations_count": len(report.operations),
-                "bias_risk": report.bias_risk,
-                "distribution_shifts": report.distribution_shift,
-                "cleaning_impact_narrative": narrative,
-            },
-            "completed": True,
-        })
+        # 写入 context.md（供 Scribe 维护项目记录）
+        if self.scribe and self.scribe.context_path.exists():
+            self.scribe.update_context("Cleaner", {
+                "data": cleaning_data,
+                "completed": True,
+            })
 
     def get_strategy_summary(self, data_path: str, context: dict) -> dict:
         """

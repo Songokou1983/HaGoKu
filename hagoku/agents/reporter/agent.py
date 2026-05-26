@@ -104,15 +104,20 @@ class ReporterAgent(InteractionMixin):
         """调用 LLM，返回文本响应"""
         if self._llm_client is None:
             raise RuntimeError("ReporterAgent 没有 LLM 客户端")
-        # 使用底层 raw 接口（和 Scout/Analyst 一致）
-        if hasattr(self._llm_client, "chat_raw"):
-            return self._llm_client.chat_raw(system=system, user=user)
-        if hasattr(self._llm_client, "chat"):
-            resp = self._llm_client.chat(system=system, messages=[{"role": "user", "content": user}])
-            if isinstance(resp, dict):
-                return resp.get("content", "")
-            return str(resp)
-        raise RuntimeError(f"不支持的 LLM 客户端类型: {type(self._llm_client)}")
+        # 使用标准 chat.completions.create 接口（兼容 instructor 包装和原始 OpenAI）
+        try:
+            response = self._llm_client.chat.completions.create(
+                model=self.llm_config.model_quick or self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.3,
+                max_tokens=4096,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"Reporter LLM 调用失败: {e}")
 
     def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})

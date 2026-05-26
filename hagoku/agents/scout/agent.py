@@ -707,6 +707,7 @@ class ScoutAgent(InteractionMixin):
                 "evidence": item.get("evidence", ""),
                 "needs_user_input": bool(item.get("needs_user_input", True)),
                 "suggested_role": item.get("suggested_role", "unknown"),
+                "used_in_analysis": item.get("used_in_analysis"),
             })
 
         # 如果 LLM 遗漏某些列，用 unknown 补上
@@ -720,6 +721,7 @@ class ScoutAgent(InteractionMixin):
                     "evidence": "LLM 未覆盖",
                     "needs_user_input": True,
                     "suggested_role": "unknown",
+                    "used_in_analysis": None,
                 })
 
         # 从 columns 数组中提取 description / display_name 到映射
@@ -896,6 +898,27 @@ class ScoutAgent(InteractionMixin):
             context["target"] = getattr(self, "_llm_target_columns")[0] if getattr(self, "_llm_target_columns") else None
         if getattr(self, "_llm_feature_columns", None):
             context["features"] = list(getattr(self, "_llm_feature_columns"))
+
+        # 4b. 同步 column_semantics 和 variable_roles，确保 UI 复选框与实际分析列一致
+        analysis_cols: set[str] = set()
+        if context.get("target"):
+            analysis_cols.add(context["target"])
+        if context.get("features"):
+            analysis_cols.update(context["features"])
+        for sem in context.get("column_semantics", []):
+            col = sem.get("column_name", "")
+            if not col:
+                continue
+            if col in analysis_cols:
+                role = "target" if col == context.get("target") else "feature"
+                sem["suggested_role"] = role
+                context.setdefault("variable_roles", {})[col] = role
+                if sem.get("used_in_analysis") is None:
+                    sem["used_in_analysis"] = True
+            else:
+                context.setdefault("variable_roles", {})[col] = sem.get("suggested_role", "unknown")
+                if sem.get("used_in_analysis") is None:
+                    sem["used_in_analysis"] = False
 
     def _generate_confirmation_message(self, column_semantics: list, context: dict) -> str:
         """用 LLM 生成字段确认的 Markdown 表（字段名｜理解名称｜含义理解）。"""

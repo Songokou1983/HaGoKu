@@ -34,7 +34,7 @@ FIELD_INFERRED_TYPES = [
 FIELD_SUGGESTED_ROLES = [
     "identifier", "time_index", "binary_feature", "target",
     "numeric_feature", "categorical_feature", "text_feature",
-    "unknown",
+    "ignore", "unknown",
 ]
 
 
@@ -53,6 +53,15 @@ class FieldInferenceItem(BaseModel):
             "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；"
             "不确定时写「可能表示…」并点出观察到的现象；"
             "禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"
+        ),
+    )
+    used_in_analysis: bool | None = Field(
+        default=None,
+        description=(
+            "该字段是否参与本次分析。设为 true 的字段将出现在「参与分析」列中打勾。"
+            "判断规则：结合用户分析目标，能服务于分析目标的字段 → true；"
+            "纯标识列（ID/编码/序号）、常量列、与目标完全无关的列 → false。"
+            "如果不确定，设为 null 交由用户确认。"
         ),
     )
 

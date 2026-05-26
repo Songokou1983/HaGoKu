@@ -51,26 +51,15 @@ def parse_effect_size(text: str) -> Optional[float]:
 
 def parse_conclusion_count(text: str) -> Optional[int]:
     """
-    从 LLM 输出中统计明确结论的数量。
+    从 LLM 输出中统计编号列表条目数（结构性检查，不做语义判断）。
 
-    识别模式：
-      - 编号列表："1. ... 2. ..."
-      - Markdown 标题 + 结论性动词："### 结论"
-      - 统计性陈述："研究发现"、"结果表明"、"conclusion"
+    只识别编号列表格式（"1. ... 2. ..."）——这是纯格式匹配，
+    不扫描中文/英文语义关键词。
 
-    返回结论数（int）或 None。
+    返回条目数（int）或 None。
     """
-    count = 0
-    # 编号列表
     numbered = re.findall(r"(?:^|\n)\s*\d+\.\s+", text)
-    count += len(numbered)
-    # 结论性动词
-    conclusion_keywords = [
-        r"研究.?发现", r"结果.?表明", r"数据.?显示",
-        r"结论", r"conclusion", r"we find", r"results show",
-    ]
-    for kw in conclusion_keywords:
-        count += len(re.findall(kw, text, re.IGNORECASE))
+    count = len(numbered)
     return count if count > 0 else None
 
 
@@ -327,12 +316,11 @@ def detect_hallucination_indicators(text: str) -> list[str]:
     if ci is not None and not is_valid_ci(*ci):
         warnings.append(f"置信区间 [{ci[0]}, {ci[1]}] 不合法")
 
-    # 4. 检查自相矛盾陈述
-    has_significant = bool(re.search(r"(?:显著|significant|p\s*[<≤]\s*0\.0[0-5])", text, re.IGNORECASE))
-    has_not_significant = bool(re.search(r"(?:不显著|not\s*significant|无显著|no\s*significant|p\s*[>≥]\s*0\.0[0-5])", text, re.IGNORECASE))
-    if has_significant and has_not_significant:
-        # 在相同上下文中同时声称显著和不显著（可能在讨论不同变量，所以只是警告级别）
-        warnings.append('文本中同时包含「显著」和「不显著」陈述，请确认是否有矛盾')
+    # 4. 检查自相矛盾陈述（仅做结构性 p 值范围检查，不扫中文语义）
+    has_sig_small_p = bool(re.search(r"p\s*[<≤]\s*0\.0[0-5]", text, re.IGNORECASE))
+    has_sig_large_p = bool(re.search(r"p\s*[>≥]\s*0\.0[0-5]", text, re.IGNORECASE))
+    if has_sig_small_p and has_sig_large_p:
+        warnings.append('文本中同时包含 p < 0.05 和 p > 0.05 的陈述，请确认是否有矛盾')
 
     # 5. 检查 p 值与 CI 一致性
     if p is not None and ci is not None:

@@ -147,20 +147,25 @@ class NoCausalClaimWithoutMethod:
         return Severity.MANDATORY
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
-        conclusion = (analysis_result.get("conclusion_plain", "") + " " +
-                      analysis_result.get("conclusion_statistical", "")).lower()
-        causal_keywords = ["导致", "引起", "因果", "造成", "cause", "causal", "leads to", "results in"]
-        has_causal_claim = any(kw in conclusion for kw in causal_keywords)
+        # 信任 LLM 的自我声明：causal_method 由 LLM 自行设置。
+        # 代码不再扫描自然语言文本检测因果语义——语义判断是 LLM 的职责。
+        # 仅做结构性校验：如果 LLM 声明了因果方法，必须是非空字符串。
         has_causal_method = analysis_result.get("causal_method") is not None
         is_experimental = analysis_result.get("design_type") == "experimental"
 
-        passed = not has_causal_claim or has_causal_method or is_experimental
+        if has_causal_method:
+            cm = analysis_result.get("causal_method")
+            causal_method_valid = isinstance(cm, str) and cm.strip() != ""
+        else:
+            causal_method_valid = True  # LLM 未声明因果 → 通过
+
+        passed = causal_method_valid or is_experimental
         return GuardrailResult(
             rule=self.rule_name,
             severity=self.severity,
             passed=passed,
-            message="这份数据无法得出因果结论，请改为'相关'或'关联'" if not passed else "",
-            suggestion="这份数据是观测数据，只能说明两件事有关联，不能说一件事导致另一件事" if not passed else None,
+            message="因果方法声明无效，请提供有效的因果推断方法或改为相关性描述" if not passed else "",
+            suggestion="如果分析不涉及因果推断，请移除 causal_method 字段；否则填写具体方法名" if not passed else None,
         )
 
 

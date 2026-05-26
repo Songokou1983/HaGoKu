@@ -108,11 +108,7 @@ class RefinementParser:
 
         f = feedback.strip()
 
-        # 1. 退出口令快速路径（固定词汇匹配，非语义判断，属于结构性操作）
-        if self._is_exit(f):
-            return RefinementIntent(raw_input=f, refine_type="exit", confidence="high")
-
-        # 2. LLM 语义理解（核心改动：全部走 function calling）
+        # LLM 语义理解（唯一通道：全部走 function calling）
         try:
             return self._parse_via_llm(f, context)
         except Exception:
@@ -160,7 +156,8 @@ class RefinementParser:
             "    - filter: 筛选数据（如「只看一线城市」「排除付费渠道」）\n"
             "    - switch_target: 切换分析指标（如「换成 ROI 看看」）\n"
             "    - simplify/more_detail: 调整报告详略（如「太长了」「详细展开」）\n"
-            "    - explain: 解释已有结论（如「为什么 ROI 下降了」）\n\n"
+            "    - explain: 解释已有结论（如「为什么 ROI 下降了」）\n"
+            "    - exit: 用户想要退出/结束当前分析（如「退出」「结束」「算了」「保存并退出」）\n\n"
             "  ❌ 不允许的调整（需重新 run）：\n"
             "    - new_direction: 提出新的分析方向，超出当前调整范围\n"
             "    - regenerate: 要求重新生成\n"
@@ -235,11 +232,6 @@ class RefinementParser:
             confidence="medium",
         )
 
-    def _is_exit(self, feedback: str) -> bool:
-        """判断是否是退出指令（固定词汇，非语义判断，属于结构性操作）。"""
-        exit_words = {"退出", "exit", "quit", "done", "stop", "q", "算了", "保存", "结束", "再见"}
-        return feedback in exit_words or feedback.lower() in {w.lower() for w in exit_words}
-
     def _build_unknown_intent(self, feedback: str) -> RefinementIntent:
         """LLM 不可达或不理解时的最小兜底。"""
         return RefinementIntent(
@@ -252,7 +244,7 @@ class RefinementParser:
                 "   • 「换成XX指标」— 换分析指标\n"
                 "   • 「简单点/详细点」— 调整报告详略\n"
                 "   • 「为什么」— 解释已有结论\n"
-                "   输入「退出」可结束并保存当前报告"
+                "   如需结束当前分析，请直接说明（如「退出」「结束」）"
             ),
         )
 

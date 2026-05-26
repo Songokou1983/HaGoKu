@@ -213,18 +213,14 @@ class DataContext:
         return [s for s in self.column_semantics if s.suggested_role == "target"]
 
     def resolve_column_alias(self, name: str) -> str | None:
-        """根据中文别名解析实际的列名"""
+        """根据已有的列描述精确匹配列名（纯结构性查找，不做语义推断）。
+
+        语义推断（如「销售额→Inc1」）由 LLM 通过 function calling 完成。
+        """
         if not name:
             return None
 
-        COMMON_COLUMN_ALIASES: dict[str, list[str]] = {
-            "销售额": ["Inc1", "Inc2", "收入", "营收", "sales", "revenue"],
-            "收入": ["Inc1", "Inc2", "revenue"],
-            "利润": ["Bos1", "Bos2", "profit"],
-            "成本": ["Bos1", "Bos2", "cost"],
-        }
-
-        # 精确匹配 column_descriptions
+        # 精确匹配 column_descriptions（代码只做已有数据的查找）
         if self.column_descriptions:
             for col, desc in self.column_descriptions.items():
                 if desc == name:
@@ -236,13 +232,6 @@ class DataContext:
                 desc_clean = re.sub(r"（[^）]+）", "", desc).strip()
                 if desc_clean == clean_name:
                     return str(col)
-
-        # 兜底：常见业务术语映射
-        for term, candidates in COMMON_COLUMN_ALIASES.items():
-            if term in name:
-                for sem in self.column_semantics:
-                    if sem.column_name in candidates:
-                        return str(sem.column_name)
 
         return None
 

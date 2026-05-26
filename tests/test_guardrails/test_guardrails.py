@@ -81,14 +81,16 @@ class TestMustReportCI:
 
 
 class TestNoCausalClaimWithoutMethod:
-    def test_fail_causal_claim_without_method(self):
+    def test_pass_no_causal_method_set(self):
+        """LLM 未声明 causal_method → 通过（信任 LLM 的自我判断）。"""
         rule = NoCausalClaimWithoutMethod()
         result = rule.check({
-            "conclusion_plain": "广告导致销售额增加",
+            "conclusion_plain": "广告和销售额正相关",
         })
-        assert not result.passed
+        assert result.passed
 
-    def test_pass_causal_claim_with_method(self):
+    def test_pass_causal_method_valid(self):
+        """LLM 声明了有效的因果方法 → 通过。"""
         rule = NoCausalClaimWithoutMethod()
         result = rule.check({
             "conclusion_plain": "广告导致销售额增加",
@@ -96,10 +98,22 @@ class TestNoCausalClaimWithoutMethod:
         })
         assert result.passed
 
-    def test_pass_no_causal_claim(self):
+    def test_fail_causal_method_empty(self):
+        """LLM 声明了因果方法但为空字符串 → 不通过（结构性校验）。"""
         rule = NoCausalClaimWithoutMethod()
         result = rule.check({
-            "conclusion_plain": "广告和销售额正相关",
+            "conclusion_plain": "广告导致销售额增加",
+            "causal_method": "",
+        })
+        assert not result.passed
+
+    def test_pass_experimental(self):
+        """实验设计 → 始终通过。"""
+        rule = NoCausalClaimWithoutMethod()
+        result = rule.check({
+            "conclusion_plain": "广告导致销售额增加",
+            "design_type": "experimental",
+            "causal_method": "",  # 即使因果方法无效，实验设计也通过
         })
         assert result.passed
 

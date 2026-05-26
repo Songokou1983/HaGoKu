@@ -67,6 +67,35 @@ def _parse_llm_field_desc_line(raw: str) -> tuple[str, str] | None:
     return col, desc
 
 
+# 结构性检查：描述是否为「列名（任意内容）」格式。
+# 这是纯字符串形状匹配——任何 col_name（...）形式都被视为结构回显。
+# 代码不判断括号内内容的语义——那是 LLM 的职责。
+_TYPE_ECHO_PATTERN_RE = re.compile(r"^.+\（.+?\）$")
+
+
+def _description_is_user_facing_meaningful(col_name: str, desc: str) -> bool:
+    """检查描述是否提供了超出列名本身的结构性信息。
+
+    纯字符串形状匹配，不涉及语义判断：
+    - 空描述 → False
+    - 描述 == 列名 → False
+    - 描述匹配「列名（...）」模式 → False（结构回显）
+    - 其他 → True
+
+    代码不判断括号内内容的业务含义——那是 LLM 的职责。
+    """
+    d = (desc or "").strip()
+    if not d:
+        return False
+    if d == col_name:
+        return False
+    # 检测「列名（...）」结构回显模式：任何 col_name（内容）形式
+    prefix = col_name + "（"
+    if d.startswith(prefix) and d.endswith("）"):
+        return False
+    return True
+
+
 def _load_prompt_md_text(agent_name: str) -> str:
     """加载 agent 的 prompt.md 作为 LLM system prompt 的后半部分（行为约束 + 判断规则）。"""
     try:

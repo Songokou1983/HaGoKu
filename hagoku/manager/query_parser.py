@@ -29,29 +29,18 @@ class QueryIntent:
     mentioned_columns: list[str] = field(default_factory=list)
     confidence: str = "medium"
     thinking: str = ""
+    analysis_focus: list[str] = field(default_factory=list)
     fallback_focus: list[str] = field(
         default_factory=lambda: ["regression", "hypothesis_test", "correlation"]
     )
 
     def to_plan_focus(self) -> list[str]:
-        """将意图类型转换为分析类型列表"""
-        mapping: dict[str, list[str]] = {
-            "comparison": ["hypothesis_test", "effect_size"],
-            "causation": ["regression", "causal"],
-            "correlation": ["correlation"],
-            "trend": ["trend"],
-            "diagnostic": ["regression", "hypothesis_test"],
-            "roi_analysis": ["hypothesis_test", "regression"],
-            "ltv_analysis": ["regression", "correlation"],
-            "funnel_conversion": ["hypothesis_test"],
-            "attribution": ["hypothesis_test", "correlation"],
-            "investment_decision": ["regression"],
-            "cac_analysis": ["hypothesis_test", "correlation"],
-            "cohort_analysis": ["hypothesis_test", "trend"],
-            "growth_rate": ["trend", "regression"],
-            "exploration": self.fallback_focus,
-        }
-        return mapping.get(self.intent_type, self.fallback_focus)
+        """返回 LLM 指定的分析焦点列表。
+
+        分析焦点由 LLM 在意图解析时直接输出，代码不做映射。
+        若 LLM 未指定，回退到默认探索焦点。
+        """
+        return self.analysis_focus or self.fallback_focus
 
 
 # ── 快捷函数（LLM 驱动，零硬编码）────────────────────────────
@@ -92,12 +81,14 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
   "group_by": ["用户想按什么维度分组，中文名称列表"],
   "time_range": "用户提到的时间范围原文，没有则为 null",
   "mentioned_columns": ["用户直接或间接提到的数据列名，中文"],
+  "analysis_focus": ["根据意图推荐的分析方法，从以下选: regression, hypothesis_test, correlation, trend, effect_size, causal"],
   "filters": {},
   "thinking": "一句话简述你的判断依据"
 }
 
 规则：
 - intent_type 必须从上面枚举中选一个，不明确的用 "exploration"
+- analysis_focus 由你根据意图直接推荐合适的分析方法列表
 - target / group_by / mentioned_columns 用中文写出用户的业务语言
 - time_range 保留用户在问题中的原文表述（如 "最近3个月"）
 - confidence: 表达清晰且关键词匹配度高 → high；可推断但需要确认 → medium；完全不清楚 → low"""
@@ -142,6 +133,7 @@ def _build_intent(data: dict[str, Any]) -> QueryIntent:
         group_by=list(data.get("group_by") or []),
         time_range=data.get("time_range"),
         mentioned_columns=list(data.get("mentioned_columns") or []),
+        analysis_focus=list(data.get("analysis_focus") or []),
         filters=data.get("filters") or {},
         thinking=data.get("thinking", ""),
     )

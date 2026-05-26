@@ -192,134 +192,78 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 # 符合 PROJECT.md「看板状态机（确定性状态转换）」定义。
 # ⚠️ 禁止在此区域添加语义判断逻辑（如根据关键词推断字段含义）。
 
-# 正则预筛选快速路径：匹配明确的确认/放行短语。
-# 若正则未命中，交由 LLM intent detection 做最终判断，
-# 确保用户自然语言补充（如"这个分类字段不对，应该是产品类型"）能被 LLM 理解并处理。
-_SCOUT_PURE_CONFIRM_RE = re.compile(
-    r"^(确认(?:无误|进清洗|继续)?|可以了|对齐了|就这样|没问题了|好的|是|没问题|对的|正确|已通过|妥当|行|"
-    r"pass|ok|okay|yes|y|thanks|thx)[\s!！。,\-\.]*$",
-    re.I,
-)
-
-# 正则未命中时的 LLM intent 后备：判断用户整体意图是「确认/放行」还是「有修改/补充」。
-# 不阻塞管道——LLM 不可用或出错时回退到「有补充」路径（安全默认值），
-# 确保用户输入不会被静默丢弃。
-async def _detect_user_intent_via_llm(
+# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
+# 用户意图判断统一入口：LLM 是唯一语义判断引擎。
+# 代码不做任何语义判断——不匹配正则、不检测关键词、不分类意图。
+# 代码只做通道：组装上下文 → 调 LLM → 解析结构化输出 → 返回结果。
+# LLM 不可用或出错时回退到「有补充」路径（安全默认值）。
+def _detect_user_intent_via_llm(
     user_reply: str,
+    llm_client: Any,
+    llm_model: str,
     *,
     stage: str = "confirm",
-    context: str = "",
+    extra_context: str = "",
 ) -> bool:
     """用 LLM 判断用户意图：True = 确认/放行，False = 有修改/补充内容。
 
-    stage 用于提示当前阶段语境（scout / cleaner / analyst）。
-    context 为可选的额外上下文（如已解析的字段理解）。
+    这是所有语义判断的**唯一入口**。代码只做通道：
+    组装上下文 → 调 LLM → 解析结构化输出 → 返回结果。
+
+    Args:
+        user_reply: 用户原始输入
+        llm_client: OpenAI 原始客户端（非 instructor 包装）
+        llm_model: 模型名称
+        stage: 当前阶段（scout / cleaner / analyst）
+        extra_context: 可选的额外上下文
     """
-    from hagoku.llm.client import chat_completion
+    import json as _json
+
+    t = (user_reply or "").strip()
+    if not t:
+        return False
+
     try:
         system = (
-            "你是一个意图分类器。只输出单个 JSON 对象：{\"intent\": \"confirm\"|\"modify\"}。"
-            "不要输出任何其他内容。"
+            '你是一个意图分类器。只输出单个 JSON 对象：{"intent": "confirm"|"modify"}。'
+            '不要输出任何其他内容。'
         )
         stage_hint = {
             "scout": "用户正在确认数据字段映射阶段。如果用户输入包含字段纠错、角色修正、数据类型纠正、列名修改等，intent=modify。",
             "cleaner": "用户正在检视数据清洗结果。如果用户提出清洗问题、要求修改清洗策略、指出异常数据未处理等，intent=modify。",
             "analyst": "用户正在检视分析结果。如果用户要求修改分析方法、调整参数、指出统计错误或希望深入探索，intent=modify。",
         }.get(stage, "")
-        ctx_line = f"\n当前上下文：{context}" if context else ""
+        ctx_line = f"\n当前上下文：{extra_context}" if extra_context else ""
         user_msg = (
             f"当前阶段：{stage_hint}{ctx_line}\n\n"
             f"用户输入：{user_reply}\n\n"
             f"判断意图：confirm=用户确认当前结果、同意继续推进；modify=用户有修改意见、补充信息或不同意见。"
         )
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_msg},
-        ]
-        resp = await chat_completion(messages=messages, temperature=0.0, max_tokens=64)
-        content = (resp.get("content") or "").strip()
-        import json
-        parsed = json.loads(content)
+        resp = llm_client.chat.completions.create(
+            model=llm_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.0,
+            max_tokens=64,
+            response_format={"type": "json_object"},
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        parsed = _json.loads(content)
         return parsed.get("intent") == "confirm"
     except Exception:
-        # LLM 不可用时回退到「有补充」路径（安全默认值），
+        # LLM 不可用 → 安全默认值：视为有修改内容，
         # 确保用户输入不会被静默丢弃。
         return False
 
 
-# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
-def _scout_reply_is_pure_confirm(user_reply: str) -> bool:
-    """判断 scout review 阶段用户回复是否为纯确认（无人为补充）。
+def _is_scout_aligned(context: dict[str, Any]) -> bool:
+    """判断 Scout 字段理解是否已对齐：所有字段 needs_user_input=False。
 
-    优先使用正则快速匹配明确确认短语；正则未命中时，
-    调用 LLM intent detection 判断意图，确保自然语言补充
-    （如"这个分类字段不对，应该是产品类型"）能被正确处理。
+    此函数仅做结构性检查（字段状态），不做语义判断。
+    用户是否「确认」由调用方通过 _detect_user_intent_via_llm 统一判断。
     """
-    t = (user_reply or "").strip()
-    if not t:
-        return False
-    if _SCOUT_PURE_CONFIRM_RE.match(t):
-        return True
-    # 正则未命中 → 交给 LLM 判断是否为「有补充内容」
-    # 异步包装：同步函数中通过 DetectiveOrchestrator 的 event loop 调用
-    return False  # 非确认 → 走 LLM 语义处理路径
-
-
-# Cleaner / Analyst 多轮暂停：仅当用户显式「放行」才结束子循环（与 Web「确认继续」按钮一致）
-_STAGE_CLEANER_PROCEED_RE = re.compile(
-    r"^(确认(?:继续|无误)?|好的|是|没问题|对的|正确|通过|ok|okay|yes)[\s!！。,\-\.]*$",
-    re.I,
-)
-
-
-def _cleaner_reply_accepts_proceed(user_reply: str) -> bool:
-    """判断 cleaner review 阶段用户回复是否为放行（无人为补充）。
-
-    优先使用正则快速匹配明确确认短语；正则未命中时
-    返回 False，交由上层通过 LLM intent detection 判断，
-    确保自然语言补充不被硬编码吞掉。
-    """
-    t = (user_reply or "").strip()
-    if not t:
-        return False
-    return bool(_STAGE_CLEANER_PROCEED_RE.match(t))
-
-
-_ANALYST_EXACT_PROCEED_PHRASES = frozenset({
-    "已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段",
-})
-
-_STAGE_ANALYST_PROCEED_RE = re.compile(
-    r"^(确认(?:继续|无误)?|生成报告|可以生成|同意进入报告|好的|是|没问题|对的|正确|通过|ok|okay|yes)[\s!！。,\-\.]*$",
-    re.I,
-)
-
-
-def _analyst_reply_accepts_proceed(user_reply: str) -> bool:
-    """判断 analyst review 阶段用户回复是否为放行（无人为补充）。
-
-    优先使用精确短语和正则快速匹配明确确认短语；
-    正则未命中时返回 False，交由上层通过 LLM intent
-    detection 判断，确保自然语言补充不被硬编码吞掉。
-    """
-    t = (user_reply or "").strip()
-    if not t:
-        return False
-    if t in _ANALYST_EXACT_PROCEED_PHRASES:
-        return True
-    return bool(_STAGE_ANALYST_PROCEED_RE.match(t))
-
-
-# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
-def _is_scout_aligned(context: dict[str, Any], user_reply: str) -> bool:
-    """判断 Scout 字段理解是否已对齐：纯确认  OR  所有字段 needs_user_input=False。
-
-    纯确认判断通过 _scout_reply_is_pure_confirm，其内部正则未命中时
-    返回 False，此时用户输入走 LLM function calling 语义处理通道，
-    确保补充意见被完整理解。
-    """
-    if _scout_reply_is_pure_confirm(user_reply):
-        return True
     if not any(s.get("needs_user_input") for s in context.get("column_semantics", [])):
         return True
     return False
@@ -409,24 +353,8 @@ def gate_cleaning_pause_payload(context: dict[str, Any] | None = None) -> dict[s
     return payload
 
 
-# 闸门回复判定：仅精确 UI 确认信号 → 进下一阶段；其余全部回 FieldReviewLoop
-# 禁止在代码层用正则做语义判断——语义判断必须交给 LLM
-
-
-# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
-def _is_gate_confirm(user_reply: str) -> bool:
-    """闸门回复是否为「确认进入下一阶段」。
-
-    仅 UI 按钮的精确确认信号返回 True；其余全部回 FieldReviewLoop。
-    语义判断（纠错、补充、反驳）必须由 LLM 完成，代码不参与。
-    """
-    t = (user_reply or "").strip()
-    if not t:
-        return False
-    # 仅精确 UI 确认短语 → True；其余全部 False（返回内层循环，走 LLM 通道）
-    if _SCOUT_PURE_CONFIRM_RE.match(t):
-        return True
-    return False
+# 闸门回复判定：语义判断全部由 LLM 完成，代码不参与。
+# 调用方通过 _detect_user_intent_via_llm 统一判断。
 
 
 def _known_scout_columns(context: dict[str, Any]) -> list[str]:
@@ -482,7 +410,7 @@ def apply_scout_user_field_reply_to_context(
     返回简短人类可读记录（如 ``Code←店铺编号``），供事件或日志；无写入则返回 []。
     """
     raw = (user_reply or "").strip()
-    if not raw or _scout_reply_is_pure_confirm(raw):
+    if not raw:
         return []
 
     columns = _known_scout_columns(context)
@@ -779,40 +707,16 @@ def _apply_scout_reply_with_llm(
     if query_raw:
         analysis_purpose_text = f"用户分析目的：{query_raw}\n"
 
-    # ── 从分析目的提取关键词，供 LLM 字段匹配 ─────────────
+    # ── 将分析目的原样传给 LLM，由 LLM 自行理解并匹配字段 ──
     analysis_goal = (context.get("query") or "").strip()
     field_match_hint = ""
     if analysis_goal:
-        import re as _re
-        # 仅移除纯语法功能词和纯分析模板词，**保留**业务含义词（收入、增长、成本等）
-        # 注意：不再移除「增长」「趋势」「变化」——这些是业务语义关键信号
-        goal_clean = _re.sub(
-            r'(分析|每个|的|是|了|比较|评估|了解|查看|请|帮我|我要|想|做|一下|一些'
-            r'|什么|哪个|哪些|各|所有|整体|情况|数据|你|为什么|不)',
-            '', analysis_goal,
+        field_match_hint = (
+            f"【关键提醒】用户的分析目的是：「{analysis_goal}」。\n"
+            "请扫描下方字段表格，理解每个字段的业务含义，\n"
+            "然后调用 update_field_role 将匹配字段设为 target/feature，并调用 update_field_understanding 补充含义。\n"
+            "即使用户没有明确写下字段名，你也要**主动推断**哪些字段应当作为 target/feature。\n\n"
         )
-        keywords = [w.strip() for w in goal_clean.split() if len(w.strip()) >= 2]
-        if keywords:
-            field_match_hint = (
-                f"【关键提醒】用户的分析目的是：「{analysis_goal}」。从目的中提取的关键业务词：{keywords}。\n"
-                "请扫描下方字段表格，找出字段名或已有含义中**匹配这些业务词**的字段（如关键词「收入」→ 匹配字段名含 Inc/Revenue/income 或含义含「收入」的字段），\n"
-                "然后调用 update_field_role 将匹配字段设为 target，并调用 update_field_understanding 补充含义（如果字段表缺少含义）。\n"
-                "即使用户没有明确写下字段名，你也要**主动推断**哪些字段应当作为 target/feature。\n\n"
-            )
-        # ── 隐式字段推导：分析目的含「增长/趋势/变化」信号 ──
-        has_trend_signal = bool(_re.search(r'(增长|趋势|变化|走势)', analysis_goal))
-        numeric_cols_in_table: list[str] = []
-        for sem in semantics:
-            col = str(sem.get("column_name", ""))
-            role = str(sem.get("suggested_role", ""))
-            if col and role not in ("identifier", "ignore") and sem.get("semantic_type") == "numeric":
-                numeric_cols_in_table.append(col)
-        if has_trend_signal and numeric_cols_in_table:
-            field_match_hint += (
-                "**【隐式字段推导】用户的分析目的涉及「增长/趋势/变化」分析，这表明数值列很可能是分析目标。\n"
-                f"当前数值列：{numeric_cols_in_table}。如果这些列中没有任何一个被标记为 target/suggested_role=target，\n"
-                "则你**必须**调用 update_field_role 将包含金额/收入/数量语义的数值列设为 target，并调用 update_field_understanding 设置 used_in_analysis=true。\n\n"
-            )
 
     # ── 当前分析目的状态（target/features），供 LLM 判断用户纠错是否合理 ──
     ap_summary = ""
@@ -1040,18 +944,27 @@ def scout_user_input_received_payload(
     raw = (user_reply or "").strip()
     parse_failed = (
         raw
-        and not _scout_reply_is_pure_confirm(raw)
         and len(applied_scout) == 0
     )
     return {
         "reply": user_reply,
         "applied_field_updates": list(applied_scout),
         "interaction_revision": interaction_revision,
-        "pure_confirm": _scout_reply_is_pure_confirm(user_reply),
         "parse_applied_count": len(applied_scout),
         "parse_failed": parse_failed,
         "columns_still_needing_input": pending,
     }
+
+
+def _scout_description_is_meaningful_for_user(col_name: str, desc: str) -> bool:
+    """检查字段描述是否向用户展示了超出类型回显的信息（结构性检查）。
+
+    委托给 scout/agent.py 的 _description_is_user_facing_meaningful。
+    纯字符串形状匹配，不涉及语义判断。
+    """
+    from hagoku.agents.scout.agent import _description_is_user_facing_meaningful
+
+    return _description_is_user_facing_meaningful(col_name, desc)
 
 
 def _normalize_cleaning_operation(op: Any) -> dict[str, Any]:
@@ -1376,6 +1289,20 @@ class Orchestrator:
             return f"[用户通过 /use 命令指定分析字段] {', '.join(cols)}"
 
         return None
+
+    def _is_user_confirm(self, user_reply: str, *, stage: str = "confirm", extra_context: str = "") -> bool:
+        """判断用户输入是否为确认/放行。LLM 是唯一语义判断引擎。
+
+        此方法是所有暂停点确认判断的统一入口。代码只做通道：
+        获取 LLM 客户端 → 调 _detect_user_intent_via_llm → 返回结果。
+        """
+        return _detect_user_intent_via_llm(
+            user_reply,
+            llm_client=self.llm_quick_raw,
+            llm_model=self.config.llm.model_quick or self.config.llm.model,
+            stage=stage,
+            extra_context=extra_context,
+        )
 
     def _pause_and_wait(self, agent: str, payload: str | dict[str, Any], timeout: float = 300.0) -> str:
         """
@@ -1948,8 +1875,9 @@ class Orchestrator:
                             if context["_pending_command_text"]:
                                 context["_pending_command_text"] += "\n"
                             context["_pending_command_text"] += cmd_result
-                        # 对齐判定：已对齐则出内层循环、进 gate；未对齐则继续内层（revision 递增）
-                        if _is_scout_aligned(context, user_reply_scout):
+                        # 对齐判定：LLM 确认 或 所有字段 needs_user_input=False → 出内层循环
+                        # 先由 LLM 判断用户是否确认，再检查字段结构是否对齐
+                        if self._is_user_confirm(user_reply_scout, stage="scout") or _is_scout_aligned(context):
                             break
                         interaction_revision += 1
 
@@ -1966,11 +1894,12 @@ class Orchestrator:
                         if context["_pending_command_text"]:
                             context["_pending_command_text"] += "\n"
                         context["_pending_command_text"] += cmd_result
-                    if _is_gate_confirm(gate_reply):
+                    gate_confirmed = self._is_user_confirm(gate_reply, stage="scout")
+                    if gate_confirmed:
                         # 确认进清洗 → 出外层循环，继续执行 Cleaner
                         break
                     # 「还有补充 / 纠错」→ 先解析并应用到 context，再回 Scout 内层循环
-                    if gate_reply and not _scout_reply_is_pure_confirm(gate_reply):
+                    if gate_reply and not gate_confirmed:
                         gate_applied = apply_scout_user_field_reply_to_context(
                             context,
                             gate_reply,
@@ -2015,7 +1944,7 @@ class Orchestrator:
                         context["_pending_command_text"] += cmd_result
 
                     # 用户可能在此修正 target/features：用 LLM tool calling 解析
-                    if ap_reply and not _scout_reply_is_pure_confirm(ap_reply):
+                    if ap_reply and not self._is_user_confirm(ap_reply, stage="scout"):
                         ap_applied = apply_scout_user_field_reply_to_context(
                             context,
                             ap_reply,
@@ -2081,13 +2010,14 @@ class Orchestrator:
                     if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                     cmd_result = self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
+                    cleaner_confirmed = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
                     if user_reply_cleaner:
                         self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
                             "reply": user_reply_cleaner,
                             "interaction_revision": cleaning_revision,
-                            "proceed_accepted": _cleaner_reply_accepts_proceed(user_reply_cleaner),
+                            "proceed_accepted": cleaner_confirmed,
                         })
-                        if not _cleaner_reply_accepts_proceed(user_reply_cleaner):
+                        if not cleaner_confirmed:
                             # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
                             if cmd_result:
                                 query = f"{query}\n{cmd_result}".strip()
@@ -2113,7 +2043,7 @@ class Orchestrator:
                                 "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
                                 "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
                             }
-                    if _cleaner_reply_accepts_proceed(user_reply_cleaner or ""):
+                    if cleaner_confirmed:
                         break
                     cleaning_revision += 1
                 ir = cleaning_report.impact_rate if cleaning_report else 0.0
@@ -2207,13 +2137,14 @@ class Orchestrator:
                 if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                 cmd_result = self._handle_command_if_present(user_reply_analyst, "analyst", context)
+                analyst_confirmed = self._is_user_confirm(user_reply_analyst, stage="analyst")
                 if user_reply_analyst:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
                         "reply": user_reply_analyst,
                         "interaction_revision": analyst_revision,
-                        "proceed_accepted": _analyst_reply_accepts_proceed(user_reply_analyst),
+                        "proceed_accepted": analyst_confirmed,
                     })
-                    if not _analyst_reply_accepts_proceed(user_reply_analyst):
+                    if not analyst_confirmed:
                         # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
                         if cmd_result:
                             query = f"{query}\n{cmd_result}".strip()
@@ -2232,7 +2163,7 @@ class Orchestrator:
                         )
                         if self._is_cancel_requested():
                             return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                if _analyst_reply_accepts_proceed(user_reply_analyst or ""):
+                if analyst_confirmed:
                     break
                 analyst_revision += 1
             n_res = len(results) if isinstance(results, list) else 0
@@ -2855,7 +2786,7 @@ class Orchestrator:
         while True:
             user_input = input("➜ ").strip()
 
-            if user_input.lower() in ("cancel", "q", "取消"):
+            if user_input.lower() in ("cancel", "q", "/cancel"):
                 print("\n❌ 已取消")
                 return None
 
@@ -2960,9 +2891,8 @@ class Orchestrator:
                     result_text = result_text[4:]
             return json.loads(result_text.strip())
         except Exception:
-            # 兜底：保持向后兼容的最小关键词匹配
-            if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
-                return {"type": "confirm", "updates": {}}
+            # LLM 不可用 → 安全默认值：视为有纠正内容，
+            # 确保用户输入不会被当作「确认」而静默跳过。
             return {"type": "correction", "updates": {}}
 
 
@@ -3077,22 +3007,20 @@ class Orchestrator:
 
         elif agent_name == "scout" and phase == "next_step":
             action = user_input.get("action", "")
-            if action in ("进入清洗", "继续"):
-                # 进入清洗阶段
+            if action == "proceed":
                 return {
                     "status": "ready_for_cleaning",
                     "phase": "cleaning_first",
                     "message": "好的，进入清洗阶段",
                     "data": user_input.get("data", {}),
                 }
-            elif action in ("重新理解字段", "重新开始"):
-                # 重新跑 Scout
+            elif action == "restart":
                 return {
                     "status": "restart_scout",
                     "phase": "scout_first",
                     "message": "好的，重新开始字段理解",
                 }
-            elif action in ("结束分析", "结束"):
+            elif action == "finish":
                 return {
                     "status": "done",
                     "message": "分析结束",

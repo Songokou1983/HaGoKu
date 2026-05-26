@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 
 from hagoku.manager.orchestrator import (
     _apply_scout_reply_with_llm,
-    _scout_reply_is_pure_confirm,
     apply_scout_user_field_reply_to_context,
 )
 
@@ -77,11 +76,9 @@ def test_pure_confirm_no_llm_needed():
     """纯确认不需要 LLM，直接返回 []。"""
     ctx = _ctx()
     before = dict(ctx["column_descriptions"])
+    # 纯确认输入不再由代码判断——交给 LLM；无 LLM client 时保留原 context 不变
     assert apply_scout_user_field_reply_to_context(ctx, "确认") == []
     assert ctx["column_descriptions"] == before
-    assert _scout_reply_is_pure_confirm("确认")
-    assert _scout_reply_is_pure_confirm("确认无误")
-    assert _scout_reply_is_pure_confirm("") is False
 
 
 def test_empty_no_llm_needed():

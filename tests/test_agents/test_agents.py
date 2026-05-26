@@ -62,7 +62,8 @@ class TestScoutUserFacingDescriptionFilter:
         from hagoku.manager.orchestrator import _scout_description_is_meaningful_for_user
 
         assert _scout_description_is_meaningful_for_user("BU", "事业部")
-        assert _scout_description_is_meaningful_for_user("BU", "BU（事业部）")
+        # 「列名（...）」格式视为结构回显，无论括号内容——语义判断是 LLM 的职责
+        assert not _scout_description_is_meaningful_for_user("BU", "BU（事业部）")
         assert _scout_description_is_meaningful_for_user("Period", "月份或账期")
 
 

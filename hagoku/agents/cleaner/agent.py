@@ -550,6 +550,126 @@ class CleanerAgent(InteractionMixin):
         )
 
     # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
+
+    def assess(self, df: pd.DataFrame, context: dict, cleaning_rules: str = "") -> dict[str, Any]:
+        """评估数据清洗需求，返回大白话评估 + 每列建议。
+
+        LLM 输出 {summary, columns: [{column, action, assessment, operations}]}
+        代码只解析 action 做路由，assessment 原样展示给用户。
+        """
+        from ...llm.client import create_raw_client
+
+        columns_info = self._build_column_profiles(df, context)
+        query = context.get("query", "") or context.get("analysis_goal", "")
+        target = context.get("target", "")
+
+        payload = {
+            "analysis_goal": query or "未指定",
+            "target_column": target,
+            "n_rows": len(df),
+            "n_cols": len(df.columns),
+            "columns": columns_info,
+        }
+
+        if not cleaning_rules.strip():
+            raise RuntimeError(
+                "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。"
+            )
+
+        client = create_raw_client(self.llm_config)
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=[
+                    {"role": "system", "content": cleaning_rules.strip()},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
+                ],
+                temperature=0.0,
+                max_tokens=4096,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+
+        return self._parse_assessment(raw)
+
+    def _parse_assessment(self, raw: str) -> dict[str, Any]:
+        """解析 LLM 评估输出，只提取 action 做路由，assessment 原样保留。"""
+        import re as _re
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            cleaned = raw.strip()
+            cleaned = _re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = _re.sub(r"\s*```\s*$", "", cleaned)
+            try:
+                result = json.loads(cleaned)
+            except json.JSONDecodeError:
+                match = _re.search(r"\{.*\}", cleaned, re.DOTALL)
+                if match:
+                    result = json.loads(match.group())
+                else:
+                    raise ValueError(f"Cleaner 输出无法解析: {raw[:200]}")
+
+        summary = str(result.get("summary", "") or "")
+        columns_out = []
+        for col in (result.get("columns") or []):
+            columns_out.append({
+                "column": str(col.get("column", "")),
+                "display_name": str(col.get("display_name", "") or ""),
+                "action": str(col.get("action", "skip")),
+                "assessment": str(col.get("assessment", "") or ""),
+                "operations": list(col.get("operations") or []),
+            })
+        return {"summary": summary, "columns": columns_out}
+
+    def _build_column_profiles(self, df: pd.DataFrame, context: dict) -> list[dict]:
+        """构建每列数据画像，传给 LLM。纯机械统计，零语义判断。"""
+        profiles: list[dict] = []
+        for col in df.columns:
+            series = df[col]
+            n_total = len(series)
+            n_null = int(series.isna().sum())
+            info: dict = {
+                "name": col,
+                "dtype": str(series.dtype),
+                "n_total": n_total,
+                "n_null": n_null,
+                "null_pct": round(n_null / n_total, 4) if n_total > 0 else 0,
+            }
+            # 字段语义
+            variable_roles = context.get("variable_roles", {})
+            info["role"] = variable_roles.get(col, "unknown")
+            col_desc = ""
+            for s in context.get("column_semantics", []):
+                if str(s.get("column_name", "")) == col:
+                    col_desc = str(s.get("description", "") or s.get("display_name", "") or "")
+                    break
+            if not col_desc:
+                col_desc = context.get("column_descriptions", {}).get(col, "")
+            info["description"] = col_desc
+            # 数值列统计
+            if pd.api.types.is_numeric_dtype(series):
+                non_null = series.dropna()
+                if len(non_null) > 0:
+                    info.update({
+                        "min": float(non_null.min()),
+                        "q25": float(non_null.quantile(0.25)),
+                        "median": float(non_null.median()),
+                        "q75": float(non_null.quantile(0.75)),
+                        "max": float(non_null.max()),
+                        "mean": round(float(non_null.mean()), 4),
+                    })
+            # 样本值
+            try:
+                sample_vals = df[col].dropna().unique()[:3]
+                info["sample_values"] = [str(v) for v in sample_vals]
+            except Exception:
+                pass
+            profiles.append(info)
+        return profiles
+
     def _plan_via_llm(
         self,
         df: pd.DataFrame,

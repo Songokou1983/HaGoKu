@@ -2320,79 +2320,113 @@ class Orchestrator:
                         "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
                     })
 
-                # 4. Cleaner: 数据清洗
-                df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                    data_path, context,
-                    impact_warning=self.config.manager.cleaning_impact_warning,
-                    emit_completed=False,
-                )
+                # 4. Cleaner: 数据评估 → 用户选择 → 执行（或跳过）
+                # 加载清洗规则（prompt.md 中的 CLEANING_PLAN_RULES 区块）
+                cleaning_rules = cleaner._load_cleaning_rules()
+                if not cleaning_rules.strip():
+                    cleaning_rules = cleaner._load_cleaning_rules()
 
-                if self._is_cancel_requested():
+                # 加载数据用于评估
+                from hagoku.tools.data_io import load_data
+                _raw_df_for_cleaner = load_data(data_path)
+                assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
+
+                # 展示评估结果给用户
+                cleaner_msg = {
+                    "message": "",
+                    "cleaning_assessment": assessment,
+                }
+                cleaner_msg["interaction_revision"] = 0
+                user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-                # ── 暂停：清洗结果待用户确认后再记 Cleaner 完成（多轮：仅显式放行才出子循环）──
-                cleaner_results = {
-                    "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
-                    "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
-                    "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
-                }
-                cleaning_revision = 0
-                while True:
-                    cleaner_msg = cleaning_review_pause_payload(
-                        cleaning_report,
-                        data_quality=str(cleaner_results["data_quality"]),
-                        impact_rate=float(cleaner_results["impact_rate"] or 0.0),
+                skip_cleaning = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
+                if skip_cleaning:
+                    # 用户选择跳过清洗 → 原始数据即为"清洗后数据"
+                    self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+                        "result_summary": "用户选择跳过清洗",
+                    })
+                    df_clean = _raw_df_for_cleaner
+                    df_raw = _raw_df_for_cleaner
+                    cleaning_report = None
+                    # 保存原始数据到 cleaned_path（Analyst 始终读 cleaned_path）
+                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
+                    save_data(df_clean, cleaned_path)
+                    cleaned_path_str = str(cleaned_path)
+                    raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
+                    save_data(df_raw, raw_path)
+                    raw_path_str = str(raw_path)
+                else:
+                    # 用户选择执行清洗
+                    df_raw, df_clean, cleaning_report, _ = cleaner.run(
+                        data_path, context,
+                        impact_warning=self.config.manager.cleaning_impact_warning,
+                        emit_completed=False,
                     )
-                    cleaner_msg["interaction_revision"] = cleaning_revision
-                    cleaner_msg = self._attach_pause_dialogue_message("cleaner", cleaner_msg)
-                    user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
-                    if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    if self._is_cancel_requested():
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    cmd_result = self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
-                    cleaner_confirmed = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
-                    if user_reply_cleaner:
-                        self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
-                            "reply": user_reply_cleaner,
-                            "interaction_revision": cleaning_revision,
-                            "proceed_accepted": cleaner_confirmed,
-                        })
-                        if not cleaner_confirmed:
-                            # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
-                            if cmd_result:
-                                query = f"{query}\n{cmd_result}".strip()
-                            else:
-                                query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
-                            # 重新运行 cleaner agent 以响应用户修改
-                            self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
-                                "thought": f"🔄 根据用户反馈重新清洗数据（第 {cleaning_revision + 1} 轮修订）",
+
+                    # ── 暂停：清洗结果确认 ──────────────────────────────────
+                    cleaner_results = {
+                        "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
+                        "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
+                        "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
+                    }
+                    cleaning_revision = 0
+                    while True:
+                        cleaner_msg = cleaning_review_pause_payload(
+                            cleaning_report,
+                            data_quality=str(cleaner_results["data_quality"]),
+                            impact_rate=float(cleaner_results["impact_rate"] or 0.0),
+                        )
+                        cleaner_msg["interaction_revision"] = cleaning_revision
+                        cleaner_msg = self._attach_pause_dialogue_message("cleaner", cleaner_msg)
+                        user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                        if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                        cmd_result = self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
+                        cleaner_confirmed = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
+                        if user_reply_cleaner:
+                            self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
+                                "reply": user_reply_cleaner,
+                                "interaction_revision": cleaning_revision,
+                                "proceed_accepted": cleaner_confirmed,
                             })
-                            upstream_note = self._get_upstream_summary("cleaner")
-                            if upstream_note:
-                                context["upstream_summary"] = upstream_note
-                            context["query"] = query
-                            # 同步字段理解到结构化 context（用户可能在清洗审查中纠正字段含义）
-                            if user_reply_cleaner and not cmd_result:
-                                apply_scout_user_field_reply_to_context(
-                                    context,
-                                    user_reply_cleaner,
-                                    llm_client=self.llm_quick_raw,
-                                    llm_model=self.config.llm.model_quick or self.config.llm.model,
+                            if not cleaner_confirmed:
+                                if cmd_result:
+                                    query = f"{query}\n{cmd_result}".strip()
+                                else:
+                                    query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
+                                self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
+                                    "thought": f"🔄 根据用户反馈重新清洗数据（第 {cleaning_revision + 1} 轮修订）",
+                                })
+                                upstream_note = self._get_upstream_summary("cleaner")
+                                if upstream_note:
+                                    context["upstream_summary"] = upstream_note
+                                context["query"] = query
+                                if user_reply_cleaner and not cmd_result:
+                                    apply_scout_user_field_reply_to_context(
+                                        context,
+                                        user_reply_cleaner,
+                                        llm_client=self.llm_quick_raw,
+                                        llm_model=self.config.llm.model_quick or self.config.llm.model,
+                                    )
+                                df_raw, df_clean, cleaning_report, _ = cleaner.run(
+                                    data_path, context,
+                                    impact_warning=self.config.manager.cleaning_impact_warning,
+                                    emit_completed=False,
                                 )
-                            df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                                data_path, context,
-                                impact_warning=self.config.manager.cleaning_impact_warning,
-                                emit_completed=False,
-                            )
-                            if self._is_cancel_requested():
-                                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                            cleaner_results = {
-                                "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
-                                "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
-                                "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
-                            }
-                    if cleaner_confirmed:
-                        break
-                    cleaning_revision += 1
+                                if self._is_cancel_requested():
+                                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                                cleaner_results = {
+                                    "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
+                                    "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
+                                    "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
+                                }
+                        if cleaner_confirmed:
+                            break
+                        cleaning_revision += 1
                 ir = cleaning_report.impact_rate if cleaning_report else 0.0
                 self.event_bus.emit(
                     EventType.AGENT_COMPLETED,

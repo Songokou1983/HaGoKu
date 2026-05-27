@@ -667,8 +667,9 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
                 "当用户用「只有 X、Y、Z 参与分析」「我只关心 A 和 B」等**包含集**语义"
                 "限定参与分析的字段时调用此工具。"
                 "代码会自动把未列出的字段 used_in_analysis 设为 false，无需你计算补集。"
-                "字段可用列名（Code/Inc1）或业务名（店铺编号/店铺收入）任一种表达，"
-                "代码会基于当前 column_descriptions/display_names 做映射。"
+                "字段标识**必须使用精确列名**（如 Code/Inc1）或**字段表第二列中的完整中文名**"
+                "（如「店铺编号」「店铺收入」），代码会做精确映射。"
+                "**不要传缩写或部分匹配词**（如用户说「店铺」但你看到的字段表第二列写的是「店铺编号」→ 传「店铺编号」）。"
                 "调用此工具后，系统会自动触发重推断以同步角色分配。"
             ),
             "parameters": {
@@ -786,9 +787,11 @@ def _resolve_to_column_names(
 ) -> list[str]:
     """把用户给的业务名 / 列名混合 token 映射为真实列名。
 
-    优先级：精确列名 > display_name 完全匹配 > description 包含 > 列名前缀。
+    优先级：精确列名 > display_name 完全匹配 > 列名前缀。
     无映射的 token 静默丢弃（由律 7 在外层判定空集时报「未理解」）。
-    纯机械运算，不涉及语义判断。
+
+    纯机械运算，不涉及语义判断。**不做 description 子串匹配** — 那是 LLM 的职责。
+    LLM 应在工具参数中传精确列名或 display_name，代码只做确定性查找。
     """
     col_set = set(columns)
     dn_to_col: dict[str, str] = {}
@@ -803,14 +806,14 @@ def _resolve_to_column_names(
             continue
         if t in col_set:
             out.append(t)
-        elif t in dn_to_col:
+            continue
+        if t in dn_to_col:
             out.append(dn_to_col[t])
-        else:
-            # description 包含匹配
-            matched = [c for c in columns if t in (str(descriptions.get(c, "") or ""))]
-            # 前缀匹配（如「店铺收入」→ Inc 前缀的列）
-            matched += [c for c in columns if c.lower().startswith(t.lower()) and c not in matched]
-            out.extend(matched)
+            continue
+        # 列名前缀匹配（如「Inc」→ Inc1,Inc2,Inc3）
+        rl = t.lower()
+        matched = [c for c in columns if c.lower().startswith(rl)]
+        out.extend(matched)
     return list(dict.fromkeys(out))  # 去重保序
 
 
@@ -1033,8 +1036,10 @@ def _apply_scout_reply_with_llm(
         "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。\n\n"
         "包含集纠错规则（最高优先级，优先于笼统纠错）：\n"
         "- 当用户说「只有 X、Y、Z 参与分析」「我只要看 A 和 B」「除了 XX 都不参与」时，\n"
-        "  **必须**调用 restrict_analysis_to(included_fields=[...])，把用户提到的字段（业务名或列名都可）放入参数。\n"
-        "  代码会自动做业务名→列名映射和补集运算，你无需算补集。\n"
+        "  **必须**调用 restrict_analysis_to(included_fields=[...])。\n"
+        "  字段标识**必须使用字段表中存在的精确列名**（如 Code,Inc1）或**第二列中的完整中文名**。\n"
+        "  **绝对禁止**传缩写或部分匹配词（如用户说「店铺」但字段表写的是「店铺编号」→ 传「店铺编号」，不传「店铺」）。\n"
+        "  代码会自动把未列出的字段 used_in_analysis 设为 false。\n"
         "  注意：此规则优先级高于笼统纠错规则——包含集是用户最明确的意图表达，不可用笼统纠错替代。\n\n"
         "最终强制规则（最高优先级）：\n"
         "- 如果你识别到用户消息包含任何抱怨/纠错/否定意图（包括笼统纠错），\n"

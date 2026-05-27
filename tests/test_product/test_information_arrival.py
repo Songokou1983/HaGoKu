@@ -460,17 +460,18 @@ def test_真实场景_restrict_analysis_to_e2e():
 
 
 def test_真实场景_restrict_analysis_to_业务名解析():
-    """律 4 完整通路：LLM 用**业务名**调 restrict_analysis_to，
-    _resolve_to_column_names 通过 column_descriptions 中的业务描述命中列名。
+    """律 4 完整通路：LLM 用 display_name（第二列中文名）调 restrict_analysis_to，
+    _resolve_to_column_names 通过 display_name 精确匹配命中列名。
 
-    test0526 现行犯的真实场景：用户说「店铺收入」，LLM 更可能传业务名而非列名。
-    本测试覆盖 _resolve_to_column_names 的 description 匹配分支（非列名直通）。
+    test0526 现行犯的真实场景：用户说「店铺编号、时间周期、店铺收入」，
+    LLM 应传字段表中的完整中文名，代码做精确 display_name 映射。
+    描述子串匹配已删除（太宽，会把「店铺」命中所有含「店铺」描述的行）。
     """
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
-    # 模拟 Scout 第一轮已把业务描述填进去
-    ctx["column_descriptions"] = {
+    # display_name 是第二列的中文名（精确匹配通道）
+    ctx["column_display_names"] = {
         "Code": "店铺编号",
         "Period": "时间周期",
         "Inc1": "店铺收入",
@@ -481,7 +482,7 @@ def test_真实场景_restrict_analysis_to_业务名解析():
         "Bos1": "费用项",
     }
 
-    # LLM 用业务名调 restrict_analysis_to（非列名）
+    # LLM 用完整中文名调 restrict_analysis_to
     spy = LLMSpy(
         response_factory=lambda messages: _make_tool_call_response(
             '{"included_fields": ["店铺编号", "时间周期", "店铺收入"]}',
@@ -496,32 +497,18 @@ def test_真实场景_restrict_analysis_to_业务名解析():
     semantics = ctx.get("column_semantics", [])
     sem = {str(s["column_name"]): s for s in semantics}
 
-    # 业务名通过 column_descriptions 命中
-    assert sem["Code"]["used_in_analysis"] is True, (
-        "「店铺编号」应通过 description 命中 Code"
-    )
-    assert sem["Period"]["used_in_analysis"] is True, (
-        "「时间周期」应通过 description 命中 Period"
-    )
-    assert sem["Inc1"]["used_in_analysis"] is True, (
-        "「店铺收入」应通过 description 命中 Inc1"
-    )
+    # display_name 精确匹配命中
+    assert sem["Code"]["used_in_analysis"] is True, "「店铺编号」→ Code"
+    assert sem["Period"]["used_in_analysis"] is True, "「时间周期」→ Period"
+    assert sem["Inc1"]["used_in_analysis"] is True, "「店铺收入」→ Inc1"
 
-    # 补集排除（未在 included_fields 中的字段）
+    # 补集排除
     complement = {"BU", "Inc2", "Inc3", "StoreID", "Bos1"}
     for c in complement:
-        assert sem[c]["used_in_analysis"] is False, (
-            f"补集字段 {c} 应标记 used_in_analysis=False"
-        )
+        assert sem[c]["used_in_analysis"] is False, f"补集字段 {c} 应排除"
 
-    # 律 9 重推断信号
-    assert ctx.get("_pending_reinference") is True, (
-        "业务名命中后仍应触发重推断"
-    )
-    # 律 7：成功调用无未理解信号
-    assert ctx.get("_last_understanding_failure") is None, (
-        "业务名命中时不应有未理解信号"
-    )
+    assert ctx.get("_pending_reinference") is True
+    assert ctx.get("_last_understanding_failure") is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

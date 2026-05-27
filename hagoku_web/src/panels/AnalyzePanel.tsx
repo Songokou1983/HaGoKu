@@ -105,7 +105,7 @@ interface CleaningAssessment {
     column: string;
     display_name?: string;
     action: "skip" | "clean";
-    assessment: string;
+    reason: string;
     operations?: Array<{ strategy: string }>;
   }>;
 }
@@ -113,7 +113,7 @@ function parseCleaningAssessment(raw: unknown): CleaningAssessment | null {
   if (!raw || typeof raw !== "object") return null;
   const d = raw as Record<string, unknown>;
   if (!Array.isArray(d.columns)) return null;
-  return { summary: String(d.summary || ""), columns: d.columns as CleaningAssessment["columns"] };
+  return { summary: String(d.summary || ""), columns: (d.columns as any[]).map((c: any) => ({ ...c, reason: c.reason || c.reason || "" })) };
 }
 
 /** Cleaner 核对：后端 `cleaning_review` 结构化载荷（非 Agent 台词） */
@@ -947,7 +947,7 @@ export default function AnalyzePanel() {
             // 清洗评估：结构化展示 LLM 的大白话评估
             const cid = uid();
             const colLines = ca.columns.map((c) =>
-              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "建议清洗" : "跳过"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.assessment}</td></tr>`
+              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "建议清洗" : "跳过"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.reason}</td></tr>`
             ).join("");
             const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">说明</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
             setMessages((prev) => [

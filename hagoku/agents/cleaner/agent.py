@@ -583,15 +583,11 @@ class CleanerAgent(InteractionMixin):
                 "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。"
             )
 
-        # 数据总览（一次性传给 LLM，同时给它工具自主探查）
-        data_overview = {
-            "analysis_goal": query or "未指定",
-            "target_column": target,
-            "n_rows": len(df),
-            "n_cols": len(df.columns),
-            "columns": columns_info,
-        }
+        from hagoku.tools.registry import agent_tools
 
+        # 纯工具模式：只给列名，LLM 自己调工具探查
+        intro = {"analysis_goal": query or "未指定", "target_column": target,
+                 "n_rows": len(df), "columns": [c["name"] for c in columns_info]}
         from hagoku.tools.registry import agent_tools
         cleaner_tools = agent_tools.to_openai("cleaner")
         # 给 LLM 一个特殊工具来输出最终评估结果
@@ -599,7 +595,7 @@ class CleanerAgent(InteractionMixin):
             "type": "function",
             "function": {
                 "name": "submit_assessment",
-                "description": "完成评估，提交最终的清洗建议。每列给出 action(skip/clean) + assessment(大白话解释)",
+                "description": "完成评估，提交最终的清洗建议。每列给出 action(clean/skip) + reason(大白话原因)",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -611,8 +607,8 @@ class CleanerAgent(InteractionMixin):
                                 "properties": {
                                     "column": {"type": "string"},
                                     "display_name": {"type": "string"},
-                                    "action": {"type": "string", "enum": ["skip", "clean"]},
-                                    "assessment": {"type": "string"},
+                                    "action": {"type": "string", "enum": ["clean", "skip"]},
+                                    "reason": {"type": "string"},
                                     "operations": {
                                         "type": "array",
                                         "items": {
@@ -621,7 +617,7 @@ class CleanerAgent(InteractionMixin):
                                         },
                                     },
                                 },
-                                "required": ["column", "action", "assessment"],
+                                "required": ["column", "action", "reason"],
                             },
                         },
                     },
@@ -634,7 +630,7 @@ class CleanerAgent(InteractionMixin):
         client = create_raw_client(self.llm_config)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": cleaning_rules.strip()},
-            {"role": "user", "content": json.dumps(data_overview, ensure_ascii=False, default=str)},
+            {"role": "user", "content": json.dumps(intro, ensure_ascii=False)},
         ]
 
         # 多轮工具调用循环（最多 5 轮）
@@ -706,7 +702,7 @@ class CleanerAgent(InteractionMixin):
                 "column": str(col.get("column", "")),
                 "display_name": str(col.get("display_name", "") or ""),
                 "action": str(col.get("action", "skip")),
-                "assessment": str(col.get("assessment", "") or ""),
+                "reason": str(col.get("reason", "") or col.get("assessment", "") or ""),
                 "operations": list(col.get("operations") or []),
             })
         return {"summary": summary, "columns": columns_out}

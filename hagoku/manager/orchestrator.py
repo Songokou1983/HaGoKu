@@ -940,18 +940,7 @@ def _apply_scout_reply_with_llm(
     if query_raw:
         analysis_purpose_text = f"用户分析目的：{query_raw}\n"
 
-    # ── 将分析目的原样传给 LLM，由 LLM 自行理解并匹配字段 ──
-    analysis_goal = (context.get("query") or "").strip()
-    field_match_hint = ""
-    if analysis_goal:
-        field_match_hint = (
-            f"【关键提醒】用户的分析目的是：「{analysis_goal}」。\n"
-            "请扫描下方字段表格，理解每个字段的业务含义，\n"
-            "然后调用 update_field_role 将匹配字段设为 target/feature，并调用 update_field_understanding 补充含义。\n"
-            "即使用户没有明确写下字段名，你也要**主动推断**哪些字段应当作为 target/feature。\n\n"
-        )
-
-    # ── 当前分析目的状态（target/features），供 LLM 判断用户纠错是否合理 ──
+    # ── 当前分析目的状态（target/features）──
     ap_summary = ""
     ap = context.get("analysis_purpose") or {}
     # 分析目的可能尚未构建（对齐循环中），回落读取 context 中已由 _derive_roles 设置的 target/features
@@ -978,78 +967,27 @@ def _apply_scout_reply_with_llm(
     except Exception:
         pass
 
+    # 对话历史（律 3：多轮上下文传输，含完整工具调用参数）
+    conv_history_for_prompt: list[dict[str, str]] = context.get("_conversation_history", [])
+    chat_lines: list[str] = []
+    for turn in conv_history_for_prompt[-(_CONV_HISTORY_INJECT_TURNS * 2):]:
+        role_label = "用户" if turn.get("role") == "user" else "系统"
+        chat_lines.append(f"{role_label}：{turn.get('content', '')}")
+    chat_history = "\n".join(chat_lines) if chat_lines else "（尚无对话历史）"
+
     system_msg = (
-        "你是一个数据分析助手，正在帮用户理解一个数据表格的字段含义。\n"
-        "用户会通过对话向你说明某些字段的含义，你需要主动识别、理解并更新字段表格。\n\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"
-        f"{field_match_hint}"
         f"{command_context}"
-        "当前字段表格状态：\n"
+        "当前字段表格：\n"
         f"{field_state}\n\n"
-        "核心规则——中文名称（display_name）vs 含义理解（description）：\n"
-        "- **中文名称（display_name）**：用户给出的简短中文标签（≤8字），如「产品编码」「店铺收入」「店铺积分」。\n"
-        "  当用户说「X 代表/叫/是 Y」且 Y 是短标签（≤8字）时，Y **只能**填入 display_name，**绝对不能**同时填入 description。\n"
-        "- **含义理解（description）**：基于 display_name 的业务含义扩展（完整一句话，含语境补充），\n"
-        "  如 display_name='店铺收入' → description='该店铺在统计周期内的总收入金额'。\n"
-        "  description **必须是独立完整句**，禁止与 display_name 相同，禁止直接复制用户原话中的短标签，\n"
-        "  禁止填「参见中文名称」之类的敷衍文案。\n"
-        "- **严格反例（以下做法全错）**：\n"
-        "  错：用户说「Inc1代表店铺收入」→ display_name='店铺收入', description='店铺收入'（description 与 display_name 相同）\n"
-        "  错：用户说「Inc1代表店铺收入」→ display_name='', description='店铺收入'（短标签写入了 description 而非 display_name）\n"
-        "  对：用户说「Inc1代表店铺收入」→ display_name='店铺收入', description='该店铺当期的总收入金额'\n\n"
-        "示例：\n"
-        "- 用户说「code代表产品编码」→ display_name='产品编码'，description='唯一标识每个产品的数字编号'\n"
-        "- 用户说「Inc1代表店铺收入」→ display_name='店铺收入'，description='该店铺当期的总收入金额'\n"
-        "- 用户说「Inc2代表店铺积分」→ display_name='店铺积分'，description='该店铺当期的累计积分数值'\n"
-        "- 用户说「Bos1-3都是店铺费用」→ 分别调用3次工具，每次更新一个字段：\n"
-        "  Bos1: display_name='店铺费用1'，description='店铺费用类型1的金额'，used_in_analysis=true\n"
-        "  Bos2: display_name='店铺费用2'，description='店铺费用类型2的金额'，used_in_analysis=true\n"
-        "  Bos3: display_name='店铺费用3'，description='店铺费用类型3的金额'，used_in_analysis=true\n"
-        "  注意：编号是为了区分同义字段，格式为「中文标签+编号」不要另设规则。\n\n"
-        "纠错/抱怨识别规则（非常重要）：\n"
-        "- 当用户说「你为什么不识别 XX」「XX 是需要分析的字段」「你漏掉了 XX」时，这不是含义说明，而是**纠错指令**。\n"
-        "  你必须：\n"
-        "  1) 从用户抱怨中提取业务关键词（如「店铺收入的增长趋势」→ 关键词=「收入」）\n"
-        "  2) 扫描字段表格，查找与该关键词匹配的字段（语义匹配，而非精确字符串匹配）\n"
-        "  3) 调用 update_field_role 将匹配字段设为 target，调用 update_field_understanding 补全含义\n"
-        "  4) 如果字段表格中没有任何字段能匹配该关键词，可以只设置 target/feature 角色而不更新含义\n"
-        "  示例：用户说「我要分析的是每个店铺收入的增长趋势，你为什么不识别收入」\n"
-        "  → 关键词「收入」→ 匹配字段名含 Inc/Revenue 的字段 → update_field_role(target='Inc1') + update_field_understanding(column_name='Inc1', display_name='店铺收入')\n\n"
-        "笼统纠错规则（用户未指明具体字段）：\n"
-        "- 当用户说「字段理解错误」「你不理解我的分析目标」「参与分析的字段不对」「请根据分析目标判断」等笼统纠错，\n"
-        "  **但未指明具体哪个字段错了**时，你不能以此为由不调用工具。你必须：\n"
-        "  1) 重新理解分析目的（已在提示词开头给出），提取目标变量概念（如「收入增长」「转化率」「销量趋势」）\n"
-        "  2) 扫描全部字段表格，逐一将字段名与目标变量概念做语义匹配\n"
-        "  3) 对明确匹配的字段，调用 update_field_role 设置 target；对可能相关的字段，设置 feature\n"
-        "  4) 对明显无关的字段（如纯 ID、时间戳、常量列），调用 update_field_role 设置 ignore\n"
-        "  5) 同时调用 update_field_understanding 为 target/feature 字段补充基于分析目的的推断含义\n"
-        "  示例：分析目的=「每个店铺收入的增长趋势」，用户说「字段理解完全错误，根据分析目标重新判断」\n"
-        "  → 目标概念=「收入」「增长」→ 匹配字段: Inc1→target, Inc2→feature, Period→feature, StoreID→identifier\n"
-        "  → 调用 update_field_role(target='Inc1', features=['Inc2','Period'], ignored=['StoreID'])\n"
-        "  → 调用 update_field_understanding(column_name='Inc1', display_name='店铺收入', description='…')\n\n"
-        "其他规则：\n"
-        "- 如果用户只解释了含义但未给短标签，仅更新 description，display_name 留空。\n"
-        "- 用户提及的字段（说明含义/关心它），used_in_analysis 设置为 true。\n"
-        "- 请基于用户的分析目的，主动推断并填写 suggested_role（target/feature/identifier/ignore）。\n"
-        "- 不要调用工具更新未被用户提及的字段。\n"
-        "- 如果用户的输入是纯确认（好的/确认/没问题）或闲聊，不要调用任何工具。\n\n"
-        "包含集纠错规则（最高优先级，优先于笼统纠错）：\n"
-        "- 当用户说「只有 X、Y、Z 参与分析」「我只要看 A 和 B」「除了 XX 都不参与」时，\n"
-        "  **必须**调用 restrict_analysis_to(included_fields=[...])。\n"
-        "  字段标识**必须使用字段表中存在的精确列名**（如 Code,Inc1）或**第二列中的完整中文名**。\n"
-        "  **绝对禁止**传缩写或部分匹配词（如用户说「店铺」但字段表写的是「店铺编号」→ 传「店铺编号」，不传「店铺」）。\n"
-        "  代码会自动把未列出的字段 used_in_analysis 设为 false。\n"
-        "  注意：此规则优先级高于笼统纠错规则——包含集是用户最明确的意图表达，不可用笼统纠错替代。\n\n"
-        "最终强制规则（最高优先级）：\n"
-        "- 如果你识别到用户消息包含任何抱怨/纠错/否定意图（包括笼统纠错），\n"
-        "  你**必须至少调用一次** update_field_role 或 update_field_understanding 工具。\n"
-        "  禁止只回复文本解释说「我已理解了」「我会重新分析」而不做任何实际更新。\n"
-        "  禁止以「用户未指明具体字段」为由不调用工具——笼统纠错时你必须主动扫描全部字段并做出判断。\n"
-        "  这是硬性要求，违反此规则意味着你没有正确理解用户的意图。"
+        "对话历史：\n"
+        f"{chat_history}\n\n"
+        "可用工具：update_field_understanding（更新字段中文名/含义）、"
+        "update_field_role（设置目标/特征/忽略）、"
+        "restrict_analysis_to（限定参与分析的字段，其余排除）。\n\n"
+        f"用户最新消息：「{raw}」"
     )
-
-    user_msg = f"用户说：{raw}"
 
     # ── 律 3：同阶段多轮记忆 — 注入前 N-1 轮的对话历史 ──
     conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
@@ -1060,7 +998,7 @@ def _apply_scout_reply_with_llm(
     max_inject = _CONV_HISTORY_INJECT_TURNS * 2
     for turn in conv_history[-max_inject:]:
         messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
-    messages.append({"role": "user", "content": user_msg})
+    messages.append({"role": "user", "content": raw})
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
@@ -1082,9 +1020,14 @@ def _apply_scout_reply_with_llm(
         conv_history.append({"role": "user", "content": raw})
         assistant_turn = _raw_text or ""
         if tool_calls and isinstance(tool_calls, list):
-            # 工具调用结果摘要作为 assistant 回复
-            tc_names = [tc.function.name if hasattr(tc, "function") else str(tc) for tc in tool_calls]
-            assistant_turn = f"[调用了工具: {', '.join(tc_names)}] " + assistant_turn
+            tc_parts = []
+            for tc in tool_calls:
+                fn = tc.function.name if hasattr(tc, "function") else ""
+                fa = tc.function.arguments if hasattr(tc, "function") else "{}"
+                tc_parts.append(f"{fn}({fa})")
+            assistant_turn = "[调用] " + "; ".join(tc_parts)
+            if _raw_text:
+                assistant_turn += " " + _raw_text
         conv_history.append({"role": "assistant", "content": assistant_turn})
         # 保留最近 _CONV_HISTORY_KEEP_TURNS 轮，避免 context 膨胀
         max_keep = _CONV_HISTORY_KEEP_TURNS * 2

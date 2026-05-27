@@ -98,6 +98,24 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
   };
 }
 
+/** Cleaner 评估：后端 `cleaning_assessment` — LLM 的自由文本评估 */
+interface CleaningAssessment {
+  summary: string;
+  columns: Array<{
+    column: string;
+    display_name?: string;
+    action: "skip" | "clean";
+    assessment: string;
+    operations?: Array<{ strategy: string }>;
+  }>;
+}
+function parseCleaningAssessment(raw: unknown): CleaningAssessment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as Record<string, unknown>;
+  if (!Array.isArray(d.columns)) return null;
+  return { summary: String(d.summary || ""), columns: d.columns as CleaningAssessment["columns"] };
+}
+
 /** Cleaner 核对：后端 `cleaning_review` 结构化载荷（非 Agent 台词） */
 interface CleaningReviewPayload {
   data_quality: string;
@@ -846,6 +864,7 @@ export default function AnalyzePanel() {
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
           const fr = parseFieldReview(dataObj.field_review);
+          const ca = parseCleaningAssessment(dataObj.cleaning_assessment);
           const cr = parseCleaningReview(dataObj.cleaning_review);
           const ar = parseAnalystReview(dataObj.analyst_review);
           const incRev = parsePauseInteractionRevision(dataObj);
@@ -922,6 +941,19 @@ export default function AnalyzePanel() {
           } else {
             setActiveCleaningReviewId(null);
             setActiveCleaningReviewRevision(-1);
+          }
+          if (ca) {
+            // 清洗评估：展示 LLM 的大白话评估
+            const cid = uid();
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: cid,
+                role: "agent",
+                text: ca.summary,
+                timestamp: d.timestamp,
+              } as ConvoMessage,
+            ]);
           }
           if (ar) {
             const patchAnalyst =

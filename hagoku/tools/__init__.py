@@ -1,5 +1,9 @@
 """HaGoKu Studio 工具层"""
 
+# 工具注册表（全局，所有 Agent 共享）
+from .registry import AgentTools, Tool, agent_tools
+from . import agent_tool_defs  # 导入即完成工具注册
+
 from .analysis import (
     anova,
     chi_square,

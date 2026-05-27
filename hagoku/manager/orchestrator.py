@@ -558,7 +558,13 @@ def _try_parse_json(text: str) -> Any:
 # ── LLM 工具定义：字段理解（function calling）──────────────────
 # LLM 通过调用这些工具来主动更新字段表格，而非被动输出 JSON。
 
-_SCOUT_FIELD_UPDATE_TOOLS = [
+def _get_scout_tools() -> list[dict[str, Any]]:
+    """从全局工具注册表获取 Scout Agent 可用的工具。"""
+    from hagoku.tools.registry import agent_tools
+    return agent_tools.to_openai("scout")
+
+
+_SCOUT_FIELD_UPDATE_TOOLS = [  # 保持向后兼容，逐步迁移到 _get_scout_tools()
     {
         "type": "function",
         "function": {
@@ -1008,7 +1014,7 @@ def _apply_scout_reply_with_llm(
             messages=messages,
             temperature=0.1,
             max_tokens=1024,
-            tools=_SCOUT_FIELD_UPDATE_TOOLS,
+            tools=_get_scout_tools(),
             tool_choice="auto",
         )
 
@@ -2320,54 +2326,18 @@ class Orchestrator:
                         "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
                     })
 
-                # 4. Cleaner: 数据评估 → 用户选择 → 执行（或跳过）
-                # 加载清洗规则（prompt.md 中的 CLEANING_PLAN_RULES 区块）
-                cleaning_rules = cleaner._load_cleaning_rules()
-                if not cleaning_rules.strip():
-                    cleaning_rules = cleaner._load_cleaning_rules()
+                # 4. Cleaner: 数据清洗
+                df_raw, df_clean, cleaning_report, _ = cleaner.run(
+                    data_path, context,
+                    impact_warning=self.config.manager.cleaning_impact_warning,
+                    emit_completed=False,
+                )
 
-                # 加载数据用于评估
-                from hagoku.tools.data_io import load_data
-                _raw_df_for_cleaner = load_data(data_path)
-                assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
-
-                # 展示评估结果给用户
-                cleaner_msg = {
-                    "message": "",
-                    "cleaning_assessment": assessment,
-                }
-                cleaner_msg["interaction_revision"] = 0
-                user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
-                if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-                skip_cleaning = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
-                if skip_cleaning:
-                    # 用户选择跳过清洗 → 原始数据即为"清洗后数据"
-                    self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
-                        "result_summary": "用户选择跳过清洗",
-                    })
-                    df_clean = _raw_df_for_cleaner
-                    df_raw = _raw_df_for_cleaner
-                    cleaning_report = None
-                    # 保存原始数据到 cleaned_path（Analyst 始终读 cleaned_path）
-                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-                    save_data(df_clean, cleaned_path)
-                    cleaned_path_str = str(cleaned_path)
-                    raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
-                    save_data(df_raw, raw_path)
-                    raw_path_str = str(raw_path)
-                else:
-                    # 用户选择执行清洗
-                    df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                        data_path, context,
-                        impact_warning=self.config.manager.cleaning_impact_warning,
-                        emit_completed=False,
-                    )
-                    if self._is_cancel_requested():
-                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-
-                    # ── 暂停：清洗结果确认 ──────────────────────────────────
+                # ── 暂停：清洗结果待用户确认 ───────────────────────────────
+                if cleaning_report is not None:
                     cleaner_results = {
                         "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
                         "data_quality": getattr(cleaning_report, "data_quality", "unknown"),

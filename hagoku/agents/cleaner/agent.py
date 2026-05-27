@@ -576,26 +576,101 @@ class CleanerAgent(InteractionMixin):
                 "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。"
             )
 
-        client = create_raw_client(self.llm_config)
-        try:
-            response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": cleaning_rules.strip()},
-                    {"role": "user", "content": (
-                        "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
-                        + json.dumps(payload, ensure_ascii=False, default=str)
-                    )},
-                ],
-                temperature=0.0,
-                max_tokens=2048,
-            )
-            raw = response.choices[0].message.content or ""
-        except Exception as e:
-            raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+        # 数据总览（一次性传给 LLM，同时给它工具自主探查）
+        data_overview = {
+            "analysis_goal": query or "未指定",
+            "target_column": target,
+            "n_rows": len(df),
+            "n_cols": len(df.columns),
+            "columns": columns_info,
+        }
 
-        if not raw or not raw.strip():
-            return {"summary": "LLM 返回空响应，跳过清洗评估", "columns": []}
+        from hagoku.tools.registry import agent_tools
+        cleaner_tools = agent_tools.to_openai("cleaner")
+        # 给 LLM 一个特殊工具来输出最终评估结果
+        finalize_tool = {
+            "type": "function",
+            "function": {
+                "name": "submit_assessment",
+                "description": "完成评估，提交最终的清洗建议。每列给出 action(skip/clean) + assessment(大白话解释)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "summary": {"type": "string", "description": "整体评估大白话总述"},
+                        "columns": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "column": {"type": "string"},
+                                    "display_name": {"type": "string"},
+                                    "action": {"type": "string", "enum": ["skip", "clean"]},
+                                    "assessment": {"type": "string"},
+                                    "operations": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {"strategy": {"type": "string"}},
+                                        },
+                                    },
+                                },
+                                "required": ["column", "action", "assessment"],
+                            },
+                        },
+                    },
+                    "required": ["summary", "columns"],
+                },
+            },
+        }
+        all_tools = cleaner_tools + [finalize_tool]
+
+        client = create_raw_client(self.llm_config)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": cleaning_rules.strip()},
+            {"role": "user", "content": json.dumps(data_overview, ensure_ascii=False, default=str)},
+        ]
+
+        # 多轮工具调用循环（最多 5 轮）
+        for _round in range(5):
+            try:
+                response = client.chat.completions.create(
+                    model=self.llm_config.model,
+                    messages=messages,
+                    temperature=0.0,
+                    max_tokens=2048,
+                    tools=all_tools,
+                    tool_choice="auto",
+                )
+            except Exception as e:
+                raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+
+            msg = response.choices[0].message
+            tool_calls = getattr(msg, "tool_calls", None)
+            raw_text = msg.content or ""
+
+            # LLM 调用了 submit_assessment → 解析并返回
+            if tool_calls:
+                for tc in tool_calls:
+                    fname = tc.function.name if hasattr(tc, "function") else ""
+                    fargs = json.loads(tc.function.arguments) if hasattr(tc, "function") and tc.function.arguments else {}
+                    if fname == "submit_assessment":
+                        return self._parse_assessment(json.dumps(fargs, ensure_ascii=False))
+                    # 其他工具调用：执行并追加结果
+                    tool_result = agent_tools.dispatch(fname, fargs, context, df)
+                    # 构造 tool result message（OpenAI 格式）
+                    tc_id = getattr(tc, "id", "") or getattr(tc, "index", "") or ""
+                    messages.append({"role": "assistant", "content": None, "tool_calls": [{
+                        "id": tc_id, "type": "function",
+                        "function": {"name": fname, "arguments": json.dumps(fargs, ensure_ascii=False)},
+                    }]})
+                    messages.append({"role": "tool", "tool_call_id": tc_id, "content": json.dumps(tool_result, ensure_ascii=False, default=str)})
+                continue
+
+            # 无 tool_calls：尝试从文本解析
+            if raw_text and raw_text.strip():
+                return self._parse_assessment(raw_text)
+
+        return {"summary": "LLM 未在 5 轮内完成评估", "columns": []}
 
         return self._parse_assessment(raw)
 

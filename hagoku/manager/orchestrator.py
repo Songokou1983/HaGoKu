@@ -2340,6 +2340,7 @@ class Orchestrator:
                 if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
+                context["_cleaner_assessment"] = assessment  # 持久化，后续对话可复用
                 skip_cleaning = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
                 if skip_cleaning:
                     self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {

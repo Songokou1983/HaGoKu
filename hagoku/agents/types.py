@@ -76,15 +76,15 @@ class FieldInferenceResult(BaseModel):
 
 def build_submit_field_inference_schema() -> dict[str, Any]:
     """根据 FieldInferenceResult 模型生成 Scout submit_field_inference 工具的 function schema。
-    
-    新增字段只需修改 FieldInferenceItem，无需改动 Agent 代码（P4 修复）。
+
+    新增字段只需修改 FieldInferenceItem 的 Pydantic 字段定义和 _build_fallback_schema() 中的
+    手动 schema，无需改动 Agent 代码（P4 修复）。
+
+    直接使用手动维护的 schema：Pydantic v2 model_json_schema() 会用 $ref/$defs
+    引用方式输出，但 $defs 在 llama.cpp OpenAI-compatible API 上报残缺，导致 LLM
+    收到空 properties 的工具定义 → 返回空响应。
     """
-    try:
-        return FieldInferenceResult.model_json_schema()
-    except Exception:
-        # Pydantic v1 / v2 兼容：降级为手动生成
-        warnings.warn("FieldInferenceResult.model_json_schema() 不可用，使用降级 schema")
-        return _build_fallback_schema()
+    return _build_fallback_schema()
 
 
 def _build_fallback_schema() -> dict[str, Any]:
@@ -106,6 +106,13 @@ def _build_fallback_schema() -> dict[str, Any]:
                         "suggested_role": {"type": "string", "enum": FIELD_SUGGESTED_ROLES, "description": "建议角色"},
                         "display_name": {"type": "string", "description": "简短中文业务名称（≤6 字，如「收入」「用户ID」）"},
                         "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
+                        "used_in_analysis": {
+                            "type": "boolean",
+                            "description": "该字段是否参与本次分析。结合用户分析目标判断："
+                            "能服务于分析目标的字段 → true；"
+                            "纯标识列/常量列/无关列 → false；"
+                            "不确定 → 不设置此字段。",
+                        },
                     },
                     "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"],
                 },

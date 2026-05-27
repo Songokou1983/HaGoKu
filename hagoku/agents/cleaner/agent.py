@@ -583,22 +583,46 @@ class CleanerAgent(InteractionMixin):
                 "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。"
             )
 
+        # 注入对话历史（律 3：多轮上下文）
+        conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": cleaning_rules.strip()},
+        ]
+        for turn in conv_history[-6:]:
+            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+
+        # 带上轮评估结果（如果有）
+        prev_assessment = context.get("_cleaner_assessment")
+        prev_text = ""
+        if prev_assessment:
+            prev_cols = prev_assessment.get("columns", [])
+            if prev_cols:
+                prev_lines = ["上轮评估结果："]
+                for c in prev_cols:
+                    prev_lines.append(f"  {c.get('column','')}: {c.get('action','')} — {c.get('reason',c.get('assessment',''))}")
+                prev_text = "\n".join(prev_lines) + "\n\n"
+
+        messages.append({"role": "user", "content": (
+            (f"用户修改意见：{user_feedback}\n\n" if user_feedback else "")
+            + prev_text
+            + "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
+            + json.dumps(payload, ensure_ascii=False, default=str)
+        )})
+
         client = create_raw_client(self.llm_config)
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": cleaning_rules.strip()},
-                    {"role": "user", "content": (
-                        (f"用户修改意见：{user_feedback}\n\n" if user_feedback else "")
-                        + "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
-                        + json.dumps(payload, ensure_ascii=False, default=str)
-                    )},
-                ],
+                messages=messages,
                 temperature=0.0,
                 max_tokens=2048,
             )
             raw = response.choices[0].message.content or ""
+            # 记录到共享对话历史
+            ch = context.get("_conversation_history")
+            if isinstance(ch, list):
+                ch.append({"role": "user", "content": json.dumps(payload, ensure_ascii=False)[:500]})
+                ch.append({"role": "assistant", "content": (raw or "")[:500]})
         except Exception as e:
             raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
 

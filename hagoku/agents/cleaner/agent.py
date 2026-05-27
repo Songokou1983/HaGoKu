@@ -582,11 +582,13 @@ class CleanerAgent(InteractionMixin):
                 model=self.llm_config.model,
                 messages=[
                     {"role": "system", "content": cleaning_rules.strip()},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
+                    {"role": "user", "content": (
+                        "请根据以上规则，评估以下数据的清洗需求，只输出 JSON，不要输出其他内容：\n\n"
+                        + json.dumps(payload, ensure_ascii=False, default=str)
+                    )},
                 ],
                 temperature=0.0,
                 max_tokens=4096,
-                response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content or ""
         except Exception as e:

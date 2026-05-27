@@ -89,8 +89,8 @@ class CleanerAgent(InteractionMixin):
         if not path.exists():
             return ""
         content = path.read_text(encoding="utf-8")
-        # 提取 "## CLEANING_PLAN_RULES" 到下一个 "## " 标题之间的内容
-        match = re.search(r"## CLEANING_PLAN_RULES\s*\n(.*?)(?=\n##\s)", content, re.DOTALL)
+        # 提取 "## CLEANING_PLAN_RULES" 到下一个 "## " 或 "### " 标题之间的内容
+        match = re.search(r"## CLEANING_PLAN_RULES\s*\n(.*?)(?=\n#{2,3}\s)", content, re.DOTALL)
         if match:
             return match.group(1).strip()
         return ""
@@ -592,6 +592,9 @@ class CleanerAgent(InteractionMixin):
         except Exception as e:
             raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
 
+        if not raw or not raw.strip():
+            return {"summary": "LLM 返回空响应，跳过清洗评估", "columns": []}
+
         return self._parse_assessment(raw)
 
     def _parse_assessment(self, raw: str) -> dict[str, Any]:
@@ -610,7 +613,7 @@ class CleanerAgent(InteractionMixin):
                 if match:
                     result = json.loads(match.group())
                 else:
-                    raise ValueError(f"Cleaner 输出无法解析: {raw[:200]}")
+                    return {"summary": f"LLM 输出无法解析，跳过清洗", "columns": []}
 
         summary = str(result.get("summary", "") or "")
         columns_out = []

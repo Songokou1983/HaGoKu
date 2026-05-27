@@ -113,10 +113,14 @@ _ROLE_DISPLAY_MAP: dict[str, str] = {
 }
 
 def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
-    """Scout 暂停：结构化字段表（供前端 HTML 渲染）；`message` 留空，不冒充 Agent 长文。"""
+    """Scout 暂停：结构化字段表（供前端 HTML 渲染）；`message` 留空，不冒充 Agent 长文。
+
+    律 5：display_name / description 首选 column_semantics，兜底 column_descriptions/column_display_names。
+    """
     cols = context.get("column_semantics") or []
     if not cols:
         return {"message": "共 0 列 — 无法生成字段表。", "field_review": None}
+    # 律 5：优先从 column_semantics 取，兜底旧 dict
     descs = context.get("column_descriptions") or {}
     display_names = context.get("column_display_names") or {}
     profiles = context.get("_column_profiles") or {}
@@ -126,7 +130,8 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for s in cols:
         name = str(s.get("column_name", ""))
-        d = str(descs.get(name, "") or "").strip()
+        # 律 5：description 首选 column_semantics，兜底旧 dict
+        d = str(s.get("description", "") or descs.get(name, "") or "").strip()
         for p in noise_prefixes:
             if d.startswith(p):
                 d = d[len(p) :].strip()
@@ -950,12 +955,18 @@ def _apply_scout_reply_with_llm(
 
     user_msg = f"用户说：{raw}"
 
+    # ── 律 3：同阶段多轮记忆 — 注入前 N-1 轮的对话历史 ──
+    conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg},
     ]
+    # 注入历史轮次（最多保留最近 6 轮，避免 prompt 过长）
+    for turn in conv_history[-6:]:
+        messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+    messages.append({"role": "user", "content": user_msg})
 
     _raw_text: str = ""
+    tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
     try:
         resp = llm_client.chat.completions.create(
             model=llm_model,
@@ -969,6 +980,19 @@ def _apply_scout_reply_with_llm(
         msg = resp.choices[0].message
         tool_calls = getattr(msg, "tool_calls", None)
         _raw_text = (msg.content or "").strip()
+
+        # ── 律 3：记录本轮对话到历史（供下一轮 LLM 调用感知上下文）──
+        conv_history.append({"role": "user", "content": raw})
+        assistant_turn = _raw_text or ""
+        if tool_calls and isinstance(tool_calls, list):
+            # 工具调用结果摘要作为 assistant 回复
+            tc_names = [tc.function.name if hasattr(tc, "function") else str(tc) for tc in tool_calls]
+            assistant_turn = f"[调用了工具: {', '.join(tc_names)}] " + assistant_turn
+        conv_history.append({"role": "assistant", "content": assistant_turn})
+        # 保留最近 10 轮（20 条消息），避免 context 膨胀
+        if len(conv_history) > 20:
+            conv_history = conv_history[-20:]
+        context["_conversation_history"] = conv_history
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
@@ -1015,16 +1039,27 @@ def _apply_scout_reply_with_llm(
                 updated_something = False
                 if d_raw:
                     descs[c] = d_raw
+                    # 律 5：同步写入 column_semantics
+                    for s in semantics:
+                        if str(s.get("column_name", "")) == c:
+                            s["description"] = d_raw
+                            break
                     applied.append(f"{c}←{d_raw}")
                     updated_something = True
                 if dn_raw:
                     display_names[c] = dn_raw
+                    # 律 5：同步写入 column_semantics
+                    for s in semantics:
+                        if str(s.get("column_name", "")) == c:
+                            s["display_name"] = dn_raw
+                            break
                     applied.append(f"{c}:[display]←{dn_raw}")
                     updated_something = True
                 if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
                     for s in semantics:
                         if str(s.get("column_name", "")) == c:
                             s["suggested_role"] = role_raw
+                            s["role"] = role_raw  # 律 5：同步 role
                             applied.append(f"{c}:[role]←{role_raw}")
                             updated_something = True
                 # 处理 used_in_analysis
@@ -2096,6 +2131,42 @@ class Orchestrator:
                             break
                         interaction_revision += 1
 
+                    # ── 律 9 重推断触发：结构性变更后重新让 Scout 做语义推断 ──
+                    if context.pop("_pending_reinference", None):
+                        self.event_bus.emit(EventType.AGENT_THINKING, "scout", {
+                            "thought": "字段参与范围已变更，正在重新分析字段关系…",
+                        })
+                        try:
+                            # 重新加载数据以便重推断
+                            from hagoku.tools.data_io import load_data
+                            df_reinfer = load_data(data_path)
+                            scout_reinfer = ScoutAgent(
+                                llm_config=self.config.llm,
+                                event_bus=self.event_bus,
+                                scribe=self.scribe,
+                            )
+                            # 带累积修正重跑 Scout 语义推断（保留用户已确认的描述/显示名）
+                            scout_reinfer._infer_all_semantics(context, df_reinfer)
+                            scout_reinfer._generate_field_descriptions(context, df_reinfer)
+                            # 重推断后重新同步 target/features
+                            from hagoku.agents.types import derive_target_features
+                            new_targets, new_features = derive_target_features(
+                                context.get("column_semantics", [])
+                            )
+                            context["target"] = new_targets[0] if new_targets else None
+                            context["targets"] = new_targets
+                            context["features"] = new_features
+                            self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
+                                "message": "字段角色重新分析完成",
+                                "phase": "reinference",
+                            })
+                        except Exception as e:
+                            import logging
+                            _rlog = logging.getLogger("hagoku.orchestrator")
+                            _rlog.warning("律 9 重推断失败，沿用原字段理解: %s", e)
+                        # 展示更新后的字段表，回到 Scout 内层循环让用户确认
+                        continue
+
                     # ── 跨阶段闸门：字段对齐后、进入清洗前 ────────────────────────
                     gate_msg = gate_cleaning_pause_payload(context)
                     gate_msg["interaction_revision"] = interaction_revision
@@ -2887,7 +2958,11 @@ class Orchestrator:
         return ""
 
     def _describe_intent(self, parsed_intent: Any) -> str:
-        """将解析后的意图译成接在「让我来」后的自然短句（LLM thinking 驱动，零硬编码映射）。"""
+        """将解析后的意图译成接在「让我来」后的自然短句。
+
+        首选 LLM thinking 字段（Planning 阶段 LLM 产出），无 thinking 时回退为
+        纯数据描述（不含硬编码 intent_type→短语映射），零语义归因。
+        """
         if parsed_intent is None:
             return "探索一下这份数据有什么规律"
 
@@ -2896,7 +2971,7 @@ class Orchestrator:
         if thinking.strip():
             return thinking.strip()
 
-        # LLM 未提供 thinking 时的最小兜底
+        # LLM 未提供 thinking 时的纯数据兜底（零硬编码语义映射）
         parts: list[str] = []
         if getattr(parsed_intent, "target", None):
             parts.append(f"关注「{parsed_intent.target}」")
@@ -2905,24 +2980,9 @@ class Orchestrator:
         if getattr(parsed_intent, "group_by", None):
             parts.append(f"按「{'/'.join(parsed_intent.group_by)}」分组")
 
-        base = getattr(parsed_intent, "intent_type", "exploration") or "exploration"
-        kind_map: dict[str, str] = {
-            "comparison": "对比差异",
-            "causation": "找原因",
-            "correlation": "看关系",
-            "trend": "看趋势",
-            "diagnostic": "诊断问题",
-            "roi_analysis": "看投入产出",
-            "ltv_analysis": "看用户生命周期价值",
-            "cac_analysis": "看获客成本",
-            "funnel_conversion": "看转化漏斗",
-            "attribution": "看归因",
-            "investment_decision": "看投资决策",
-            "cohort_analysis": "看人群分层",
-            "growth_rate": "看增长率",
-        }
-        kind = kind_map.get(base, "探索规律")
-        return f"{kind}，{'，'.join(parts)}" if parts else f"{kind}"
+        if parts:
+            return f"分析{'，'.join(parts)}"
+        return "探索一下这份数据有什么规律"
 
     def _build_analysis_purpose(self, context: dict[str, Any]) -> dict[str, Any]:
         """从 context 提取本次分析涉及的核心字段信息，供下游 Agent 聚焦。

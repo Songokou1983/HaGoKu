@@ -584,10 +584,18 @@ class CleanerAgent(InteractionMixin):
                 "null_pct": round(null_pct, 4),
             }
 
-            # 字段语义（来自 Scout）
+            # 字段语义（来自 Scout） — 律 5：首选 column_semantics
             variable_roles = context.get("variable_roles", {})
             col_info["role"] = variable_roles.get(col, "unknown")
-            col_info["description"] = context.get("column_descriptions", {}).get(col, "")
+            # 律 5：description 首选 column_semantics，兜底 column_descriptions
+            col_desc = ""
+            for s in context.get("column_semantics", []):
+                if str(s.get("column_name", "")) == col:
+                    col_desc = str(s.get("description", "") or "")
+                    break
+            if not col_desc:
+                col_desc = context.get("column_descriptions", {}).get(col, "")
+            col_info["description"] = col_desc
 
             # 数值列：分位数 + 分布
             if pd.api.types.is_numeric_dtype(series):

@@ -238,7 +238,7 @@ class ReporterAgent(InteractionMixin):
         history = self.memory.get("reports", {}).get(project_name, [])
         history_text = json.dumps(history[-3:] if history else [], ensure_ascii=False, indent=2)
 
-        # ── 构建证据溯源字段映射 ───────────────────────────────
+        # ── 构建证据溯源字段映射（律 5：首选 column_semantics）──
         field_display_names = context.get("column_display_names", {}) or {}
         field_descriptions = context.get("column_descriptions", {}) or {}
         column_semantics = context.get("column_semantics", [])
@@ -250,8 +250,9 @@ class ReporterAgent(InteractionMixin):
             if not col:
                 continue
             sem_type = sem.get("semantic_type", "")
-            display = field_display_names.get(col, "")
-            desc = field_descriptions.get(col, "")
+            # 律 5：display_name / description 首选 column_semantics，兜底旧 dict
+            display = sem.get("display_name", "") or field_display_names.get(col, "")
+            desc = sem.get("description", "") or field_descriptions.get(col, "")
             parts = [f"  - `{col}`"]
             if display:
                 parts.append(f"中文名：{display}")

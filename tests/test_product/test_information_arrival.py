@@ -226,13 +226,9 @@ def _make_tool_call_response(arguments_json: str, function_name: str = "update_f
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 律 3：多轮历史抵达（占位 — 待 P3 message-history 改造完成后激活）
+# 律 3：多轮历史抵达 ✅ 已落地
 # ─────────────────────────────────────────────────────────────────────────────
 
-@pytest.mark.xfail(
-    reason="律 3 待 P3 实施：当前 _apply_scout_reply_with_llm 每轮独立调用，未带前一轮 LLM 输出。",
-    strict=False,
-)
 def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     """同一暂停点第 2 轮 LLM 调用，messages 应含第 1 轮的 assistant turn。
 

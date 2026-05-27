@@ -118,9 +118,106 @@ def _build_fallback_schema() -> dict[str, Any]:
     }
 
 
+# ── 律 5 单权威：字段语义的唯一数据结构 ──
+# column_semantics 是字段语义的 Single Source of Truth。
+# column_descriptions / column_display_names / target / features / variable_roles
+# 均从 column_semantics 派生，禁止平行存储。
+
+
+def derive_display_names(column_semantics: list[dict[str, Any]]) -> dict[str, str]:
+    """从 column_semantics 派生 display_name 映射。"""
+    return {
+        str(s.get("column_name", "")): str(s.get("display_name", "") or s.get("column_name", ""))
+        for s in column_semantics
+    }
+
+
+def derive_descriptions(column_semantics: list[dict[str, Any]]) -> dict[str, str]:
+    """从 column_semantics 派生 description 映射。"""
+    return {
+        str(s.get("column_name", "")): str(s.get("description", "") or "")
+        for s in column_semantics
+    }
+
+
+def derive_target_features(
+    column_semantics: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    """从 column_semantics 派生 target / features 列表。
+
+    优先使用 role 字段；无 role 时回退到 suggested_role。
+    仅 used_in_analysis != False 的列参与推导。
+    """
+    targets: list[str] = []
+    features: list[str] = []
+    for s in column_semantics:
+        col = str(s.get("column_name", ""))
+        if s.get("used_in_analysis") is False:
+            continue
+        role = s.get("role") or s.get("suggested_role", "")
+        if role in ("target",):
+            targets.append(col)
+        elif role in ("ignore", "identifier"):
+            continue
+        elif role in ("time_index", "time"):
+            continue
+        else:
+            features.append(col)
+    return targets, features
+
+
+def derive_variable_roles(column_semantics: list[dict[str, Any]]) -> dict[str, str]:
+    """从 column_semantics 派生 variable_roles 映射。"""
+    return {
+        str(s.get("column_name", "")): str(s.get("role") or s.get("suggested_role", "feature"))
+        for s in column_semantics
+    }
+
+
+def derive_analysis_columns(column_semantics: list[dict[str, Any]]) -> list[str]:
+    """从 column_semantics 派生本次参与分析的列名列表。"""
+    return [
+        str(s["column_name"])
+        for s in column_semantics
+        if s.get("used_in_analysis", True) is not False
+    ]
+
+
+def column_semantics_lookup(
+    column_semantics: list[dict[str, Any]], column_name: str
+) -> dict[str, Any] | None:
+    """按列名在 column_semantics 中查找（O(n)，n 通常 ≤ 50）。"""
+    for s in column_semantics:
+        if str(s.get("column_name", "")) == column_name:
+            return s
+    return None
+
+
+# ── ColumnInfo 字段规范（文档型，不做运行时强制） ──
+# 每个 column_semantics 元素必须包含以下字段：
+#
+#   column_name: str          — 原始列名
+#   display_name: str         — 简短中文业务名称（≤6 字）
+#   description: str          — 业务含义（一句话自然语言）
+#   inferred_type: str        — 数据类型
+#   confidence: float         — 置信度 0~1
+#   evidence: str             — 推断依据
+#   suggested_role: str       — LLM 建议角色
+#   role: str                 — 当前有效角色（用户纠正后可覆盖 suggested_role）
+#   used_in_analysis: bool    — 是否参与本次分析
+#   needs_user_input: bool    — 是否需要用户确认
+#   confirmed_by_user: bool   — 本轮是否被用户纠正过（律 10）
+#   last_confirmed_at_run: str | None — 上次确认的 run_id（律 10）
+
+
 @dataclass
 class ColumnSemantic:
-    """列语义推断结果"""
+    """列语义推断结果（律 5 扩展版 — 字段语义的单一权威数据结构）。
+
+    所有字段信息统一存储于此：display_name / description / role / used_in_analysis
+    均在 column_semantics 中，不再有独立平行的 column_descriptions / column_display_names。
+    """
+
     column_name: str
     inferred_type: SemanticType
     confidence: float  # 0-1
@@ -129,14 +226,39 @@ class ColumnSemantic:
     suggested_role: str = "feature"  # feature / target / identifier / time_index
     user_override: str | None = None  # 用户修正后的类型
 
+    # 律 5 扩展字段
+    display_name: str = ""  # 简短中文业务名（≤6 字，如「店铺收入」）
+    description: str = ""  # 业务含义（一句话自然语言）
+    used_in_analysis: bool = True  # 是否参与本次分析
+    role: str = ""  # 当前有效角色（优先于 suggested_role）
+    confirmed_by_user: bool = False  # 律 10：本轮是否被用户纠正
+    last_confirmed_at_run: str | None = None  # 律 10：上次确认的 run_id
+
+    @property
+    def effective_role(self) -> str:
+        """当前有效角色：role > suggested_role > fallback 'feature'。"""
+        return self.role or self.suggested_role or "feature"
+
+    @property
+    def effective_display_name(self) -> str:
+        """当前有效显示名：display_name > column_name。"""
+        return self.display_name or self.column_name
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "column_name": self.column_name,
-            "inferred_type": self.inferred_type.value,
+            "inferred_type": self.inferred_type.value if isinstance(self.inferred_type, SemanticType) else str(self.inferred_type),
             "confidence": self.confidence,
             "evidence": self.evidence,
             "needs_user_input": self.needs_user_input,
             "suggested_role": self.suggested_role,
+            "user_override": self.user_override,
+            "display_name": self.display_name,
+            "description": self.description,
+            "used_in_analysis": self.used_in_analysis,
+            "role": self.effective_role,
+            "confirmed_by_user": self.confirmed_by_user,
+            "last_confirmed_at_run": self.last_confirmed_at_run,
         }
 
 

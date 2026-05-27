@@ -55,6 +55,7 @@ class ColumnSemanticDef(BaseModel):
     role: str | None = None
     confidence: float = 1.0
     source: str = "auto"
+    confirmed_by_user: bool = False  # 律 10：用户是否显式确认/纠正过
 
 
 class CleaningPrefDef(BaseModel):
@@ -526,10 +527,19 @@ class MemoryManager:
             if sem_def.role == "group" and col_name not in context.group_columns:
                 context.group_columns.append(col_name)
 
-        # 4. 描述和单位
+        # 4. 描述和单位（律 10：用户确认过的字段使用持久化值但标记优先级）
         for col_name, sem_def in confirmed.items():
             if sem_def.description:
                 context.column_descriptions[col_name] = sem_def.description
+                # 律 10：同步 confirmed_by_user 标记到当前 context
+                for s in context.column_semantics:
+                    if s.column_name == col_name:
+                        s.confirmed_by_user = sem_def.confirmed_by_user
+                        s.last_confirmed_at_run = (
+                            sem_def.confirmed_by_user
+                            and getattr(sem_def, "updated_at", None)
+                        )
+                        break
             if sem_def.unit:
                 context.units[col_name] = sem_def.unit
 
@@ -596,6 +606,7 @@ class MemoryManager:
                     sem_def.display_name = dn
                 sem_def.source = "user"
                 sem_def.confidence = 1.0
+                sem_def.confirmed_by_user = True  # 律 10
             else:
                 sem_def = ColumnSemanticDef(
                     semantic="unknown",
@@ -603,6 +614,7 @@ class MemoryManager:
                     unit=dn if dn else None,
                     source="user",
                     confidence=1.0,
+                    confirmed_by_user=True,  # 律 10
                 )
 
             self.save_column_semantic(project_id, col_name, sem_def)
@@ -645,11 +657,14 @@ class MemoryManager:
             col_name = _get(sem, "column_name", "")
 
             if confidence >= 0.8 or "用户" in evidence or "记忆" in evidence:
+                # 律 10：传播 confirmed_by_user
+                confirmed = bool(_get(sem, "confirmed_by_user", False))
                 sem_def = ColumnSemanticDef(
                     semantic=str(inferred_type),
                     role=suggested_role,
                     confidence=confidence,
-                    source="user" if "用户" in evidence else "auto",
+                    source="user" if ("用户" in evidence or confirmed) else "auto",
+                    confirmed_by_user=confirmed,
                 )
                 self.save_column_semantic(project_id, col_name, sem_def)
                 count += 1

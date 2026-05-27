@@ -392,11 +392,16 @@ class ScoutAgent(InteractionMixin):
         corrected = user_input.get("corrected", {})
         comments = user_input.get("comments", {})
 
-        # 更新 column_descriptions
-        for col, desc in confirmed.items():
+        # 更新 column_descriptions（旧接口）+ column_semantics（律 5 单权威）
+        all_updates = {**confirmed, **corrected}
+        for col, desc in all_updates.items():
             self._context["column_descriptions"][col] = desc
-        for col, desc in corrected.items():
-            self._context["column_descriptions"][col] = desc
+            # 律 5：同步写入 column_semantics
+            for sem in self._context.get("column_semantics", []):
+                if sem["column_name"] == col:
+                    sem["description"] = desc
+                    sem["confirmed_by_user"] = True  # 律 10
+                    break
 
         # 记录用户注释到 context
         if comments:
@@ -670,7 +675,7 @@ class ScoutAgent(InteractionMixin):
         if not columns_out:
             raise ValueError("Scout LLM 未返回任何列推断结果（`columns` 字段为空）")
 
-        # 标准化输出到 Scout 代码库期望的格式
+        # 标准化输出到 Scout 代码库期望的格式（律 5：display_name/description/role 入 column_semantics）
         semantics: list[dict] = []
         for item in columns_out:
             col_name = item.get("name", "")
@@ -684,6 +689,12 @@ class ScoutAgent(InteractionMixin):
                 "needs_user_input": bool(item.get("needs_user_input", True)),
                 "suggested_role": item.get("suggested_role", "unknown"),
                 "used_in_analysis": item.get("used_in_analysis"),
+                # 律 5 扩展：display_name / description / role 直接入 column_semantics
+                "display_name": str(item.get("display_name", "") or "").strip(),
+                "description": str(item.get("description", "") or "").strip(),
+                "role": "",  # 初始为空，用户纠正后由 orchestrator 填入
+                "confirmed_by_user": False,
+                "last_confirmed_at_run": None,
             })
 
         # 如果 LLM 遗漏某些列，用 unknown 补上
@@ -698,6 +709,11 @@ class ScoutAgent(InteractionMixin):
                     "needs_user_input": True,
                     "suggested_role": "unknown",
                     "used_in_analysis": None,
+                    "display_name": col,
+                    "description": "",
+                    "role": "",
+                    "confirmed_by_user": False,
+                    "last_confirmed_at_run": None,
                 })
 
         # 从 columns 数组中提取 description / display_name 到映射
@@ -848,12 +864,21 @@ class ScoutAgent(InteractionMixin):
 
         _infer_all_semantics 已经通过一次 LLM 调用产出了所有字段的 type/role/desc/display_name。
         此方法仅做回填，不做独立 LLM 调用——零硬编码。
+
+        律 5 过渡：同时写入 column_descriptions/column_display_names（旧接口兼容）
+        和 column_semantics[i].description / .display_name（新单一权威源）。
         """
         # 1. 回填 LLM 产出的 column_descriptions（_infer_all_semantics 暂存在 self 上）
         llm_descs = getattr(self, "_llm_column_descriptions", {}) or {}
         for col, desc in llm_descs.items():
             if col not in context["column_descriptions"]:
                 context["column_descriptions"][col] = desc
+            # 律 5：同步写入 column_semantics
+            for sem in context["column_semantics"]:
+                if sem["column_name"] == col:
+                    if not sem.get("description"):
+                        sem["description"] = desc
+                    break
 
         # 2. 回填 display_names
         llm_names = getattr(self, "_llm_display_names", {}) or {}
@@ -862,6 +887,12 @@ class ScoutAgent(InteractionMixin):
             for col, name in llm_names.items():
                 if col not in context["column_display_names"]:
                     context["column_display_names"][col] = name
+                # 律 5：同步写入 column_semantics
+                for sem in context["column_semantics"]:
+                    if sem["column_name"] == col:
+                        if not sem.get("display_name"):
+                            sem["display_name"] = name
+                        break
 
         # 3. 无 LLM 描述的列：标记 needs_user_input=True
         for sem in context["column_semantics"]:
@@ -870,6 +901,9 @@ class ScoutAgent(InteractionMixin):
             if not raw or raw == col:
                 context.setdefault("column_display_names", {})[col] = col
                 sem["needs_user_input"] = True
+                # 律 5：兜底 display_name 写入 column_semantics
+                if not sem.get("display_name"):
+                    sem["display_name"] = col
 
         # 4. 回填 LLM 产出的 target / features
         if getattr(self, "_llm_target_columns", None):

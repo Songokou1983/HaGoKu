@@ -2264,12 +2264,11 @@ class Orchestrator:
                     # 必须递增 revision，否则下一轮 field_review 与上一轮同号，前端会再插一张表。
                     interaction_revision += 1
 
-                # ── 分析目的确认暂停点（仅当存在 target/features 时）──
-                # 闸门确认字段对齐后、进入 Cleaner 前，让用户确认分析目的（目标变量、特征变量）
+                # ── 分析目的确认暂停点（用户已确认则跳过，直接进 Cleaner）──
                 analysis_purpose = self._build_analysis_purpose(context)
                 context["analysis_purpose"] = analysis_purpose
 
-                if analysis_purpose.get("target") or analysis_purpose.get("features"):
+                if not skip_gate and (analysis_purpose.get("target") or analysis_purpose.get("features")):
                     ap_payload = analysis_purpose_pause_payload(context)
                     ap_payload["interaction_revision"] = interaction_revision
                     ap_payload = self._attach_pause_dialogue_message("scout", ap_payload)

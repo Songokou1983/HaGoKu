@@ -487,6 +487,7 @@ interface ConvoMessage {
   role: "system" | "user" | "agent" | "workflow";
   text: string;
   timestamp: string;
+  html?: string;
   fieldReview?: FieldReviewPayload;
   cleaningReview?: CleaningReviewPayload;
   analystReview?: AnalystReviewPayload;
@@ -668,7 +669,7 @@ function ConvoFeed({
                   : "bg-transparent text-app-text-muted text-ui-xs italic whitespace-pre-wrap"
                 }`}
             >
-              {m.text}
+              {m.html ? <span dangerouslySetInnerHTML={{ __html: m.html }} /> : m.text}
             </div>
           </div>
         );
@@ -943,14 +944,19 @@ export default function AnalyzePanel() {
             setActiveCleaningReviewRevision(-1);
           }
           if (ca) {
-            // 清洗评估：展示 LLM 的大白话评估
+            // 清洗评估：结构化展示 LLM 的大白话评估
             const cid = uid();
+            const colLines = ca.columns.map((c) =>
+              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "建议清洗" : "跳过"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.assessment}</td></tr>`
+            ).join("");
+            const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">说明</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
             setMessages((prev) => [
               ...prev,
               {
                 id: cid,
                 role: "agent",
                 text: ca.summary,
+                html: `<p><strong>${ca.summary}</strong></p>${tableHtml}`,
                 timestamp: d.timestamp,
               } as ConvoMessage,
             ]);

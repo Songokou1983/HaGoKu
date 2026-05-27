@@ -382,17 +382,56 @@ def _known_scout_columns(context: dict[str, Any]) -> list[str]:
 
 
 def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
+    """将用户或 LLM 给出的字段标识解析为真实列名。
+
+    匹配优先级：精确列名 > 忽略下划线匹配 > display_name 匹配 > description 包含。
+    纯机械结构查找，不涉及语义判断。
+    """
     raw = (token or "").strip().strip("`\"'“”‘’")
     if not raw:
         return None
+    # 1. 精确列名（大小写不敏感）
     rl = raw.lower()
     for c in columns:
         if c.lower() == rl:
             return c
+    # 2. 忽略下划线匹配
     rl2 = rl.replace("_", "")
     for c in columns:
         if c.lower().replace("_", "") == rl2:
             return c
+    return None
+
+
+def _resolve_scout_column_token_with_context(
+    token: str,
+    columns: list[str],
+    display_names: dict[str, Any] | None = None,
+    descriptions: dict[str, Any] | None = None,
+) -> str | None:
+    """扩展版列名解析：精确匹配失败后继续尝试 display_name / description。
+
+    用于 _apply_scout_reply_with_llm 中 update_field_understanding 的 column_name
+    解析 —— LLM 可能传业务名（如「店铺收入」）而非原始列名（如「Inc1」）。
+    """
+    # 先走精确匹配
+    exact = _resolve_scout_column_token(token, columns)
+    if exact:
+        return exact
+
+    # 3. display_name 完全匹配
+    dnames = display_names or {}
+    dn_to_col = {str(v).strip(): k for k, v in dnames.items() if v}
+    if token in dn_to_col:
+        return dn_to_col[token]
+
+    # 4. description 包含匹配（模糊但有效）
+    descs = descriptions or {}
+    for c in columns:
+        desc = str(descs.get(c, "") or "")
+        if desc and token in desc:
+            return c
+
     return None
 
 
@@ -487,7 +526,10 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
                 "properties": {
                     "column_name": {
                         "type": "string",
-                        "description": "要更新的字段名，必须是当前字段表格中存在的字段。",
+                        "description": (
+                            "要更新的字段。可以使用原始列名（如 Inc1）或已确认的业务名/中文名"
+                            "（如「店铺收入」），代码会自动映射到真实列名。"
+                        ),
                     },
                     "display_name": {
                         "type": "string",
@@ -1030,7 +1072,7 @@ def _apply_scout_reply_with_llm(
                     continue
 
                 col_t = str(args.get("column_name", "")).strip()
-                c = _resolve_scout_column_token(col_t, columns)
+                c = _resolve_scout_column_token_with_context(col_t, columns, display_names, descs)
                 if not c or c in seen_col:
                     continue
                 seen_col.add(c)

@@ -446,6 +446,20 @@ async def get_project_detail(project_name: str):
     }
 
 
+# ── POST /api/analysis/cancel — 强制终止当前分析 ────
+@app.post("/api/analysis/cancel")
+async def force_cancel_analysis():
+    from hagoku.api.ws_handler import get_orchestrator
+    orch = get_orchestrator()
+    if orch is None:
+        return {"ok": False, "message": "当前没有正在运行的分析"}
+    try:
+        orch.request_cancel()
+        return {"ok": True, "message": "已请求终止分析"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 # ── GET /api/projects/{project_name}/runs — 运行历史列表 ────
 @app.get("/api/projects/{project_name}/runs")
 async def get_project_runs(project_name: str):

@@ -34,16 +34,19 @@ interface WorkspaceStore {
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  activeView: "projects",
+  activeView: (localStorage.getItem('hagoku_active_view') as PanelId) || "projects",
   status: "idle",
   agents: {},
   connectionStatus: "idle",
   projects: [],
-  currentProject: null,
+  currentProject: localStorage.getItem('hagoku_active_project') || null,
   reportFiles: [],
   lastError: null,
 
-  setActiveView: (activeView) => set({ activeView }),
+  setActiveView: (activeView) => {
+    if (activeView) localStorage.setItem('hagoku_active_view', activeView);
+    set({ activeView });
+  },
   setStatus: (status) => set({ status }),
   setAgentStatus: (agent, st) =>
     set((s) => ({
@@ -51,7 +54,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setProjects: (projects) => set({ projects }),
-  setCurrentProject: (currentProject) => set({ currentProject }),
+  setCurrentProject: (currentProject) => {
+    if (currentProject) localStorage.setItem('hagoku_active_project', currentProject);
+    else localStorage.removeItem('hagoku_active_project');
+    set({ currentProject });
+  },
   setReportFiles: (reportFiles) => set({ reportFiles }),
   setLastError: (lastError) => set({ lastError }),
   resetRunUiState: () => set({ status: "idle", agents: {} }),

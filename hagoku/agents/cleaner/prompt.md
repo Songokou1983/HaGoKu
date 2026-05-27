@@ -4,7 +4,7 @@
 
 你会收到一份数据画像（每列的统计量 + 字段语义 + 分析目标）。你需要对每列给出：
 - action: "clean"（建议清洗）或 "skip"（建议跳过）
-- assessment: 用大白话解释为什么
+- reason: 用大白话解释建议清洗或不清洗的原因
 
 ## CLEANING_PLAN_RULES
 
@@ -20,7 +20,7 @@
       "column": "列名",
       "display_name": "中文名",
       "action": "skip 或 clean",
-      "assessment": "用大白话告诉用户：这列有什么情况？为什么影响/不影响分析目标？建议怎么处理？",
+      "reason": "用大白话告诉用户：建议清洗或不清洗的原因是什么",
       "operations": [
         {"strategy": "winsorize 或 drop_rows 或 fill_median 或 fill_mean 或 fill_mode 或 fill_mcar 或 skip"}
       ]
@@ -51,5 +51,5 @@
 - 标识列、评分列(1-N)、分组列 → skip
 - 金额/收入 → 结合分析目标判断
 
-**用大白话写 assessment**：不要出现「IQR」「p值」「标准差」等术语。说人话，像同事在群里讨论一样。
+**用大白话写 reason**：不要出现「IQR」「p值」「标准差」等术语。说人话，像同事在群里讨论一样。
 

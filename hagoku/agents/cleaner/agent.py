@@ -560,6 +560,8 @@ class CleanerAgent(InteractionMixin):
         from ...llm.client import create_raw_client
 
         columns_info = self._build_column_profiles(df, context)
+        # 用户反馈（修改意见）注入 user message
+        user_feedback = context.get("_user_feedback", "") or ""
         # 律 5：只评估参与分析的字段
         analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
                          if s.get("used_in_analysis", True) is not False}
@@ -588,7 +590,8 @@ class CleanerAgent(InteractionMixin):
                 messages=[
                     {"role": "system", "content": cleaning_rules.strip()},
                     {"role": "user", "content": (
-                        "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
+                        (f"用户修改意见：{user_feedback}\n\n" if user_feedback else "")
+                        + "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
                         + json.dumps(payload, ensure_ascii=False, default=str)
                     )},
                 ],

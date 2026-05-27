@@ -2326,41 +2326,45 @@ class Orchestrator:
                         "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
                     })
 
-                # 4. Cleaner: 数据评估 → 用户选择 → 执行（或跳过）
+                # 4. Cleaner: 评估 → 确认/修改（多轮对齐，同 Scout 模式）
                 self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
                     "thought": "正在评估数据清洗需求…",
                 })
                 cleaning_rules = cleaner._load_cleaning_rules()
                 from hagoku.tools.data_io import load_data
                 _raw_df_for_cleaner = load_data(data_path)
+
+                cleaning_revision = 0
                 assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
+                while True:
+                    context["_cleaner_assessment"] = assessment
+                    cleaner_msg = {
+                        "message": "",
+                        "cleaning_assessment": assessment,
+                        "interaction_revision": cleaning_revision,
+                    }
+                    user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                    if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+                    if self._is_user_confirm(user_reply_cleaner, stage="cleaner"):
+                        break
+                    # 用户修改意见 → 重新评估
+                    context["_user_feedback"] = user_reply_cleaner
+                    assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
+                    cleaning_revision += 1
 
-                cleaner_msg = {"message": "", "cleaning_assessment": assessment, "interaction_revision": 0}
-                user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
-                if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
-                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-
-                context["_cleaner_assessment"] = assessment  # 持久化，后续对话可复用
-                skip_cleaning = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
-                if skip_cleaning:
-                    self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
-                        "result_summary": "用户选择跳过清洗",
-                    })
-                    df_clean = _raw_df_for_cleaner
-                    df_raw = _raw_df_for_cleaner
-                    cleaning_report = None
-                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-                    save_data(df_clean, cleaned_path)
-                    cleaned_path_str = str(cleaned_path)
-                    raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
-                    save_data(df_raw, raw_path)
-                    raw_path_str = str(raw_path)
-                else:
-                    df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                        data_path, context,
-                        impact_warning=self.config.manager.cleaning_impact_warning,
-                        emit_completed=False,
-                    )
+                df_clean = _raw_df_for_cleaner
+                df_raw = _raw_df_for_cleaner
+                cleaning_report = None
+                cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
+                save_data(df_clean, cleaned_path)
+                cleaned_path_str = str(cleaned_path)
+                raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
+                save_data(df_raw, raw_path)
+                raw_path_str = str(raw_path)
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+                    "result_summary": f"评估完成，{len(assessment.get('columns',[]))} 列",
+                })
 
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)

@@ -947,9 +947,9 @@ export default function AnalyzePanel() {
             // 清洗评估：结构化展示 LLM 的大白话评估
             const cid = uid();
             const colLines = ca.columns.map((c) =>
-              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "建议清洗" : "跳过"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.reason}</td></tr>`
+              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "清洗" : "不清洗"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.reason}</td></tr>`
             ).join("");
-            const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">说明</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
+            const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">原因</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
             setMessages((prev) => [
               ...prev,
               {
@@ -1254,7 +1254,7 @@ export default function AnalyzePanel() {
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text relative">
       <PanelHeader title="分析">
-        {phase !== "setup" && (
+        {(
           <button
             type="button"
             onClick={handleReset}
@@ -1430,7 +1430,7 @@ export default function AnalyzePanel() {
       )}
 
       {/* ── Query / running / done: conversation view ── */}
-      {phase !== "setup" && (
+      {(
         <>
           {/* Pipeline bar */}
           <div className="px-3 py-2 border-b border-app-border shrink-0">
@@ -1506,21 +1506,12 @@ export default function AnalyzePanel() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => submitUserReply("跳过清洗，直接分析")}
+                    onClick={() => submitUserReply("确认无误")}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
                       bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
                   >
                     <CheckCircle2 size={14} />
-                    跳过清洗，直接分析
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("执行清洗建议")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
-                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
-                      motion-safe:transition-colors"
-                  >
-                    执行清洗建议
+                    确认
                   </button>
                 </div>
               )}
@@ -1563,7 +1554,9 @@ export default function AnalyzePanel() {
                     if (canSendReply) submitUserReply(replyText);
                   }}
                   placeholder={
-                    scoutFieldReviewOpen
+                    waitingAgent === "cleaner" && !cleanerCleaningReviewOpen
+                      ? "不同意建议？输入你的想法后 Enter 发送；确认无误请点上方按钮"
+                      : scoutFieldReviewOpen
                       ? "字段理解不对时输入说明，Enter 发送；确认无误请点上方按钮"
                       : cleanerCleaningReviewOpen
                         ? "补充说明后 Enter 发送；确认结果请点上方按钮"

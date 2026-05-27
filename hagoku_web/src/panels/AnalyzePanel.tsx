@@ -1502,6 +1502,28 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
+              {waitingAgent === "cleaner" && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("跳过清洗，直接分析")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    跳过清洗，直接分析
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("执行清洗建议")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
+                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
+                      motion-safe:transition-colors"
+                  >
+                    执行清洗建议
+                  </button>
+                </div>
+              )}
               {gateOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button

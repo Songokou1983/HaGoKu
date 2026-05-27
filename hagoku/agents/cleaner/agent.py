@@ -560,6 +560,13 @@ class CleanerAgent(InteractionMixin):
         from ...llm.client import create_raw_client
 
         columns_info = self._build_column_profiles(df, context)
+        # 律 5：只评估参与分析的字段
+        analysis_cols = {
+            str(s["column_name"]) for s in context.get("column_semantics", [])
+            if s.get("used_in_analysis", True) is not False
+        }
+        if analysis_cols:
+            columns_info = [c for c in columns_info if c["name"] in analysis_cols]
         query = context.get("query", "") or context.get("analysis_goal", "")
         target = context.get("target", "")
 

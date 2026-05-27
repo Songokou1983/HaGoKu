@@ -2326,18 +2326,43 @@ class Orchestrator:
                         "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
                     })
 
-                # 4. Cleaner: 数据清洗
-                df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                    data_path, context,
-                    impact_warning=self.config.manager.cleaning_impact_warning,
-                    emit_completed=False,
-                )
+                # 4. Cleaner: 数据评估 → 用户选择 → 执行（或跳过）
+                cleaning_rules = cleaner._load_cleaning_rules()
+                from hagoku.tools.data_io import load_data
+                _raw_df_for_cleaner = load_data(data_path)
+                assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
+
+                cleaner_msg = {"message": "", "cleaning_assessment": assessment, "interaction_revision": 0}
+                user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
+                if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+                skip_cleaning = self._is_user_confirm(user_reply_cleaner, stage="cleaner")
+                if skip_cleaning:
+                    self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+                        "result_summary": "用户选择跳过清洗",
+                    })
+                    df_clean = _raw_df_for_cleaner
+                    df_raw = _raw_df_for_cleaner
+                    cleaning_report = None
+                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
+                    save_data(df_clean, cleaned_path)
+                    cleaned_path_str = str(cleaned_path)
+                    raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
+                    save_data(df_raw, raw_path)
+                    raw_path_str = str(raw_path)
+                else:
+                    df_raw, df_clean, cleaning_report, _ = cleaner.run(
+                        data_path, context,
+                        impact_warning=self.config.manager.cleaning_impact_warning,
+                        emit_completed=False,
+                    )
 
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
                 # ── 暂停：清洗结果待用户确认 ───────────────────────────────
-                if cleaning_report is not None:
+                if not skip_cleaning and cleaning_report is not None:
                     cleaner_results = {
                         "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
                         "data_quality": getattr(cleaning_report, "data_quality", "unknown"),

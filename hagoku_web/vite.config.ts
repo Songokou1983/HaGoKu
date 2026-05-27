@@ -17,6 +17,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: { ...API_PROXY },
+    watch: {
+      ignored: ["**/.venv/**", "**/__pycache__/**", "**/.git/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/dist/**", "**/*.db"],
+    },
   },
   // `vite preview` 不走 server.proxy；不配则 /api 打到预览进程本身，列表请求易挂死
   preview: {

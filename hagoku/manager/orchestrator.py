@@ -408,31 +408,78 @@ def _resolve_scout_column_token_with_context(
     columns: list[str],
     display_names: dict[str, Any] | None = None,
     descriptions: dict[str, Any] | None = None,
-) -> str | None:
-    """扩展版列名解析：精确匹配失败后继续尝试 display_name / description。
+) -> list[str]:
+    """将用户或 LLM 给出的字段标识解析为真实列名列表（支持范围记号展开）。
 
     用于 _apply_scout_reply_with_llm 中 update_field_understanding 的 column_name
-    解析 —— LLM 可能传业务名（如「店铺收入」）而非原始列名（如「Inc1」）。
-    """
-    # 先走精确匹配
-    exact = _resolve_scout_column_token(token, columns)
-    if exact:
-        return exact
+    解析 —— LLM 可能传业务名（如「店铺收入」）或范围记号（如「Bos1-3」）。
 
-    # 3. display_name 完全匹配
+    匹配优先级：精确列名 > 范围展开 > 忽略下划线 > display_name > description。
+    纯机械结构查找，不涉及语义判断。
+    """
+    raw = (token or "").strip().strip("`\"'“”‘’")
+    if not raw:
+        return []
+
+    # 1. 精确列名（大小写不敏感）
+    rl = raw.lower()
+    for c in columns:
+        if c.lower() == rl:
+            return [c]
+
+    # 2. 范围记号展开：「Bos1-3」→ 匹配 Bos1, Bos2, Bos3
+    expanded = _expand_column_range(raw, columns)
+    if expanded:
+        return expanded
+
+    # 3. 忽略下划线匹配
+    rl2 = rl.replace("_", "")
+    for c in columns:
+        if c.lower().replace("_", "") == rl2:
+            return [c]
+
+    # 4. display_name 完全匹配
     dnames = display_names or {}
     dn_to_col = {str(v).strip(): k for k, v in dnames.items() if v}
     if token in dn_to_col:
-        return dn_to_col[token]
+        return [dn_to_col[token]]
 
-    # 4. description 包含匹配（模糊但有效）
+    # 5. description 包含匹配
     descs = descriptions or {}
     for c in columns:
         desc = str(descs.get(c, "") or "")
         if desc and token in desc:
-            return c
+            return [c]
 
-    return None
+    return []
+
+
+def _expand_column_range(token: str, columns: list[str]) -> list[str]:
+    """展开范围记号「PrefixN-M」→ 匹配 columns 中所有 Prefix{num}（N ≤ num ≤ M）。
+
+    纯机械字符串匹配，零语义判断。例如：
+      「Bos1-3」 + columns=[Bos1,Bos2,Bos3,Bos4] → [Bos1, Bos2, Bos3]
+      「Inc1-2」  + columns=[Inc1,Inc2,Inc3]      → [Inc1, Inc2]
+    """
+    import re
+    m = re.match(r"^(.+?)(\d+)\s*[-–—]\s*(\d+)$", token)
+    if not m:
+        return []
+    prefix = m.group(1)
+    lo = int(m.group(2))
+    hi = int(m.group(3))
+    if lo > hi:
+        lo, hi = hi, lo  # 容忍倒序如 "3-1"
+    if hi - lo > 20:     # 安全上限
+        return []
+    result: list[str] = []
+    for num in range(lo, hi + 1):
+        candidate = f"{prefix}{num}"
+        for c in columns:
+            if c.lower() == candidate.lower():
+                result.append(c)
+                break
+    return result
 
 
 
@@ -527,8 +574,9 @@ _SCOUT_FIELD_UPDATE_TOOLS = [
                     "column_name": {
                         "type": "string",
                         "description": (
-                            "要更新的字段。可以使用原始列名（如 Inc1）或已确认的业务名/中文名"
-                            "（如「店铺收入」），代码会自动映射到真实列名。"
+                            "要更新的字段。可以使用原始列名（如 Inc1）、业务名/中文名"
+                            "（如「店铺收入」），或范围记号（如「Bos1-3」表示 Bos1,Bos2,Bos3）。"
+                            "代码会自动映射到真实列名并展开范围。"
                         ),
                     },
                     "display_name": {
@@ -1072,53 +1120,55 @@ def _apply_scout_reply_with_llm(
                     continue
 
                 col_t = str(args.get("column_name", "")).strip()
-                c = _resolve_scout_column_token_with_context(col_t, columns, display_names, descs)
-                if not c or c in seen_col:
+                resolved = _resolve_scout_column_token_with_context(col_t, columns, display_names, descs)
+                if not resolved:
                     continue
-                seen_col.add(c)
 
                 d_raw = str(args.get("description", "") or "").strip()
                 dn_raw = str(args.get("display_name", "") or "").strip()
                 role_raw = str(args.get("suggested_role", "") or "").strip()
-
-                updated_something = False
-                if d_raw:
-                    descs[c] = d_raw
-                    # 律 5：同步写入 column_semantics
-                    for s in semantics:
-                        if str(s.get("column_name", "")) == c:
-                            s["description"] = d_raw
-                            break
-                    applied.append(f"{c}←{d_raw}")
-                    updated_something = True
-                if dn_raw:
-                    display_names[c] = dn_raw
-                    # 律 5：同步写入 column_semantics
-                    for s in semantics:
-                        if str(s.get("column_name", "")) == c:
-                            s["display_name"] = dn_raw
-                            break
-                    applied.append(f"{c}:[display]←{dn_raw}")
-                    updated_something = True
-                if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
-                    for s in semantics:
-                        if str(s.get("column_name", "")) == c:
-                            s["suggested_role"] = role_raw
-                            s["role"] = role_raw  # 律 5：同步 role
-                            applied.append(f"{c}:[role]←{role_raw}")
-                            updated_something = True
-                # 处理 used_in_analysis
                 uia = args.get("used_in_analysis")
-                if uia is not None:
-                    for s in semantics:
-                        if str(s.get("column_name", "")) == c:
-                            s["used_in_analysis"] = bool(uia)
-                            applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
-                            updated_something = True
-                if updated_something:
-                    for s in semantics:
-                        if str(s.get("column_name", "")) == c:
-                            s["needs_user_input"] = False
+
+                # 对每个解析到的列应用相同的更新（支持范围展开如 Bos1-3）
+                for c in resolved:
+                    if c in seen_col:
+                        continue
+                    seen_col.add(c)
+
+                    updated = False
+                    if d_raw:
+                        descs[c] = d_raw
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["description"] = d_raw
+                                break
+                        applied.append(f"{c}←{d_raw}")
+                        updated = True
+                    if dn_raw:
+                        display_names[c] = dn_raw
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["display_name"] = dn_raw
+                                break
+                        applied.append(f"{c}:[display]←{dn_raw}")
+                        updated = True
+                    if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["suggested_role"] = role_raw
+                                s["role"] = role_raw  # 律 5：同步 role
+                                applied.append(f"{c}:[role]←{role_raw}")
+                                updated = True
+                    if uia is not None:
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["used_in_analysis"] = bool(uia)
+                                applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
+                                updated = True
+                    if updated:
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["needs_user_input"] = False
 
             # 成功时清除上次的未理解信号
             context.pop("_last_understanding_failure", None)

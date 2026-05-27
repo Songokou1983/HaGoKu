@@ -2327,6 +2327,9 @@ class Orchestrator:
                     })
 
                 # 4. Cleaner: 数据评估 → 用户选择 → 执行（或跳过）
+                self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
+                    "thought": "正在评估数据清洗需求…",
+                })
                 cleaning_rules = cleaner._load_cleaning_rules()
                 from hagoku.tools.data_io import load_data
                 _raw_df_for_cleaner = load_data(data_path)

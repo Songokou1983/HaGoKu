@@ -743,7 +743,10 @@ export default function AnalyzePanel() {
     loadFiles(currentProject);
     fetch(`/api/projects/${currentProject}/detail`)
       .then((r) => r.json())
-      .then((d: { data_path?: string }) => { if (d.data_path) setDataPath(d.data_path); })
+      .then((d: { data_path?: string; last_query?: string }) => {
+        if (d.data_path) setDataPath(d.data_path);
+        if (d.last_query) setQueryText(d.last_query);
+      })
       .catch(() => {});
   }, [currentProject, loadFiles]);
 

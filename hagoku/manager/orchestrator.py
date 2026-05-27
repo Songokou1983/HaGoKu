@@ -2122,6 +2122,7 @@ class Orchestrator:
                 # 对齐条件：用户纯确认  OR  所有字段 needs_user_input=False
                 # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
                 interaction_revision = 0
+                skip_gate = False  # 用户主动确认 → 跳过 gate
                 while True:
                     # 内层：Scout 字段对齐循环
                     while True:
@@ -2174,8 +2175,10 @@ class Orchestrator:
                                 context["_pending_command_text"] += "\n"
                             context["_pending_command_text"] += cmd_result
                         # 对齐判定：LLM 确认 或 所有字段 needs_user_input=False → 出内层循环
-                        # 先由 LLM 判断用户是否确认，再检查字段结构是否对齐
-                        if self._is_user_confirm(user_reply_scout, stage="scout") or _is_scout_aligned(context):
+                        user_confirmed = user_reply_scout and self._is_user_confirm(user_reply_scout, stage="scout")
+                        if user_confirmed or _is_scout_aligned(context):
+                            if user_confirmed:
+                                skip_gate = True  # 用户主动确认 → 跳过 gate
                             break
                         interaction_revision += 1
 
@@ -2215,7 +2218,10 @@ class Orchestrator:
                         # 展示更新后的字段表，回到 Scout 内层循环让用户确认
                         continue
 
-                    # ── 跨阶段闸门：字段对齐后、进入清洗前 ────────────────────────
+                    if skip_gate:
+                        break  # 用户主动确认 → 跳过 gate，直接进 Cleaner
+
+                    # ── 跨阶段闸门：只有字段自动对齐（非用户主动确认）时才展示 ──
                     gate_msg = gate_cleaning_pause_payload(context)
                     gate_msg["interaction_revision"] = interaction_revision
                     gate_msg = self._attach_pause_dialogue_message("scout", gate_msg)

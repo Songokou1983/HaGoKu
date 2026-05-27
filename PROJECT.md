@@ -85,6 +85,33 @@ HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，
 
 **关于模板**：表格列结构、报告章节、分析方法签名——这些都是"办公用品"，由代码定义供 Agent 使用。代码定义**形状**，Agent 填写**内容**。
 
+### 全局工具注册表
+
+HaGoKu 有一个**项目级工具注册表**（`hagoku/tools/registry.py`），所有 Agent 共享。代码只做三件事：注册工具签名、执行工具调用、返回结果。LLM 决定调哪个、什么时候调。
+
+```
+hagoku/tools/
+├── registry.py          # AgentTools 注册表（单例）：register / to_openai / dispatch
+├── agent_tool_defs.py   # 工具定义：每个 Tool = name + description + parameters + handler + agents
+└── ...
+```
+
+**新增工具只需在 `agent_tool_defs.py` 加一个 `Tool(...)` 注册**，指定 `agents=["scout","cleaner"]` 控制哪些 Agent 可用。代码不做任何 if-else 语义路由——LLM 通过 function calling 主动选择工具，代码机械执行 `dispatch()`。
+
+**已注册工具**（7 个）：
+
+| 工具 | 可用 Agent | 用途 |
+|------|----------|------|
+| `get_column_stats` | 全部 | 获取某列统计量（min/q25/median/q75/max/mean） |
+| `get_sample_rows` | 全部 | 获取某列抽样值 |
+| `list_columns` | 全部 | 列出所有列名和类型 |
+| `group_stats` | cleaner, analyst | 按某列分组查看另一列统计 |
+| `update_field_understanding` | scout | 更新字段中文名/含义 |
+| `update_field_role` | scout | 设置 target/features/ignored |
+| `restrict_analysis_to` | scout | 限定参与分析的字段 |
+
+**检验标准**（律 4 延伸）：新增 Agent 能力时，若要在 prompt 里手写 JSON 格式让 LLM 输出 → 说明缺工具，应在注册表补。
+
 ---
 
 ## 通道完备性十律

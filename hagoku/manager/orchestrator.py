@@ -33,6 +33,10 @@ from .command_parser import parse as parse_command, ParsedCommand
 # WebSocket「重置 / 取消」暂停时使用的哨兵（用户正常回复不会使用此串）
 HAGOKU_CANCEL_PAUSE_TOKEN = "__HAGOKU_CANCEL__"
 
+# 律 3：多轮对话历史窗口 — 注入轮数 vs 持久化轮数（1 轮 = user + assistant 两条消息）
+_CONV_HISTORY_INJECT_TURNS = 3   # 注入到 LLM prompt 的最近轮数
+_CONV_HISTORY_KEEP_TURNS = 10    # context 中保留的最近轮数
+
 def _md_table_cell(s: str) -> str:
     """Markdown 表单元格：去换行、转义竖线。"""
     return (s or "").replace("|", "｜").replace("\n", " ").strip()
@@ -752,24 +756,18 @@ def _apply_restrict_analysis_to(
 
     keep_set: set[str] = set(resolved)
 
-    # 补集 = 全部列 - 保留列
-    complement = [c for c in columns if c not in keep_set]
-
-    # 保留列 → used_in_analysis=True
-    for c in keep_set:
-        for s in semantics:
-            if str(s.get("column_name", "")) == c:
-                s["used_in_analysis"] = True
-                s["needs_user_input"] = False
-                applied.append(f"{c}:[used_in_analysis]←true")
-
-    # 补集 → used_in_analysis=False
-    for c in complement:
-        for s in semantics:
-            if str(s.get("column_name", "")) == c:
-                s["used_in_analysis"] = False
-                s["needs_user_input"] = False
-                applied.append(f"{c}:[used_in_analysis]←false")
+    # 单次遍历：按列名索引 semantics，对每列设置 used_in_analysis（O(N)）
+    sem_by_name: dict[str, dict[str, Any]] = {
+        str(s.get("column_name", "")): s for s in semantics
+    }
+    for col in columns:
+        s = sem_by_name.get(col)
+        if s is None:
+            continue
+        target = col in keep_set
+        s["used_in_analysis"] = target
+        s["needs_user_input"] = False
+        applied.append(f"{col}:[used_in_analysis]←{'true' if target else 'false'}")
 
     # 触发重推断信号（律 9）
     context["_pending_reinference"] = True
@@ -811,6 +809,9 @@ def _apply_scout_reply_with_llm(
             "timestamp": datetime.now().isoformat(),
             "consumed": False,
         })
+        # 裁剪：保留最近 50 条，防 context 单向膨胀
+        if len(utterances) > 50:
+            context["utterances"] = utterances[-50:]
 
     descs: dict[str, Any] = context.setdefault("column_descriptions", {})
     display_names: dict[str, Any] = context.setdefault("column_display_names", {})
@@ -960,8 +961,9 @@ def _apply_scout_reply_with_llm(
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_msg},
     ]
-    # 注入历史轮次（最多保留最近 6 轮，避免 prompt 过长）
-    for turn in conv_history[-6:]:
+    # 注入最近 _CONV_HISTORY_INJECT_TURNS 轮（每轮 user+assistant 两条消息）
+    max_inject = _CONV_HISTORY_INJECT_TURNS * 2
+    for turn in conv_history[-max_inject:]:
         messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
     messages.append({"role": "user", "content": user_msg})
 
@@ -989,9 +991,10 @@ def _apply_scout_reply_with_llm(
             tc_names = [tc.function.name if hasattr(tc, "function") else str(tc) for tc in tool_calls]
             assistant_turn = f"[调用了工具: {', '.join(tc_names)}] " + assistant_turn
         conv_history.append({"role": "assistant", "content": assistant_turn})
-        # 保留最近 10 轮（20 条消息），避免 context 膨胀
-        if len(conv_history) > 20:
-            conv_history = conv_history[-20:]
+        # 保留最近 _CONV_HISTORY_KEEP_TURNS 轮，避免 context 膨胀
+        max_keep = _CONV_HISTORY_KEEP_TURNS * 2
+        if len(conv_history) > max_keep:
+            conv_history = conv_history[-max_keep:]
         context["_conversation_history"] = conv_history
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────

@@ -459,6 +459,71 @@ def test_真实场景_restrict_analysis_to_e2e():
     )
 
 
+def test_真实场景_restrict_analysis_to_业务名解析():
+    """律 4 完整通路：LLM 用**业务名**调 restrict_analysis_to，
+    _resolve_to_column_names 通过 column_descriptions 中的业务描述命中列名。
+
+    test0526 现行犯的真实场景：用户说「店铺收入」，LLM 更可能传业务名而非列名。
+    本测试覆盖 _resolve_to_column_names 的 description 匹配分支（非列名直通）。
+    """
+    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+
+    ctx = _make_real_scene_context()
+    # 模拟 Scout 第一轮已把业务描述填进去
+    ctx["column_descriptions"] = {
+        "Code": "店铺编号",
+        "Period": "时间周期",
+        "Inc1": "店铺收入",
+        "Inc2": "其它收入",
+        "Inc3": "杂项收入",
+        "BU": "事业部",
+        "StoreID": "店铺ID",
+        "Bos1": "费用项",
+    }
+
+    # LLM 用业务名调 restrict_analysis_to（非列名）
+    spy = LLMSpy(
+        response_factory=lambda messages: _make_tool_call_response(
+            '{"included_fields": ["店铺编号", "时间周期", "店铺收入"]}',
+            function_name="restrict_analysis_to",
+        )
+    )
+
+    applied = _apply_scout_reply_with_llm(
+        ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model"
+    )
+
+    semantics = ctx.get("column_semantics", [])
+    sem = {str(s["column_name"]): s for s in semantics}
+
+    # 业务名通过 column_descriptions 命中
+    assert sem["Code"]["used_in_analysis"] is True, (
+        "「店铺编号」应通过 description 命中 Code"
+    )
+    assert sem["Period"]["used_in_analysis"] is True, (
+        "「时间周期」应通过 description 命中 Period"
+    )
+    assert sem["Inc1"]["used_in_analysis"] is True, (
+        "「店铺收入」应通过 description 命中 Inc1"
+    )
+
+    # 补集排除（未在 included_fields 中的字段）
+    complement = {"BU", "Inc2", "Inc3", "StoreID", "Bos1"}
+    for c in complement:
+        assert sem[c]["used_in_analysis"] is False, (
+            f"补集字段 {c} 应标记 used_in_analysis=False"
+        )
+
+    # 律 9 重推断信号
+    assert ctx.get("_pending_reinference") is True, (
+        "业务名命中后仍应触发重推断"
+    )
+    # 律 7：成功调用无未理解信号
+    assert ctx.get("_last_understanding_failure") is None, (
+        "业务名命中时不应有未理解信号"
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 律 6：信息抵达正向契约的元测试 —— 确认 spy 工具本身正常工作
 # ─────────────────────────────────────────────────────────────────────────────

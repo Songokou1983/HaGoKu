@@ -934,6 +934,9 @@ def _apply_scout_reply_with_llm(
             parts.append(f"含义: {current_desc}")
         if current_role:
             parts.append(f"当前角色: {current_role}")
+        uia = sem.get("used_in_analysis")
+        if uia is not None:
+            parts.append(f"参与分析: {'是' if uia else '否'}")
         if not current_dn and not current_desc:
             parts.append("(尚未理解)")
         field_state_lines.append(" | ".join(parts))
@@ -989,7 +992,7 @@ def _apply_scout_reply_with_llm(
         f"{field_state}\n\n"
         "对话历史：\n"
         f"{chat_history}\n\n"
-        "可用工具：update_field_understanding（更新字段中文名/含义）、"
+        "可用工具：update_field_understanding（更新中文名/含义/是否参与分析）、"
         "update_field_role（设置目标/特征/忽略）、"
         "restrict_analysis_to（限定参与分析的字段，其余排除）。\n\n"
         f"用户最新消息：「{raw}」"

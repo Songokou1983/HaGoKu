@@ -1060,6 +1060,16 @@ def _apply_scout_reply_with_llm(
                 else:
                     continue
 
+                if func_name == "update_field_table":
+                    from hagoku.tools.registry import agent_tools
+                    try:
+                        args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+                    except (_json.JSONDecodeError, TypeError):
+                        continue
+                    result = agent_tools.dispatch("update_field_table", args, context)
+                    applied.extend(result.get("updated", []))
+                    continue
+
                 if func_name == "update_field_role":
                     _apply_role_update(context, tool_calls, columns, applied, semantics)
                     continue

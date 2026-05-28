@@ -114,6 +114,56 @@ agent_tools.register(Tool(
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 统一表格工具（所有 Agent 可用）
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_update_field_table(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """统一表格更新。代码只做 merge 写入，不判断。"""
+    updates = args.get("columns", args.get("updates", {}))
+    if isinstance(updates, list):
+        updates = {str(c.get("column", "")): c for c in updates if c.get("column")}
+    if not isinstance(updates, dict) or not updates:
+        return {"error": "columns 为空"}
+
+    semantics = ctx.get("column_semantics", [])
+    sem_by_name = {str(s.get("column_name", "")): s for s in semantics}
+    applied = []
+
+    for col, info in updates.items():
+        if not isinstance(info, dict):
+            continue
+        s = sem_by_name.get(col)
+        if s is None:
+            s = {"column_name": col}
+            semantics.append(s)
+            sem_by_name[col] = s
+        for field in ("display_name", "description", "role", "cleaning", "cleaning_reason", "suggested_role"):
+            if field in info:
+                s[field] = info[field]
+        if "in_analysis" in info:
+            s["in_analysis"] = info["in_analysis"]
+            s["used_in_analysis"] = info["in_analysis"]
+        applied.append(col)
+
+    ctx["column_semantics"] = semantics
+    return {"updated": applied}
+
+
+agent_tools.register(Tool(
+    name="update_field_table",
+    description="更新字段表格。一次调用可修改多列的 display_name/description/role/in_analysis/cleaning/cleaning_reason。只需传要改的字段。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "columns": {"type": "object", "description": "key=列名, value=要更新的字段"},
+        },
+        "required": ["columns"],
+    },
+    handler=_handle_update_field_table,
+    agents=["scout", "cleaner", "analyst"],
+))
+
+# ═══════════════════════════════════════════════════════════════════
 # Scout 字段理解工具
 # ═══════════════════════════════════════════════════════════════════
 

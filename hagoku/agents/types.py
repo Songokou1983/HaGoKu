@@ -108,13 +108,10 @@ def _build_fallback_schema() -> dict[str, Any]:
                         "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
                         "used_in_analysis": {
                             "type": "boolean",
-                            "description": "该字段是否参与本次分析。结合用户分析目标判断："
-                            "能服务于分析目标的字段 → true；"
-                            "纯标识列/常量列/无关列 → false；"
-                            "不确定 → 不设置此字段。",
+                            "description": "该字段是否参与本次分析。根据分析目标判断，必须明确选择 true 或 false。",
                         },
                     },
-                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"],
+                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description", "used_in_analysis"],
                 },
             },
             "target_columns": {"type": "array", "items": {"type": "string"}, "description": "从用户问题中识别到的目标变量候选列表（列名数组）"},

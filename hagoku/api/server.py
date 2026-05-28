@@ -360,14 +360,18 @@ async def clear_project_history(project_name: str):
         runs_dir = proj_dir / "runs"
         if runs_dir.exists():
             shutil.rmtree(runs_dir)
-        # 删除 kanban
-        kanban = proj_dir / "kanban.db"
-        if kanban.exists():
-            kanban.unlink()
-        # 清除 memory
+        # 删除记忆文件
+        for f in ("progress.yaml", "kanban.db", "process_log.md", "handover_notes.md", "context.md"):
+            fp = proj_dir / f
+            if fp.exists():
+                fp.unlink()
+        # 清除 SQLite memory
         from hagoku.storage.database import HaGoKuDB
         db = HaGoKuDB.get_instance()
         db.conn.execute("DELETE FROM memory WHERE project_id = ?", (project_name,))
+        db.conn.commit()
+        # 删除项目数据库记录（下次分析重新创建）
+        db.conn.execute("DELETE FROM projects WHERE id = ?", (project_name,))
         db.conn.commit()
     except Exception as exc:
         raise HTTPException(500, str(exc))

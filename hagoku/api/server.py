@@ -371,9 +371,7 @@ async def clear_project_history(project_name: str):
             ("memory", "project_id"),
             ("project_state", "project_id"),
             ("runs", "project_id"),
-            ("artifacts", "project_id"),
             ("data_sources", "project_id"),
-            ("findings", "project_id"),
             ("projects", "id"),
         ]:
             db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))

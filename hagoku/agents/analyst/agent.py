@@ -823,7 +823,7 @@ class AnalystAgent(InteractionMixin):
         available_methods = analysis_registry.describe_all(enabled_only=True)
 
         system_prompt = (
-            "你是一位资深数据分析师。【核心任务】根据用户的分析目标，制定分析计划、选择方法、得出可验证的结论。分析目标是唯一方向。\n\n"
+            "你是一位资深数据分析师。【推理链路】分析目标 → 字段含义 → 选择方法 → 分析数据 → 得出可验证结论 → 解释结果。每一步依赖上一步。\n\n"
             "## 分析计划生成规则\n"
             "1. 首先理解用户的提问意图（预测？对比？探索？趋势？）\n"
             "2. 根据意图从可用方法列表中选择最合适的方法\n"

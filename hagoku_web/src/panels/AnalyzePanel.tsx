@@ -526,13 +526,6 @@ function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
   const pure = typeof inner.pure_confirm === "boolean" ? inner.pure_confirm : false;
   const pStr = pending.length > 0 ? pending.join(", ") : "（无）";
 
-  // 律 7：LLM 未理解用户输入 → 显式告知用户
-  const uf = inner.understanding_failure;
-  if (uf && typeof uf === "object" && (uf as Record<string, unknown>).raw_text) {
-    const snippet = String((uf as Record<string, unknown>).raw_text).slice(0, 60);
-    return `系统未理解你的输入「${snippet}」，请尝试换一种说法（例如直接给出列名、或更具体的业务关系）。`;
-  }
-
   if (lines.length > 0 || count > 0) {
     const joined = lines.length > 0 ? lines.join("；") : "—";
     return `字段理解写入 ${count} 条: ${joined}。仍需确认的列: ${pStr}`;

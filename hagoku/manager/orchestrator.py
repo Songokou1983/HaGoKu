@@ -2812,17 +2812,13 @@ class Orchestrator:
         parsed_intent: Any | None = None,
     ) -> dict[str, Any]:
         """创建分析计划：LLM 唯一决策引擎，零硬编码规则。"""
-        plan = self._call_llm_for_plan(query, parsed_intent=parsed_intent)
-        if plan is not None:
-            return plan
-        # LLM 不可达时的最小兜底
-        return {
-            "plan_name": "通用分析",
-            "agents": ["scout", "cleaner", "analyst", "reporter"],
-            "analyst_focus": ["regression", "hypothesis_test", "correlation"],
-            "query": query,
-            "llm_generated": False,
-        }
+        try:
+            return self._call_llm_for_plan(query, parsed_intent=parsed_intent)
+        except RuntimeError:
+            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                "thought": "LLM 计划生成失败：LLM 不可达，请检查 API 配置后重试。",
+            })
+            raise
 
     def _call_llm_for_plan(
         self,
@@ -2887,10 +2883,9 @@ class Orchestrator:
             return plan
 
         except Exception as e:
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": f"LLM 计划生成失败: {e}",
-            })
-            return None
+            raise RuntimeError(
+                f"Manager LLM 计划生成失败：LLM 不可达，请检查配置。原始错误: {e}"
+            ) from e
 
     def _persist_scout_field_updates(
         self,
@@ -2989,26 +2984,32 @@ class Orchestrator:
             return ""
 
         # 一层：LLM 主模型生成消息
-        msg = self._try_generate_phase_llm(
-            phase=phase, data_quality=data_quality,
-            n_ops=n_ops, ops_desc=ops_desc,
-            n_findings=n_findings, findings_desc=findings_desc,
-            sf=sf, pw=pw,
-            retry=False,
-        )
-        if msg is not None:
-            return msg
+        try:
+            msg = self._try_generate_phase_llm(
+                phase=phase, data_quality=data_quality,
+                n_ops=n_ops, ops_desc=ops_desc,
+                n_findings=n_findings, findings_desc=findings_desc,
+                sf=sf, pw=pw,
+                retry=False,
+            )
+            if msg is not None:
+                return msg
+        except RuntimeError:
+            pass  # LLM 不可达，尝试下一层
 
         # 二层：LLM 快速模型重试
-        msg = self._try_generate_phase_llm(
-            phase=phase, data_quality=data_quality,
-            n_ops=n_ops, ops_desc=ops_desc,
-            n_findings=n_findings, findings_desc=findings_desc,
-            sf=sf, pw=pw,
-            retry=True,
-        )
-        if msg is not None:
-            return msg
+        try:
+            msg = self._try_generate_phase_llm(
+                phase=phase, data_quality=data_quality,
+                n_ops=n_ops, ops_desc=ops_desc,
+                n_findings=n_findings, findings_desc=findings_desc,
+                sf=sf, pw=pw,
+                retry=True,
+            )
+            if msg is not None:
+                return msg
+        except RuntimeError:
+            pass  # LLM 仍不可达，走确定性兜底
 
         # 三层：LLM 完全不可达时的纯数据兜底（零语义归因）
         return self._build_fallback_phase_message(
@@ -3071,11 +3072,10 @@ class Orchestrator:
             )
             msg = response.choices[0].message.content or ""
             return msg.strip()
-        except Exception:
-            logger.warning(
-                "_try_generate_phase_llm: LLM 不可达（retry=%s）", retry, exc_info=True
-            )
-            return None
+        except Exception as e:
+            raise RuntimeError(
+                f"_try_generate_phase_llm: LLM 不可达（retry={retry}）。原始错误: {e}"
+            ) from e
 
     def _build_fallback_phase_message(
         self,
@@ -3380,7 +3380,11 @@ class Orchestrator:
             return valid_updates if valid_updates else None
 
         except Exception as e:
-            print(f"   ⚠️ 没理解：{e}")
+            context["_last_understanding_failure"] = {
+                "raw_text": user_input,
+                "error": str(e),
+                "stage": "field_update",
+            }
             return None
 
     def respond(

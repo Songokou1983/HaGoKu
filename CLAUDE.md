@@ -6,10 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains **one primary project**: `hagoku/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
 
+## 铁律（PR 级硬约束）→ 详见 [AGENTS.md](AGENTS.md)
+
+**铁律 1（零硬编码）**：业务概念分类 / 中文同义识别 / 自然语言意图判断 → 全部 LLM 做，代码不准碰。
+**铁律 2（LLM 失败）**：只能 raise RuntimeError / 写 `_last_understanding_failure` / 部分落地 / 拒绝写入。禁止 except 兜底。
+**铁律 3（提交前自检）**：每次改动后必须跑过下面三组。任一变红 = 改坏了。
+
+```bash
+.venv/bin/python -m pytest tests/test_doctrine_compliance.py -q
+.venv/bin/python -m pytest tests/test_product/test_information_arrival.py -q
+.venv/bin/python -m pytest --tb=short -q
+```
+
 ## hagoku/ — HaGoKu Studio 多 Agent 数据分析平台
 
 > 项目灵魂、Agent 表、架构原则、命令参考、技术栈 → 见 **[PROJECT.md](PROJECT.md)**（唯一真相源）。
-> 文档索引、环境变量、测试命令 → 见 **[DEV.md](DEV.md)**。
+> 文档索引、环境变量 → 见 **[DEV.md](DEV.md)**。
 
 ### 当前架构关键点（已实施的 P0 项）
 
@@ -39,7 +51,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 > 删除的硬编码常量（`DISTRIBUTION_CATEGORICAL_THRESHOLD` 等）位于 `hagoku/agents/constants.py`。完整审查 → `docs/AGENT_HARDCODED_REVIEW.md`。
 
-**代码层角色限定**：serialize → validate → transport。任何涉及"判断"（意图、字段语义、分布形状、分析策略、用户消息）的环节，信息必须完整到达 LLM。
+**代码层角色限定**：serialize → validate → transport。判断的事 LLM 做——详见 [AGENTS.md](AGENTS.md)。
 
 ---
 

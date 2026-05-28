@@ -150,15 +150,12 @@ class TestCreatePlanLLM:
         mock_call.assert_called_once()
 
     @patch.object(Orchestrator, "_call_llm_for_plan")
-    def test_llm_fails_fallback_generic(self, mock_call, config):
-        """LLM 失败 → 降级到通用计划"""
-        mock_call.return_value = None
+    def test_llm_fails_raises_runtime_error(self, mock_call, config):
+        """LLM 失败 → 抛出 RuntimeError，不再静默降级"""
+        mock_call.side_effect = RuntimeError("LLM 不可达")
         orch = Orchestrator(config=config)
-        plan = orch._create_plan("任何问题")
-        assert plan["plan_name"] == "通用分析"
-        assert plan["llm_generated"] is False
-        assert "scout" in plan["agents"]
-        assert "reporter" in plan["agents"]
+        with pytest.raises(RuntimeError):
+            orch._create_plan("任何问题")
 
     @patch.object(Orchestrator, "_call_llm_for_plan")
     def test_plan_name_contains_semantic_match(self, mock_call, config):
@@ -246,26 +243,24 @@ class TestCallLlmForPlan:
         assert "analyst" in result["agents"]
 
     @patch("hagoku.manager.orchestrator.create_structured_llm_client")
-    def test_llm_exception_returns_none(self, mock_create_client):
+    def test_llm_exception_raises_runtime_error(self, mock_create_client):
         mock_create_client.side_effect = ConnectionError("llama-server down")
 
         config = HaGoKuConfig()
         orch = Orchestrator(config=config)
-        result = orch._call_llm_for_plan("test")
-
-        assert result is None
+        with pytest.raises(RuntimeError):
+            orch._call_llm_for_plan("test")
 
     @patch("hagoku.manager.orchestrator.create_structured_llm_client")
-    def test_llm_timeout_returns_none(self, mock_create_client):
+    def test_llm_timeout_raises_runtime_error(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_client.chat.completions.create.side_effect = TimeoutError("timeout")
 
         config = HaGoKuConfig()
         orch = Orchestrator(config=config)
-        result = orch._call_llm_for_plan("test")
-
-        assert result is None
+        with pytest.raises(RuntimeError):
+            orch._call_llm_for_plan("test")
 
     @patch("hagoku.manager.orchestrator.create_structured_llm_client")
     def test_lazy_client_initialization(self, mock_create_client):
@@ -316,13 +311,13 @@ class TestEventEmission:
         assert plan_events[0].data["source"] == "llm"
 
     @patch("hagoku.manager.orchestrator.create_structured_llm_client")
-    def test_llm_failure_emits_thinking(self, mock_create):
+    def test_llm_failure_emits_thinking_and_raises(self, mock_create):
         mock_create.side_effect = ConnectionError("server down")
         config = HaGoKuConfig()
         orch = Orchestrator(config=config)
-        plan = orch._create_plan("test query")
+        with pytest.raises(RuntimeError):
+            orch._create_plan("test query")
 
-        assert plan["plan_name"] == "通用分析"
         thinking_events = [
             e for e in orch.event_bus.events
             if e.event_type.value == "agent_thinking"

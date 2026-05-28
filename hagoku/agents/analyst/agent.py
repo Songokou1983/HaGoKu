@@ -884,11 +884,9 @@ class AnalystAgent(InteractionMixin):
             )
             raw = response.choices[0].message.content or ""
         except Exception as e:
-            self._emit(
-                EventType.AGENT_THINKING,
-                {"thought": f"LLM 分析规划失败，回退到机械序列：{e}"},
-            )
-            return []
+            raise RuntimeError(
+                f"Analyst LLM 分析规划失败：LLM 不可达，请检查 API 配置。原始错误: {e}"
+            ) from e
 
         # 解析 JSON
         try:
@@ -908,12 +906,10 @@ class AnalystAgent(InteractionMixin):
                         result = _json.loads(match.group())
                     else:
                         raise
-                except Exception:
-                    self._emit(
-                        EventType.AGENT_THINKING,
-                        {"thought": f"LLM 分析计划 JSON 解析失败，回退到机械序列"},
-                    )
-                    return []
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Analyst LLM 输出解析失败：通道异常，必须修复后重跑。原始错误: {e}"
+                    ) from e
 
         steps = result.get("steps") or []
         if not steps:

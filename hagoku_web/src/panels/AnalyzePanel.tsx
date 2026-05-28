@@ -1430,7 +1430,7 @@ export default function AnalyzePanel() {
       )}
 
       {/* ── Query / running / done: conversation view ── */}
-      {(
+      {phase !== "setup" && (
         <>
           {/* Pipeline bar */}
           <div className="px-3 py-2 border-b border-app-border shrink-0">

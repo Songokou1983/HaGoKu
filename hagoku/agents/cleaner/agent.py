@@ -602,32 +602,77 @@ class CleanerAgent(InteractionMixin):
                     prev_lines.append(f"  {c.get('column','')}: {c.get('action','')} — {c.get('reason',c.get('assessment',''))}")
                 prev_text = "\n".join(prev_lines) + "\n\n"
 
-        messages.append({"role": "user", "content": (
-            (f"用户修改意见：{user_feedback}\n\n" if user_feedback else "")
-            + prev_text
-            + "请评估以下数据，只输出 JSON，不要输出解释或其他内容：\n\n"
-            + json.dumps(payload, ensure_ascii=False, default=str)
-        )})
+        # 拼自然语言上下文（不限制 LLM 输出格式）
+        ctx_parts = []
+        if prev_text:
+            ctx_parts.append(prev_text)
+        if user_feedback:
+            ctx_parts.append(f"用户说：{user_feedback}")
+        ctx_parts.append(f"数据：{json.dumps(payload, ensure_ascii=False, default=str)}")
+        messages.append({"role": "user", "content": "\n\n".join(ctx_parts)})
+
+        # function calling 多轮对话模式（对齐 Scout）
+        from hagoku.tools.registry import agent_tools as _agt
+        _tools = _agt.to_openai("cleaner") + [{
+            "type": "function",
+            "function": {
+                "name": "submit_assessment",
+                "description": "提交清洗评估结果",
+                "parameters": {
+                    "type": "object", "properties": {
+                        "summary": {"type": "string"},
+                        "columns": {"type": "array", "items": {"type": "object", "properties": {
+                            "column": {"type": "string"}, "display_name": {"type": "string"},
+                            "action": {"type": "string", "enum": ["clean", "skip"]},
+                            "reason": {"type": "string"},
+                            "operations": {"type": "array", "items": {"type": "object", "properties": {"strategy": {"type": "string"}}}},
+                        }, "required": ["column", "action", "reason"]}},
+                    }, "required": ["summary", "columns"],
+                },
+            },
+        }]
 
         client = create_raw_client(self.llm_config)
-        try:
-            response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=messages,
-                temperature=0.0,
-                max_tokens=2048,
-            )
-            raw = response.choices[0].message.content or ""
-            # 记录到共享对话历史
-            ch = context.get("_conversation_history")
-            if isinstance(ch, list):
-                ch.append({"role": "user", "content": json.dumps(payload, ensure_ascii=False)[:500]})
-                ch.append({"role": "assistant", "content": (raw or "")[:500]})
-        except Exception as e:
-            raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+        # 多轮工具调用循环
+        for _round in range(5):
+            try:
+                response = client.chat.completions.create(
+                    model=self.llm_config.model,
+                    messages=messages,
+                    temperature=0.0, max_tokens=2048,
+                    tools=_tools, tool_choice="auto",
+                )
+            except Exception as e:
+                raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
 
-        if not raw or not raw.strip():
-            return {"summary": "LLM 返回空响应，跳过清洗评估", "columns": []}
+            msg = response.choices[0].message
+            tc = getattr(msg, "tool_calls", None)
+            txt = msg.content or ""
+
+            if tc:
+                for t in tc:
+                    fn = t.function
+                    args = json.loads(fn.arguments) if fn.arguments else {}
+                    if fn.name == "submit_assessment":
+                        return self._parse_assessment(json.dumps(args, ensure_ascii=False))
+                    # 执行工具并追加结果
+                    result = _agt.dispatch(fn.name, args, context, df)
+                    tc_id = getattr(t, "id", "") or ""
+                    messages.append({"role": "assistant", "content": txt, "tool_calls": [{
+                        "id": tc_id, "type": "function",
+                        "function": {"name": fn.name, "arguments": fn.arguments},
+                    }]})
+                    messages.append({"role": "tool", "tool_call_id": tc_id,
+                                     "content": json.dumps(result, ensure_ascii=False, default=str)})
+                continue
+
+            if txt.strip():
+                # LLM 自由文本回复 → 追加到对话，继续循环
+                messages.append({"role": "assistant", "content": txt})
+                messages.append({"role": "user", "content": "请继续。如果已经完成评估，调用 submit_assessment 提交结果。"})
+                continue
+
+        return {"summary": "LLM 未在 5 轮内完成评估", "columns": []}
 
         return self._parse_assessment(raw)
 

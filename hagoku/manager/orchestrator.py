@@ -994,6 +994,8 @@ def _apply_scout_reply_with_llm(
         "restrict_analysis_to（限定参与分析列，其余排除）。\n\n"
         "display_name 用于简短中文标签（≤8字），description 用于业务含义说明（完整句子）。"
         "用户说的短标签放 display_name，不要和 description 重复。\n\n"
+        "参与分析字段的选择：从分析目标中提取关键词，匹配字段名称和含义。"
+        "匹配的设为参与分析，明显无关的标识列/编号列设为不参与。\n\n"
         "当前字段表格：\n"
         f"{field_state}\n\n"
         "对话历史：\n"

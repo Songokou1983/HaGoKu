@@ -511,37 +511,15 @@ function uid() { return `m-${++_idCtr}-${Date.now()}`; }
 
 /** 由后端 `user_input_received` 结构化字段拼一条事实行（随状态变化，非固定话术库） */
 function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
-  const pendingRaw = inner.columns_still_needing_input;
-  const pending = Array.isArray(pendingRaw)
-    ? pendingRaw.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "").map((x) => (x as string).trim())
-    : [];
   const appliedRaw = inner.applied_field_updates;
   const lines = Array.isArray(appliedRaw)
     ? appliedRaw.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "")
     : [];
-  const count =
-    typeof inner.parse_applied_count === "number" && Number.isFinite(inner.parse_applied_count)
-      ? inner.parse_applied_count
-      : lines.length;
-  const pure = typeof inner.pure_confirm === "boolean" ? inner.pure_confirm : false;
-  const pStr = pending.length > 0 ? pending.join(", ") : "（无）";
-
-  // LLM 的文本回复优先展示
   const llmReplies = lines.filter((l: string) => l.startsWith("[llm_reply]"));
-  const otherLines = lines.filter((l: string) => !l.startsWith("[llm_reply]"));
   if (llmReplies.length > 0) {
     return llmReplies.map((l: string) => l.slice(11)).join("\n");
   }
-
-  if (otherLines.length > 0 || count > 0) {
-    const joined = otherLines.length > 0 ? otherLines.join("；") : "—";
-    return `字段理解写入 ${otherLines.length} 条: ${joined}。仍需确认的列: ${pStr}`;
-  }
-  if (pure) {
-    return `本轮判定为仅确认（未新增解析行）。仍需确认的列: ${pStr}`;
-  }
-  const rep = typeof inner.reply === "string" ? inner.reply : "";
-  return `本轮 0 条写入（回复 ${rep.length} 字）。仍需确认的列: ${pStr}`;
+  return "";
 }
 
 function formatStageProceedFactLine(label: "清洗" | "统计", inner: Record<string, unknown>): string {

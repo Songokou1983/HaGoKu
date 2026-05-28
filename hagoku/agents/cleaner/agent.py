@@ -581,34 +581,50 @@ class CleanerAgent(InteractionMixin):
             intro += f"\n用户反馈：{user_feedback}"
         messages.append({"role": "user", "content": intro})
 
-        # 单次 JSON 模式：Qwen 35B 不支持 function calling self-submit
+        # 工具：从注册表拉，代码不加任何额外 tool
         from hagoku.tools.registry import agent_tools as _agt
-        columns_info = self._build_column_profiles(df, context)
-        analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", []) if s.get("used_in_analysis", True) is not False}
-        if analysis_cols: columns_info = [c for c in columns_info if c["name"] in analysis_cols]
-        payload = {"analysis_goal": query, "n_rows": len(df), "columns": columns_info}
-        if user_feedback: payload["user_feedback"] = user_feedback
-        messages.append({"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)})
+        _tools = _agt.to_openai("cleaner")
+
         client = create_raw_client(self.llm_config)
-        try:
-            resp = client.chat.completions.create(model=self.llm_config.model, messages=messages, temperature=0.0, max_tokens=2048)
-            raw = resp.choices[0].message.content or ""
-        except Exception as e: raise RuntimeError(f"Cleaner LLM: {e}") from e
-        if not raw or not raw.strip(): return {"summary": "", "columns": []}
-        import re as _re
-        result = None
-        try: result = json.loads(raw)
-        except json.JSONDecodeError:
-            cl = raw.strip(); cl = _re.sub(r"^.*?```(?:json)?\s*", "", cl); cl = _re.sub(r"\s*```\s*$", "", cl)
-            m = _re.search(r"\{.*\}", cl, re.DOTALL)
-            if m: result = json.loads(m.group())
-            else:
-                conv_history.append({"role": "assistant", "content": raw})
+        for _round in range(5):
+            try:
+                response = client.chat.completions.create(
+                    model=self.llm_config.model,
+                    messages=messages, temperature=0.0, max_tokens=2048,
+                    tools=_tools, tool_choice="auto",
+                )
+            except Exception as e:
+                raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+
+            msg = response.choices[0].message
+            tc = getattr(msg, "tool_calls", None)
+            txt = msg.content or ""
+
+            if tc:
+                for t in tc:
+                    fn = t.function
+                    args = json.loads(fn.arguments) if fn.arguments else {}
+                    conv_history.append({"role": "assistant", "content": f"[调用] {fn.name}({fn.arguments})"})
+                    context["_conversation_history"] = conv_history
+                    if fn.name == "submit_assessment":
+                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
+                    result = _agt.dispatch(fn.name, args, context, df)
+                    tc_id = getattr(t, "id", "") or ""
+                    messages.append({"role": "assistant", "content": txt, "tool_calls": [{
+                        "id": tc_id, "type": "function",
+                        "function": {"name": fn.name, "arguments": fn.arguments},
+                    }]})
+                    messages.append({"role": "tool", "tool_call_id": tc_id,
+                                     "content": json.dumps(result, ensure_ascii=False, default=str)})
+                continue
+
+            if txt.strip():
+                messages.append({"role": "assistant", "content": txt})
+                conv_history.append({"role": "assistant", "content": txt})
                 context["_conversation_history"] = conv_history
-                return {"summary": raw, "columns": []}
-        conv_history.append({"role": "assistant", "content": json.dumps(result, ensure_ascii=False)[:500]})
-        context["_conversation_history"] = conv_history
-        return {"summary": result.get("summary", ""), "columns": result.get("columns", [])}
+                continue
+
+        return {"summary": "评估未完成", "columns": []}
 
     def _parse_assessment(self, raw: str) -> dict[str, Any]:
         """解析 LLM 评估输出，只提取 action 做路由，assessment 原样保留。"""

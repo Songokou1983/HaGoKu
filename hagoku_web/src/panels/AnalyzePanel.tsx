@@ -862,6 +862,7 @@ export default function AnalyzePanel() {
 
         // 暂停点：结构化 field_review 用工作流卡片展示；message 由编排层填入简短 Agent 气泡（可与卡片并存）
         if (d.event_type === "user_input_requested") {
+          setGateOpen(false);  // 每次暂停默认关，有 gate 才开
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
           const fr = parseFieldReview(dataObj.field_review);
@@ -871,7 +872,6 @@ export default function AnalyzePanel() {
           const incRev = parsePauseInteractionRevision(dataObj);
           const incomingRevision = incRev !== null ? incRev : Infinity;
           if (fr) {
-            setGateOpen(false);  // 字段核对阶段不显示 gate 按钮
             // 多轮对齐：同 revision 或递增 revision → 更新同一张卡片（不堆叠）；revision 未变时
             // 常见于闸门「还有补充」回到字段表（后端已递增 revision；此处兜底同号原地更新）。
             const patchInPlace =
@@ -1014,8 +1014,6 @@ export default function AnalyzePanel() {
                 },
               ]);
             }
-          } else {
-            setGateOpen(false);
           }
           const raw = dataObj.message;
           const agentMsg = typeof raw === "string" ? raw.trim() : "";

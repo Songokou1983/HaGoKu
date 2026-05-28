@@ -456,11 +456,11 @@ def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
         )
         import json
         return json.loads(response.choices[0].message.content)
-    except Exception:
-        # 兜底：保持向后兼容
-        if user_input.lower() in ("好", "是", "ok", "继续", "next", "y", "yes"):
-            return {"type": "confirm", "updates": {}}
-        return {"type": "correction", "updates": {}}
+    except Exception as e:
+        # 路径 1：LLM 不可达 → 抛出 RuntimeError，让用户看到
+        raise RuntimeError(
+            f"LLM 意图分类失败：LLM 不可达，请检查 API 配置。原始错误: {e}"
+        ) from e
 ```
 
 ---

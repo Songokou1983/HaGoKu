@@ -34,6 +34,11 @@ pytest tests/ -q
 ruff check hagoku/                 # lint
 mypy hagoku/                       # 类型检查
 
+# ⚠️ 铁律 3：每次代码改动后必须跑过这三组，任一变红 = 改坏了
+.venv/bin/python -m pytest tests/test_doctrine_compliance.py -q      # 零硬编码守门
+.venv/bin/python -m pytest tests/test_product/test_information_arrival.py -q  # 信息抵达契约
+.venv/bin/python -m pytest --tb=short -q                             # 全套回归
+
 # 启动后端 API（FastAPI + WebSocket）
 hagoku-api   # http://localhost:8000
 

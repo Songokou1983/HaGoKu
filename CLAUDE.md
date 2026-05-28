@@ -6,17 +6,68 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains **one primary project**: `hagoku/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。
 
-## 铁律（PR 级硬约束）→ 详见 [AGENTS.md](AGENTS.md)
+## 铁律（PR 级硬约束 — 违反任何一条 PR 直接拒）
 
-**铁律 1（零硬编码）**：业务概念分类 / 中文同义识别 / 自然语言意图判断 → 全部 LLM 做，代码不准碰。
-**铁律 2（LLM 失败）**：只能 raise RuntimeError / 写 `_last_understanding_failure` / 部分落地 / 拒绝写入。禁止 except 兜底。
-**铁律 3（提交前自检）**：每次改动后必须跑过下面三组。任一变红 = 改坏了。
+开始任何代码动作前，请先做这两件事：
+
+1. 读完仓库根目录的 [AGENTS.md](AGENTS.md)
+2. 读完 [PROJECT.md](PROJECT.md) 的三个章节：
+   - §「代码边界」（哪些事 LLM 干、哪些事代码干）
+   - §「通道完备性十律」（10 条正向契约）
+   - §「失败处理」§「代码层合法动作清单」（LLM 失败时唯一允许的代码动作）
+
+### 铁律 1（零硬编码）
+
+任何"业务概念分类 / 自然语言意图判断 / 中文同义识别"必须由 LLM 完成。代码不准做。如果你想写：
+
+- `["收入", "营收", "销售额", ...]` 这样的关键词列表
+- `re.search(r"收入|营收|销售", text)` 这样的中文语义正则
+- `if intent == "预测" elif intent == "对比"` 这样的中文 if-elif 链
+- 函数名带 `_infer_`/`_detect_`/`_classify_` 但内部没调 LLM
+
+→ 全部禁止。停下来想：这个判断能不能写到 system prompt 里让 LLM 做？
+能 → 写到 prompt 里，删掉代码。
+不能（纯运算/IO/序列化）→ 才允许写代码。
+
+### 铁律 2（LLM 失败的唯一合法路径）
+
+当 LLM 调用失败时，你只能做四件事：
+
+- **A.** `raise RuntimeError(...)` — LLM 不可达 / 通道异常时
+- **B.** 写 `ctx["_last_understanding_failure"] = {raw_text, ...}` 然后 `return []` — LLM 调用成功但没产生有效工具调用时
+- **C.** 落地能落的工具调用，未落的留空 — LLM 给出部分输出时
+- **D.** 拒绝写入权威结构（同 B） — LLM 输出与原话明显矛盾时
+
+禁止写：`except: return []` / `except: return None` / 默认值兜底 / 缓存+规则降级。
+
+### 铁律 3（提交前自检）
+
+完成任何代码改动后，必须跑过这三组测试。任一变红 = 改坏了：
 
 ```bash
 .venv/bin/python -m pytest tests/test_doctrine_compliance.py -q
 .venv/bin/python -m pytest tests/test_product/test_information_arrival.py -q
 .venv/bin/python -m pytest --tb=short -q
 ```
+
+### 常见错误模式（每次都会犯，请警惕）
+
+| 你的本能 | 正确做法 |
+|---------|---------|
+| 测试不绿 → 加规则让它绿 | 检查是不是 prompt 写错了 / 工具 schema 不全 |
+| LLM 调用失败 → 加 except 兜底 | `raise RuntimeError` 让用户看见 |
+| 看到字段名（"收入"/"销售额"）→ 加 dict 映射 | 让 LLM 用 `_resolve_to_column_names` 之类的工具映射 |
+| 防御性编程 "万一 LLM 返回空"→ 加默认值 | 写 `_last_understanding_failure` 让用户看到没理解 |
+
+### 拿不准时问自己唯一一个问题
+
+> "这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"
+
+| 答案 | 行动 |
+|------|------|
+| 能 → 这是 LLM 的活 | 删掉代码，写到 prompt 里 |
+| 不能（纯运算/IO/序列化）→ 代码的活 | 写代码，但确保不夹带业务判断 |
+| 拿不准 | 默认是 LLM 的活（LLM 主导是项目第一原则） |
 
 ## hagoku/ — HaGoKu Studio 多 Agent 数据分析平台
 

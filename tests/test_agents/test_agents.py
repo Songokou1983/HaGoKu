@@ -117,7 +117,7 @@ class TestScribeRecoverFieldDescriptions:
         assert result == {"A": "年龄", "B": "收入"}
 
     def test_missing_fallback_gives_placeholder(self, tmp_path, bus, llm_cfg):
-        """无有效 LLM 连接时，为缺失列返回基础占位（不硬编码假值）。"""
+        """无有效 LLM 连接时，为缺失列返回基础占位 + _scribe_fallback 标记。"""
         from hagoku.agents._scribe.agent import ScribeAgent
 
         scribe = ScribeAgent(llm_cfg, bus, tmp_path)
@@ -133,7 +133,8 @@ class TestScribeRecoverFieldDescriptions:
         for col in ("B", "C"):
             assert col in result
             assert isinstance(result[col], str)
-            assert len(result[col]) > 0  # 至少一个占位描述
+        # 铁律 2：降级路径必须有标记，调用方可区分 LLM 产出 vs 占位
+        assert result.get("_scribe_fallback") is True
 
     def test_scout_missing_triggers_needs_input_no_hardcode(self, tmp_path, bus, llm_cfg):
         """Scout 端到端：缺失字段仅标记 needs_user_input，不填充硬编码。"""

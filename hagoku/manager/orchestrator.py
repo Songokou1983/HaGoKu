@@ -147,18 +147,8 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
         role = str(s.get("suggested_role", "")).strip()
         role_display = _ROLE_DISPLAY_MAP.get(role, role)
 
-        # used_in_analysis: LLM 直接决策优先；仅当 LLM 未设置时用角色推导
-        if "used_in_analysis" in s and s.get("used_in_analysis") is not None:
-            used_in_analysis = bool(s.get("used_in_analysis"))
-        else:
-            # target 和各类 feature 角色默认参与分析
-            if role in ("target", "feature") or role.endswith("_feature"):
-                used_in_analysis = True
-            elif role in ("identifier", "ignore", "unknown") or role == "text_feature":
-                used_in_analysis = False
-            else:
-                # time_index 等中间角色保持待定
-                used_in_analysis = None
+        # used_in_analysis: LLM 直接决策，代码不做角色推导
+        used_in_analysis = bool(s.get("used_in_analysis")) if s.get("used_in_analysis") is not None else None
         rows.append({
             "field_name": name,
             "chinese_name": dname,

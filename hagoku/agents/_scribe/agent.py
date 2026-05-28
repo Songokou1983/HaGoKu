@@ -788,5 +788,6 @@ class ScribeAgent:
                 merged[col] = f"字段 {col}（{dtype_hint}）"
             else:
                 merged[col] = f"字段 {col}"
+        merged["_scribe_fallback"] = True  # 标记降级，调用方可据此区分 LLM 产出 vs 占位
         return merged
 

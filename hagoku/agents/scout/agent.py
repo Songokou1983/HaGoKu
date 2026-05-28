@@ -925,12 +925,10 @@ class ScoutAgent(InteractionMixin):
                 role = "target" if col == context.get("target") else "feature"
                 sem["suggested_role"] = role
                 context.setdefault("variable_roles", {})[col] = role
-                if sem.get("used_in_analysis") is None:
-                    sem["used_in_analysis"] = True
+                # used_in_analysis 由 LLM 直接决策，代码不做推导
             else:
                 context.setdefault("variable_roles", {})[col] = sem.get("suggested_role", "unknown")
-                if sem.get("used_in_analysis") is None:
-                    sem["used_in_analysis"] = False
+                # used_in_analysis 由 LLM 直接决策，代码不做推导
 
     def _generate_confirmation_message(self, column_semantics: list, context: dict) -> str:
         """用 LLM 生成字段确认的 Markdown 表（字段名｜理解名称｜含义理解）。"""

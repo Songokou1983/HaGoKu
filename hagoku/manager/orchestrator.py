@@ -988,13 +988,14 @@ def _apply_scout_reply_with_llm(
         f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{command_context}"
-        "当前字段表格：\n"
+        "当前字段表格（你对每个字段的全部理解）：\n"
         f"{field_state}\n\n"
         "对话历史：\n"
         f"{chat_history}\n\n"
         "可用工具：update_field_understanding（更新中文名/含义/是否参与分析）、"
         "update_field_role（设置目标/特征/忽略）、"
         "restrict_analysis_to（限定参与分析的字段，其余排除）。\n\n"
+        "注意：字段信息是联动的。更新一个字段的含义后，请同时检查它的角色和参与分析状态是否需要调整。\n\n"
         f"用户最新消息：「{raw}」"
     )
 

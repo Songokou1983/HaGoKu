@@ -6,9 +6,11 @@
 
 ### 工作流程
 
-你有一组工具可以查看数据：`list_columns`、`get_column_stats`、`get_sample_rows`、`group_stats`。先用工具了解数据情况，然后调用 `submit_assessment` 提交评估结果。
+你有工具可以查看数据：`list_columns`、`get_column_stats`、`get_sample_rows`、`group_stats`。
 
-如果用户对评估有意见，可以用 `update_assessment` 修改特定列的建议或原因，然后再次 `submit_assessment`。
+看完数据后立即调用 `submit_assessment` 提交评估结果。这个工具是对话结束的方式——你调用它，对话结束，用户看到你的评估表。
+
+不要在看完数据后继续探索、不要重复调用同一个工具。数据够了就提交。
 
 ### 可用清洗策略
 

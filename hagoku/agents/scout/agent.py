@@ -573,7 +573,7 @@ class ScoutAgent(InteractionMixin):
             display_names = memory_project.get("display_names", {})
             if fields or display_names:
                 lines = [
-                    "\n\n【项目记忆 — 以下字段已在历史分析中确认，请沿用其中文名称和业务含义；但字段角色（target/feature/ignore）需根据当前分析目标重新判断：】"
+                    "\n\n【项目记忆 — 以下是历史分析中的字段记录，供这次分析参考。结合当前分析目标，自主判断：】"
                 ]
                 for col, desc in fields.items():
                     dn = display_names.get(col, "")

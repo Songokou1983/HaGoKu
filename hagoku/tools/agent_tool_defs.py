@@ -41,8 +41,8 @@ def _handle_get_sample_rows(args: dict, _ctx: dict, df: pd.DataFrame | None) -> 
     n = int(args.get("n", 10))
     if df is None or col not in df.columns:
         return {"error": f"列 {col} 不存在"}
-    vals = df[col].dropna().head(n).tolist()
-    return {"column": col, "sample": [str(v) for v in vals], "count": len(vals)}
+    vals = df[col].dropna().unique()[:n].tolist()
+    return {"column": col, "sample": [str(v) for v in vals], "unique_count": len(vals), "total": len(df[col].dropna())}
 
 
 def _handle_list_columns(_args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
@@ -172,6 +172,34 @@ agent_tools.register(Tool(
     },
     handler=_handle_update_field_role,
     agents=["scout"],
+))
+
+agent_tools.register(Tool(
+    name="submit_assessment",
+    description="提交清洗评估结果。action 只有 clean 或 skip，reason 是大白话原因说明",
+    parameters={
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string", "description": "整体评估"},
+            "columns": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string"},
+                        "display_name": {"type": "string"},
+                        "action": {"type": "string", "enum": ["clean", "skip"]},
+                        "reason": {"type": "string"},
+                        "operations": {"type": "array", "items": {"type": "object", "properties": {"strategy": {"type": "string"}}}},
+                    },
+                    "required": ["column", "action", "reason"],
+                },
+            },
+        },
+        "required": ["summary", "columns"],
+    },
+    handler=lambda args, ctx, df: args,
+    agents=["cleaner"],
 ))
 
 agent_tools.register(Tool(

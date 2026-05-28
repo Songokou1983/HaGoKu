@@ -559,87 +559,38 @@ class CleanerAgent(InteractionMixin):
         """
         from ...llm.client import create_raw_client
 
-        columns_info = self._build_column_profiles(df, context)
-        # 用户反馈（修改意见）注入 user message
-        user_feedback = context.get("_user_feedback", "") or ""
-        # 律 5：只评估参与分析的字段
-        analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
-                         if s.get("used_in_analysis", True) is not False}
-        if analysis_cols:
-            columns_info = [c for c in columns_info if c["name"] in analysis_cols]
         query = context.get("query", "") or context.get("analysis_goal", "")
-        target = context.get("target", "")
-
-        payload = {
-            "analysis_goal": query or "未指定",
-            "target_column": target,
-            "n_rows": len(df),
-            "n_cols": len(df.columns),
-            "columns": columns_info,
-        }
+        user_feedback = context.get("_user_feedback", "") or ""
 
         if not cleaning_rules.strip():
-            raise RuntimeError(
-                "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。"
-            )
+            raise RuntimeError("Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。")
 
-        # 注入对话历史（律 3：多轮上下文）
+        # 纯通道：只给列名，LLM 自己调工具看数据
+        analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
+                         if s.get("used_in_analysis", True) is not False}
+        col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
+
+        # 拼 messages：系统规则 + 对话历史 + 当前上下文
         conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": cleaning_rules.strip()},
-        ]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": cleaning_rules.strip()}]
         for turn in conv_history[-6:]:
             messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
 
-        # 带上轮评估结果（如果有）
-        prev_assessment = context.get("_cleaner_assessment")
-        prev_text = ""
-        if prev_assessment:
-            prev_cols = prev_assessment.get("columns", [])
-            if prev_cols:
-                prev_lines = ["上轮评估结果："]
-                for c in prev_cols:
-                    prev_lines.append(f"  {c.get('column','')}: {c.get('action','')} — {c.get('reason',c.get('assessment',''))}")
-                prev_text = "\n".join(prev_lines) + "\n\n"
-
-        # 拼自然语言上下文（不限制 LLM 输出格式）
-        ctx_parts = []
-        if prev_text:
-            ctx_parts.append(prev_text)
+        intro = f"分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
-            ctx_parts.append(f"用户说：{user_feedback}")
-        ctx_parts.append(f"数据：{json.dumps(payload, ensure_ascii=False, default=str)}")
-        messages.append({"role": "user", "content": "\n\n".join(ctx_parts)})
+            intro += f"\n用户反馈：{user_feedback}"
+        messages.append({"role": "user", "content": intro})
 
-        # function calling 多轮对话模式（对齐 Scout）
+        # 工具：从注册表拉，代码不加任何额外 tool
         from hagoku.tools.registry import agent_tools as _agt
-        _tools = _agt.to_openai("cleaner") + [{
-            "type": "function",
-            "function": {
-                "name": "submit_assessment",
-                "description": "提交清洗评估结果",
-                "parameters": {
-                    "type": "object", "properties": {
-                        "summary": {"type": "string"},
-                        "columns": {"type": "array", "items": {"type": "object", "properties": {
-                            "column": {"type": "string"}, "display_name": {"type": "string"},
-                            "action": {"type": "string", "enum": ["clean", "skip"]},
-                            "reason": {"type": "string"},
-                            "operations": {"type": "array", "items": {"type": "object", "properties": {"strategy": {"type": "string"}}}},
-                        }, "required": ["column", "action", "reason"]}},
-                    }, "required": ["summary", "columns"],
-                },
-            },
-        }]
+        _tools = _agt.to_openai("cleaner")
 
         client = create_raw_client(self.llm_config)
-        # 多轮工具调用循环
         for _round in range(5):
             try:
                 response = client.chat.completions.create(
                     model=self.llm_config.model,
-                    messages=messages,
-                    temperature=0.0, max_tokens=2048,
+                    messages=messages, temperature=0.0, max_tokens=2048,
                     tools=_tools, tool_choice="auto",
                 )
             except Exception as e:
@@ -654,8 +605,7 @@ class CleanerAgent(InteractionMixin):
                     fn = t.function
                     args = json.loads(fn.arguments) if fn.arguments else {}
                     if fn.name == "submit_assessment":
-                        return self._parse_assessment(json.dumps(args, ensure_ascii=False))
-                    # 执行工具并追加结果
+                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
                     result = _agt.dispatch(fn.name, args, context, df)
                     tc_id = getattr(t, "id", "") or ""
                     messages.append({"role": "assistant", "content": txt, "tool_calls": [{
@@ -667,14 +617,10 @@ class CleanerAgent(InteractionMixin):
                 continue
 
             if txt.strip():
-                # LLM 自由文本回复 → 追加到对话，继续循环
                 messages.append({"role": "assistant", "content": txt})
-                messages.append({"role": "user", "content": "请继续。如果已经完成评估，调用 submit_assessment 提交结果。"})
                 continue
 
-        return {"summary": "LLM 未在 5 轮内完成评估", "columns": []}
-
-        return self._parse_assessment(raw)
+        return {"summary": "评估未完成", "columns": []}
 
     def _parse_assessment(self, raw: str) -> dict[str, Any]:
         """解析 LLM 评估输出，只提取 action 做路由，assessment 原样保留。"""

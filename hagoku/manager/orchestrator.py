@@ -996,7 +996,7 @@ def _apply_scout_reply_with_llm(
         f"{field_state}\n\n"
         "对话历史：\n"
         f"{chat_history}\n\n"
-        f"用户最新消息：「{raw}」"
+        f"用户最新消息：「{raw}」\n\n请用中文回复用户，告知你做了什么或理解了什么。如果不理解用户的意思，直接告诉他。"
     )
 
     # ── 律 3：同阶段多轮记忆 — 注入前 N-1 轮的对话历史 ──
@@ -1188,18 +1188,13 @@ def _apply_scout_reply_with_llm(
                 "stage": "scout_field_review",
             }
         else:
-            # 成功时清除上次的未理解信号
             context.pop("_last_understanding_failure", None)
-            utts = context.get("utterances")
-            if isinstance(utts, list) and utts:
-                utts[-1]["consumed"] = True
-            # LLM 的文本回复原样返回，由前端展示
-            if _raw_text and _raw_text.strip():
-                applied.append(f"[llm_reply]{_raw_text.strip()}")
-            return applied
+        # ── LLM 文本回复原样保留 ──
+        if _raw_text and _raw_text.strip():
+            context["_last_llm_reply"] = _raw_text.strip()
+        return applied
 
     except Exception as e:
-        # LLM 失败 → 记录日志，返回 []，不阻断流程
         if raw and not applied:
             context["_last_understanding_failure"] = {
                 "raw_text": raw,
@@ -1249,6 +1244,7 @@ def scout_user_input_received_payload(
     return {
         "reply": user_reply,
         "applied_field_updates": list(applied_scout),
+        "llm_reply": context.get("_last_llm_reply", ""),
         "interaction_revision": interaction_revision,
         "parse_applied_count": len(applied_scout),
         "parse_failed": parse_failed,

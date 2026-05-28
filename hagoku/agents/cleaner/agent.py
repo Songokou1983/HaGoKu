@@ -808,7 +808,6 @@ class CleanerAgent(InteractionMixin):
                 ],
                 temperature=0.0,
                 max_tokens=4096,
-                response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content or ""
         except Exception as e:

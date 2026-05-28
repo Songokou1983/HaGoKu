@@ -511,15 +511,8 @@ function uid() { return `m-${++_idCtr}-${Date.now()}`; }
 
 /** 由后端 `user_input_received` 结构化字段拼一条事实行（随状态变化，非固定话术库） */
 function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
-  const appliedRaw = inner.applied_field_updates;
-  const lines = Array.isArray(appliedRaw)
-    ? appliedRaw.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "")
-    : [];
-  const llmReplies = lines.filter((l: string) => l.startsWith("[llm_reply]"));
-  if (llmReplies.length > 0) {
-    return llmReplies.map((l: string) => l.slice(11)).join("\n");
-  }
-  return "";
+  const llmReply = typeof inner.llm_reply === "string" ? inner.llm_reply : "";
+  return llmReply;
 }
 
 function formatStageProceedFactLine(label: "清洗" | "统计", inner: Record<string, unknown>): string {

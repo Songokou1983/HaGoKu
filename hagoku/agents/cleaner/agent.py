@@ -576,7 +576,7 @@ class CleanerAgent(InteractionMixin):
         for turn in conv_history[-6:]:
             messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
 
-        intro = f"分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
+        intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
         messages.append({"role": "user", "content": intro})

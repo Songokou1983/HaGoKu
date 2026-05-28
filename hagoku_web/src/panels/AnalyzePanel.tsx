@@ -1262,7 +1262,17 @@ export default function AnalyzePanel() {
   }, [currentProject, loadFiles]);
 
   const selectedFileName = dataPath ? dataPath.split("/").pop() ?? dataPath : null;
-  const canStart = !!currentProject && !!dataPath && connectionStatus === "connected";
+  const [fileExists, setFileExists] = useState(false);
+  useEffect(() => {
+    if (!currentProject || !dataPath) { setFileExists(false); return; }
+    fetch(`/api/projects/${currentProject}/files`)
+      .then(r => r.json())
+      .then((d: { files?: Array<{path: string}> }) => {
+        setFileExists((d.files || []).some((f: {path: string}) => f.path === dataPath));
+      })
+      .catch(() => setFileExists(false));
+  }, [currentProject, dataPath]);
+  const canStart = !!currentProject && !!dataPath && fileExists && connectionStatus === "connected";
   const scoutFieldReviewOpen =
     Boolean(activeFieldReviewId) && waitingAgent === "scout";
   const cleanerCleaningReviewOpen =

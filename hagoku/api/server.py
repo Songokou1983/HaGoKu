@@ -356,22 +356,27 @@ async def clear_project_history(project_name: str):
     if not proj_dir.exists():
         raise HTTPException(404, "Project not found")
     try:
-        # 删除 runs
+        # 删除文件系统记录
         runs_dir = proj_dir / "runs"
         if runs_dir.exists():
             shutil.rmtree(runs_dir)
-        # 删除记忆文件（跳过 kanban.db，运行时可能被锁定）
         for f in ("progress.yaml", "process_log.md", "handover_notes.md", "context.md"):
             fp = proj_dir / f
             if fp.exists():
                 fp.unlink()
-        # 清除 SQLite memory
+        # 清除 SQLite 所有记录
         from hagoku.storage.database import HaGoKuDB
         db = HaGoKuDB.get_instance()
-        db.conn.execute("DELETE FROM memory WHERE project_id = ?", (project_name,))
-        db.conn.commit()
-        # 删除项目数据库记录（下次分析重新创建）
-        db.conn.execute("DELETE FROM projects WHERE id = ?", (project_name,))
+        for table, col in [
+            ("memory", "project_id"),
+            ("project_state", "project_id"),
+            ("runs", "project_id"),
+            ("artifacts", "project_id"),
+            ("data_sources", "project_id"),
+            ("findings", "project_id"),
+            ("projects", "id"),
+        ]:
+            db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))
         db.conn.commit()
     except Exception as exc:
         raise HTTPException(500, str(exc))

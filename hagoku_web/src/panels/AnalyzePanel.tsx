@@ -871,6 +871,7 @@ export default function AnalyzePanel() {
           const incRev = parsePauseInteractionRevision(dataObj);
           const incomingRevision = incRev !== null ? incRev : Infinity;
           if (fr) {
+            setGateOpen(false);  // 字段核对阶段不显示 gate 按钮
             // 多轮对齐：同 revision 或递增 revision → 更新同一张卡片（不堆叠）；revision 未变时
             // 常见于闸门「还有补充」回到字段表（后端已递增 revision；此处兜底同号原地更新）。
             const patchInPlace =

@@ -348,6 +348,32 @@ async def update_project(project_name: str, req: UpdateProjectRequest):
     return {"project": project_name, "updated": True}
 
 
+# ── POST /api/projects/{project_name}/clear-history — 清除历史 ─
+@app.post("/api/projects/{project_name}/clear-history")
+async def clear_project_history(project_name: str):
+    import shutil
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    try:
+        # 删除 runs
+        runs_dir = proj_dir / "runs"
+        if runs_dir.exists():
+            shutil.rmtree(runs_dir)
+        # 删除 kanban
+        kanban = proj_dir / "kanban.db"
+        if kanban.exists():
+            kanban.unlink()
+        # 清除 memory
+        from hagoku.storage.database import HaGoKuDB
+        db = HaGoKuDB.get_instance()
+        db.conn.execute("DELETE FROM memory WHERE project_id = ?", (project_name,))
+        db.conn.commit()
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"project": project_name, "cleared": True}
+
+
 # ── DELETE /api/projects/{project_name} — 删除项目 ──────────
 @app.delete("/api/projects/{project_name}")
 async def delete_project(project_name: str):

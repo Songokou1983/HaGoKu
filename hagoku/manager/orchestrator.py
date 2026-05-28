@@ -2152,19 +2152,13 @@ class Orchestrator:
                         user_reply_scout = self._pause_and_wait("scout", scout_msg)
                         if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
                             return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                        cmd_result = ""  # 初始化，避免确认分支 UnboundLocalError
-                        # 纯确认 → 跳 LLM，不浪费调用也不触发律 7
-                        if user_reply_scout and self._is_user_confirm(user_reply_scout, stage="scout"):
-                            applied_scout = []
-                        else:
-                            # 命令检测：先给用户反馈，再原样转发给 LLM 理解
-                            cmd_result = self._handle_command_if_present(user_reply_scout, "scout", context)
-                            applied_scout = apply_scout_user_field_reply_to_context(
-                                context,
-                                user_reply_scout or "",
-                                llm_client=self.llm_quick_raw,
-                                llm_model=self.config.llm.model_quick or self.config.llm.model,
-                            )
+                        cmd_result = self._handle_command_if_present(user_reply_scout, "scout", context)
+                        applied_scout = apply_scout_user_field_reply_to_context(
+                            context,
+                            user_reply_scout or "",
+                            llm_client=self.llm_quick_raw,
+                            llm_model=self.config.llm.model_quick or self.config.llm.model,
+                        )
                         # LLM 未产出任何字段更新时记日志（纯可观测性，不做兜底判断）
                         if user_reply_scout and not applied_scout:
                             import logging as _logging

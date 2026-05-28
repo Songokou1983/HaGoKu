@@ -986,6 +986,8 @@ def _apply_scout_reply_with_llm(
 
     system_msg = (
         f"{analysis_purpose_text}"
+        "以上分析目标是你所有判断的依据——哪些字段参与分析、字段是什么角色、是否需要清洗，"
+        "都以这个目标为准。\n\n"
         f"{ap_summary}"
         f"{command_context}"
         "可用工具：update_field_table（一次更新多列多字段，推荐）、"

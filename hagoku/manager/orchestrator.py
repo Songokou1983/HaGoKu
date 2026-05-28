@@ -1188,14 +1188,15 @@ def _apply_scout_reply_with_llm(
                 "stage": "scout_field_review",
             }
         else:
-            # 成功时清除上次的未理解信号（如果有）
+            # 成功时清除上次的未理解信号
             context.pop("_last_understanding_failure", None)
-            # 标记 utterances 为已消费
             utts = context.get("utterances")
             if isinstance(utts, list) and utts:
                 utts[-1]["consumed"] = True
-
-        return []
+            # LLM 的文本回复原样返回，由前端展示
+            if _raw_text and _raw_text.strip():
+                applied.append(f"[llm_reply]{_raw_text.strip()}")
+            return applied
 
     except Exception as e:
         # LLM 失败 → 记录日志，返回 []，不阻断流程

@@ -526,9 +526,16 @@ function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
   const pure = typeof inner.pure_confirm === "boolean" ? inner.pure_confirm : false;
   const pStr = pending.length > 0 ? pending.join(", ") : "（无）";
 
-  if (lines.length > 0 || count > 0) {
-    const joined = lines.length > 0 ? lines.join("；") : "—";
-    return `字段理解写入 ${count} 条: ${joined}。仍需确认的列: ${pStr}`;
+  // LLM 的文本回复优先展示
+  const llmReplies = lines.filter((l: string) => l.startsWith("[llm_reply]"));
+  const otherLines = lines.filter((l: string) => !l.startsWith("[llm_reply]"));
+  if (llmReplies.length > 0) {
+    return llmReplies.map((l: string) => l.slice(11)).join("\n");
+  }
+
+  if (otherLines.length > 0 || count > 0) {
+    const joined = otherLines.length > 0 ? otherLines.join("；") : "—";
+    return `字段理解写入 ${otherLines.length} 条: ${joined}。仍需确认的列: ${pStr}`;
   }
   if (pure) {
     return `本轮判定为仅确认（未新增解析行）。仍需确认的列: ${pStr}`;

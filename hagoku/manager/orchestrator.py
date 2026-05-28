@@ -992,6 +992,8 @@ def _apply_scout_reply_with_llm(
         "update_field_understanding（更新单列）、"
         "update_field_role（设置目标/特征/忽略）、"
         "restrict_analysis_to（限定参与分析列，其余排除）。\n\n"
+        "display_name 用于简短中文标签（≤8字），description 用于业务含义说明（完整句子）。"
+        "用户说的短标签放 display_name，不要和 description 重复。\n\n"
         "当前字段表格：\n"
         f"{field_state}\n\n"
         "对话历史：\n"

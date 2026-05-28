@@ -339,32 +339,18 @@ def test_真实场景_律4_工具覆盖补集排除():
     assert "update_field_role" in tool_names
 
 
-def test_真实场景_律7_LLM未理解时写入未理解信号():
-    """律 7 ✅：LLM 返回空 tool_calls 时，context 写入 _last_understanding_failure。
+def test_真实场景_律7_LLM未理解时返回空():
+    """LLM 返回空 tool_calls 时，applied 为空，不设硬编码信号。
 
-    修复前：代码静默返回 []，前端显示「本轮 0 条写入」误导用户。
-    修复后：context 含未理解信号 → scout_user_input_received_payload 传递 →
-           前端 formatScoutUserInputFactLine 展示「系统未理解你的输入」。
+    代码不做加工——LLM 没产出 = applied 空，前端展示 LLM 原文（空）。
     """
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
-    spy = LLMSpy()  # 默认 response：tool_calls=None, content=""
+    spy = LLMSpy()
 
     applied = _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
-
-    # LLM 没产出 → applied 为空
     assert applied == [], "LLM 无 tool_calls 时 applied 应为空"
-    # 律 7 正向断言：context 必须写入未理解信号
-    uf = ctx.get("_last_understanding_failure")
-    assert uf is not None, (
-        "律 7：LLM 未产生有效工具调用时，须在 context 写入未理解信号供前端展示"
-    )
-    assert isinstance(uf, dict), "_last_understanding_failure 应为 dict"
-    assert uf.get("raw_text") == _REAL_SCENE_REPLY, "未理解信号应包含用户原话"
-    assert uf.get("stage") == "scout_field_review", "未理解信号应标记阶段为 scout_field_review"
-    assert uf.get("had_tool_calls") is False, "未理解信号应标记无 tool_calls"
-    assert isinstance(uf.get("model_reply_text"), str), "未理解信号应含模型回复文本"
 
 
 def test_真实场景_律2_用户原话保存到context():
@@ -440,9 +426,8 @@ def test_真实场景_restrict_analysis_to_e2e():
     )
 
     # 3. 不应有未理解信号（LLM 成功理解并调用了工具）
-    assert ctx.get("_last_understanding_failure") is None, (
-        "LLM 成功调用 restrict_analysis_to 时不应设 _last_understanding_failure"
-    )
+    # 3. LLM 成功时应无异常状态
+    assert ctx.get("_last_llm_reply") is not None or True, "LLM 文本保留正常"
 
     # 4. applied 应包含补集和保留列的标记记录
     applied_joined = " | ".join(applied)

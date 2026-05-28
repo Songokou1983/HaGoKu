@@ -2348,9 +2348,11 @@ class Orchestrator:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                     if self._is_user_confirm(user_reply_cleaner, stage="cleaner"):
                         break
-                    # 用户修改意见 → 重新评估
+                    # 用户修改意见 → 通过 LLM function calling 更新评估
                     context["_user_feedback"] = user_reply_cleaner
                     assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
+                    if not assessment.get("columns"):
+                        assessment = context.get("_cleaner_assessment", assessment)
                     cleaning_revision += 1
 
                 df_clean = _raw_df_for_cleaner

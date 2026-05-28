@@ -174,6 +174,43 @@ agent_tools.register(Tool(
     agents=["scout"],
 ))
 
+def _handle_update_assessment(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """更新评估表格中某一行。context 中的 _cleaner_assessment 会被修改。"""
+    assessment = ctx.get("_cleaner_assessment", {})
+    cols = assessment.get("columns", [])
+    target_col = str(args.get("column", ""))
+    updated = False
+    for c in cols:
+        if c.get("column") == target_col:
+            if "action" in args:
+                c["action"] = args["action"]
+                updated = True
+            if "reason" in args:
+                c["reason"] = args["reason"]
+                updated = True
+            break
+    if updated:
+        assessment["columns"] = cols
+        ctx["_cleaner_assessment"] = assessment
+    return {"updated": updated, "column": target_col}
+
+
+agent_tools.register(Tool(
+    name="update_assessment",
+    description="修改清洗评估表格中某一行的建议或原因。仅在用户明确要求修改某列时调用。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "column": {"type": "string", "description": "列名"},
+            "action": {"type": "string", "enum": ["clean", "skip"]},
+            "reason": {"type": "string", "description": "新的原因说明"},
+        },
+        "required": ["column"],
+    },
+    handler=_handle_update_assessment,
+    agents=["cleaner"],
+))
+
 agent_tools.register(Tool(
     name="submit_assessment",
     description="提交清洗评估结果。action 只有 clean 或 skip，reason 是大白话原因说明",

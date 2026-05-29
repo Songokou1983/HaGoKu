@@ -2034,15 +2034,20 @@ class Orchestrator:
         # phase="cleaning_first"：跑 Scout（缓存）+ Cleaner（strategy_only），返回清洗策略供用户确认
         if phase == "cleaning_first":
             # Scout（使用缓存上下文或重新跑）
-            if scout_context is not None:
+            if scout_context is not None and scout_context.get("query") == query:
                 context = scout_context
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": "🔍 Scout 缓存未命中，重新识别字段...",
-                })
+                if scout_context is not None:
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": "🔍 分析目标已变更，重新识别字段...",
+                    })
+                else:
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": "🔍 Scout 缓存未命中，重新识别字段...",
+                    })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
                 context = scout_agent.run(data_path, query=query, project_id=project_name)
 
@@ -2086,12 +2091,16 @@ class Orchestrator:
         # phase="analyst_first"：Scout（缓存）+ Cleaner（strategy_only，已确认）+ Analyst（preliminary）
         if phase == "analyst_first":
             # Scout
-            if scout_context is not None:
+            if scout_context is not None and scout_context.get("query") == query:
                 context = scout_context
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
             else:
+                if scout_context is not None:
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": "🔍 分析目标已变更，重新识别字段...",
+                    })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
                 context = scout_agent.run(data_path, query=query, project_id=project_name)
 

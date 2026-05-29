@@ -10,8 +10,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 开始任何代码动作前，请先做这两件事：
 
-1. 读完仓库根目录的 [AGENTS.md](AGENTS.md)
-2. 读完 [PROJECT.md](PROJECT.md) 的三个章节：
+1. 读完 [PROJECT.md](PROJECT.md) 的三个章节：
    - §「代码边界」（哪些事 LLM 干、哪些事代码干）
    - §「通道完备性十律」（10 条正向契约）
    - §「失败处理」§「代码层合法动作清单」（LLM 失败时唯一允许的代码动作）
@@ -42,6 +41,45 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 - **D.** 拒绝写入权威结构（同 B） — LLM 输出与原话明显矛盾时
 
 禁止写：`except: return []` / `except: return None` / 默认值兜底 / 缓存+规则降级。
+
+### 违禁代码速查（这些全是硬编码伪装，见一个删一个）
+
+```python
+# ❌ 禁止：业务关键词列表
+BUSINESS_KEYWORDS = ["收入", "营收", "销售额", "客流量"]
+
+# ❌ 禁止：中文语义正则
+if re.search(r"收入|营收|销售", text):
+    is_revenue_field = True
+
+# ❌ 禁止：if-elif 中文分支链
+if intent == "预测": method = "regression"
+elif intent == "对比": method = "ttest"
+
+# ❌ 禁止：兜底默认值
+result = llm_call(...)
+if not result: result = "默认理解"
+
+# ❌ 禁止：缓存 + 规则降级
+try: return llm_call(col)
+except: return guess_by_column_name(col)
+
+# ❌ 禁止：函数名暗示 LLM 但内部无 LLM 调用
+def _infer_column_role(col): ...
+```
+
+### 唯一合法写法
+
+```python
+# ✅ 纯通道 + 工具：组装上下文 → 调 LLM → 机械执行 tool_calls
+try:
+    resp = llm_client.chat.completions.create(messages=msgs, tools=TOOLS)
+except Exception as e:
+    raise RuntimeError(f"LLM 不可达：{e}") from e  # 路径 1
+
+if raw and not resp.choices[0].message.tool_calls:
+    ctx["_last_understanding_failure"] = {"raw_text": raw}  # 路径 3
+```
 
 ### 铁律 3（提交前自检）
 
@@ -115,7 +153,7 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 > 删除的硬编码常量（`DISTRIBUTION_CATEGORICAL_THRESHOLD` 等）位于 `hagoku/agents/constants.py`。完整审查 → `docs/AGENT_HARDCODED_REVIEW.md`。
 
-**代码层角色限定**：serialize → validate → transport。判断的事 LLM 做——详见 [AGENTS.md](AGENTS.md)。
+**代码层角色限定**：serialize → validate → transport。判断的事 LLM 做。
 
 ---
 

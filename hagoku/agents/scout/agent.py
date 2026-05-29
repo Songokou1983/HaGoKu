@@ -621,7 +621,9 @@ class ScoutAgent(InteractionMixin):
             analysis_goal_line = (
                 f"\n\n【最高优先级 — 用户分析目标】\n"
                 f"「{query.strip()}」\n\n"
-                f"给每个字段翻译一个中文名。现在调用 submit_field_inference。\n"
+                f"1. 给每个字段一个中文名（display_name）\n"
+                f"2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段\n"
+                f"现在调用 submit_field_inference。\n"
             )
 
         system_prompt = (

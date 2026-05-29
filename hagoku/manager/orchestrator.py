@@ -1068,6 +1068,17 @@ def _apply_scout_reply_with_llm(
             if _raw_text:
                 assistant_turn += " " + _raw_text
         if session_msgs:
+            # 追加本轮更新后的字段状态摘要，供下一轮参考
+            state_after = []
+            for sem in semantics:
+                col = sem.get("column_name", "")
+                dn = str(sem.get("display_name", "") or "").strip()
+                uia = sem.get("used_in_analysis")
+                dn_str = f"({dn})" if dn else ""
+                uia_str = "参与" if uia is True else ("不参与" if uia is False else "待定")
+                state_after.append(f"  {col}{dn_str}: {uia_str}")
+            state_text = "当前字段状态：\n" + "\n".join(state_after) if state_after else ""
+            assistant_turn = state_text + "\n\n" + assistant_turn
             session_msgs.append({"role": "assistant", "content": assistant_turn})
             context["_session_messages"] = session_msgs
 

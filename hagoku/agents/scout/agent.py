@@ -615,6 +615,12 @@ class ScoutAgent(InteractionMixin):
                 f"将最相关的字段设为 target（目标变量），辅助字段设为 feature（特征变量），\n"
                 f"无关字段设为 ignore 或 identifier。\n"
                 f"不要仅根据数据类型（数值/文本/日期）推断角色——必须结合分析目标做语义判断。\n"
+                f"\n"
+                f"⚡ 关键：对于与本次分析目标「{query.strip()}」无关的字段，\n"
+                f"必须将 used_in_analysis 设为 false。\n"
+                f"只有确实能服务于用户分析目标的字段才设为 true。\n"
+                f"举例：用户问「各渠道收入对比」——渠道字段、收入字段 = true；\n"
+                f"设备型号、注册日期等无关字段 = false。\n"
             )
 
         system_prompt = (

@@ -1214,7 +1214,7 @@ export default function AnalyzePanel() {
       project_name: currentProject ?? "default",
       phase: "full",
     });
-  }, [send, dataPath, currentProject]);
+  }, [send, dataPath, currentProject, queryText]);
 
   const handleReset = useCallback(() => {
     send("cancel_analysis", {});

@@ -57,6 +57,23 @@ def test_summary_writes_channel_health():
         assert record["query_arrived"] is True
 
 
+def test_log_llm_appends_not_overwrites():
+    """两次 log_llm 调用应追加而非覆盖"""
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp)
+        cl = ChannelLogger(run_dir)
+        cl.log_llm("scout", "Qwen", "s1", "u1", tokens=100)
+        cl.log_llm("analyst", "GPT4", "s2", "u2", tokens=200)
+        lines = (run_dir / "llm.log").read_text().strip().split("\n")
+        assert len(lines) == 2
+        r1 = json.loads(lines[0])
+        assert r1["agent"] == "scout"
+        assert r1["tokens"] == 100
+        r2 = json.loads(lines[1])
+        assert r2["agent"] == "analyst"
+        assert r2["tokens"] == 200
+
+
 def test_multiple_events_appended():
     """多次调用应追加而非覆盖"""
     with tempfile.TemporaryDirectory() as tmp:

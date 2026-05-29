@@ -48,8 +48,8 @@ class ChannelLogger:
             "tokens": tokens,
             "duration_ms": duration_ms,
         }
-        with open(self._llm_log, "w", encoding="utf-8") as f:
-            json.dump(record, f, ensure_ascii=False, default=str)
+        with open(self._llm_log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
     # ── 决策链 ──
 

@@ -258,7 +258,7 @@ export default function SettingsPanel() {
         <Field label="密钥" icon={<Key size={14} />}>
           <input
             className={inputClass}
-            type="password"
+            type="text"
             placeholder={llm.api_key_configured ? "已保存过，不想改就空着" : "本地没密钥就填 none"}
             autoComplete="new-password"
             value={apiKeyInput}

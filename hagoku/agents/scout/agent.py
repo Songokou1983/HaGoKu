@@ -631,7 +631,7 @@ class ScoutAgent(InteractionMixin):
             )
 
         system_prompt = (
-            "你是资深数据侦察专家，精通从数据画像中推断字段语义和角色。\n"
+            "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
             "你必须调用 submit_field_inference 工具来提交你的分析结果。\n"
             "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
             f"{analysis_goal_line}"

@@ -304,12 +304,12 @@ async def test_llm_connection(req: LlmTestBody):
         # strip 可能残留的引号
         api_key = api_key.strip().strip("'").strip('"')
         client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=4,
-                temperature=0,
-            )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=4,
+            temperature=0,
+        )
 
         content = response.choices[0].message.content or ""
         return {

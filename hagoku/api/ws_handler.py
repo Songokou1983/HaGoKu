@@ -194,7 +194,7 @@ async def ws_handler(ws: WebSocket) -> None:
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
                 data_path = payload.get("data_path", "")
-                query = payload.get("query", "")
+                query = payload.get("query", "").strip("\x00").strip()
                 project_name = payload.get("project_name", "default")
                 phase = payload.get("phase", "full")
                 import logging
@@ -265,6 +265,12 @@ async def ws_handler(ws: WebSocket) -> None:
                 # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})
                 user_text = payload.get("text", payload.get("user_input", ""))
+                import logging
+                logging.getLogger("hagoku.ws").warning(
+                    "WS respond 收到: text=%r payload_keys=%s full_payload=%s",
+                    user_text[:100], list(payload.keys()),
+                    str(payload)[:200],
+                )
                 orch = _shared_orchestrator
                 if orch is None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})

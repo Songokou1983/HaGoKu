@@ -1588,6 +1588,9 @@ class Orchestrator:
 
     def unblock(self, user_response: str) -> None:
         """前端用户发送回复后，ws_handler 调用此方法解除线程阻塞。"""
+        if hasattr(self, '_channel_logger') and self._channel_logger:
+            self._channel_logger.log("orchestrator", "user_input",
+                raw_text=user_response[:200], phase="field_correction")
         self._user_response = user_response
         self._is_paused = False
         self._pause_event.set()

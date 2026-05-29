@@ -2044,7 +2044,7 @@ class Orchestrator:
                     "thought": "🔍 Scout 缓存未命中，重新识别字段...",
                 })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
-                context = scout_agent.run(data_path, query="", project_id=project_name)
+                context = scout_agent.run(data_path, query=query, project_id=project_name)
 
             # Cleaner：只检测+计划，不执行清洗
             self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
@@ -2093,7 +2093,7 @@ class Orchestrator:
                 })
             else:
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
-                context = scout_agent.run(data_path, query="", project_id=project_name)
+                context = scout_agent.run(data_path, query=query, project_id=project_name)
 
             # Cleaner
             self.event_bus.emit(EventType.AGENT_THINKING, "manager", {

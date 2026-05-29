@@ -612,10 +612,8 @@ _SCOUT_FIELD_UPDATE_TOOLS = [  # 保持向后兼容，逐步迁移到 _get_scout
                     "used_in_analysis": {
                         "type": "boolean",
                         "description": (
-                            "用户是否明确指定该字段参与本次分析。"
-                            "例如用户回复了该字段的含义解释，说明他们关心该字段 → true；"
-                            "若用户说「某字段不参与分析/忽略/不需要」→ false；"
-                            "若用户未提及该字段 → 不设置此字段。"
+                            "该字段是否参与本次分析。根据字段中文名和分析目标自行判断。"
+                            "例如分析「收入趋势」→ 收入类字段=true，费用类字段=false。"
                         ),
                     },
                 },
@@ -983,7 +981,8 @@ def _apply_scout_reply_with_llm(
         "用户说的中文标签（如「公司」「店铺积分」）→ display_name。\n"
         "用户说的含义说明（如「店铺当期的总收入」）→ description。\n"
         "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一更新，不能只更新第一个。\n"
-        "根据分析目标和用户纠正，自行判断每个字段的 suggested_role 和 used_in_analysis。\n"
+        "根据分析目标和字段中文名，重新判断每个字段是否参与分析（used_in_analysis）。\n"
+        "与目标直接相关的保留 true，无关的设为 false。\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{command_context}"

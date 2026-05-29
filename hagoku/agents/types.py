@@ -103,13 +103,8 @@ def _build_fallback_schema() -> dict[str, Any]:
                         "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "置信度 0~1"},
                         "evidence": {"type": "string", "description": "推断依据（自然语言简述）"},
                         "needs_user_input": {"type": "boolean", "description": "是否需要用户确认"},
-                        "suggested_role": {"type": "string", "enum": FIELD_SUGGESTED_ROLES, "description": "建议角色"},
                         "display_name": {"type": "string", "description": "简短中文业务名称（≤6 字，如「收入」「用户ID」）"},
                         "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
-                        "used_in_analysis": {
-                            "type": "boolean",
-                            "description": "该字段是否参与本次分析。",
-                        },
                     },
                     "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "display_name", "description"],
                 },

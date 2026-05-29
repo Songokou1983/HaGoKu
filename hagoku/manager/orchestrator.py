@@ -983,6 +983,7 @@ def _apply_scout_reply_with_llm(
         "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一更新，不能只更新第一个。\n"
         "根据分析目标和字段中文名，重新判断每个字段是否参与分析（used_in_analysis）。\n"
         "与目标直接相关的保留 true，无关的设为 false。\n"
+        "例如：分析「收入趋势」→ 收入类=true，费用类=false，与收入和变动无关的其他字段=false。\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{command_context}"

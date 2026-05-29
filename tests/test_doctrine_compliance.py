@@ -106,7 +106,7 @@ def test_doctrine_无业务关键词字面量集合() -> None:
 
     assert not violations, (
         "\n违反【零硬编码】：业务关键词字面量集合（业务语义判断应由 LLM 完成）\n"
-        "如何修复：删除该集合，把判断逻辑写到 system prompt / tool description 里。\n"
+        "如何修复：删除该集合。LLM 拿到分析目标和数据后自己会判断，不需要代码替它做业务分类。\n"
         "  ----  违规位置  ----\n"
         + "\n".join(f"  {v}" for v in violations)
     )

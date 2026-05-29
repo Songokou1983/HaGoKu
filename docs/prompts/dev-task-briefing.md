@@ -27,8 +27,9 @@
     - re.search(r"收入|营收|销售", text) 这样的中文语义正则
     - if intent == "预测" elif intent == "对比" 这样的中文 if-elif 链
     - 函数名带 _infer_/_detect_/_classify_ 但内部没调 LLM
-  → 全部禁止。停下来想：这个判断能不能写到 system prompt 里让 LLM 做？
-    能 → 写到 prompt 里，删掉代码。
+  → 全部禁止。停下来想：这个判断能不能写成一句中文，让 LLM 拿到分析目标和数据后自己判断？
+    能 → 说明 LLM 不需要你帮它——删掉这条规则，代码和 prompt 里都不要有。
+       「写到 prompt 里」≠ 把 id→false 从 .py 搬到 system prompt。是在 prompt 里给 LLM 分析目标和数据，不是替它写好结论。
     不能（纯运算/IO/序列化）→ 才允许写代码。
 
 铁律 2（LLM 失败的唯一合法路径）：当 LLM 调用失败时，你只能做四件事：
@@ -58,7 +59,7 @@
 【拿不准时问自己唯一一个问题】
 
   "这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"
-  能 → LLM 的活，删代码。
+  能 → LLM 的活，删代码。prompt 里给的是目标和数据，不是替 LLM 写好的结论。
   不能 → 代码的活，但确保不夹带业务判断。
   拿不准 → 默认是 LLM 的活（项目第一原则是 LLM 主导）。
 
@@ -81,7 +82,7 @@ HaGoKu 项目铁律：LLM 主导，零硬编码。代码只是通道+工具。
 
 提交前必跑：pytest tests/test_doctrine_compliance.py
 
-拿不准时：想这判断能否写成 prompt 让 LLM 做。能 → 别写在代码里。
+拿不准时：LLM 拿到目标和数据后能自己判断吗？能 → 代码和 prompt 里都别替它写结论。
 
 任务：[在此描述]
 ```

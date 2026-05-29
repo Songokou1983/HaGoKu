@@ -197,6 +197,11 @@ async def ws_handler(ws: WebSocket) -> None:
                 query = payload.get("query", "")
                 project_name = payload.get("project_name", "default")
                 phase = payload.get("phase", "full")
+                import logging
+                logging.getLogger("hagoku.ws").warning(
+                    "WS analyze 收到: query=%r project=%s phase=%s payload_keys=%s",
+                    query, project_name, phase, list(payload.keys()),
+                )
 
                 if not data_path:
                     await ws.send_json({

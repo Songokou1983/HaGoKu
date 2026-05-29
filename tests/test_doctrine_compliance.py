@@ -406,3 +406,81 @@ def test_meta_中文正则探测器自检() -> None:
     assert not _CHINESE_ALT_REGEX_PATTERN.search(ok), (
         "守门 2 探测器误报：单一中文短语不应判违规"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 守门 6：prompt 构造代码中不得含结论式规则
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 检测 prompt 拼接代码中替 LLM 写结论的模式
+# 注意：这些模式只检测「结论式规则」，不检测 Python 控制流和流程描述
+_PROMPT_RULE_PATTERNS: list[tuple[str, str]] = [
+    # 「role → value」格式的结论映射（如「identifier → false」「feature → true」）
+    (r"(?:identifier|ignore|time_index|feature|target)\s*[→\->]\s*(?:true|false|参与|不参与)", "role→value 结论映射"),
+    # 「必须判为 X 角色」的强制性角色分配（在 prompt 字符串内）
+    (r"必须(?:判为|设为)\s*(?:feature|target|identifier|ignore)", "必须角色结论"),
+    # 「规则：xxx → yyy」格式的硬性规则声明（在 prompt 字符串内）
+    (r"[\"'].{0,20}(?:硬性规则|判断规则|映射规则).{0,50}[\"']", "规则声明"),
+]
+
+
+def test_doctrine_prompt中不得写结论式规则() -> None:
+    """守门 6：扫描 prompt 构造代码，检测是否在替 LLM 写结论。
+
+    合法：角色定义（feature=分组维度）、分析目标、调用引导
+    违规：identifier→false、必须判为feature、硬性规则等
+
+    这是对「铁律 0 事前刹车」的机器化补充——
+    即使忘了写自检，代码也会被拦住。
+    """
+    violations: list[str] = []
+    for path in _scanned_files():
+        text = _read(path)
+        try:
+            tree = ast.parse(text, filename=str(path))
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            # 只检查函数内的字符串常量（这些更可能是 prompt 拼接）
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            try:
+                func_src = ast.unparse(node)
+            except Exception:
+                continue
+
+            # 检查函数是否在构造 prompt（含 chat.completions 或 system_prompt 或 analysis_goal 等）
+            if not re.search(
+                r"(system_prompt|analysis_goal|user_prompt|messages|prompt)",
+                func_src,
+                re.IGNORECASE,
+            ):
+                continue
+
+            for pattern, desc in _PROMPT_RULE_PATTERNS:
+                matches = list(re.finditer(pattern, func_src))
+                for m in matches:
+                    # 排除注释中的匹配（以 # 开头的行）
+                    line_start = func_src.rfind("\n", 0, m.start()) + 1
+                    line = func_src[line_start:m.end() + 20]
+                    if line.strip().startswith("#"):
+                        continue
+                    # 排除合法的角色定义（如「feature — 分组维度」）
+                    if "—" in m.group() and "→" not in m.group():
+                        continue
+                    rel = path.relative_to(HAGOKU_ROOT)
+                    ctx = func_src[max(0, m.start() - 30):m.end() + 30]
+                    violations.append(
+                        f"{rel}::{node.name}:{node.lineno}  {desc}: …{ctx}…"
+                    )
+
+    assert not violations, (
+        "\n违反【prompt 不得写结论】：prompt 构造代码中含替 LLM 做判断的规则式指令\n"
+        "如何修复：\n"
+        "  - 删掉映射规则（id→false 之类），LLM 自己能判断\n"
+        "  - 删掉强制性结论（必须判为 X），改为角色定义（feature = 分组维度）\n"
+        "  - 流程可以说，结论不能说\n"
+        "  ----  违规位置  ----\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

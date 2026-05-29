@@ -140,6 +140,20 @@ def _apply_user_correction(ctx: dict, raw: str, llm_client, columns: list) -> li
 
 ---
 
+## 铁律 0：改动前自检（事前刹车 — 任何 LLM 交互改动前强制执行）
+
+任何涉及 LLM prompt、工具 schema、Agent 输出的代码改动前，**必须**先写下自检答案。不写不改。格式：
+
+```
+【自检】判断：LLM 拿到分析目标和数据后能自己判断 [X] 吗？
+答案：能 → 不写任何规则。只确保信息送到 prompt。
+      不能（纯运算/IO）→ 代码的活。
+```
+
+写在 commit message 或 PR 描述中。Code review 时第一眼看这个——没有自检答案的 LLM 改动直接拒。
+
+---
+
 ## 当你拿不准时
 
 问自己**唯一一个问题**：

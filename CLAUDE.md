@@ -62,6 +62,16 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 | 看到字段名（"收入"/"销售额"）→ 加 dict 映射 | 让 LLM 用 `_resolve_to_column_names` 之类的工具映射 |
 | 防御性编程 "万一 LLM 返回空"→ 加默认值 | 写 `_last_understanding_failure` 让用户看到没理解 |
 
+### 铁律 0：改动前自检（事前刹车）
+
+任何涉及 LLM prompt、工具 schema、Agent 输出的代码改动前，**必须**先写下：
+```
+【自检】判断：LLM 拿到分析目标和数据后能自己判断 [X] 吗？
+答案：能 → 不写任何规则，只确保信息送到 prompt。
+      不能（纯运算/IO）→ 代码的活。
+```
+不写不改。Code review 没有自检答案 → 直接拒。
+
 ### 拿不准时问自己唯一一个问题
 
 > "这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"

@@ -938,8 +938,6 @@ def _apply_scout_reply_with_llm(
     query_raw = context.get("query", "") or ""
     if query_raw:
         analysis_purpose_text = f"用户分析目的：{query_raw}\n"
-    if channel_logger:
-        channel_logger.log("scout", "respond_context", query=query_raw[:100], has_target=bool(current_target or current_features))
 
     # ── 当前分析目的状态（target/features）──
     ap_summary = ""
@@ -958,6 +956,8 @@ def _apply_scout_reply_with_llm(
             f"  - 目标变量 (target): {current_target if current_target else '（未设置）'}\n"
             f"  - 特征变量 (features): {', '.join(current_features) if current_features else '（未设置）'}\n\n"
         )
+    if channel_logger:
+        channel_logger.log("scout", "respond_context", query=query_raw[:100])
 
     # ── 注入用户历史命令/纠错（与初始 Scout 推理一致的通道）─────────────
     command_context = ""

@@ -43,6 +43,10 @@ JSONL 格式，每行一条。字段：
 | role_set | suggested_role 被设置 | column, value, source |
 | field_updated | 用户纠正字段 | column, field, old_value, new_value |
 | reinference_triggered | 触发重推断 | reason |
+| user_input | 用户输入（respond/confirm） | raw_text, phase, agent |
+| user_output | 系统向用户展示 | message, fields_table_summary |
+| pause | 系统暂停等用户 | agent, reason, phase |
+| unblock | 用户响应后恢复 | agent, phase |
 | channel_summary | run 结束 | query_arrived, uia_breakdown, warnings |
 | error | 异常 | type, message, traceback |
 
@@ -104,6 +108,26 @@ class ChannelLogger:
 6. **所有 except 块** — error
 
 Agent 通过构造参数 `channel_logger` 接收，由 Orchestrator 在创建 Agent 时传入。
+
+## 完整交互追踪示例
+
+一次 Scout 字段确认的完整日志：
+
+```json
+{"ts":"...","agent":"orchestrator","event":"run_start","query":"分析店铺变动趋势"}
+{"ts":"...","agent":"scout","event":"llm_call","model":"Qwen3.6-35B"}
+{"ts":"...","agent":"scout","event":"llm_response","columns":8}
+{"ts":"...","agent":"scout","event":"uia_set","column":"StoreID","value":false,"source":"llm"}
+{"ts":"...","agent":"scout","event":"user_output","fields":{"StoreID":"标识-不参与","Inc1":"目标-参与",...}}
+{"ts":"...","agent":"scout","event":"pause","reason":"等用户确认字段"}
+{"ts":"...","agent":"orchestrator","event":"user_input","raw_text":"店铺编码要参与","phase":"confirm_fields"}
+{"ts":"...","agent":"scout","event":"field_updated","column":"Code","field":"used_in_analysis","old_value":false,"new_value":true}
+{"ts":"...","agent":"scout","event":"reinference_triggered","reason":"结构性变更"}
+{"ts":"...","agent":"scout","event":"llm_call","model":"Qwen3.6-35B"}
+{"ts":"...","agent":"scout","event":"llm_response","columns":8}
+{"ts":"...","agent":"scout","event":"user_output","fields":{...}}
+{"ts":"...","agent":"orchestrator","event":"channel_summary","query_arrived":true,"rounds":2}
+```
 
 ## 不覆盖
 

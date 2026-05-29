@@ -12,6 +12,10 @@ from pydantic import BaseModel, ConfigDict
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+# ── 启动时永久清除代理环境变量 ──
+for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+    os.environ.pop(_k, None)
+
 from hagoku.api.ws_handler import ws_handler
 from hagoku.api.middleware import ApiAuthMiddleware
 

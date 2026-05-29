@@ -614,6 +614,7 @@ class ScoutAgent(InteractionMixin):
                 f"你必须逐一检查每个字段是否能服务于上述分析目标。\n"
                 f"将最相关的字段设为 target（目标变量），辅助字段设为 feature（特征变量），\n"
                 f"无关字段设为 ignore 或 identifier。\n"
+                f"⚠️ 趋势/变化类分析：时间列（Period/Date）必须判为 feature，不是 time_index。\n"
                 f"不要仅根据数据类型（数值/文本/日期）推断角色——必须结合分析目标做语义判断。\n"
                 f"\n"
                 f"⚡ 关键：对于与本次分析目标「{query.strip()}」无关的字段，\n"
@@ -621,6 +622,11 @@ class ScoutAgent(InteractionMixin):
                 f"只有确实能服务于用户分析目标的字段才设为 true。\n"
                 f"举例：用户问「各渠道收入对比」——渠道字段、收入字段 = true；\n"
                 f"设备型号、注册日期等无关字段 = false。\n"
+                f"\n"
+                f"used_in_analysis 判断规则（严格按 suggested_role 执行）：\n"
+                f"  • suggested_role 为 target 或 feature → used_in_analysis = true\n"
+                f"  • suggested_role 为 identifier、ignore、time_index、unknown → used_in_analysis = false\n"
+                f"这是硬性规则，不允许例外。role 是你自己判的，uia 必须与 role 一致。\n"
             )
 
         system_prompt = (

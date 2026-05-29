@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -109,12 +110,15 @@ class ScoutAgent(InteractionMixin):
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
         llm_client: Any | None = None,
+        *,
+        channel_logger: Any | None = None,
     ) -> None:
         self.role = "scout"
         self.llm_config = llm_config
         self.event_bus = event_bus
         self.scribe = scribe  # 可选，用于看板 block/unblock
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
+        self._channel_logger = channel_logger
 
         # 加载 prompt.md
         self.prompt = self._load_prompt()
@@ -385,6 +389,12 @@ class ScoutAgent(InteractionMixin):
             "comments": {"Inc1": "注意单位是万元"}
           }
         """
+        # ── 通道日志：记录用户输入 ──
+        if self._channel_logger:
+            self._channel_logger.log(self.role, "user_input",
+                raw_text=str(user_input.get("text", user_input.get("confirmed", ""))),
+                phase=self._phase)
+
         if self._phase != "confirm_fields" or self._context is None:
             return self._done("done", "阶段错误，请重新开始", {})
 
@@ -606,8 +616,6 @@ class ScoutAgent(InteractionMixin):
             logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
 
         # ── 将用户分析目标前置为最高优先级指令 ──
-        import logging as _log
-        _log.getLogger("hagoku").warning(f"TRACE: _infer_all_semantics received query={query!r}")
         analysis_goal_line = ""
         if query and query.strip():
             analysis_goal_line = (
@@ -633,13 +641,23 @@ class ScoutAgent(InteractionMixin):
             f"{command_context}"
         )
 
+        import json as _json
+        user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
+
+        # ── 通道日志：LLM 调用前 ──
+        if self._channel_logger:
+            self._channel_logger.log("scout", "llm_call",
+                model=self.llm_config.model_quick or self.llm_config.model,
+                prompt_len=len(system_prompt))
+
         client = create_raw_client(self.llm_config)
+        _call_start = datetime.now(timezone.utc)
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{__import__('json').dumps(payload, ensure_ascii=False, default=str)}\n```"},
+                    {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```"},
                 ],
                 temperature=SCOUT_INFER_TEMPERATURE,
                 max_tokens=SCOUT_INFER_MAX_TOKENS,
@@ -649,9 +667,22 @@ class ScoutAgent(InteractionMixin):
         except Exception as e:
             raise RuntimeError(f"Scout 字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
 
-        import json as _json
+        _call_duration_ms = int((datetime.now(timezone.utc) - _call_start).total_seconds() * 1000)
+
         raw_text = response.choices[0].message.content or ""
         tool_calls = response.choices[0].message.tool_calls
+
+        # ── 通道日志：LLM 调用后，记录完整输入输出 ──
+        if self._channel_logger:
+            tc = tool_calls or []
+            self._channel_logger.log_llm("scout",
+                model=self.llm_config.model_quick or self.llm_config.model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_str,
+                response_tool_calls=[{"name": t.function.name, "arguments": t.function.arguments} for t in tc],
+                response_content=raw_text,
+                tokens=response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0,
+                duration_ms=_call_duration_ms)
 
         if tool_calls:
             # 优先：LLM 支持 tool calling，从结构化参数中解析
@@ -753,8 +784,11 @@ class ScoutAgent(InteractionMixin):
         self._llm_target_columns = result.get("target_columns") or []
         self._llm_feature_columns = result.get("feature_columns") or []
 
-        uia_summary = {s["column_name"]: s.get("used_in_analysis") for s in semantics}
-        _log.getLogger("hagoku").warning(f"TRACE: _infer_all_semantics output uia={uia_summary}")
+        # ── 通道日志：记录每个字段的 uia 决策 ──
+        for sem in semantics:
+            if self._channel_logger:
+                self._channel_logger.trace_value("scout", sem["column_name"],
+                    "used_in_analysis", sem.get("used_in_analysis"), "llm")
         return semantics
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:

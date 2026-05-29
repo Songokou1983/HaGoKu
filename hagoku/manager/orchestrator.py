@@ -1959,6 +1959,11 @@ class Orchestrator:
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
 
+        # ── 通道日志：初始化 ChannelLogger ──
+        from ..observability.channel_logger import ChannelLogger
+        self._channel_logger = ChannelLogger(run_dir)
+        self._channel_logger.log("orchestrator", "run_start", query=query, project=project_name, run_id=run_id)
+
         with self._cancel_lock:
             self._cancel_requested_flag = False
 
@@ -1978,7 +1983,8 @@ class Orchestrator:
 
         # 初始化 Agent（传入 scribe 用于看板 block/unblock）
         # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
-        scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
+        scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
+                           channel_logger=self._channel_logger)
         cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
         analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep, scribe=self.scribe)
         reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
@@ -2014,7 +2020,7 @@ class Orchestrator:
             # 加载项目历史记忆，避免用户重复回答字段含义
             memory_project = self.memory.build_memory_project(project_name) if self.memory else None
             scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
-                               memory_project=memory_project)
+                               memory_project=memory_project, channel_logger=self._channel_logger)
             ir = scout.begin(data_path=data_path, query=query, project_id=project_name,
                              memory_project=memory_project)
             # begin() 已触发 AGENT_STARTED（由 Scribe claim 任务），并在需要确认时 block 了看板
@@ -2039,16 +2045,29 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
+                # ── 通道日志：缓存命中 ──
+                if hasattr(self, '_channel_logger') and self._channel_logger:
+                    self._channel_logger.log("orchestrator", "cache_check",
+                        result="hit",
+                        cached_query=scout_context.get("query") if scout_context else None,
+                        current_query=query)
             else:
                 if scout_context is not None:
                     self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                         "thought": "🔍 分析目标已变更，重新识别字段...",
                     })
+                    # ── 通道日志：缓存未命中（查询变更）──
+                    if hasattr(self, '_channel_logger') and self._channel_logger:
+                        self._channel_logger.log("orchestrator", "cache_check",
+                            result="miss_query_changed",
+                            cached_query=scout_context.get("query") if scout_context else None,
+                            current_query=query)
                 else:
                     self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                         "thought": "🔍 Scout 缓存未命中，重新识别字段...",
                     })
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
+                                          channel_logger=self._channel_logger)
                 context = scout_agent.run(data_path, query=query, project_id=project_name)
 
             # Cleaner：只检测+计划，不执行清洗
@@ -2096,12 +2115,25 @@ class Orchestrator:
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
+                # ── 通道日志：缓存命中 ──
+                if hasattr(self, '_channel_logger') and self._channel_logger:
+                    self._channel_logger.log("orchestrator", "cache_check",
+                        result="hit",
+                        cached_query=scout_context.get("query") if scout_context else None,
+                        current_query=query)
             else:
                 if scout_context is not None:
                     self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                         "thought": "🔍 分析目标已变更，重新识别字段...",
                     })
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+                    # ── 通道日志：缓存未命中（查询变更）──
+                    if hasattr(self, '_channel_logger') and self._channel_logger:
+                        self._channel_logger.log("orchestrator", "cache_check",
+                            result="miss_query_changed",
+                            cached_query=scout_context.get("query") if scout_context else None,
+                            current_query=query)
+                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
+                                          channel_logger=self._channel_logger)
                 context = scout_agent.run(data_path, query=query, project_id=project_name)
 
             # Cleaner
@@ -2788,6 +2820,16 @@ class Orchestrator:
                 "run_id": run_id,
                 "project": project_name,
             })
+
+            # ── 通道日志：run 结束写摘要 ──
+            if hasattr(self, '_channel_logger') and self._channel_logger:
+                semantics = (context or {}).get("column_semantics", [])
+                true_n = sum(1 for s in semantics if s.get("used_in_analysis"))
+                false_n = sum(1 for s in semantics if s.get("used_in_analysis") is False)
+                self._channel_logger.summary(
+                    query_arrived=bool(query),
+                    uia_breakdown=f"{true_n} true / {false_n} false",
+                    warnings=[])
 
             return {
                 "status": "completed",

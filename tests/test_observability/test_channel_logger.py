@@ -27,7 +27,9 @@ def test_log_llm_writes_full_record():
         cl.log_llm("scout", "Qwen", "sys prompt", "user prompt",
                    [{"name": "submit", "arguments": {}}],
                    tokens=500, duration_ms=1200)
-        data = json.loads((run_dir / "llm.log").read_text())
+        lines = (run_dir / "llm.log").read_text().strip().split("\n")
+        assert len(lines) == 1
+        data = json.loads(lines[0])
         assert data["agent"] == "scout"
         assert data["system_prompt"] == "sys prompt"
         assert data["tokens"] == 500
@@ -40,10 +42,23 @@ def test_trace_value_records_source():
         cl = ChannelLogger(run_dir)
         cl.trace_value("scout", "StoreID", "used_in_analysis", False, "llm")
         record = json.loads((run_dir / "run.log").read_text())
-        assert record["event"] == "used_in_analysis_set"
+        assert record["event"] == "uia_set"
         assert record["column"] == "StoreID"
         assert record["value"] is False
         assert record["source"] == "llm"
+
+
+def test_trace_value_unknown_field():
+    """trace_value() 未映射字段用 {field}_set"""
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp)
+        cl = ChannelLogger(run_dir)
+        cl.trace_value("scout", "StoreID", "custom_field", 42, "rule")
+        record = json.loads((run_dir / "run.log").read_text())
+        assert record["event"] == "custom_field_set"
+        assert record["column"] == "StoreID"
+        assert record["value"] == 42
+        assert record["source"] == "rule"
 
 
 def test_summary_writes_channel_health():

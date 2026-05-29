@@ -1014,9 +1014,9 @@ def _apply_scout_reply_with_llm(
             model=llm_model,
             messages=messages,
             temperature=0.1,
-            max_tokens=1024,
             tools=_get_scout_tools(),
             tool_choice="auto",
+            max_tokens=8192,
         )
 
         msg = resp.choices[0].message

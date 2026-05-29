@@ -85,11 +85,9 @@ def test_scout_prompt_contains_ignore_role_instruction():
         f"prompt:\n{prompt[:1500]}"
     )
 
-    # 4. used_in_analysis / false 示例
-    assert "used_in_analysis" in prompt.lower(), (
-        "❌ prompt 未提及 used_in_analysis 字段。\n"
-        f"prompt:\n{prompt[:1500]}"
-    )
+    # 4. used_in_analysis 在 tool schema 中，不在 prompt 里
+    # prompt 只给流程和词汇，不说结论。used_in_analysis 是 schema 字段，LLM 会自己判断。
+    # 如果 prompt 里出现了 used_in_analysis 的映射指令（如 identifier→false），那才是违规。
 
 
 def test_scout_llm_output_used_in_analysis_preserved():

@@ -972,7 +972,24 @@ def _apply_scout_reply_with_llm(
         pass
 
     # 对话历史（律 3：多轮上下文传输，含完整工具调用参数）
-    conv_history_for_prompt: list[dict[str, str]] = context.get("_conversation_history", [])
+    conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
+    # 首次 respond 时注入初始 Scout 的完整判断作为上下文
+    if not conv_history:
+        init_summary_lines = ["初始分析判断（基于分析目标的独立判断，非用户纠正）："]
+        for sem in semantics:
+            col = sem.get("column_name", "")
+            uia = sem.get("used_in_analysis")
+            dn = str(sem.get("display_name", "") or "").strip()
+            dn_str = f"（{dn}）" if dn else ""
+            if uia is True:
+                init_summary_lines.append(f"  {col}{dn_str}: 参与 —— 直接服务于分析目标")
+            elif uia is False:
+                init_summary_lines.append(f"  {col}{dn_str}: 不参与 —— 与目标无关")
+            else:
+                init_summary_lines.append(f"  {col}{dn_str}: 待定")
+        init_text = "\n".join(init_summary_lines)
+        conv_history.append({"role": "assistant", "content": init_text})
+    conv_history_for_prompt: list[dict[str, str]] = conv_history
     chat_lines: list[str] = []
     for turn in conv_history_for_prompt[-(_CONV_HISTORY_INJECT_TURNS * 2):]:
         role_label = "用户" if turn.get("role") == "user" else "系统"

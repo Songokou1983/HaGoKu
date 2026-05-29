@@ -938,6 +938,8 @@ def _apply_scout_reply_with_llm(
     query_raw = context.get("query", "") or ""
     if query_raw:
         analysis_purpose_text = f"用户分析目的：{query_raw}\n"
+    if channel_logger:
+        channel_logger.log("scout", "respond_context", query=query_raw[:100], has_target=bool(current_target or current_features))
 
     # ── 当前分析目的状态（target/features）──
     ap_summary = ""

@@ -606,6 +606,8 @@ class ScoutAgent(InteractionMixin):
             logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
 
         # ── 将用户分析目标前置为最高优先级指令 ──
+        import logging as _log
+        _log.getLogger("hagoku").warning(f"TRACE: _infer_all_semantics received query={query!r}")
         analysis_goal_line = ""
         if query and query.strip():
             analysis_goal_line = (
@@ -751,6 +753,8 @@ class ScoutAgent(InteractionMixin):
         self._llm_target_columns = result.get("target_columns") or []
         self._llm_feature_columns = result.get("feature_columns") or []
 
+        uia_summary = {s["column_name"]: s.get("used_in_analysis") for s in semantics}
+        _log.getLogger("hagoku").warning(f"TRACE: _infer_all_semantics output uia={uia_summary}")
         return semantics
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:

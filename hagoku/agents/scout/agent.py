@@ -664,6 +664,9 @@ class ScoutAgent(InteractionMixin):
         _call_duration_ms = int((datetime.now(timezone.utc) - _call_start).total_seconds() * 1000)
 
         raw_text = response.choices[0].message.content or ""
+        # MiniMax 等模型会输出 <think>...</think> CoT 块，清理后再解析
+        import re as _re
+        raw_text = _re.sub(r"<think>.*?</think>", "", raw_text, flags=_re.DOTALL).strip()
         tool_calls = response.choices[0].message.tool_calls
 
         # ── 通道日志：LLM 调用后，记录完整输入输出 ──

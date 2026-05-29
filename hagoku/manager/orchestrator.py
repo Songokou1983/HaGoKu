@@ -926,8 +926,10 @@ def _apply_scout_reply_with_llm(
         if current_role:
             parts.append(f"当前角色: {current_role}")
         uia = sem.get("used_in_analysis")
-        if uia is not None:
-            parts.append(f"参与分析: {'是' if uia else '否'}")
+        if uia is True:
+            parts.append(f"参与分析: 是（直接服务于分析目标）")
+        elif uia is False:
+            parts.append(f"参与分析: 否（与目标无关）")
         if not current_dn and not current_desc:
             parts.append("(尚未理解)")
         field_state_lines.append(" | ".join(parts))

@@ -317,11 +317,13 @@ async def test_llm_connection(req: LlmTestBody):
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": "ping"}],
-            max_tokens=4,
+            max_tokens=50,
             temperature=0,
         )
 
+        import re as _re
         content = response.choices[0].message.content or ""
+        content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
         return {
             "ok": True,
             "model": model,

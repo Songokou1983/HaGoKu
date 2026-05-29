@@ -977,10 +977,12 @@ def _apply_scout_reply_with_llm(
     chat_history = "\n".join(chat_lines) if chat_lines else "（尚无对话历史）"
 
     system_msg = (
-        "你是一个数据分析助手。用户给你当前字段表格状态和一条纠正消息。\n"
-        "请根据用户说的内容，调用 update_field_understanding 或 update_field_role 来更新字段表格。\n"
-        "用户说的中文标签（如「公司」「店铺积分」）放 display_name，补充说明放 description。\n"
-        "根据分析目标和用户纠正，自行判断每个字段的 used_in_analysis 和 suggested_role。\n"
+        "你是字段理解助手，负责理解用户对字段表格的纠正。\n"
+        "用户会告诉你某些字段的真实含义、中文名称、角色归属。\n"
+        "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
+        "用户说的中文标签（如「公司」「店铺积分」）→ display_name。\n"
+        "用户说的含义说明（如「店铺当期的总收入」）→ description。\n"
+        "根据分析目标和用户纠正，自行判断每个字段的 suggested_role 和 used_in_analysis。\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{command_context}"

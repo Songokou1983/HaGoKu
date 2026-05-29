@@ -224,6 +224,11 @@ class ScoutAgent(InteractionMixin):
                 "column_descriptions": {},
                 "_session_messages": getattr(self, "_session_messages", []),
             }
+            # 提取 Scout 结论供下游 Agent 使用
+            context["_scout_conclusions"] = {
+                "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
+                "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
+            }
 
             # 5. 应用项目记忆（从 memory_project 传入）
             if memory_project and project_id:
@@ -312,6 +317,10 @@ class ScoutAgent(InteractionMixin):
                 "column_descriptions": {},
                 "_column_profiles": column_profiles,
                 "_session_messages": getattr(self, "_session_messages", []),
+            }
+            context["_scout_conclusions"] = {
+                "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
+                "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
             }
 
             # 应用项目记忆

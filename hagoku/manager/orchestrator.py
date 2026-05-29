@@ -982,6 +982,7 @@ def _apply_scout_reply_with_llm(
         "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
         "用户说的中文标签（如「公司」「店铺积分」）→ display_name。\n"
         "用户说的含义说明（如「店铺当期的总收入」）→ description。\n"
+        "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一更新，不能只更新第一个。\n"
         "根据分析目标和用户纠正，自行判断每个字段的 suggested_role 和 used_in_analysis。\n"
         f"{analysis_purpose_text}"
         f"{ap_summary}"

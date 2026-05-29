@@ -295,6 +295,8 @@ async def test_llm_connection(req: LlmTestBody):
     base_url = req.base_url.strip()
     model = req.main_model.strip()
     api_key = req.api_key.strip()
+    import logging
+    logging.getLogger("hagoku").warning(f"TEST key_len={len(api_key)} prefix={api_key[:15] if api_key else 'EMPTY'} url={base_url} model={model}")
 
     if not base_url or not model:
         raise HTTPException(status_code=400, detail="网址和模型名称不能为空")

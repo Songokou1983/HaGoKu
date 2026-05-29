@@ -978,8 +978,8 @@ def _apply_scout_reply_with_llm(
     chat_history = "\n".join(chat_lines) if chat_lines else "（尚无对话历史）"
 
     system_msg = (
+        f"{analysis_purpose_text}\n"
         "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
-        "用户会告诉你某些字段的真实含义、中文名称、角色归属。\n"
         "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
         "用户说的简称/标签（≤6字，如「公司」「店铺积分」「费用」）→ display_name。\n"
         "含义扩展说明（完整语句）→ description。两者不能相同。\n"
@@ -988,7 +988,6 @@ def _apply_scout_reply_with_llm(
         "根据分析目标和字段中文名，判断每个字段是否参与（used_in_analysis）。\n"
         "与目标直接相关的保留 true，无关的设为 false。\n"
         "例如：分析「收入趋势」→ 收入类=true，费用类=false，与收入和变动无关的其他字段=false。\n"
-        f"{analysis_purpose_text}"
         f"{ap_summary}"
         f"{command_context}"
         "当前字段表格：\n"

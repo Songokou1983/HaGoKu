@@ -625,13 +625,10 @@ class ScoutAgent(InteractionMixin):
             )
 
         system_prompt = (
-            "你是专业数据分析侦察员。基于每列的数据画像，推断每个字段的语义角色。\n"
-            "你必须调用 submit_field_inference 工具来提交你的分析结果。\n"
-            "同名 display_name 可以相同但不要编号——让后续流程处理重复。"
+            "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
             f"{analysis_goal_line}"
             f"{knowledge_section}"
             f"{memory_notes}"
-            f"{prompt_md_text}"
             f"{command_context}"
         )
 

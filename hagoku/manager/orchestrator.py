@@ -3450,6 +3450,12 @@ class Orchestrator:
         agent_name = user_input.get("agent", "")
         phase = user_input.get("phase", "")
 
+        # 通道日志：用户输入
+        if hasattr(self, '_channel_logger') and self._channel_logger:
+            self._channel_logger.log("orchestrator", "user_input",
+                raw_text=str(user_input.get("text", user_input.get("confirmed", ""))),
+                phase=phase, agent=agent_name)
+
         # 重新初始化 scribe（因为 respond() 是新调用，scribe 需要恢复状态）
         if self.output_mgr is None:
             self.output_mgr = OutputManager(self.config.output, project_name or "default")
@@ -3457,7 +3463,8 @@ class Orchestrator:
 
         if agent_name == "scout" and phase == "confirm_fields":
             # 恢复 Scout 状态
-            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
+            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
+                               channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None)
             # 从 user_input 恢复 Scout 内部状态
             scout._phase = "confirm_fields"
             scout._data_path = user_input.get("data_path", "")

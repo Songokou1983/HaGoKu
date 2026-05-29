@@ -27,9 +27,9 @@ Scout LLM → suggested_role (target/feature/identifier/ignore/time_index)
 | **GPT-4o / Claude 4** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 自然区分 | 🟢 低 |
 | **DeepSeek-V3** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 自然区分 | 🟢 低 |
 | **Llama 3.1-70B** | ⭐⭐⭐⭐ | ⭐⭐ | 需 prompt 引导 | 🟡 中 |
-| **Llama 3.1-8B** | ⭐⭐⭐ | ⭐ | 困难 | 🔴 高 |
-| **Qwen2.5-7B** | ⭐⭐⭐ | ⭐ | 困难 | 🔴 高 |
 | **Mistral/Mixtral** | ⭐⭐⭐⭐ | ⭐⭐ | 需 prompt 引导 | 🟡 中 |
+
+> ⚠️ 7B 级模型（Llama-8B, Qwen-7B 等）不在 HaGoKu 的目标范围内。项目设计假设模型具备基本角色识别和指令遵循能力（≥ ~30B 或等效性能）。见 [PROJECT.md](../PROJECT.md) §「灵魂」。
 
 ### 风险分级
 
@@ -39,24 +39,11 @@ Scout LLM → suggested_role (target/feature/identifier/ignore/time_index)
 **🟡 中风险（Llama-70B, Mixtral）**：
 与 Qwen 类似——role 识别好，但多字段独立判断弱。如果 prompt 不显式引导它们用 `ignore`，会掉进 `feature→true` 陷阱。当前架构（机械推导 + prompt 引导）应该能覆盖，但需验证。
 
-**🔴 高风险（7B-8B 小模型）**：
-这些小模型连角色识别本身就不稳定。`suggested_role` 可能混入错误值，`used_in_analysis` 更不可靠。当前架构只能部分保护——如果 LLM 把无关字段错判为 `feature`，机械推导会将其标记为 `true`（参与）。
-
 ---
 
 ## 3. 换模型会出错的场景
 
-### 场景 1：小模型角色识别错误
-
-```
-LLM 输出:  Quantity → suggested_role=feature  (错，应该=ignore)
-代码推导:  feature → used_in_analysis=true     (连锁错)
-结果:      无关字段参与分析
-```
-
-**根因**：机械推导是"信任 LLM 的角色判断"的。如果角色错了，一切皆错。
-
-### 场景 2：模型不输出某些字段
+### 场景 1：模型不输出某些字段
 
 ```
 LLM 输出:  Quantity → suggested_role=feature
@@ -69,7 +56,7 @@ LLM 输出:  Quantity → suggested_role=feature
 
 当前代码对这种情况有保护——`unknown` 角色映射到 `false`（保守）。
 
-### 场景 3：不同模型对"ignore"的理解不同
+### 场景 2：不同模型对"ignore"的理解不同
 
 ```
 GPT-4o:    ignore = 完全不参与，不展示给用户
@@ -146,7 +133,6 @@ def test_model_can_assign_ignore_to_irrelevant_fields():
 |------|------|
 | 换 GPT-4/Claude 会出错吗？ | **大概率不会**。它们能独立处理多字段判断。 |
 | 换 Llama-70B 会出错吗？ | **可能不会**。当前架构的机械推导 + prompt 引导应该覆盖。但建议验证。 |
-| 换 7B 小模型会出错吗？ | **很可能会**。角色识别本身就不稳定，机械推导会放大错误。 |
 | 最安全的做法？ | **让 `used_in_analysis` 完全机械化** —— 删除 LLM 直接输出路径，只从 `suggested_role` 推导。然后所有精力放在让 role 准确上（一个判断点比两个容易）。 |
 
 ### 建议的终极方案

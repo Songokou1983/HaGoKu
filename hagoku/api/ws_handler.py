@@ -264,7 +264,7 @@ async def ws_handler(ws: WebSocket) -> None:
             elif cmd == "respond":
                 # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})
-                user_text = payload.get("text", payload.get("user_input", ""))
+                user_text = payload.get("text", payload.get("user_input", "")).strip("\x00").strip()
                 import logging
                 logging.getLogger("hagoku.ws").warning(
                     "WS respond 收到: text=%r payload_keys=%s full_payload=%s",

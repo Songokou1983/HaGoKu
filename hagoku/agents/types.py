@@ -108,7 +108,7 @@ def _build_fallback_schema() -> dict[str, Any]:
                         "description": {"type": "string", "description": "业务含义理解（一句话自然语言，面向业务同事；引用样本值作为依据；不确定时写「可能表示…」并点出观察到的现象；禁止出现统计用词如「数值型」「分类型」；禁止只重复英文列名）"},
                         "used_in_analysis": {
                             "type": "boolean",
-                            "description": "该字段是否参与本次分析。严格根据分析目标判断：能服务于用户问题的字段=true，无关字段=false。标识符、ID、与问题无关的文本列通常=false。",
+                            "description": "该字段是否参与本次分析。",
                         },
                     },
                     "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "display_name", "description"],

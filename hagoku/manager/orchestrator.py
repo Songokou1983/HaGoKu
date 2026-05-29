@@ -990,8 +990,9 @@ def _apply_scout_reply_with_llm(
         "例如：分析「收入趋势」→ 收入类=true，费用类=false，与收入和变动无关的其他字段=false。\n"
         f"{ap_summary}"
         f"{command_context}"
-        "当前字段表格：\n"
+        "当前字段表格（参与分析列已由初始分析判断）：\n"
         f"{field_state}\n"
+        "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
 
         # ── 律 3：同阶段多轮记忆 — 注入前 N-1 轮的对话历史 ──

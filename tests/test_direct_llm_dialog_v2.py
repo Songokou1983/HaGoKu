@@ -28,16 +28,13 @@ SYSTEM = (
     "你必须调用 submit_field_inference 工具来提交你的分析结果。\n\n"
     f"【最高优先级 — 用户分析目标】\n"
     f"「{QUERY}」\n\n"
-    f"角色定义（请结合分析目标自行判断每个字段的角色）：\n"
-    f"  • target：用户关心的核心度量指标（如收入、转化率）\n"
-    f"  • feature：用于分组、切分、解释目标的维度或辅助度量（如渠道、时间、店铺编码、地区）\n"
-    f"  • identifier：仅用于唯一标识行、无任何分析意义的列（如自增主键、UUID）\n"
-    f"  • time_index：纯时间戳，与本次分析目标无关时使用\n"
-    f"  • ignore：与本次分析目标完全无关的列\n\n"
-    f"used_in_analysis：判断每个字段是否服务于上述分析目标。\n"
-    f"服务于目标 → true；不服务 → false。\n"
-    f"不要仅根据数据类型推断——结合分析目标、样本值、业务常识综合判断。\n"
-    f"现在请调用 submit_field_inference 提交你对所有字段的完整分析。"
+    f"字段角色含义：\n"
+    f"  target — 核心度量指标\n"
+    f"  feature — 分组维度或辅助度量\n"
+    f"  identifier — 仅用于唯一标识行，无分析意义\n"
+    f"  time_index — 时间戳\n"
+    f"  ignore — 与本次分析无关\n"
+    f"现在请调用 submit_field_inference 提交你的分析。"
 )
 
 # 完整 Scout schema

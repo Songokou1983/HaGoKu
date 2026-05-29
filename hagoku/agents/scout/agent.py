@@ -663,20 +663,22 @@ class ScoutAgent(InteractionMixin):
         _call_duration_ms = int((datetime.now(timezone.utc) - _call_start).total_seconds() * 1000)
 
         raw_text = response.choices[0].message.content or ""
-        # MiniMax 等模型会输出 <think>...</think> CoT 块，清理后再解析
+        # MiniMax 等模型会输出 <think>...</think> CoT 块
         import re as _re
+        think_match = _re.search(r"<think>(.*?)</think>", raw_text, flags=_re.DOTALL)
+        think_content = think_match.group(1).strip() if think_match else ""
         raw_text = _re.sub(r"<think>.*?</think>", "", raw_text, flags=_re.DOTALL).strip()
         tool_calls = response.choices[0].message.tool_calls
 
-        # ── 通道日志：LLM 调用后，记录完整输入输出 ──
+        # ── 通道日志：LLM 调用后，记录完整输入输出（含 think 块）──
         if self._channel_logger:
             tc = tool_calls or []
             self._channel_logger.log_llm("scout",
                 model=self.llm_config.model_quick or self.llm_config.model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt_str,
-                response_tool_calls=[{"name": t.function.name, "arguments": t.function.arguments} for t in tc],
-                response_content=raw_text,
+                response_tool_calls=[{"name": t.function.name, "arguments": t.function.arguments} for t in tc] if tc else [],
+                response_content=f"<think>\n{think_content}\n</think>\n{raw_text}" if think_content else raw_text,
                 tokens=response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0,
                 duration_ms=_call_duration_ms)
 

@@ -259,8 +259,7 @@ export default function SettingsPanel() {
           <input
             className={inputClass}
             type="text"
-            placeholder={llm.api_key_configured ? "已保存过，不想改就空着" : "本地没密钥就填 none"}
-            autoComplete="new-password"
+            placeholder="粘贴 API 密钥"
             value={apiKeyInput}
             onChange={(e) => {
               setApiKeyInput(e.target.value);

@@ -193,8 +193,10 @@ async def ws_handler(ws: WebSocket) -> None:
                 await ws.send_json({"type": "pong"})
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
+                # 清理整个 payload 中的 null 字节
+                payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 data_path = payload.get("data_path", "")
-                query = payload.get("query", "").strip("\x00").strip()
+                query = payload.get("query", "").strip()
                 project_name = payload.get("project_name", "default")
                 phase = payload.get("phase", "full")
                 import logging
@@ -264,7 +266,8 @@ async def ws_handler(ws: WebSocket) -> None:
             elif cmd == "respond":
                 # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})
-                user_text = payload.get("text", payload.get("user_input", "")).strip("\x00").strip()
+                payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
+                user_text = payload.get("text", payload.get("user_input", "")).strip()
                 import logging
                 logging.getLogger("hagoku.ws").warning(
                     "WS respond 收到: text=%r payload_keys=%s full_payload=%s",

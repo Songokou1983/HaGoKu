@@ -271,8 +271,8 @@ async def ws_handler(ws: WebSocket) -> None:
                 import logging
                 logging.getLogger("hagoku.ws").warning(
                     "WS respond 收到: text=%r payload_keys=%s full_payload=%s",
-                    user_text[:100], list(payload.keys()),
-                    str(payload)[:200],
+                    user_text, list(payload.keys()),
+                    str(payload),
                 )
                 orch = _shared_orchestrator
                 if orch is None:

@@ -957,7 +957,7 @@ def _apply_scout_reply_with_llm(
             f"  - 特征变量 (features): {', '.join(current_features) if current_features else '（未设置）'}\n\n"
         )
     if channel_logger:
-        channel_logger.log("scout", "respond_context", query=query_raw[:100])
+        channel_logger.log("scout", "respond_context", query=query_raw)
 
     # ── 注入用户历史命令/纠错（与初始 Scout 推理一致的通道）─────────────
     command_context = ""
@@ -1028,7 +1028,7 @@ def _apply_scout_reply_with_llm(
             for tc in (tool_calls or []):
                 fn = tc.function.name if hasattr(tc, "function") else str(tc)
                 fa = tc.function.arguments if hasattr(tc, "function") else ""
-                channel_logger.log("scout", "field_updated", tool=fn, args=fa[:200])
+                channel_logger.log("scout", "field_updated", tool=fn, args=fa)
 
         # ── 律 3：记录本轮对话到历史（供下一轮 LLM 调用感知上下文）──
         conv_history.append({"role": "user", "content": raw})
@@ -1036,7 +1036,7 @@ def _apply_scout_reply_with_llm(
         import re as _re2
         _think_match = _re2.search(r"<think>(.*?)</think>", _raw_text or "", _re2.DOTALL)
         if _think_match and channel_logger:
-            channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip()[:500])
+            channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip())
 
         assistant_turn = _raw_text or ""
         if tool_calls and isinstance(tool_calls, list):
@@ -1219,7 +1219,7 @@ def _apply_scout_reply_with_llm(
         _log.warning(
             "LLM 字段理解失败（保留原字段信息不变）：%s | 原始响应: %s",
             e,
-            repr(_raw_text[:200] if _raw_text else "(无响应)"),
+            repr(_raw_text if _raw_text else "(无响应)"),
         )
         _log.debug(traceback.format_exc())
         return []
@@ -1553,7 +1553,7 @@ class Orchestrator:
         """前端用户发送回复后，ws_handler 调用此方法解除线程阻塞。"""
         if hasattr(self, '_channel_logger') and self._channel_logger:
             self._channel_logger.log("orchestrator", "user_input",
-                raw_text=user_response[:200], phase="field_correction")
+                raw_text=user_response, phase="field_correction")
         self._user_response = user_response
         self._is_paused = False
         self._pause_event.set()

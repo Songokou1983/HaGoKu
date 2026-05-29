@@ -295,8 +295,12 @@ async def test_llm_connection(req: LlmTestBody):
     base_url = req.base_url.strip()
     model = req.main_model.strip()
     api_key = req.api_key.strip()
-    import logging
-    logging.getLogger("hagoku").warning(f"TEST key_len={len(api_key)} prefix={api_key[:15] if api_key else 'EMPTY'} url={base_url} model={model}")
+    # 如果前端没传 key，用 .env 里已保存的
+    if not api_key:
+        from hagoku.config import HaGoKuConfig
+        api_key = HaGoKuConfig.load().llm.api_key or ""
+    if not api_key:
+        raise HTTPException(status_code=400, detail="密钥为空，请先在设置页保存密钥再测试")
 
     if not base_url or not model:
         raise HTTPException(status_code=400, detail="网址和模型名称不能为空")

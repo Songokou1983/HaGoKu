@@ -146,6 +146,12 @@ def _handle_update_field_table(args: dict, ctx: dict, _df: pd.DataFrame | None) 
         applied.append(col)
 
     ctx["column_semantics"] = semantics
+    # 律 5：同步 column_display_names，避免平行存储导致的展示不一致
+    display_names = ctx.setdefault("column_display_names", {})
+    for col in applied:
+        sem = sem_by_name.get(col, {})
+        if sem.get("display_name"):
+            display_names[col] = sem["display_name"]
     return {"updated": applied}
 
 

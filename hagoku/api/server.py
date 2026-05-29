@@ -244,7 +244,9 @@ async def post_llm_config(req: LlmConfigBody):
         _dotenv_set(path, "HAGOKU_LLM_MODEL_QUICK", sub)
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
-        from dotenv import dotenv_values
+        # 重新加载 .env 到当前进程，让后续请求立即使用新配置
+        from dotenv import load_dotenv, dotenv_values
+        load_dotenv(path, override=True)
 
         vals = dotenv_values(path) or {}
         akv = str(vals.get("HAGOKU_LLM_API_KEY") or "").strip()
@@ -258,8 +260,8 @@ async def post_llm_config(req: LlmConfigBody):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
         "ok": True,
-        "restart_required": True,
-        "hint": "已经存到本机配置文件。请重新启动一次后端（运行 hagoku-api 的那个窗口关掉再开），新设置才会用在分析里。",
+        "restart_required": False,
+        "hint": "配置已保存并立即生效，下次分析将使用新模型。",
         "llm": {
             "base_url": str(vals.get("HAGOKU_LLM_BASE_URL") or base_url),
             "main_model": main,

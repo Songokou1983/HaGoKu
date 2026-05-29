@@ -21,6 +21,10 @@ mkdir -p ~/.hagoku && cp .env.example ~/.hagoku/.env
 
 # 验证
 pytest tests/ -q
+
+# 安装铁律 0 commit hook（LLM 改动前强制自检）
+cp scripts/check-selfcheck-hook.py .git/hooks/commit-msg
+chmod +x .git/hooks/commit-msg
 ```
 
 > **前置条件**: Python 3.10+

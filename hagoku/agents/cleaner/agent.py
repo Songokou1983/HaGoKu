@@ -567,7 +567,7 @@ class CleanerAgent(InteractionMixin):
 
         # 纯通道：只给列名，LLM 自己调工具看数据
         analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
-                         if s.get("used_in_analysis", True) is not False}
+                         if s.get("used_in_analysis") is True}
         col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
 
         # 拼 messages：系统规则 + 对话历史 + 当前上下文

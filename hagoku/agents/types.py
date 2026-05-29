@@ -111,7 +111,7 @@ def _build_fallback_schema() -> dict[str, Any]:
                             "description": "该字段是否参与本次分析。严格根据分析目标判断：能服务于用户问题的字段=true，无关字段=false。标识符、ID、与问题无关的文本列通常=false。",
                         },
                     },
-                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description", "used_in_analysis"],
+                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"],
                 },
             },
             "target_columns": {"type": "array", "items": {"type": "string"}, "description": "从用户问题中识别到的目标变量候选列表（列名数组）"},
@@ -183,7 +183,7 @@ def derive_analysis_columns(column_semantics: list[dict[str, Any]]) -> list[str]
     return [
         str(s["column_name"])
         for s in column_semantics
-        if s.get("used_in_analysis", True) is not False
+        if s.get("used_in_analysis") is True
     ]
 
 
@@ -233,7 +233,7 @@ class ColumnSemantic:
     # 律 5 扩展字段
     display_name: str = ""  # 简短中文业务名（≤6 字，如「店铺收入」）
     description: str = ""  # 业务含义（一句话自然语言）
-    used_in_analysis: bool = True  # 是否参与本次分析
+    used_in_analysis: bool = False  # 是否参与本次分析（opt-in：LLM 明确标记才参与）
     role: str = ""  # 当前有效角色（优先于 suggested_role）
     confirmed_by_user: bool = False  # 律 10：本轮是否被用户纠正
     last_confirmed_at_run: str | None = None  # 律 10：上次确认的 run_id

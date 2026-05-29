@@ -297,10 +297,13 @@ async def test_llm_connection(req: LlmTestBody):
 
     try:
         from openai import OpenAI
-        from hagoku.llm.client import _clear_proxy_env
-
-        with _clear_proxy_env():
-            client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
+        import os as _os
+        # 永久清除代理，确保直连 MiniMax
+        for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+            _os.environ.pop(_k, None)
+        # strip 可能残留的引号
+        api_key = api_key.strip().strip("'").strip('"')
+        client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": "ping"}],

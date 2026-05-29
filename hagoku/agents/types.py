@@ -111,7 +111,7 @@ def _build_fallback_schema() -> dict[str, Any]:
                             "description": "该字段是否参与本次分析。严格根据分析目标判断：能服务于用户问题的字段=true，无关字段=false。标识符、ID、与问题无关的文本列通常=false。",
                         },
                     },
-                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "suggested_role", "display_name", "description"],
+                    "required": ["name", "inferred_type", "confidence", "evidence", "needs_user_input", "display_name", "description"],
                 },
             },
             "target_columns": {"type": "array", "items": {"type": "string"}, "description": "从用户问题中识别到的目标变量候选列表（列名数组）"},

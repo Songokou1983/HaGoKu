@@ -621,13 +621,9 @@ class ScoutAgent(InteractionMixin):
             analysis_goal_line = (
                 f"\n\n【最高优先级 — 用户分析目标】\n"
                 f"「{query.strip()}」\n\n"
-                f"字段角色含义：\n"
-                f"  target — 核心度量指标\n"
-                f"  feature — 分组维度或辅助度量\n"
-                f"  identifier — 仅用于唯一标识行，无分析意义\n"
-                f"  time_index — 时间戳\n"
-                f"  ignore — 与本次分析无关\n"
-                f"现在请调用 submit_field_inference 提交你的分析。\n"
+                f"你的工作：1. 给每个字段翻译一个中文名 2. 判断是否参与本次分析。\n"
+                f"只勾选直接回答分析目标所必需的字段，不相关的不要勾。\n"
+                f"现在调用 submit_field_inference。\n"
             )
 
         system_prompt = (

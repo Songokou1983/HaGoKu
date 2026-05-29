@@ -26,8 +26,10 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 - 函数名带 `_infer_`/`_detect_`/`_classify_` 但内部没调 LLM
 
 → 全部禁止。停下来想：这个判断能不能写成一句中文，让 LLM 拿到分析目标和数据后自己判断？
-能 → 说明 LLM 不需要你帮它——删掉这条规则，代码和 prompt 里都不要有。
-   「写到 prompt 里」≠ 把 id→false 从 .py 搬到 system prompt。是在 prompt 里给 LLM 分析目标和数据，不是替它写好结论。
+能 → 删掉它。不要在任何地方替 LLM 写结论。
+   prompt 可以告诉 LLM 流程（先看目标、再看字段、判断角色、提交结果），
+   但不能告诉 LLM 结论（id→false、Period必须feature、逐一检查是否服务目标）。
+   流程 = 怎么思考。结论 = 判成什么。代码和 prompt 都只能说流程，不能说结论。
 不能（纯运算/IO/序列化）→ 才允许写代码。
 
 ### 铁律 2（LLM 失败的唯一合法路径）

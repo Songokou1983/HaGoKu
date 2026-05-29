@@ -1029,6 +1029,12 @@ def _apply_scout_reply_with_llm(
 
         # ── 律 3：记录本轮对话到历史（供下一轮 LLM 调用感知上下文）──
         conv_history.append({"role": "user", "content": raw})
+        # 提取 MiniMax think 块用于调试
+        import re as _re2
+        _think_match = _re2.search(r"<think>(.*?)</think>", _raw_text or "", _re2.DOTALL)
+        if _think_match and channel_logger:
+            channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip()[:500])
+
         assistant_turn = _raw_text or ""
         if tool_calls and isinstance(tool_calls, list):
             tc_parts = []

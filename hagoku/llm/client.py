@@ -25,17 +25,14 @@ def _clear_proxy_env() -> Generator[None, None, None]:
     """清理代理环境变量，避免 httpx 对 socks:// 等不支持 scheme 抛出 ValueError。
 
     适用于 LLM 服务为本地/内网访问、无需代理的场景。
-    退出上下文时自动恢复原始值。
+    不再恢复代理设置——httpx 在请求时读取环境变量，恢复后会导致请求走代理。
     """
-    _saved = {k: os.environ.pop(k, None) for k in _PROXY_ENV_KEYS}
+    for k in _PROXY_ENV_KEYS:
+        os.environ.pop(k, None)
     try:
         yield
     finally:
-        for k, v in _saved.items():
-            if v is not None:
-                os.environ[k] = v
-            elif k in os.environ:
-                del os.environ[k]
+        pass  # 不恢复，避免 httpx 请求时重新读取代理
 
 
 def create_structured_llm_client(llm_config: LLMConfig) -> Any:

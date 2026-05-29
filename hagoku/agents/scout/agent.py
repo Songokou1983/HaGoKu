@@ -610,8 +610,9 @@ class ScoutAgent(InteractionMixin):
         if query and query.strip():
             analysis_goal_line = (
                 f"\n\n【最高优先级 — 用户分析目标】\n"
-                f"「{query.strip()}」\n\n"
-                f"角色定义（请结合分析目标自行判断每个字段的角色）：\n"
+                f"「{query.strip()}」\n"
+                f"逐一检查每个字段是否能服务于上述分析目标，据此判定角色和参与与否。\n\n"
+                f"角色定义：\n"
                 f"  • target：用户关心的核心度量指标（如收入、转化率）\n"
                 f"  • feature：用于分组、切分、解释目标的维度或辅助度量（如渠道、时间、店铺编码、地区）\n"
                 f"  • identifier：仅用于唯一标识行、无任何分析意义的列（如自增主键、UUID）\n"

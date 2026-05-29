@@ -754,20 +754,6 @@ class ScoutAgent(InteractionMixin):
         self._llm_target_columns = result.get("target_columns") or []
         self._llm_feature_columns = result.get("feature_columns") or []
 
-        # 机械推导 used_in_analysis 从 suggested_role
-        # Qwen 对照实验（docs/MODEL_EVALUATION_USED_IN_ANALYSIS.md）：
-        #   LLM 的角色判断可靠（变体 D 100%），但 used_in_analysis 不可靠
-        #   → 代码做纯布尔映射：identifier/ignore/unknown → false
-        # 注意：time_index 不在此列——趋势分析需要时间维度，只有 LLM 能判断
-        # 铁律 1 合规：此映射不含语义——role 100% 由 LLM 决定，代码只翻译
-        _UIA_FALSE_ROLES = frozenset({"identifier", "ignore", "unknown"})
-        for sem in semantics:
-            role = str(sem.get("suggested_role", "")).strip()
-            if role in _UIA_FALSE_ROLES:
-                sem["used_in_analysis"] = False
-            elif sem.get("used_in_analysis") is None:
-                sem["used_in_analysis"] = True
-
         return semantics
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:

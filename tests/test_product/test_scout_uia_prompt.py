@@ -136,36 +136,3 @@ def test_scout_llm_output_used_in_analysis_preserved():
         f"❌ LLM 输出 used_in_analysis=true，但被代码覆盖。B={sem_b}"
     )
 
-
-def test_mechanical_override_identifier_and_ignore():
-    """GREEN: LLM 输出 used_in_analysis=true 但 role=identifier/ignore →
-    机械推导覆盖为 false。这是「全部勾选」问题的最终修复。"""
-    import pandas as pd
-    from hagoku.config import HaGoKuConfig
-    from hagoku.agents.scout.agent import ScoutAgent
-
-    cfg = HaGoKuConfig()
-    agent = ScoutAgent(cfg.llm, event_bus=MagicMock())
-    df = pd.DataFrame({"ID": [1, 2], "Val": [100.0, 200.0], "Extra": [3.0, 4.0]})
-
-    def mock_client(llm_config):
-        c = MagicMock()
-        def _create(*, model, messages, tools, temperature, max_tokens, tool_choice=None):
-            r = MagicMock(); r.choices = [MagicMock()]; r.choices[0].message = MagicMock()
-            r.choices[0].message.tool_calls = []
-            r.choices[0].message.content = (
-                '{"columns":['
-                '{"name":"ID","inferred_type":"id","suggested_role":"identifier","display_name":"","description":"","confidence":0.9,"needs_user_input":false,"used_in_analysis":true},'
-                '{"name":"Val","inferred_type":"numeric","suggested_role":"target","display_name":"","description":"","confidence":0.9,"needs_user_input":false,"used_in_analysis":true},'
-                '{"name":"Extra","inferred_type":"numeric","suggested_role":"ignore","display_name":"","description":"","confidence":0.8,"needs_user_input":false,"used_in_analysis":true}'
-                ']}')
-            return r
-        c.chat.completions.create = _create; return c
-
-    with patch("hagoku.llm.client.create_raw_client", mock_client):
-        semantics = agent._infer_all_semantics(df, query="分析 Val")
-
-    s = {x["column_name"]: x for x in semantics}
-    assert s["ID"]["used_in_analysis"] is False, f"identifier→false 失败: {s['ID']}"
-    assert s["Val"]["used_in_analysis"] is True, f"target→true 失败: {s['Val']}"
-    assert s["Extra"]["used_in_analysis"] is False, f"ignore→false 失败: {s['Extra']}"

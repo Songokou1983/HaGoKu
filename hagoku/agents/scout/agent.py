@@ -222,6 +222,7 @@ class ScoutAgent(InteractionMixin):
                 "missing_summary": profile.get("missing_summary", {}),
                 "warnings": [],
                 "column_descriptions": {},
+                "_session_messages": getattr(self, "_session_messages", []),
             }
 
             # 5. 应用项目记忆（从 memory_project 传入）
@@ -310,6 +311,7 @@ class ScoutAgent(InteractionMixin):
                 "warnings": [],
                 "column_descriptions": {},
                 "_column_profiles": column_profiles,
+                "_session_messages": getattr(self, "_session_messages", []),
             }
 
             # 应用项目记忆
@@ -787,6 +789,14 @@ class ScoutAgent(InteractionMixin):
             if self._channel_logger:
                 self._channel_logger.trace_value("scout", sem["column_name"],
                     "used_in_analysis", sem.get("used_in_analysis"), "llm")
+
+        # ── 保存完整 session 上下文 ──
+        self._session_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
+            {"role": "assistant", "content": raw_text or _json.dumps(result, ensure_ascii=False)},
+        ]
+
         return semantics
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:

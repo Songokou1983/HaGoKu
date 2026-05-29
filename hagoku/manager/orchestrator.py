@@ -1014,16 +1014,17 @@ def _apply_scout_reply_with_llm(
         "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
 
-        # ── 律 3：同阶段多轮记忆 — 注入前 N-1 轮的对话历史 ──
-    conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_msg},
-    ]
-    # 注入最近 _CONV_HISTORY_INJECT_TURNS 轮（每轮 user+assistant 两条消息）
-    max_inject = _CONV_HISTORY_INJECT_TURNS * 2
-    for turn in conv_history[-max_inject:]:
-        messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
-    messages.append({"role": "user", "content": raw})
+    # ── Session 上下文：用初始 Scout 的完整对话作为起点 ──
+    session_msgs = context.get("_session_messages", [])
+    if session_msgs:
+        messages = list(session_msgs)  # 拷贝初始对话（system + user + assistant）
+        messages.append({"role": "user", "content": raw})  # 追加用户纠正
+    else:
+        # 回退：没有 session 上下文时用独立 system_msg
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": raw},
+        ]
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
@@ -1050,9 +1051,7 @@ def _apply_scout_reply_with_llm(
                 fa = tc.function.arguments if hasattr(tc, "function") else ""
                 channel_logger.log("scout", "field_updated", tool=fn, args=fa)
 
-        # ── 律 3：记录本轮对话到历史（供下一轮 LLM 调用感知上下文）──
-        conv_history.append({"role": "user", "content": raw})
-        # 提取 MiniMax think 块用于调试
+        # ── 追加本轮响应到 session 上下文 ──
         import re as _re2
         _think_match = _re2.search(r"<think>(.*?)</think>", _raw_text or "", _re2.DOTALL)
         if _think_match and channel_logger:
@@ -1068,12 +1067,9 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
-        conv_history.append({"role": "assistant", "content": assistant_turn})
-        # 保留最近 _CONV_HISTORY_KEEP_TURNS 轮，避免 context 膨胀
-        max_keep = _CONV_HISTORY_KEEP_TURNS * 2
-        if len(conv_history) > max_keep:
-            conv_history = conv_history[-max_keep:]
-        context["_conversation_history"] = conv_history
+        if session_msgs:
+            session_msgs.append({"role": "assistant", "content": assistant_turn})
+            context["_session_messages"] = session_msgs
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:

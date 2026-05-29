@@ -481,6 +481,7 @@ def apply_scout_user_field_reply_to_context(
     *,
     llm_client: Any = None,
     llm_model: str = "",
+    channel_logger: Any = None,
 ) -> list[str]:
     """
     将用户在 Scout 字段核对暂停点的说明写入 context（column_descriptions、needs_user_input）。
@@ -503,7 +504,7 @@ def apply_scout_user_field_reply_to_context(
 
     # ── LLM 唯一引擎：将用户自然语言说明交给 LLM 理解 ──────────
     if llm_client is not None and llm_model:
-        return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model)
+        return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model, channel_logger)
 
     # ── LLM 不可用（client/model 为空）：保留原 context，无写入 ──
     import logging
@@ -869,6 +870,7 @@ def _apply_scout_reply_with_llm(
     columns: list[str],
     llm_client: Any,
     llm_model: str,
+    channel_logger: Any = None,
 ) -> list[str]:
     """
     LLM 作为字段理解的唯一引擎，通过 function calling 主动更新字段信息。
@@ -1060,6 +1062,9 @@ def _apply_scout_reply_with_llm(
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
     try:
+        if channel_logger:
+            channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(system_msg), phase="field_reply")
+
         resp = llm_client.chat.completions.create(
             model=llm_model,
             messages=messages,
@@ -1072,6 +1077,12 @@ def _apply_scout_reply_with_llm(
         msg = resp.choices[0].message
         tool_calls = getattr(msg, "tool_calls", None)
         _raw_text = (msg.content or "").strip()
+
+        if channel_logger and tool_calls:
+            for tc in (tool_calls or []):
+                fn = tc.function.name if hasattr(tc, "function") else str(tc)
+                fa = tc.function.arguments if hasattr(tc, "function") else ""
+                channel_logger.log("scout", "field_updated", tool=fn, args=fa[:200])
 
         # ── 律 3：记录本轮对话到历史（供下一轮 LLM 调用感知上下文）──
         conv_history.append({"role": "user", "content": raw})
@@ -2246,6 +2257,7 @@ class Orchestrator:
                             user_reply_scout or "",
                             llm_client=self.llm_quick_raw,
                             llm_model=self.config.llm.model_quick or self.config.llm.model,
+                            channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None,
                         )
                         # LLM 未产出任何字段更新时记日志（纯可观测性，不做兜底判断）
                         if user_reply_scout and not applied_scout:

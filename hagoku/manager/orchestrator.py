@@ -612,8 +612,8 @@ _SCOUT_FIELD_UPDATE_TOOLS = [  # 保持向后兼容，逐步迁移到 _get_scout
                     "used_in_analysis": {
                         "type": "boolean",
                         "description": (
-                            "该字段是否参与本次分析。根据字段中文名和分析目标自行判断。"
-                            "例如分析「收入趋势」→ 收入类字段=true，费用类字段=false。"
+                            "该字段是否参与本次分析。根据字段中文名和分析目标自行判断——"
+                            "纠正中文名不代表该字段要参与。例如分析「收入趋势」→ 收入类=true，费用类=false。"
                         ),
                     },
                 },

@@ -661,6 +661,7 @@ function ClearHistoryButton({ currentProject }: { currentProject: string | null 
     setClearing(true);
     try {
       await fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" });
+      handleReset();
     } finally {
       setClearing(false);
       setShowConfirm(false);

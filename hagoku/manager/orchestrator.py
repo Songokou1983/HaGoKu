@@ -1076,8 +1076,8 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
-        if session_msgs:
-            # 追加本轮更新后的字段状态摘要，供下一轮参考
+        if session_msgs is not None:
+            # 降级路径：旧的 _session_messages 追加
             state_after = []
             for sem in semantics:
                 col = sem.get("column_name", "")
@@ -1087,10 +1087,18 @@ def _apply_scout_reply_with_llm(
                 uia_str = "参与" if uia is True else ("不参与" if uia is False else "待定")
                 state_after.append(f"  {col}{dn_str}: {uia_str}")
             state_text = "当前字段状态：\n" + "\n".join(state_after) if state_after else ""
-            assistant_turn = state_text + "\n\n" + assistant_turn
-            if session_msgs is not None:
-                session_msgs.append({"role": "assistant", "content": assistant_turn})
-                context["_session_messages"] = session_msgs
+            assistant_turn_full = state_text + "\n\n" + assistant_turn
+            session_msgs.append({"role": "assistant", "content": assistant_turn_full})
+            context["_session_messages"] = session_msgs
+        elif project_ctx is not None:
+            # project_ctx 路径：通过 ProjectContext 记录本轮结果
+            applied_summary = ", ".join(applied) if applied else "无字段更新"
+            project_ctx.add_agent_response(
+                stage="scout",
+                revision=context.get("interaction_revision", 0),
+                content=applied_summary,
+                snapshot=project_ctx._derive_snapshot(context),
+            )
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:

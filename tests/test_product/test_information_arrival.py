@@ -509,3 +509,68 @@ def test_meta_LLMSpy录制功能正常():
     assert spy.call_count() == 1
     assert spy.contains_in_any_message("hello world")
     assert not spy.contains_in_any_message("not there")
+
+
+# ── ProjectContext 信息抵达正向断言（律 1/2/3/6）─────────────────────────
+
+def test_project_context_injects_goal_to_prompt():
+    """律 1 + 律 6：build_prompt 的 system_prefix 首行必须包含 analysis_goal。"""
+    import sys
+    # 确保 worktree root 优先于主仓库，且清除已缓存的 hagoku 模块
+    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
+    if _wt in sys.path:
+        sys.path.remove(_wt)
+    sys.path.insert(0, _wt)
+    for _mod in list(sys.modules.keys()):
+        if _mod.startswith("hagoku"):
+            del sys.modules[_mod]
+    from hagoku.context.project_context import ProjectContext
+
+    ctx = ProjectContext(run_id="test", analysis_goal="分析销售趋势")
+    result = ctx.build_prompt("scout", {"column_semantics": []})
+    first_line = result["system_prefix"].strip().split("\n")[0]
+    assert "分析销售趋势" in first_line, f"system_prefix 首行不含分析目标: {first_line}"
+
+
+def test_project_context_preserves_user_raw_text():
+    """律 2 + 律 6：user_feedback entry 必须保留 raw_user_text。"""
+    import sys
+    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
+    if _wt in sys.path:
+        sys.path.remove(_wt)
+    sys.path.insert(0, _wt)
+    for _mod in list(sys.modules.keys()):
+        if _mod.startswith("hagoku"):
+            del sys.modules[_mod]
+    from hagoku.context.project_context import ProjectContext
+
+    ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
+    ctx.add_user_feedback(stage="scout", revision=1, raw_text="Period是周次")
+    assert ctx.entries[0].raw_user_text == "Period是周次"
+
+
+def test_project_context_history_includes_full_stage_dialog():
+    """律 3 + 律 6：同一阶段的多轮对话必须全部出现在 history_context 中。"""
+    import sys
+    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
+    if _wt in sys.path:
+        sys.path.remove(_wt)
+    sys.path.insert(0, _wt)
+    for _mod in list(sys.modules.keys()):
+        if _mod.startswith("hagoku"):
+            del sys.modules[_mod]
+    from hagoku.context.project_context import ProjectContext
+
+    ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
+    ctx.add_user_feedback(stage="scout", revision=1, raw_text="第一轮纠正")
+    ctx.add_agent_response(stage="scout", revision=1, content="已处理第一轮")
+    ctx.add_user_feedback(stage="scout", revision=2, raw_text="第二轮纠正")
+    ctx.add_agent_response(stage="scout", revision=2, content="已处理第二轮")
+
+    result = ctx.build_prompt("scout", {"column_semantics": []})
+    assert "第一轮纠正" in result["history_context"]
+    assert "第二轮纠正" in result["history_context"]
+    # 验证时间序
+    idx1 = result["history_context"].index("第一轮纠正")
+    idx2 = result["history_context"].index("第二轮纠正")
+    assert idx1 < idx2, "对话顺序应保持时间序"

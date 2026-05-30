@@ -1952,6 +1952,14 @@ class Orchestrator:
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
 
+        # ── ProjectContext：统一上下文记忆系统（阶段1：并行旧路径）──
+        from ..context.project_context import ProjectContext
+        self._project_context = ProjectContext(
+            run_id=run_id,
+            analysis_goal=query,
+        )
+        self._project_context.subscribe(self.event_bus, context_ref=None)
+
         # ── 通道日志：初始化 ChannelLogger ──
         from ..observability.channel_logger import ChannelLogger
         self._channel_logger = ChannelLogger(run_dir)
@@ -2211,6 +2219,9 @@ class Orchestrator:
                 )
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
+                # ── 更新 ProjectContext 的 context_ref 引用 ──
+                if hasattr(self, '_project_context') and self._project_context is not None:
+                    self._project_context._context_ref = context
 
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
@@ -2221,6 +2232,8 @@ class Orchestrator:
                 # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
                 interaction_revision = 0
                 skip_gate = False  # 用户主动确认 → 跳过 gate
+                # ── 注入 ProjectContext 到 context ──
+                context["_project_context"] = getattr(self, '_project_context', None)
                 while True:
                     # 内层：Scout 字段对齐循环
                     while True:

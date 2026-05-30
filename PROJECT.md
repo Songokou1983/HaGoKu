@@ -277,27 +277,73 @@ Scribe 是项目管家，通过 4 个持久化通道实现管道可观测性和 
 
 > 实现：`hagoku/agents/_scribe/agent.py`
 
-### Session 上下文记忆系统
+### ProjectContext — 统一上下文记忆系统
 
-一次分析 session 内，同一 Agent 的多次 LLM 调用共享消息列表——初始调用的 system prompt + 用户数据 + LLM 响应全部保留，后续纠正追加到同一对话。LLM 能看到自己之前的所有判断，而非每次从零开始。
+一次分析 run 内，所有 Agent 共享同一个追加式上下文日志。从用户提交分析目标到最终报告生成，每一次 Agent 响应和用户反馈都按时间序记录。每个 Agent 调 LLM 时，自动获得：分析目标 + 当前字段状态 + 本阶段对话历史 + 上游阶段摘要。不再是各 Agent 各自维护零散的 `_session_messages` / `_conversation_history`。
+
+#### 数据模型
+
+```
+ProjectContext (追加式，只增不改)
+├── analysis_goal: "分析各渠道ROI"
+└── entries: [
+    {type: goal,           content: "分析各渠道ROI"},
+    {type: agent_response, stage: scout,  snapshot: {fields: [...], target: null}},
+    {type: user_feedback,  stage: scout,  raw: "Code是店铺编号"},
+    {type: agent_response, stage: scout,  snapshot: {fields: [Code→店铺编号, ...]}},
+    {type: stage_transition, from: scout, to: cleaner},
+    {type: agent_response, stage: cleaner, snapshot: {...}},
+    ...
+]
+```
+
+每条 `agent_response` 附带从 `column_semantics` 实时派生的状态快照（律 5：不平行存储）。每条 `user_feedback` 保留用户原话直到对应 tool_call 落地（律 2）。
+
+#### 与现有组件的关系
+
+```
+EventBus (已有)
+  ├── Scribe (已有)         → process_log.md / context.md / kanban.db
+  └── ProjectContext (新增)  → entries 追加 + build_prompt()
+```
+
+`ProjectContext` 是 EventBus 的被动消费者——监听 `AGENT_STARTED` / `AGENT_COMPLETED` / `USER_INPUT_RECEIVED`，自动追加 entries，不做任何流程控制。
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
-| **Session 消息链** | `context["_session_messages"]` | 完整多轮对话（system + user + assistant），每次 respond 追加用户纠正和字段状态摘要 |
-| **Agent 结论提取** | `context["_scout_conclusions"]` | Scout 完成后提取 `participating` / `excluded` 字段列表 |
-| **SessionContext 类** | `hagoku/observability/session_context.py` | 统一 API：`start_agent` / `add_message` / `finish_agent` / `get_upstream_context` |
-| **通道日志** | `run.log` + `llm.log` | 每个 run 的通道事件决策链 + LLM 完整输入输出（含 think 块） |
+| **ProjectContext** | `hagoku/context/project_context.py` | 统一上下文日志：追加 entries + `build_prompt(agent)` 拼装上下文 |
+| **ContextEntry** | 同上 | 单条记录：`type` / `stage` / `revision` / `raw_user_text` / `snapshot` |
+| **build_prompt()** | 同上 | 为 Agent 拼装 `system_prefix`（分析目标+字段状态+命令上下文）+ `history_context`（阶段对话历史） |
+| **Scribe 4 通道** | `hagoku/agents/_scribe/agent.py` | 不变——管持久化文档和看板，与 ProjectContext 互补不重叠 |
+| **MemoryManager** | `hagoku/storage/memory.py` | 不变——管跨 run 结构化知识，与 ProjectContext 互补不重叠 |
 
-**工作流**：
+#### 工作流
+
 ```
-Scout 初始调用 → 消息存入 _session_messages
-用户纠正 → 追加 user 消息到同一消息列表 → LLM 看到历史判断
-每轮纠正后 → 追加字段状态摘要到 assistant 消息
-Scout 完成 → 提取结论到 _scout_conclusions
-看板 promote → Cleaner 读取上游结论注入 system prompt
+用户提交分析目标 → ProjectContext 记录 goal entry
+Scout 初始分析 → AGENT_COMPLETED → 追加 agent_response + snapshot
+用户纠正 → USER_INPUT_RECEIVED → 追加 user_feedback（含 raw_user_text）
+    → Agent 调 LLM 前：build_prompt("scout")
+        system_prefix: 分析目标 + 当前字段状态 + 命令上下文
+        history_context: 本阶段所有 user_feedback + agent_response
+    → LLM 看到完整来龙去脉
+Cleaner 启动 → build_prompt("cleaner")
+    system_prefix: 分析目标 + 当前字段状态
+    history_context: Scout 阶段快照（结构化摘要）+ Cleaner 阶段对话
 ```
 
-> 实现：`hagoku/observability/session_context.py`、`hagoku/observability/channel_logger.py`、`hagoku/manager/orchestrator.py::_apply_scout_reply_with_llm`
+> 实现：`hagoku/context/project_context.py`、`hagoku/manager/orchestrator.py`
+> 设计规格：`docs/superpowers/specs/2026-05-30-project-context-memory-design.md`
+> 实现计划：`docs/superpowers/plans/2026-05-30-project-context-memory-plan.md`
+
+#### 与 Scribe 的分工
+
+| | ProjectContext | Scribe |
+|---|---|---|
+| **管什么** | 对话记忆（运行时上下文拼装） | 持久化文档（process_log / context.md / handover_notes） |
+| **生命周期** | run 级（内存，crash 丢失 → 后续阶段 3 持久化） | 项目级（磁盘文件，永久保留） |
+| **消费者** | 各 Agent 的 LLM 调用 | 用户阅读 / 开发者调试 |
+| **写入触发** | EventBus 事件（被动） | EventBus 事件 + 看板状态变更 |
 
 ### 多模型分派
 

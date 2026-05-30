@@ -197,6 +197,10 @@ class ProjectContext:
 
     # ── EventBus 集成 ──
 
+    def set_context_ref(self, context_ref: dict[str, Any] | None) -> None:
+        """供 orchestrator 在 context dict 就绪后补充设置。"""
+        self._context_ref = context_ref
+
     def subscribe(self, event_bus: Any, context_ref: dict[str, Any] | None = None) -> None:
         """注册为 EventBus 消费者。context_ref 是 orchestrator 的 context dict 引用。"""
         self._event_bus = event_bus

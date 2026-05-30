@@ -2221,7 +2221,7 @@ class Orchestrator:
                     raise RuntimeError(str(context["error"]))
                 # ── 更新 ProjectContext 的 context_ref 引用 ──
                 if hasattr(self, '_project_context') and self._project_context is not None:
-                    self._project_context._context_ref = context
+                    self._project_context.set_context_ref(context)
 
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)

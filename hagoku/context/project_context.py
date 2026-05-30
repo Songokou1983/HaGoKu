@@ -6,9 +6,12 @@
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
+
+from hagoku.observability.events import EventType
 
 
 @dataclass
@@ -31,8 +34,13 @@ class ProjectContext:
     run_id: str
     analysis_goal: str
     entries: list[ContextEntry] = field(default_factory=list)
+    _event_bus: Any = field(init=False, default=None)
+    _context_ref: dict[str, Any] | None = field(init=False, default=None)
 
     # ── 追加接口 ──
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     def add_entry(self, entry: ContextEntry) -> None:
         """追加一条记录。不可删除，不可修改已有记录。"""
@@ -50,7 +58,7 @@ class ProjectContext:
             type="user_feedback",
             stage=stage,
             revision=revision,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=self._now(),
             content=content or raw_text[:200],
             raw_user_text=raw_text,
         ))
@@ -67,7 +75,7 @@ class ProjectContext:
             type="agent_response",
             stage=stage,
             revision=revision,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=self._now(),
             content=content,
             snapshot=snapshot,
         ))
@@ -78,7 +86,7 @@ class ProjectContext:
             type="stage_transition",
             stage=stage,
             revision=0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=self._now(),
             content=content or f"进入 {stage} 阶段",
         ))
 
@@ -90,14 +98,15 @@ class ProjectContext:
         fields = []
         pending = []
         for s in semantics:
-            col = str(s.get("column_name", ""))
+            col = s.get("column_name", "")
             if not col:
                 continue
+            used = s.get("used_in_analysis")
             fields.append({
                 "name": col,
-                "display": str(s.get("display_name", "") or ""),
-                "role": str(s.get("suggested_role", "") or ""),
-                "participating": bool(s.get("used_in_analysis")) if s.get("used_in_analysis") is not None else None,
+                "display": s.get("display_name", "") or "",
+                "role": s.get("suggested_role", "") or "",
+                "participating": used if used is None else bool(used),
             })
             if s.get("needs_user_input"):
                 pending.append(col)
@@ -196,8 +205,6 @@ class ProjectContext:
 
     def _on_event(self, event: Any) -> None:
         """EventBus 回调：监听关键事件并自动记录。"""
-        from hagoku.observability.events import EventType
-
         etype = event.event_type
         agent = event.agent
         data = event.data or {}
@@ -209,7 +216,11 @@ class ProjectContext:
             )
 
         elif etype == EventType.AGENT_COMPLETED:
-            ctx = getattr(self, "_context_ref", {}) or {}
+            if self._context_ref is None:
+                logging.warning("ProjectContext._context_ref is None, using empty dict")
+                ctx = {}
+            else:
+                ctx = self._context_ref
             snapshot = self._derive_snapshot(ctx) if ctx else None
             revision = ctx.get("interaction_revision", 0) if ctx else 0
             self.add_agent_response(
@@ -220,7 +231,11 @@ class ProjectContext:
             )
 
         elif etype == EventType.USER_INPUT_RECEIVED:
-            ctx = getattr(self, "_context_ref", {}) or {}
+            if self._context_ref is None:
+                logging.warning("ProjectContext._context_ref is None, using empty dict")
+                ctx = {}
+            else:
+                ctx = self._context_ref
             revision = ctx.get("interaction_revision", 0) if ctx else 0
             raw = data.get("reply", "")
             self.add_user_feedback(

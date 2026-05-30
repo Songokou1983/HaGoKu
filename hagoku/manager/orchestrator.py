@@ -1014,17 +1014,26 @@ def _apply_scout_reply_with_llm(
         "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
 
-    # ── Session 上下文：用初始 Scout 的完整对话作为起点 ──
-    session_msgs = context.get("_session_messages", [])
-    if session_msgs:
-        messages = list(session_msgs)  # 拷贝初始对话（system + user + assistant）
-        messages.append({"role": "user", "content": raw})  # 追加用户纠正
-    else:
-        # 回退：没有 session 上下文时用独立 system_msg
+    # ── 使用 ProjectContext.build_prompt 替代旧的 _session_messages ──
+    session_msgs = None  # 初始化，project_ctx 路径不使用
+    project_ctx = context.get("_project_context")
+    if project_ctx:
+        ctx_block = project_ctx.build_prompt("scout", context)
         messages = [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": raw},
+            {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]},
+            {"role": "user", "content": ctx_block["history_context"] + "\n\n【当前用户输入】\n" + raw},
         ]
+    else:
+        # 降级：没有 ProjectContext 时回退旧路径
+        session_msgs = context.get("_session_messages", [])
+        if session_msgs:
+            messages = list(session_msgs)
+            messages.append({"role": "user", "content": raw})
+        else:
+            messages = [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": raw},
+            ]
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
@@ -1079,8 +1088,9 @@ def _apply_scout_reply_with_llm(
                 state_after.append(f"  {col}{dn_str}: {uia_str}")
             state_text = "当前字段状态：\n" + "\n".join(state_after) if state_after else ""
             assistant_turn = state_text + "\n\n" + assistant_turn
-            session_msgs.append({"role": "assistant", "content": assistant_turn})
-            context["_session_messages"] = session_msgs
+            if session_msgs is not None:
+                session_msgs.append({"role": "assistant", "content": assistant_turn})
+                context["_session_messages"] = session_msgs
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:

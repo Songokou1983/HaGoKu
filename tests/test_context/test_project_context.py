@@ -164,3 +164,72 @@ class TestProjectContext:
     def test_build_prompt_with_no_entries_history_is_empty(self, ctx):
         result = ctx.build_prompt("scout", {"column_semantics": []})
         assert result["history_context"] == ""
+
+
+class TestProjectContextEventBus:
+    """ProjectContext + EventBus 集成测试"""
+
+    def test_agent_started_adds_stage_transition(self):
+        from hagoku.observability.event_bus import EventBus
+        from hagoku.observability.events import EventType
+
+        ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+        bus = EventBus()
+        ctx.subscribe(bus, context_ref={})
+
+        bus.emit(EventType.AGENT_STARTED, "scout", {"goal": "数据侦察"})
+        assert len(ctx.entries) == 1
+        assert ctx.entries[0].type == "stage_transition"
+        assert ctx.entries[0].stage == "scout"
+
+    def test_agent_completed_adds_response_with_snapshot(self):
+        from hagoku.observability.event_bus import EventBus
+        from hagoku.observability.events import EventType
+
+        ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+        bus = EventBus()
+        test_ctx = {
+            "column_semantics": [
+                {"column_name": "Code", "display_name": "店铺", "used_in_analysis": True},
+            ],
+            "target": "Revenue",
+            "features": ["Code"],
+            "interaction_revision": 2,
+        }
+        ctx.subscribe(bus, context_ref=test_ctx)
+
+        bus.emit(EventType.AGENT_COMPLETED, "scout", {"result_summary": "完成"})
+        assert len(ctx.entries) == 1
+        assert ctx.entries[0].type == "agent_response"
+        assert ctx.entries[0].snapshot is not None
+        assert ctx.entries[0].snapshot["target"] == "Revenue"
+
+    def test_user_input_received_adds_feedback(self):
+        from hagoku.observability.event_bus import EventBus
+        from hagoku.observability.events import EventType
+
+        ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+        bus = EventBus()
+        ctx.subscribe(bus, context_ref={"interaction_revision": 1})
+
+        bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": "Code是店铺编号"})
+        assert len(ctx.entries) == 1
+        assert ctx.entries[0].type == "user_feedback"
+        assert ctx.entries[0].raw_user_text == "Code是店铺编号"
+
+    def test_multiple_events_accumulate(self):
+        """EventBus 多次事件 → entries 正常累积。"""
+        from hagoku.observability.event_bus import EventBus
+        from hagoku.observability.events import EventType
+
+        ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+        bus = EventBus()
+        ctx.subscribe(bus, context_ref={})
+
+        bus.emit(EventType.AGENT_STARTED, "scout", {})
+        bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": "反馈1"})
+        bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": "反馈2"})
+
+        assert len(ctx.entries) == 3
+        assert ctx.entries[1].raw_user_text == "反馈1"
+        assert ctx.entries[2].raw_user_text == "反馈2"

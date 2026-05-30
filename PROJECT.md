@@ -277,6 +277,28 @@ Scribe 是项目管家，通过 4 个持久化通道实现管道可观测性和 
 
 > 实现：`hagoku/agents/_scribe/agent.py`
 
+### Session 上下文记忆系统
+
+一次分析 session 内，同一 Agent 的多次 LLM 调用共享消息列表——初始调用的 system prompt + 用户数据 + LLM 响应全部保留，后续纠正追加到同一对话。LLM 能看到自己之前的所有判断，而非每次从零开始。
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| **Session 消息链** | `context["_session_messages"]` | 完整多轮对话（system + user + assistant），每次 respond 追加用户纠正和字段状态摘要 |
+| **Agent 结论提取** | `context["_scout_conclusions"]` | Scout 完成后提取 `participating` / `excluded` 字段列表 |
+| **SessionContext 类** | `hagoku/observability/session_context.py` | 统一 API：`start_agent` / `add_message` / `finish_agent` / `get_upstream_context` |
+| **通道日志** | `run.log` + `llm.log` | 每个 run 的通道事件决策链 + LLM 完整输入输出（含 think 块） |
+
+**工作流**：
+```
+Scout 初始调用 → 消息存入 _session_messages
+用户纠正 → 追加 user 消息到同一消息列表 → LLM 看到历史判断
+每轮纠正后 → 追加字段状态摘要到 assistant 消息
+Scout 完成 → 提取结论到 _scout_conclusions
+看板 promote → Cleaner 读取上游结论注入 system prompt
+```
+
+> 实现：`hagoku/observability/session_context.py`、`hagoku/observability/channel_logger.py`、`hagoku/manager/orchestrator.py::_apply_scout_reply_with_llm`
+
 ### 多模型分派
 
 HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策略权衡：

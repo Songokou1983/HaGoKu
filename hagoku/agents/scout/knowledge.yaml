@@ -7970,3 +7970,1460 @@ knowledge:
     confidence: 0.85
   created_at: '2026-05-28 16:00:22'
   use_count: 0
+- id: 9b188306
+  content: 字段名：业务单元代码，标识数据所属的业务板块（B01~B05），B01占比最大（约36%），B03占比最小（约4%）；含义：业务单元代码，标识数据所属的业务板块（B01~B05），B01占比最大（约36%），B03占比最小（约4%）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，B01出现225次最多，B03仅25次，分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元代码，标识数据所属的业务板块（B01~B05），B01占比最大（约36%），B03占比最小（约4%）
+    meaning: 业务单元代码，标识数据所属的业务板块（B01~B05），B01占比最大（约36%），B03占比最小（约4%）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，样本值呈字母+数字格式，B01出现225次最多，B03仅25次，分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 09:11:15'
+  use_count: 0
+- id: 3803664c
+  content: 字段名：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；含义：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；数据特征：datetime
+    整型值范围202540~202612，样本值202540/202541/202542等，符合YYYYWW（年+周）格式，202540=2025年第40周，202612=2026年第12周；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    meaning: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    data_pattern: datetime 整型值范围202540~202612，样本值202540/202541/202542等，符合YYYYWW（年+周）格式，202540=2025年第40周，202612=2026年第12周
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 09:11:16'
+  use_count: 0
+- id: b0e92748
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10远低于均值59.70，说明存在少量高收入拉高均值，大部分数据集中在低值区域；含义：收入指标1，数值范围0~398元，中位数16.10远低于均值59.70，说明存在少量高收入拉高均值，大部分数据集中在低值区域；数据特征：numeric
+    浮点型，范围0.0039~397.62，均值59.70远大于中位数16.10，右偏分布明显，样本值多在100~120区间；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10远低于均值59.70，说明存在少量高收入拉高均值，大部分数据集中在低值区域
+    meaning: 收入指标1，数值范围0~398元，中位数16.10远低于均值59.70，说明存在少量高收入拉高均值，大部分数据集中在低值区域
+    data_pattern: numeric 浮点型，范围0.0039~397.62，均值59.70远大于中位数16.10，右偏分布明显，样本值多在100~120区间
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 09:11:18'
+  use_count: 0
+- id: 75489aad
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27远低于均值43.45，右偏程度比Inc1更明显，可能表示另一维度的收入；含义：收入指标2，数值范围0~296元，中位数11.27远低于均值43.45，右偏程度比Inc1更明显，可能表示另一维度的收入；数据特征：numeric
+    浮点型，范围0~296.32，均值43.45远大于中位数11.27，右偏分布，与Inc1命名相似但数值量级略低；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27远低于均值43.45，右偏程度比Inc1更明显，可能表示另一维度的收入
+    meaning: 收入指标2，数值范围0~296元，中位数11.27远低于均值43.45，右偏程度比Inc1更明显，可能表示另一维度的收入
+    data_pattern: numeric 浮点型，范围0~296.32，均值43.45远大于中位数11.27，右偏分布，与Inc1命名相似但数值量级略低
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 09:11:19'
+  use_count: 0
+- id: 0c68188a
+  content: 字段名：业务指标1，数值范围0~175，中位数6.5远低于均值25.14，右偏分布，可能表示某种业务评分或计数；含义：业务指标1，数值范围0~175，中位数6.5远低于均值25.14，右偏分布，可能表示某种业务评分或计数；数据特征：numeric
+    浮点型，范围0~175.25，均值25.14远大于中位数6.5，右偏分布，253个唯一值，样本值多在40~55区间；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 业务指标1，数值范围0~175，中位数6.5远低于均值25.14，右偏分布，可能表示某种业务评分或计数
+    meaning: 业务指标1，数值范围0~175，中位数6.5远低于均值25.14，右偏分布，可能表示某种业务评分或计数
+    data_pattern: numeric 浮点型，范围0~175.25，均值25.14远大于中位数6.5，右偏分布，253个唯一值，样本值多在40~55区间
+    inferred_role: feature
+    confidence: 0.85
+  created_at: '2026-05-29 09:11:20'
+  use_count: 0
+- id: f53bf44f
+  content: 字段名：业务指标2，数值范围0~5.46，中位数0.24远低于均值0.93，右偏明显，数值量级较小，可能表示比率或比例指标；含义：业务指标2，数值范围0~5.46，中位数0.24远低于均值0.93，右偏明显，数值量级较小，可能表示比率或比例指标；数据特征：numeric
+    浮点型，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，202个唯一值，样本值集中在1.3~2.0区间；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 业务指标2，数值范围0~5.46，中位数0.24远低于均值0.93，右偏明显，数值量级较小，可能表示比率或比例指标
+    meaning: 业务指标2，数值范围0~5.46，中位数0.24远低于均值0.93，右偏明显，数值量级较小，可能表示比率或比例指标
+    data_pattern: numeric 浮点型，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，202个唯一值，样本值集中在1.3~2.0区间
+    inferred_role: feature
+    confidence: 0.85
+  created_at: '2026-05-29 09:11:21'
+  use_count: 0
+- id: 95374d3d
+  content: 字段名：业务指标3，数值范围0~6.69，中位数0.51低于均值1.12，右偏分布，可能表示另一维度的业务评分；含义：业务指标3，数值范围0~6.69，中位数0.51低于均值1.12，右偏分布，可能表示另一维度的业务评分；数据特征：numeric
+    浮点型，范围0~6.69，均值1.12大于中位数0.51，右偏分布，373个唯一值，样本值集中在2.2~2.9区间；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 业务指标3，数值范围0~6.69，中位数0.51低于均值1.12，右偏分布，可能表示另一维度的业务评分
+    meaning: 业务指标3，数值范围0~6.69，中位数0.51低于均值1.12，右偏分布，可能表示另一维度的业务评分
+    data_pattern: numeric 浮点型，范围0~6.69，均值1.12大于中位数0.51，右偏分布，373个唯一值，样本值集中在2.2~2.9区间
+    inferred_role: feature
+    confidence: 0.85
+  created_at: '2026-05-29 09:11:22'
+  use_count: 0
+- id: a1bc475e
+  content: 字段名：公司标识，代表数据所属的公司；含义：公司标识，代表数据所属的公司；数据特征：categorical 5个唯一值（B01/B02/B03/B04/B05），无缺失，样本值显示为字母+数字组合，符合公司/业务单元编码格式；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 公司标识，代表数据所属的公司
+    meaning: 公司标识，代表数据所属的公司
+    data_pattern: categorical 5个唯一值（B01/B02/B03/B04/B05），无缺失，样本值显示为字母+数字组合，符合公司/业务单元编码格式
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:17'
+  use_count: 0
+- id: 53e0e500
+  content: 字段名：唯一标识每个店铺的数字编号；含义：唯一标识每个店铺的数字编号；数据特征：id 25个唯一值（A0000001~A0000025），每个Code恰好出现25次（620/25=24.8），说明每个店铺在25个周期中各有一条记录；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test052801
+    field: 唯一标识每个店铺的数字编号
+    meaning: 唯一标识每个店铺的数字编号
+    data_pattern: id 25个唯一值（A0000001~A0000025），每个Code恰好出现25次（620/25=24.8），说明每个店铺在25个周期中各有一条记录
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:18'
+  use_count: 0
+- id: 419e07a9
+  content: 字段名：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；含义：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；数据特征：datetime
+    25个唯一值，范围202540~202612，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    meaning: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    data_pattern: datetime 25个唯一值，范围202540~202612，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:19'
+  use_count: 0
+- id: 92d8370b
+  content: 字段名：该店铺当期的总收入金额；含义：该店铺当期的总收入金额；数据特征：numeric float64类型，范围0.0039~397.6249，均值59.7，中位数16.1，右偏分布，样本值如115.11、99.24等，符合金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 该店铺当期的总收入金额
+    meaning: 该店铺当期的总收入金额
+    data_pattern: numeric float64类型，范围0.0039~397.6249，均值59.7，中位数16.1，右偏分布，样本值如115.11、99.24等，符合金额特征
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:20'
+  use_count: 0
+- id: 034f1e64
+  content: 字段名：该店铺当期的累计积分数值；含义：该店铺当期的累计积分数值；数据特征：numeric float64类型，范围0~296.32，均值43.4，中位数11.3，右偏分布，样本值如85.46、74.47等；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 该店铺当期的累计积分数值
+    meaning: 该店铺当期的累计积分数值
+    data_pattern: numeric float64类型，范围0~296.32，均值43.4，中位数11.3，右偏分布，样本值如85.46、74.47等
+    inferred_role: numeric_feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:22'
+  use_count: 0
+- id: 296733da
+  content: 字段名：店铺费用类型1的金额；含义：店铺费用类型1的金额；数据特征：numeric float64类型，范围0~175.25，均值25.1，中位数6.5，右偏分布，样本值如55.5、49.0等；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型1的金额
+    meaning: 店铺费用类型1的金额
+    data_pattern: numeric float64类型，范围0~175.25，均值25.1，中位数6.5，右偏分布，样本值如55.5、49.0等
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:23'
+  use_count: 0
+- id: f07d5408
+  content: 字段名：店铺费用类型2的金额；含义：店铺费用类型2的金额；数据特征：numeric float64类型，范围0~5.46，均值0.93，中位数0.24，右偏分布，样本值如1.86、1.68等；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型2的金额
+    meaning: 店铺费用类型2的金额
+    data_pattern: numeric float64类型，范围0~5.46，均值0.93，中位数0.24，右偏分布，样本值如1.86、1.68等
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:24'
+  use_count: 0
+- id: 03daa612
+  content: 字段名：店铺费用类型3的金额；含义：店铺费用类型3的金额；数据特征：numeric float64类型，范围0~6.69，均值1.12，中位数0.51，右偏分布，样本值如2.69、2.34等；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型3的金额
+    meaning: 店铺费用类型3的金额
+    data_pattern: numeric float64类型，范围0~6.69，均值1.12，中位数0.51，右偏分布，样本值如2.69、2.34等
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:20:25'
+  use_count: 0
+- id: 7d3591d6
+  content: 字段名：公司标识，代表数据所属的公司；含义：公司标识，代表数据所属的公司；数据特征：categorical 5个唯一值（B01-B05），无缺失，样本值显示为字母+数字组合，符合公司编码格式；推断角色：categorical_feature
+  tags:
+  - categorical
+  - categorical_feature
+  metadata:
+    project: test052801
+    field: 公司标识，代表数据所属的公司
+    meaning: 公司标识，代表数据所属的公司
+    data_pattern: categorical 5个唯一值（B01-B05），无缺失，样本值显示为字母+数字组合，符合公司编码格式
+    inferred_role: categorical_feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:49'
+  use_count: 0
+- id: acf523ed
+  content: 字段名：唯一标识每个店铺的数字编号；含义：唯一标识每个店铺的数字编号；数据特征：id 25个唯一值（A0000001-A0000025），每个Code恰好出现25次（620/25=24.8），符合店铺编码×时间周期的面板结构；推断角色：identifier
+  tags:
+  - id
+  - identifier
+  metadata:
+    project: test052801
+    field: 唯一标识每个店铺的数字编号
+    meaning: 唯一标识每个店铺的数字编号
+    data_pattern: id 25个唯一值（A0000001-A0000025），每个Code恰好出现25次（620/25=24.8），符合店铺编码×时间周期的面板结构
+    inferred_role: identifier
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:50'
+  use_count: 0
+- id: 7391487f
+  content: 字段名：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；含义：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；数据特征：datetime
+    int64类型，范围202540-202612，格式为YYYYWW（年+周），25个唯一值对应25个周期；推断角色：time_index
+  tags:
+  - datetime
+  - time_index
+  metadata:
+    project: test052801
+    field: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    meaning: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    data_pattern: datetime int64类型，范围202540-202612，格式为YYYYWW（年+周），25个唯一值对应25个周期
+    inferred_role: time_index
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:52'
+  use_count: 0
+- id: 182126ba
+  content: 字段名：该店铺当期的总收入金额；含义：该店铺当期的总收入金额；数据特征：numeric float64类型，范围0.0039-397.6249，均值59.7远大于中位数16.1，右偏分布明显，619个唯一值（几乎无重复）；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 该店铺当期的总收入金额
+    meaning: 该店铺当期的总收入金额
+    data_pattern: numeric float64类型，范围0.0039-397.6249，均值59.7远大于中位数16.1，右偏分布明显，619个唯一值（几乎无重复）
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:53'
+  use_count: 0
+- id: d4861364
+  content: 字段名：该店铺当期的累计积分数值，与费用挂钩；含义：该店铺当期的累计积分数值，与费用挂钩；数据特征：numeric float64类型，范围0-296.3193，均值43.4，中位数11.3，右偏分布，与Bos费用列存在关联关系；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 该店铺当期的累计积分数值，与费用挂钩
+    meaning: 该店铺当期的累计积分数值，与费用挂钩
+    data_pattern: numeric float64类型，范围0-296.3193，均值43.4，中位数11.3，右偏分布，与Bos费用列存在关联关系
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:54'
+  use_count: 0
+- id: f31a6489
+  content: 字段名：店铺费用类型1的金额，与积分挂钩；含义：店铺费用类型1的金额，与积分挂钩；数据特征：numeric float64类型，范围0-175.25，均值25.1，中位数6.5，右偏分布，253个唯一值；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型1的金额，与积分挂钩
+    meaning: 店铺费用类型1的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0-175.25，均值25.1，中位数6.5，右偏分布，253个唯一值
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:55'
+  use_count: 0
+- id: c650a591
+  content: 字段名：店铺费用类型2的金额，与积分挂钩；含义：店铺费用类型2的金额，与积分挂钩；数据特征：numeric float64类型，范围0-5.46，均值0.93，中位数0.24，右偏分布，数值量级明显小于Bos1；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型2的金额，与积分挂钩
+    meaning: 店铺费用类型2的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0-5.46，均值0.93，中位数0.24，右偏分布，数值量级明显小于Bos1
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:56'
+  use_count: 0
+- id: 764883cf
+  content: 字段名：店铺费用类型3的金额，与积分挂钩；含义：店铺费用类型3的金额，与积分挂钩；数据特征：numeric float64类型，范围0-6.6906，均值1.12，中位数0.51，右偏分布，25%分位数为0（存在零值）；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型3的金额，与积分挂钩
+    meaning: 店铺费用类型3的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0-6.6906，均值1.12，中位数0.51，右偏分布，25%分位数为0（存在零值）
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 09:37:57'
+  use_count: 0
+- id: 4c948807
+  content: 字段名：公司标识，代表数据所属的公司；含义：公司标识，代表数据所属的公司；数据特征：categorical 5个唯一值（B01~B05），无缺失，样本值如B01、B05，符合公司/业务单元标识特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 公司标识，代表数据所属的公司
+    meaning: 公司标识，代表数据所属的公司
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，样本值如B01、B05，符合公司/业务单元标识特征
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:03'
+  use_count: 0
+- id: 599f8d80
+  content: 字段名：唯一标识每个店铺的数字编号；含义：唯一标识每个店铺的数字编号；数据特征：id 25个唯一值（A0000001~A0000025），每店25条记录（620/25≈25），格式为A+6位数字；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test052801
+    field: 唯一标识每个店铺的数字编号
+    meaning: 唯一标识每个店铺的数字编号
+    data_pattern: id 25个唯一值（A0000001~A0000025），每店25条记录（620/25≈25），格式为A+6位数字
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:04'
+  use_count: 0
+- id: '35570360'
+  content: 字段名：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；含义：时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期；数据特征：datetime
+    25个唯一值，范围202540~202612，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    meaning: 时间周期，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周，共25个周期
+    data_pattern: datetime 25个唯一值，范围202540~202612，格式为YYYYWW（年+周），覆盖2025年第40周到2026年第12周
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:05'
+  use_count: 0
+- id: 9bd2d6c1
+  content: 字段名：该店铺当期的总收入金额；含义：该店铺当期的总收入金额；数据特征：numeric float64类型，范围0.0039~397.6249，均值59.7远大于中位数16.1，右偏分布，样本值如115.11、99.24；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 该店铺当期的总收入金额
+    meaning: 该店铺当期的总收入金额
+    data_pattern: numeric float64类型，范围0.0039~397.6249，均值59.7远大于中位数16.1，右偏分布，样本值如115.11、99.24
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:06'
+  use_count: 0
+- id: 1ac8354b
+  content: 字段名：该店铺当期的累计积分数值，与费用挂钩；含义：该店铺当期的累计积分数值，与费用挂钩；数据特征：numeric float64类型，范围0~296.3193，均值43.4远大于中位数11.3，右偏分布，样本值如85.46、74.47；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 该店铺当期的累计积分数值，与费用挂钩
+    meaning: 该店铺当期的累计积分数值，与费用挂钩
+    data_pattern: numeric float64类型，范围0~296.3193，均值43.4远大于中位数11.3，右偏分布，样本值如85.46、74.47
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:07'
+  use_count: 0
+- id: e01877e9
+  content: 字段名：店铺费用类型1的金额，与积分挂钩；含义：店铺费用类型1的金额，与积分挂钩；数据特征：numeric float64类型，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，样本值如55.5、49.0；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型1的金额，与积分挂钩
+    meaning: 店铺费用类型1的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0~175.25，均值25.1远大于中位数6.5，右偏分布，样本值如55.5、49.0
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:09'
+  use_count: 0
+- id: '80292923'
+  content: 字段名：店铺费用类型2的金额，与积分挂钩；含义：店铺费用类型2的金额，与积分挂钩；数据特征：numeric float64类型，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，样本值如1.86、1.68；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型2的金额，与积分挂钩
+    meaning: 店铺费用类型2的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0~5.46，均值0.93远大于中位数0.24，右偏分布，样本值如1.86、1.68
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:10'
+  use_count: 0
+- id: 477f838d
+  content: 字段名：店铺费用类型3的金额，与积分挂钩；含义：店铺费用类型3的金额，与积分挂钩；数据特征：numeric float64类型，范围0~6.6906，均值1.12远大于中位数0.51，右偏分布，样本值如2.69、2.34；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺费用类型3的金额，与积分挂钩
+    meaning: 店铺费用类型3的金额，与积分挂钩
+    data_pattern: numeric float64类型，范围0~6.6906，均值1.12远大于中位数0.51，右偏分布，样本值如2.69、2.34
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-05-29 10:51:11'
+  use_count: 0
+- id: c9827ce0
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 10:53:14'
+  use_count: 0
+- id: a506c709
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 10:53:15'
+  use_count: 0
+- id: ceb10b08
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 10:53:16'
+  use_count: 0
+- id: b6cb39c6
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 10:53:18'
+  use_count: 0
+- id: df7d84e6
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 11:04:54'
+  use_count: 0
+- id: 10630d8d
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:04:55'
+  use_count: 0
+- id: 3d842b64
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 11:04:56'
+  use_count: 0
+- id: c7932915
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:04:57'
+  use_count: 0
+- id: 7b865019
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 11:14:09'
+  use_count: 0
+- id: 937976ec
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:14:10'
+  use_count: 0
+- id: 8e6bcd6b
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 11:14:11'
+  use_count: 0
+- id: 6a2fa0be
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:14:12'
+  use_count: 0
+- id: b8360620
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 11:19:04'
+  use_count: 0
+- id: 4a07ac7f
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:19:05'
+  use_count: 0
+- id: 68935ac1
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 11:19:06'
+  use_count: 0
+- id: d8692e33
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:19:07'
+  use_count: 0
+- id: 89904de0
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 11:26:47'
+  use_count: 0
+- id: 8bf87287
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:26:48'
+  use_count: 0
+- id: 1d992e0d
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 11:26:50'
+  use_count: 0
+- id: 24cd271a
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 11:26:51'
+  use_count: 0
+- id: d379c6a9
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 13:16:04'
+  use_count: 0
+- id: c387b165
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 13:16:06'
+  use_count: 0
+- id: a65b545a
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 13:16:07'
+  use_count: 0
+- id: e9b1599d
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 13:16:08'
+  use_count: 0
+- id: f7f124a6
+  content: 字段名：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；含义：业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）；数据特征：categorical
+    5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    meaning: 业务单元编码，共5个类别（B01~B05），B01为最大类别（225条记录），B03最小（25条）
+    data_pattern: categorical 5个唯一值（B01~B05），无缺失，B01占比36%（225/620），B03仅占4%（25/620），分布不均
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 14:09:22'
+  use_count: 0
+- id: 15b541b7
+  content: 字段名：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；含义：产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录；数据特征：categorical
+    25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    meaning: 产品或项目编码，格式为A后接6位数字（如A0000001），共25个编码，每个编码对应约25条记录
+    data_pattern: categorical 25个唯一值，每个值恰好出现约25次（620/25≈24.8），格式为A0000001~A0000025，呈规律编号
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:09:23'
+  use_count: 0
+- id: 0976792a
+  content: 字段名：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；含义：收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值；数据特征：numeric
+    619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    meaning: 收入指标1，数值范围0~398元，中位数16.10元，均值59.70元，右偏分布，大部分值集中在低区间（Q25=3.93），少数高值拉高均值
+    data_pattern: numeric 619个唯一值（几乎全唯一），范围0.0039~397.62，均值59.70远大于中位数16.10，右偏明显，Q25=3.93，Q75=85.44
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 14:09:24'
+  use_count: 0
+- id: e813e385
+  content: 字段名：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；含义：收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低；数据特征：numeric
+    615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64；推断角色：numeric_feature
+  tags:
+  - numeric
+  - numeric_feature
+  metadata:
+    project: test052801
+    field: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    meaning: 收入指标2，数值范围0~296元，中位数11.27元，均值43.45元，右偏分布，与Inc1类似但整体数值偏低
+    data_pattern: numeric 615个唯一值，范围0~296.32，均值43.45远大于中位数11.27，右偏明显，Q25=2.30，Q75=62.64
+    inferred_role: numeric_feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:09:25'
+  use_count: 0
+- id: 7d8993c0
+  content: 字段名：收入金额，可能是店铺的主要收入指标，样本值如115.11、99.24等，分布右偏说明存在高收入店铺；含义：收入金额，可能是店铺的主要收入指标，样本值如115.11、99.24等，分布右偏说明存在高收入店铺；数据特征：numeric
+    连续数值，范围0.0039~397.62，中位数16.1，均值59.7，分布右偏（均值>中位数），样本值如115.11、99.24等，'Inc'前缀暗示Income/收入；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 收入金额，可能是店铺的主要收入指标，样本值如115.11、99.24等，分布右偏说明存在高收入店铺
+    meaning: 收入金额，可能是店铺的主要收入指标，样本值如115.11、99.24等，分布右偏说明存在高收入店铺
+    data_pattern: numeric 连续数值，范围0.0039~397.62，中位数16.1，均值59.7，分布右偏（均值>中位数），样本值如115.11、99.24等，'Inc'前缀暗示Income/收入
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 14:20:49'
+  use_count: 0
+- id: 79c8c697
+  content: 字段名：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；含义：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；数据特征：categorical
+    5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    meaning: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    data_pattern: categorical 5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:31:12'
+  use_count: 0
+- id: c02fe67c
+  content: 字段名：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；含义：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；数据特征：categorical
+    25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    meaning: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    data_pattern: categorical 25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 14:31:13'
+  use_count: 0
+- id: eed2b777
+  content: 字段名：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；含义：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；数据特征：numeric
+    浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    meaning: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    data_pattern: numeric 浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 14:31:15'
+  use_count: 0
+- id: bb197f8a
+  content: 字段名：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；含义：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；数据特征：categorical
+    5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    meaning: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    data_pattern: categorical 5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:40:44'
+  use_count: 0
+- id: 2ceb2cb2
+  content: 字段名：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；含义：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；数据特征：categorical
+    25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    meaning: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    data_pattern: categorical 25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 14:40:45'
+  use_count: 0
+- id: f9311733
+  content: 字段名：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；含义：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；数据特征：numeric
+    浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    meaning: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    data_pattern: numeric 浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 14:40:46'
+  use_count: 0
+- id: d47ad6bc
+  content: 字段名：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；含义：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；数据特征：categorical
+    5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    meaning: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    data_pattern: categorical 5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:46:08'
+  use_count: 0
+- id: ec5a891d
+  content: 字段名：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；含义：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；数据特征：categorical
+    25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    meaning: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    data_pattern: categorical 25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 14:46:09'
+  use_count: 0
+- id: 1db287dd
+  content: 字段名：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；含义：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；数据特征：numeric
+    浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    meaning: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    data_pattern: numeric 浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 14:46:10'
+  use_count: 0
+- id: '77286807'
+  content: 字段名：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；含义：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；数据特征：categorical
+    5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    meaning: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    data_pattern: categorical 5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 14:59:57'
+  use_count: 0
+- id: 485747fc
+  content: 字段名：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；含义：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；数据特征：categorical
+    25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    meaning: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    data_pattern: categorical 25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 14:59:58'
+  use_count: 0
+- id: b8c71909
+  content: 字段名：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；含义：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；数据特征：numeric
+    浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    meaning: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    data_pattern: numeric 浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 15:00:00'
+  use_count: 0
+- id: bc2f5202
+  content: 字段名：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；含义：店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型；数据特征：categorical
+    5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    meaning: 店铺所属的业务单元编码，共5类（B01~B05），B01占比最高（225/620），可能代表不同区域或门店类型
+    data_pattern: categorical 5个唯一值（B01-B05），分布不均（B01占36%），样本值格式为字母+数字，可能是业务单元或店铺类别编码
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 15:04:39'
+  use_count: 0
+- id: aee5faee
+  content: 字段名：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；含义：店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）；数据特征：categorical
+    25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    meaning: 店铺的唯一编码，格式为A开头加6位数字，共25家店铺，每家店铺有约25条记录（对应25个周期）
+    data_pattern: categorical 25个唯一值，格式A0000001~A0000005，每个值恰好出现25次（620/25≈24.8），符合店铺编码特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 15:04:40'
+  use_count: 0
+- id: 3f66b9db
+  content: 字段名：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；含义：店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺；数据特征：numeric
+    浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    meaning: 店铺收入金额，大部分店铺收入在16元左右，少数店铺收入较高（最高近400），存在明显的右偏分布，可能包含少量高收入店铺
+    data_pattern: numeric 浮点数，范围0.0039~397.62，均值59.7但中位数仅16.1，右偏分布明显，619个唯一值（几乎无重复），符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 15:04:41'
+  use_count: 0
+- id: 4a54e25e
+  content: 字段名：业务单元/店铺编号，共有5个店铺参与分析；含义：业务单元/店铺编号，共有5个店铺参与分析；数据特征：categorical 5个唯一值(B01-B05)，每个代表一个店铺/业务单元，null_pct=0%；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元/店铺编号，共有5个店铺参与分析
+    meaning: 业务单元/店铺编号，共有5个店铺参与分析
+    data_pattern: categorical 5个唯一值(B01-B05)，每个代表一个店铺/业务单元，null_pct=0%
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 16:01:17'
+  use_count: 0
+- id: 2c3e5c90
+  content: 字段名：主要收入指标，右偏分布表明多数店铺收入较低，存在高收入店铺/期间；含义：主要收入指标，右偏分布表明多数店铺收入较低，存在高收入店铺/期间；数据特征：numeric
+    右偏分布(mean=59.7>>median=16.1)，范围0.004-397.6，符合收入特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 主要收入指标，右偏分布表明多数店铺收入较低，存在高收入店铺/期间
+    meaning: 主要收入指标，右偏分布表明多数店铺收入较低，存在高收入店铺/期间
+    data_pattern: numeric 右偏分布(mean=59.7>>median=16.1)，范围0.004-397.6，符合收入特征
+    inferred_role: target
+    confidence: 0.95
+  created_at: '2026-05-29 16:01:18'
+  use_count: 0
+- id: f311a80f
+  content: 字段名：店铺或业务单元的唯一标识代码，如B01、B02等代表不同门店；含义：店铺或业务单元的唯一标识代码，如B01、B02等代表不同门店；数据特征：categorical
+    5个唯一值，样本为B01-B05的店铺代码，每个店铺约125条记录，分布相对均匀，符合业务单元/店铺ID特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺或业务单元的唯一标识代码，如B01、B02等代表不同门店
+    meaning: 店铺或业务单元的唯一标识代码，如B01、B02等代表不同门店
+    data_pattern: categorical 5个唯一值，样本为B01-B05的店铺代码，每个店铺约125条记录，分布相对均匀，符合业务单元/店铺ID特征
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 16:15:21'
+  use_count: 0
+- id: cee03f4d
+  content: 字段名：商品或SKU的唯一编码标识；含义：商品或SKU的唯一编码标识；数据特征：categorical 25个唯一值，如A0000001等格式，每个值约25条记录，可能是产品编码或账户编码；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test052801
+    field: 商品或SKU的唯一编码标识
+    meaning: 商品或SKU的唯一编码标识
+    data_pattern: categorical 25个唯一值，如A0000001等格式，每个值约25条记录，可能是产品编码或账户编码
+    inferred_role: unknown
+    confidence: 0.85
+  created_at: '2026-05-29 16:15:22'
+  use_count: 0
+- id: ed464910
+  content: 字段名：时间周期标识，采用年+周格式（如202540表示2025年第40周），用于追踪收入变动趋势；含义：时间周期标识，采用年+周格式（如202540表示2025年第40周），用于追踪收入变动趋势；数据特征：datetime
+    整数范围202540-202612，样本值202540、202541等，符合YYYYWW（年+周）格式，用于表示时间周期；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期标识，采用年+周格式（如202540表示2025年第40周），用于追踪收入变动趋势
+    meaning: 时间周期标识，采用年+周格式（如202540表示2025年第40周），用于追踪收入变动趋势
+    data_pattern: datetime 整数范围202540-202612，样本值202540、202541等，符合YYYYWW（年+周）格式，用于表示时间周期
+    inferred_role: feature
+    confidence: 0.92
+  created_at: '2026-05-29 16:15:24'
+  use_count: 0
+- id: 1b5b0511
+  content: 字段名：主要收入指标，金额型数值，部分店铺收入较高呈右偏分布；含义：主要收入指标，金额型数值，部分店铺收入较高呈右偏分布；数据特征：numeric
+    浮点数值，范围0.0039-397.62，均值59.7，中位数16.1，偏态分布，619个唯一值，符合收入金额特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 主要收入指标，金额型数值，部分店铺收入较高呈右偏分布
+    meaning: 主要收入指标，金额型数值，部分店铺收入较高呈右偏分布
+    data_pattern: numeric 浮点数值，范围0.0039-397.62，均值59.7，中位数16.1，偏态分布，619个唯一值，符合收入金额特征
+    inferred_role: target
+    confidence: 0.9
+  created_at: '2026-05-29 16:15:25'
+  use_count: 0
+- id: ae4128b5
+  content: 字段名：次要收入指标，可能为其他收入来源或收入分项；含义：次要收入指标，可能为其他收入来源或收入分项；数据特征：numeric 浮点数值，范围0-296.3，均值43.4，中位数11.3，分布与Inc1相似但规模较小；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 次要收入指标，可能为其他收入来源或收入分项
+    meaning: 次要收入指标，可能为其他收入来源或收入分项
+    data_pattern: numeric 浮点数值，范围0-296.3，均值43.4，中位数11.3，分布与Inc1相似但规模较小
+    inferred_role: unknown
+    confidence: 0.88
+  created_at: '2026-05-29 16:15:26'
+  use_count: 0
+- id: af513fc6
+  content: 字段名：业务单元/店铺的唯一标识符，如B01、B04代表不同分店或业务部门；含义：业务单元/店铺的唯一标识符，如B01、B04代表不同分店或业务部门；数据特征：categorical
+    5个唯一值B01~B05，分布不均（B01占225条），无空值，样本为业务单元代码；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 业务单元/店铺的唯一标识符，如B01、B04代表不同分店或业务部门
+    meaning: 业务单元/店铺的唯一标识符，如B01、B04代表不同分店或业务部门
+    data_pattern: categorical 5个唯一值B01~B05，分布不均（B01占225条），无空值，样本为业务单元代码
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 16:36:13'
+  use_count: 0
+- id: 5b90c4a7
+  content: 字段名：可能是产品编码、项目编号或科目代码，每个Code对应25条记录；含义：可能是产品编码、项目编号或科目代码，每个Code对应25条记录；数据特征：categorical
+    25个唯一值，每个值出现25次，可能是产品/项目编码；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test052801
+    field: 可能是产品编码、项目编号或科目代码，每个Code对应25条记录
+    meaning: 可能是产品编码、项目编号或科目代码，每个Code对应25条记录
+    data_pattern: categorical 25个唯一值，每个值出现25次，可能是产品/项目编码
+    inferred_role: unknown
+    confidence: 0.85
+  created_at: '2026-05-29 16:36:14'
+  use_count: 0
+- id: b9b68504
+  content: 字段名：时间周期标识，采用年+周格式（如202540代表2025年第40周），用于追踪收入的时间变化；含义：时间周期标识，采用年+周格式（如202540代表2025年第40周），用于追踪收入的时间变化；数据特征：datetime
+    int64类型，范围202540~202612，样本202540表示2025年第40周，YYYYWW格式；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期标识，采用年+周格式（如202540代表2025年第40周），用于追踪收入的时间变化
+    meaning: 时间周期标识，采用年+周格式（如202540代表2025年第40周），用于追踪收入的时间变化
+    data_pattern: datetime int64类型，范围202540~202612，样本202540表示2025年第40周，YYYYWW格式
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 16:36:15'
+  use_count: 0
+- id: ce925ab7
+  content: 字段名：主要收入指标，金额型数值，多数记录较低（25%分位仅3.9），存在高收入异常值（最高397.6），直接反映店铺经营收入；含义：主要收入指标，金额型数值，多数记录较低（25%分位仅3.9），存在高收入异常值（最高397.6），直接反映店铺经营收入；数据特征：numeric
+    float64，范围0.0039~397.6249，均值59.7，中位数16.1，分布右偏，无空值；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 主要收入指标，金额型数值，多数记录较低（25%分位仅3.9），存在高收入异常值（最高397.6），直接反映店铺经营收入
+    meaning: 主要收入指标，金额型数值，多数记录较低（25%分位仅3.9），存在高收入异常值（最高397.6），直接反映店铺经营收入
+    data_pattern: numeric float64，范围0.0039~397.6249，均值59.7，中位数16.1，分布右偏，无空值
+    inferred_role: target
+    confidence: 0.95
+  created_at: '2026-05-29 16:36:16'
+  use_count: 0
+- id: 25c0aa96
+  content: 字段名：次要收入指标，可能为收入分类或附加收入项，与Inc1合计构成总收入；含义：次要收入指标，可能为收入分类或附加收入项，与Inc1合计构成总收入；数据特征：numeric
+    float64，范围0~296.3，均值43.4，中位数11.3，规模约为Inc1的70%；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 次要收入指标，可能为收入分类或附加收入项，与Inc1合计构成总收入
+    meaning: 次要收入指标，可能为收入分类或附加收入项，与Inc1合计构成总收入
+    data_pattern: numeric float64，范围0~296.3，均值43.4，中位数11.3，规模约为Inc1的70%
+    inferred_role: unknown
+    confidence: 0.9
+  created_at: '2026-05-29 16:36:18'
+  use_count: 0
+- id: 4e28270d
+  content: 字段名：店铺或业务单元的唯一标识代码，用于区分不同门店；含义：店铺或业务单元的唯一标识代码，用于区分不同门店；数据特征：categorical
+    5个唯一值如B01~B05，样本显示店铺编码格式，分布较均匀；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 店铺或业务单元的唯一标识代码，用于区分不同门店
+    meaning: 店铺或业务单元的唯一标识代码，用于区分不同门店
+    data_pattern: categorical 5个唯一值如B01~B05，样本显示店铺编码格式，分布较均匀
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-05-29 17:01:37'
+  use_count: 0
+- id: 4d793ab2
+  content: 字段名：可能是产品或SKU编码，用于标识具体商品；含义：可能是产品或SKU编码，用于标识具体商品；数据特征：categorical 25个唯一编码如A0000001~A0000025，每个值出现约25次；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test052801
+    field: 可能是产品或SKU编码，用于标识具体商品
+    meaning: 可能是产品或SKU编码，用于标识具体商品
+    data_pattern: categorical 25个唯一编码如A0000001~A0000025，每个值出现约25次
+    inferred_role: unknown
+    confidence: 0.9
+  created_at: '2026-05-29 17:01:38'
+  use_count: 0
+- id: 7a4cd8af
+  content: 字段名：时间周期标识，格式为YYYYWW（年+周），如202540表示2025年第40周；含义：时间周期标识，格式为YYYYWW（年+周），如202540表示2025年第40周；数据特征：datetime
+    数值格式为6位如202540，推断为2025年第40周，范围202540~202612共25个周期；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test052801
+    field: 时间周期标识，格式为YYYYWW（年+周），如202540表示2025年第40周
+    meaning: 时间周期标识，格式为YYYYWW（年+周），如202540表示2025年第40周
+    data_pattern: datetime 数值格式为6位如202540，推断为2025年第40周，范围202540~202612共25个周期
+    inferred_role: feature
+    confidence: 0.98
+  created_at: '2026-05-29 17:01:40'
+  use_count: 0
+- id: 154abedb
+  content: 字段名：主要收入指标，金额型数值，变动范围较大；含义：主要收入指标，金额型数值，变动范围较大；数据特征：numeric 浮点数值，均值59.7，范围0~397.6，分布右偏，符合收入特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test052801
+    field: 主要收入指标，金额型数值，变动范围较大
+    meaning: 主要收入指标，金额型数值，变动范围较大
+    data_pattern: numeric 浮点数值，均值59.7，范围0~397.6，分布右偏，符合收入特征
+    inferred_role: target
+    confidence: 0.95
+  created_at: '2026-05-29 17:01:41'
+  use_count: 0
+- id: 8ac36892
+  content: 字段名：可能是收入的其他组成部分或子类别，与Inc1合计构成总收入；含义：可能是收入的其他组成部分或子类别，与Inc1合计构成总收入；数据特征：numeric
+    浮点数值，均值43.4，范围0~296.3，与Inc1同质且相关；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 可能是收入的其他组成部分或子类别，与Inc1合计构成总收入
+    meaning: 可能是收入的其他组成部分或子类别，与Inc1合计构成总收入
+    data_pattern: numeric 浮点数值，均值43.4，范围0~296.3，与Inc1同质且相关
+    inferred_role: unknown
+    confidence: 0.9
+  created_at: '2026-05-29 17:01:42'
+  use_count: 0
+- id: 91ee9b21
+  content: 字段名：业务量相关指标，具体业务含义待确认；含义：业务量相关指标，具体业务含义待确认；数据特征：numeric 浮点数值，均值25.1，范围0~175.25，分布右偏；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 业务量相关指标，具体业务含义待确认
+    meaning: 业务量相关指标，具体业务含义待确认
+    data_pattern: numeric 浮点数值，均值25.1，范围0~175.25，分布右偏
+    inferred_role: unknown
+    confidence: 0.85
+  created_at: '2026-05-29 17:01:43'
+  use_count: 0
+- id: 36f6cf0f
+  content: 字段名：门店/分店的唯一标识代码，如B01代表1号门店，B04代表4号门店；含义：门店/分店的唯一标识代码，如B01代表1号门店，B04代表4号门店；数据特征：categorical
+    字段包含B01~B05共5种店铺代码，每种出现25次（对应25个时间周期），共620条记录；推断角色：target
+  tags:
+  - categorical
+  - target
+  metadata:
+    project: test052801
+    field: 门店/分店的唯一标识代码，如B01代表1号门店，B04代表4号门店
+    meaning: 门店/分店的唯一标识代码，如B01代表1号门店，B04代表4号门店
+    data_pattern: categorical 字段包含B01~B05共5种店铺代码，每种出现25次（对应25个时间周期），共620条记录
+    inferred_role: target
+    confidence: 0.95
+  created_at: '2026-05-29 17:08:16'
+  use_count: 0
+- id: 18af6521
+  content: 字段名：商品或服务的SKU编码，用于标识具体产品；含义：商品或服务的SKU编码，用于标识具体产品；数据特征：categorical 包含A0000001~A0000025共25种产品代码，每个代码出现25次（对应25个时间周期），均匀分布；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test052801
+    field: 商品或服务的SKU编码，用于标识具体产品
+    meaning: 商品或服务的SKU编码，用于标识具体产品
+    data_pattern: categorical 包含A0000001~A0000025共25种产品代码，每个代码出现25次（对应25个时间周期），均匀分布
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-05-29 17:08:17'
+  use_count: 0
+- id: ec2914db
+  content: 字段名：时间周期标识，格式为YYYYWW（年份+周数），如202540表示2025年第40周；含义：时间周期标识，格式为YYYYWW（年份+周数），如202540表示2025年第40周；数据特征：datetime
+    数值格式为6位整数（如202540=2025年第40周），范围从202540到202612，共25个连续周期；推断角色：unknown
+  tags:
+  - datetime
+  - unknown
+  metadata:
+    project: test052801
+    field: 时间周期标识，格式为YYYYWW（年份+周数），如202540表示2025年第40周
+    meaning: 时间周期标识，格式为YYYYWW（年份+周数），如202540表示2025年第40周
+    data_pattern: datetime 数值格式为6位整数（如202540=2025年第40周），范围从202540到202612，共25个连续周期
+    inferred_role: unknown
+    confidence: 0.98
+  created_at: '2026-05-29 17:08:18'
+  use_count: 0
+- id: 0a39fb8b
+  content: 字段名：主要收入指标，数值较大且分布偏斜（均值>中位数），可能包含高收入店铺或时期的贡献；含义：主要收入指标，数值较大且分布偏斜（均值>中位数），可能包含高收入店铺或时期的贡献；数据特征：numeric
+    浮点数类型，均值59.7，中位数16.1，分布0.004~397.6，620个值中619个唯一，无缺失值；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 主要收入指标，数值较大且分布偏斜（均值>中位数），可能包含高收入店铺或时期的贡献
+    meaning: 主要收入指标，数值较大且分布偏斜（均值>中位数），可能包含高收入店铺或时期的贡献
+    data_pattern: numeric 浮点数类型，均值59.7，中位数16.1，分布0.004~397.6，620个值中619个唯一，无缺失值
+    inferred_role: unknown
+    confidence: 0.97
+  created_at: '2026-05-29 17:08:19'
+  use_count: 0
+- id: 42f90701
+  content: 字段名：辅助收入指标，可能表示另一类收入来源或不同口径的统计；含义：辅助收入指标，可能表示另一类收入来源或不同口径的统计；数据特征：numeric
+    浮点数类型，均值43.4，中位数11.3，分布0~296.3，与Inc1结构相似但规模较小；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 辅助收入指标，可能表示另一类收入来源或不同口径的统计
+    meaning: 辅助收入指标，可能表示另一类收入来源或不同口径的统计
+    data_pattern: numeric 浮点数类型，均值43.4，中位数11.3，分布0~296.3，与Inc1结构相似但规模较小
+    inferred_role: unknown
+    confidence: 0.95
+  created_at: '2026-05-29 17:08:20'
+  use_count: 0
+- id: ce107fb0
+  content: 字段名：业务数量或规模指标，可能表示订单数、客流量等业务活动量；含义：业务数量或规模指标，可能表示订单数、客流量等业务活动量；数据特征：numeric
+    浮点数，范围0~175.25，均值25.1，中位数6.5，分布偏斜，与收入指标结构相似；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test052801
+    field: 业务数量或规模指标，可能表示订单数、客流量等业务活动量
+    meaning: 业务数量或规模指标，可能表示订单数、客流量等业务活动量
+    data_pattern: numeric 浮点数，范围0~175.25，均值25.1，中位数6.5，分布偏斜，与收入指标结构相似
+    inferred_role: unknown
+    confidence: 0.85
+  created_at: '2026-05-29 17:08:22'
+  use_count: 0

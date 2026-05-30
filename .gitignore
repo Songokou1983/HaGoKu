@@ -36,6 +36,9 @@ coverage.xml
 .hagoku/
 *.db
 
+# Git worktrees
+.worktrees/
+
 # 本地环境变量：运行时由 `hagoku/config.py` 加载 `~/.hagoku/.env`，勿在仓库根目录提交 `.env`
 .env
 

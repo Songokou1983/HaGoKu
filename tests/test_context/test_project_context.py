@@ -269,3 +269,28 @@ def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
     assert ctx.entries[0].snapshot is not None
     assert len(ctx.entries[0].snapshot.get("fields", [])) == 1
     assert ctx.entries[0].snapshot["target"] == "Revenue"
+
+
+def test_一轮scout反馈不产生重复entries():
+    """守门：一轮 _apply_scout_reply_with_llm + emit USER_INPUT_RECEIVED
+    应恰好产生 1 user_feedback + 1 agent_response，不能重复。"""
+    from hagoku.observability.event_bus import EventBus
+    from hagoku.observability.events import EventType
+    from hagoku.context.project_context import ProjectContext
+
+    ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+    ref = {"column_semantics": [], "interaction_revision": 1}
+    bus = EventBus()
+    ctx.subscribe(bus, context_ref=ref)
+
+    # 模拟 USER_INPUT_RECEIVED 事件（orchestrator L2291）
+    bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": "Code是店铺编号"})
+
+    # 模拟 _apply_scout_reply_with_llm 完成后的 add_agent_response
+    ctx.add_agent_response(stage="scout", revision=1, content="已更新", snapshot={})
+
+    feedbacks = [e for e in ctx.entries if e.type == "user_feedback"]
+    responses = [e for e in ctx.entries if e.type == "agent_response"]
+    assert len(feedbacks) == 1, f"期望 1 条 user_feedback，实际 {len(feedbacks)}"
+    assert len(responses) == 1, f"期望 1 条 agent_response，实际 {len(responses)}"
+    assert len(ctx.entries) == 2, f"期望总计 2 条 entries，实际 {len(ctx.entries)}"

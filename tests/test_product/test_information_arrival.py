@@ -366,11 +366,17 @@ def test_真实场景_律2_用户原话保存到context():
     """
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
     from hagoku.context.project_context import ProjectContext
+    from hagoku.observability.event_bus import EventBus
+    from hagoku.observability.events import EventType
 
     ctx = _make_real_scene_context()
-    # 注入 ProjectContext 到 context（律 2 现在走 EventBus → ProjectContext 路径）
     project_ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
+    bus = EventBus()
+    project_ctx.subscribe(bus, context_ref=ctx)
     ctx["_project_context"] = project_ctx
+
+    # 模拟 orchestrator 的 USER_INPUT_RECEIVED emit（L2291）
+    bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": _REAL_SCENE_REPLY})
 
     spy = LLMSpy()
     _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")

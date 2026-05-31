@@ -1071,22 +1071,8 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
+        # 用户反馈由 USER_INPUT_RECEIVED 事件自动写入 entries（orchestrator.py L2291）
         if project_ctx is not None:
-            # 记录本轮用户输入（EventBus 不一定触发，直接补录）
-            project_ctx.add_user_feedback(
-                stage="scout",
-                revision=context.get("interaction_revision", 0),
-                raw_text=raw,
-                content=raw[:200] if raw else "",
-            )
-            # 通过 ProjectContext 记录本轮 Agent 结果
-            applied_summary = ", ".join(applied) if applied else "无字段更新"
-            project_ctx.add_agent_response(
-                stage="scout",
-                revision=context.get("interaction_revision", 0),
-                content=applied_summary,
-                snapshot=project_ctx._derive_snapshot(context),
-            )
             applied_summary = ", ".join(applied) if applied else "无字段更新"
             project_ctx.add_agent_response(
                 stage="scout",

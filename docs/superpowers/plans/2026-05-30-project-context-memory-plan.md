@@ -211,9 +211,32 @@ class ProjectContext:
 
         history_context = "\n".join(history_parts)
 
+        # ── 必修 1：返回 messages_history（标准 messages list，非纯文本）──
+        # stage_transition 不进入 messages_history（避免 LLM 混淆角色）
+        messages_history: list[dict[str, str]] = []
+        for e in current_stage_entries:
+            if e.type == "user_feedback":
+                messages_history.append({"role": "user", "content": e.raw_user_text or e.content})
+            elif e.type == "agent_response":
+                messages_history.append({"role": "assistant", "content": e.content})
+
+        # upstream_summary：上游阶段结构化快照（注入 system role 末尾）
+        upstream_parts: list[str] = []
+        for e in upstream_entries:
+            if e.type == "agent_response" and e.snapshot:
+                t = e.snapshot.get("target", "")
+                f = e.snapshot.get("features", [])
+                p = e.snapshot.get("pending", [])
+                summary = f"{e.stage} 阶段完成: target={t}, features={f}"
+                if p:
+                    summary += f", 待确认={p}"
+                upstream_parts.append(summary)
+        upstream_summary = "【上游阶段摘要】\n" + "\n".join(upstream_parts) if upstream_parts else ""
+
         return {
             "system_prefix": system_prefix,
-            "history_context": history_context,
+            "upstream_summary": upstream_summary,
+            "messages_history": messages_history,
         }
 ```
 
@@ -428,39 +451,36 @@ git commit -m "test: ProjectContext 单元测试（11 条）"
 **文件：**
 - 修改：`hagoku/manager/orchestrator.py`
 
-- [ ] **步骤 1：在 Orchestrator 初始化时创建 ProjectContext**
+**关键约束**：`context` dict 必须自始至终是同一个引用——任何 `context = ...` 重新赋值都会破坏 ProjectContext 已注册的引用。
 
-在 `run()` 方法中，Scribe 初始化之后（约 L1941），添加 ProjectContext 初始化：
+- [ ] **步骤 1：在 run() 开头建空 context dict，保持引用稳定**
+
+在 `run()` 方法中，Scribe 初始化之前，先建空 context：
 
 ```python
-# 在 self.scribe = ScribeAgent(...) 之后添加：
+# run() 开头，在 Scribe 初始化之前
+context: dict[str, Any] = {}  # 一次性建立，从头到尾保持同一引用
+```
+
+- [ ] **步骤 2：初始化 ProjectContext 并传入稳定引用**
+
+在 `run_id` 定义后（约 L1954），创建 ProjectContext 并 subscribe，传入持久引用：
+
+```python
 from ..context.project_context import ProjectContext
-self._project_context = ProjectContext(
-    run_id=run_id,
-    analysis_goal=query,
-)
-self._project_context.subscribe(self.event_bus, context_ref=None)
+self._project_context = ProjectContext(run_id=run_id, analysis_goal=query)
+self._project_context.subscribe(self.event_bus, context_ref=context)
 ```
 
-注意：`subscribe` 需要 `context_ref` 作为 context dict 的引用，但此时 context dict 还未创建。先传 None，后续在 context 创建后更新引用。
+- [ ] **步骤 3：Scout 跑完后用 update 而非重新赋值**
 
-- [ ] **步骤 2：在 context 创建后更新 ProjectContext 的 context_ref**
-
-在 Scout 执行完成、context dict 创建后（约 L2029），更新引用：
+在 `scout.run(...)` 返回后（约 L2208）：
 
 ```python
-# 在 context = scout.run(...) 之后添加：
-if hasattr(self, '_project_context'):
-    self._project_context._context_ref = context
-```
-
-- [ ] **步骤 3：在 run() 方法中初始化 context_ref 变量**
-
-在 `run()` 方法开头声明 `context` 变量前，将 None 赋值给它，这样 subscribe 时的 context_ref 是有效的：
-
-```python
-# 在 run() 方法中，context = None 声明后，_project_context 初始化前：
-# （ProjectContext 用 run_id + query 初始化，context_ref 初始为 None，后续更新）
+scout_result = scout.run(data_path, query, project_id=project_name, emit_completed=False, memory_project=memory_project)
+if scout_result.get("error"):
+    raise RuntimeError(str(scout_result["error"]))
+context.update(scout_result)  # ✅ 不要写 context = scout.run(...)
 ```
 
 - [ ] **步骤 4：运行现有测试，确认无回归**
@@ -601,10 +621,12 @@ project_ctx = context.get("_project_context")
 # ── 使用 ProjectContext.build_prompt 替代旧的 _session_messages ──
 if project_ctx:
     ctx_block = project_ctx.build_prompt("scout", context)
-    # system_prefix 注入到 system role；history_context + raw 作为 user
+    # system_prefix + upstream_summary 拼入 system role；messages_history 展开为标准 messages list（律 3）
     messages = [
-        {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]},
-        {"role": "user", "content": ctx_block["history_context"] + "\n\n【当前用户输入】\n" + raw},
+        {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]
+                                      + "\n\n" + ctx_block["upstream_summary"]},
+        *ctx_block["messages_history"],  # [{"role": "user", ...}, {"role": "assistant", ...}]
+        {"role": "user", "content": raw},
     ]
 else:
     # 降级：没有 ProjectContext 时回退旧路径
@@ -636,12 +658,25 @@ context["_project_context"] = getattr(self, '_project_context', None)
 ```
 预期：无新增失败
 
-- [ ] **步骤 5：Commit**
+- [ ] **步骤 5：删除 Agent 自身 system_prompt 中的重复注入（必修 2）**
+
+`analysis_goal` 和 `command_context` 不应再出现在 Agent 的 system_prompt 中——统一由 ProjectContext 的 `system_prefix` 提供。
+
+文件：`hagoku/agents/scout/agent.py`
+
+```python
+# 删除 _infer_all_semantics 中的：
+#   analysis_goal_line 构建（约 L628-637）—— analysis_goal 由 ProjectContext.system_prefix 注入
+#   command_context 拼接（约 L610-628）—— _pending_command_text 由 ProjectContext.system_prefix 注入
+```
+
+注：`knowledge_section`、`memory_notes` 保留——这些是 Agent 自身推理框架的一部分，不属于动态运行时状态重复。
+
+- [ ] **步骤 6：Commit**
 
 ```bash
-git add hagoku/manager/orchestrator.py
-git commit -m "feat: _apply_scout_reply_with_llm 接入 ProjectContext.build_prompt（修复断裂点 1/2/3）"
-```
+git add hagoku/manager/orchestrator.py hagoku/agents/scout/agent.py
+git commit -m "feat: _apply_scout_reply_with_llm 接入 ProjectContext.build_prompt（修复断裂点 1/2/3）+ 删除 Agent 重复注入"
 
 ---
 
@@ -695,7 +730,18 @@ if project_ctx:
 # "_session_messages": getattr(self, "_session_messages", []),
 ```
 
-- [ ] **步骤 3：运行全量测试确认无回归**
+- [ ] **步骤 3：移除 utterances 数组（建议 4：律 5 二选一）**
+
+`context["utterances"]` 与 `ProjectContext.entries[type=user_feedback]` 平行存储用户原话——违反律 5。
+选择方案 A：`entries` 已含 `raw_user_text`，删除 `_apply_scout_reply_with_llm` 中的 `utterances` 追加代码（约 L805-810）。
+
+```python
+# 移除 _apply_scout_reply_with_llm 中约 L805-810 的：
+# utterances = context.setdefault("utterances", [])
+# utterances.append({...})
+```
+
+- [ ] **步骤 4：运行全量测试确认无回归**
 
 ```bash
 .venv/bin/python -m pytest --tb=short -q
@@ -751,10 +797,13 @@ def test_project_context_history_includes_full_stage_dialog():
     ctx.add_agent_response(stage="scout", revision=2, content="已处理第二轮")
 
     result = ctx.build_prompt("scout", {"column_semantics": []})
-    assert "第一轮纠正" in result["history_context"]
-    assert "第二轮纠正" in result["history_context"]
-    assert result["history_context"].index("第一轮纠正") < result["history_context"].index("第二轮纠正"), \
-        "对话顺序应保持时间序"
+    # 验证 messages_history（律 3：标准 messages list）
+    msgs = result["messages_history"]
+    assert len(msgs) == 4  # user, assistant, user, assistant
+    assert msgs[0]["role"] == "user" and "第一轮纠正" in msgs[0]["content"]
+    assert msgs[1]["role"] == "assistant"
+    assert msgs[2]["role"] == "user" and "第二轮纠正" in msgs[2]["content"]
+    assert msgs[3]["role"] == "assistant"
 ```
 
 - [ ] **步骤 2：运行测试验证通过**
@@ -786,6 +835,45 @@ git commit -m "test: 新增 ProjectContext 信息抵达正向断言（律 1/2/3/
 预期：三组全绿
 
 - [ ] **步骤 2：确认无新增 ruff 警告**
+
+```bash
+.venv/bin/python -m ruff check hagoku/context/ hagoku/manager/orchestrator.py
+```
+
+- [ ] **步骤 3：清理阶段 1 遗留的 `if project_ctx else 旧路径` 防御分支（建议 7）**
+
+ProjectContext 应作为强制依赖而非可选组件。移除所有降级分支：
+
+```bash
+grep -n "if project_ctx\|if hasattr.*_project_context\|_session_messages" hagoku/manager/orchestrator.py
+# 全部清除——只保留 ProjectContext 路径
+```
+
+- [ ] **步骤 4：doctrine compliance 加守门（建议 7）**
+
+在 `tests/test_doctrine_compliance.py` 追加：
+
+```python
+def test_doctrine_无_session_messages_残留() -> None:
+    """阶段 2 完工后，_session_messages 字面量不得在 hagoku/ 中出现。"""
+    violations = []
+    for path in HAGOKU_ROOT.rglob("*.py"):
+        if "_session_messages" in _read(path):
+            violations.append(str(path.relative_to(HAGOKU_ROOT)))
+    assert not violations, f"_session_messages 残留: {violations}"
+```
+
+- [ ] **步骤 5：最终 Commit**
+
+```bash
+git add -A
+git commit -m "chore: 阶段2完成 — ProjectContext 上下文记忆系统全部落地"
+```
+
+```bash
+git add -A
+git commit -m "chore: 阶段2完成 — ProjectContext 上下文记忆系统全部落地"
+```
 
 ```bash
 .venv/bin/python -m ruff check hagoku/context/ hagoku/manager/orchestrator.py

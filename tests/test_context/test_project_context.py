@@ -55,24 +55,27 @@ class TestProjectContext:
         assert "待确认字段: Period" in result["system_prefix"]
 
     def test_build_prompt_history_context_includes_current_stage(self, ctx):
-        """history_context 包含当前阶段的 user_feedback + agent_response。"""
+        """messages_history 包含当前阶段的 user_feedback + agent_response。"""
         ctx.add_user_feedback(stage="scout", revision=1, raw_text="Code是店铺编号")
         ctx.add_agent_response(stage="scout", revision=1, content="已更新 Code→店铺编号")
 
         result = ctx.build_prompt("scout", {"column_semantics": []})
-        assert "Code是店铺编号" in result["history_context"]
-        assert "已更新 Code→店铺编号" in result["history_context"]
+        msgs = result["messages_history"]
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "user" and "Code是店铺编号" in msgs[0]["content"]
+        assert msgs[1]["role"] == "assistant" and "已更新" in msgs[1]["content"]
 
     def test_build_prompt_history_context_excludes_other_stages_dialog(self, ctx):
-        """上游阶段的对话细节不出现在当前阶段的 history_context 中（仅保留 snapshot 摘要）。"""
+        """上游阶段的对话细节不出现在当前阶段的 messages_history 中（仅保留 snapshot 摘要）。"""
         ctx.add_user_feedback(stage="scout", revision=1, raw_text="Code是店铺编号")
         ctx.add_agent_response(stage="scout", revision=1, content="已更新", snapshot={"target": "Revenue", "features": ["Code"], "pending": []})
 
         result = ctx.build_prompt("cleaner", {"column_semantics": []})
-        # upstream 的对话细节不应出现
-        assert "Code是店铺编号" not in result["history_context"]
-        # 但 snapshot 摘要应出现
-        assert "scout" in result["history_context"]
+        # upstream 对话细节不在 messages_history 中
+        for msg in result["messages_history"]:
+            assert "Code是店铺编号" not in msg["content"]
+        # 但 upstream_summary 包含 stage 名
+        assert "scout" in result["upstream_summary"]
 
     def test_build_prompt_with_command_context(self, ctx):
         """_pending_command_text 应出现在 system_prefix 中。"""
@@ -100,7 +103,8 @@ class TestProjectContext:
         """空 context → build_prompt 正常返回，不抛异常。"""
         result = ctx.build_prompt("scout", {})
         assert "system_prefix" in result
-        assert "history_context" in result
+        assert "messages_history" in result
+        assert "upstream_summary" in result
         assert "分析ROI" in result["system_prefix"]
 
     # ── _derive_snapshot 边界测试 ──
@@ -163,7 +167,8 @@ class TestProjectContext:
 
     def test_build_prompt_with_no_entries_history_is_empty(self, ctx):
         result = ctx.build_prompt("scout", {"column_semantics": []})
-        assert result["history_context"] == ""
+        assert result["messages_history"] == []
+        assert result["upstream_summary"] == ""
 
 
 class TestProjectContextEventBus:

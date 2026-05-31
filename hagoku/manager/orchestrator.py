@@ -889,20 +889,6 @@ def _apply_scout_reply_with_llm(
     if not columns or not raw:
         return []
 
-    # ── 律 2：结构化保留用户原话 ──
-    if raw.strip():
-        utterances: list[dict[str, Any]] = context.setdefault("utterances", [])
-        utterances.append({
-            "raw_text": raw,
-            "stage": "scout_field_review",
-            "revision": context.get("interaction_revision", 0),
-            "timestamp": datetime.now().isoformat(),
-            "consumed": False,
-        })
-        # 裁剪：保留最近 50 条，防 context 单向膨胀
-        if len(utterances) > 50:
-            context["utterances"] = utterances[-50:]
-
     descs: dict[str, Any] = context.setdefault("column_descriptions", {})
     display_names: dict[str, Any] = context.setdefault("column_display_names", {})
     semantics = context.get("column_semantics") or []
@@ -1013,7 +999,6 @@ def _apply_scout_reply_with_llm(
         f"{field_state}\n"
         "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
-    session_msgs = None
     project_ctx = context.get("_project_context")
     # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
     system_msg_for_llm = system_msg
@@ -1036,16 +1021,14 @@ def _apply_scout_reply_with_llm(
             {"role": "user", "content": raw},
         ]
     else:
-        # 降级：没有 ProjectContext 时回退旧路径
-        session_msgs = context.get("_session_messages", [])
-        if session_msgs:
-            messages = list(session_msgs)
-            messages.append({"role": "user", "content": raw})
-        else:
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": raw},
-            ]
+        # ProjectContext 不可用时，最小降级：直接 system_msg + raw
+        import logging
+        _fallback_log = logging.getLogger("hagoku.orchestrator")
+        _fallback_log.warning("ProjectContext 不可用，使用最小降级路径")
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": raw},
+        ]
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
@@ -1088,22 +1071,22 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
-        if session_msgs is not None:
-            # 降级路径：旧的 _session_messages 追加
-            state_after = []
-            for sem in semantics:
-                col = sem.get("column_name", "")
-                dn = str(sem.get("display_name", "") or "").strip()
-                uia = sem.get("used_in_analysis")
-                dn_str = f"({dn})" if dn else ""
-                uia_str = "参与" if uia is True else ("不参与" if uia is False else "待定")
-                state_after.append(f"  {col}{dn_str}: {uia_str}")
-            state_text = "当前字段状态：\n" + "\n".join(state_after) if state_after else ""
-            assistant_turn_full = state_text + "\n\n" + assistant_turn
-            session_msgs.append({"role": "assistant", "content": assistant_turn_full})
-            context["_session_messages"] = session_msgs
-        elif project_ctx is not None:
-            # project_ctx 路径：通过 ProjectContext 记录本轮结果
+        if project_ctx is not None:
+            # 记录本轮用户输入（EventBus 不一定触发，直接补录）
+            project_ctx.add_user_feedback(
+                stage="scout",
+                revision=context.get("interaction_revision", 0),
+                raw_text=raw,
+                content=raw[:200] if raw else "",
+            )
+            # 通过 ProjectContext 记录本轮 Agent 结果
+            applied_summary = ", ".join(applied) if applied else "无字段更新"
+            project_ctx.add_agent_response(
+                stage="scout",
+                revision=context.get("interaction_revision", 0),
+                content=applied_summary,
+                snapshot=project_ctx._derive_snapshot(context),
+            )
             applied_summary = ", ".join(applied) if applied else "无字段更新"
             project_ctx.add_agent_response(
                 stage="scout",
@@ -1207,9 +1190,6 @@ def _apply_scout_reply_with_llm(
 
             # 成功时清除上次的未理解信号
             context.pop("_last_understanding_failure", None)
-            utts = context.get("utterances")
-            if isinstance(utts, list) and utts:
-                utts[-1]["consumed"] = True
             return applied
 
         # ── 无 tool_calls：尝试 JSON fallback（兼容旧模型）─────

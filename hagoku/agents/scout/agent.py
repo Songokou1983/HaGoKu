@@ -222,7 +222,6 @@ class ScoutAgent(InteractionMixin):
                 "missing_summary": profile.get("missing_summary", {}),
                 "warnings": [],
                 "column_descriptions": {},
-                "_session_messages": getattr(self, "_session_messages", []),
             }
             # 提取 Scout 结论供下游 Agent 使用
             context["_scout_conclusions"] = {
@@ -316,7 +315,6 @@ class ScoutAgent(InteractionMixin):
                 "warnings": [],
                 "column_descriptions": {},
                 "_column_profiles": column_profiles,
-                "_session_messages": getattr(self, "_session_messages", []),
             }
             context["_scout_conclusions"] = {
                 "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
@@ -780,13 +778,6 @@ class ScoutAgent(InteractionMixin):
             if self._channel_logger:
                 self._channel_logger.trace_value("scout", sem["column_name"],
                     "used_in_analysis", sem.get("used_in_analysis"), "llm")
-
-        # ── 保存完整 session 上下文 ──
-        self._session_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
-            {"role": "assistant", "content": raw_text or _json.dumps(result, ensure_ascii=False)},
-        ]
 
         return semantics
 

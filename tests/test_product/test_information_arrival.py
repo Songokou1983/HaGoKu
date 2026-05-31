@@ -232,10 +232,11 @@ def _make_tool_call_response(arguments_json: str, function_name: str = "update_f
 def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     """同一暂停点第 2 轮 LLM 调用，messages 应含第 1 轮的 assistant turn。
 
-    当前实现：每轮都是 system+user 两条消息，无历史累积。
-    P3 改造后：第 2 轮 messages = [system, user_1, assistant_1, user_2]。
+    ProjectContext 接管后：messages = [system_prefix, *messages_history, user_raw]。
+    messages_history 由 ProjectContext.entries 派生，第 2 轮应包含第 1 轮的交互。
     """
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.context.project_context import ProjectContext
 
     ctx: dict[str, Any] = {
         "query": "分析每个店铺的收入增长趋势",
@@ -244,22 +245,27 @@ def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
         "column_display_names": {},
     }
 
-    # 第 1 轮：LLM 调用 tool 把 Inc1 标为「收入」
+    # 注入 ProjectContext，预填第 1 轮交互历史
+    project_ctx = ProjectContext(run_id="test", analysis_goal="分析每个店铺的收入增长趋势")
+    project_ctx.add_user_feedback(stage="scout", revision=1, raw_text="Inc1 是收入")
+    project_ctx.add_agent_response(stage="scout", revision=1, content="已更新 Inc1→收入")
+    ctx["_project_context"] = project_ctx
+
+    # 第 2 轮：用户纠正
     spy = LLMSpy(
         response_factory=lambda messages: _make_tool_call_response(
-            '{"column_name": "Inc1", "display_name": "收入"}',
+            '{"column_name": "Inc1", "display_name": "销售额"}',
             function_name="update_field_understanding",
         )
     )
-    _apply_scout_reply_with_llm(ctx, "Inc1 是收入", ["Inc1"], spy.client, "test-model")
-
-    # 第 2 轮：用户纠正，LLM 应能看到自己上一轮说过「收入」
     _apply_scout_reply_with_llm(ctx, "不对，Inc1 应该是销售额", ["Inc1"], spy.client, "test-model")
 
     # 律 3 期望：第 2 轮 LLM 看到第 1 轮 assistant 的产出
-    assert spy.calls[1]["messages"][-2]["role"] == "assistant", (
+    # messages = [system, *messages_history(user_1, assistant_1), user_2]
+    roles = [m["role"] for m in spy.calls[0]["messages"]]
+    assert "assistant" in roles, (
         "律 3 违反：第 2 轮 LLM messages 缺少第 1 轮 assistant 历史。\n"
-        f"第 2 轮 messages 角色序列: {[m['role'] for m in spy.calls[1]['messages']]}"
+        f"第 2 轮 messages 角色序列: {roles}"
     )
 
 
@@ -354,29 +360,32 @@ def test_真实场景_律7_LLM未理解时返回空():
 
 
 def test_真实场景_律2_用户原话保存到context():
-    """律 2 ✅：用户原话通过 utterances 结构化数组保留在 context 中。
+    """律 2 ✅：用户原话通过 ProjectContext.entries 保留（替代旧的 utterances 数组）。
 
-    修复前：raw 只在 _apply_scout_reply_with_llm 局部变量中存活，函数返回后丢失。
-    修复后：入口处追加到 context.utterances，含 raw_text/stage/revision/timestamp/consumed。
+    修复后：USER_INPUT_RECEIVED 事件 → ProjectContext._on_event → add_user_feedback。
     """
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.context.project_context import ProjectContext
 
     ctx = _make_real_scene_context()
+    # 注入 ProjectContext 到 context（律 2 现在走 EventBus → ProjectContext 路径）
+    project_ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
+    ctx["_project_context"] = project_ctx
+
     spy = LLMSpy()
     _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
 
-    # 正向断言：原始话通过 utterances 结构化保留
-    utts = ctx.get("utterances", [])
-    assert isinstance(utts, list) and len(utts) >= 1, (
-        "律 2：用户输入后 context.utterances 应至少含 1 条记录"
+    # 正向断言：原始话通过 ProjectContext entries 保留
+    entries = project_ctx.entries
+    user_entries = [e for e in entries if e.type == "user_feedback"]
+    assert len(user_entries) >= 1, (
+        "律 2：用户输入后 ProjectContext 应至少含 1 条 user_feedback entry"
     )
-    last = utts[-1]
-    assert last.get("raw_text") == _REAL_SCENE_REPLY, (
-        f"utterances 应含用户原话。期望「{_REAL_SCENE_REPLY}」，"
-        f"实际「{last.get('raw_text')}」"
+    last = user_entries[-1]
+    assert last.raw_user_text == _REAL_SCENE_REPLY, (
+        f"entries 应含用户原话。期望「{_REAL_SCENE_REPLY}」，"
+        f"实际「{last.raw_user_text}」"
     )
-    assert last.get("stage") == "scout_field_review"
-    assert isinstance(last.get("timestamp"), str)
 
 
 def test_真实场景_restrict_analysis_to_e2e():

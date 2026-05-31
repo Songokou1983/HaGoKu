@@ -484,3 +484,15 @@ def test_doctrine_prompt中不得写结论式规则() -> None:
         "  ----  违规位置  ----\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_doctrine_无_session_messages_残留():
+    """阶段 2 完工后，_session_messages 字面量不得在 hagoku/ 中出现。"""
+    violations = []
+    for path in HAGOKU_ROOT.rglob("*.py"):
+        if "_session_messages" in _read(path):
+            violations.append(str(path.relative_to(HAGOKU_ROOT)))
+    assert not violations, (
+        f"_session_messages 残留（应全部替换为 ProjectContext）:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

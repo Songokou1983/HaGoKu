@@ -568,9 +568,9 @@ def test_project_context_history_includes_full_stage_dialog():
     ctx.add_agent_response(stage="scout", revision=2, content="已处理第二轮")
 
     result = ctx.build_prompt("scout", {"column_semantics": []})
-    assert "第一轮纠正" in result["history_context"]
-    assert "第二轮纠正" in result["history_context"]
-    # 验证时间序
-    idx1 = result["history_context"].index("第一轮纠正")
-    idx2 = result["history_context"].index("第二轮纠正")
-    assert idx1 < idx2, "对话顺序应保持时间序"
+    msgs = result["messages_history"]
+    assert len(msgs) == 4  # user, assistant, user, assistant
+    assert msgs[0]["role"] == "user" and "第一轮纠正" in msgs[0]["content"]
+    assert msgs[1]["role"] == "assistant"
+    assert msgs[2]["role"] == "user" and "第二轮纠正" in msgs[2]["content"]
+    assert msgs[3]["role"] == "assistant"

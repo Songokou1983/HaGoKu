@@ -573,6 +573,12 @@ class CleanerAgent(InteractionMixin):
         # 拼 messages：系统规则 + 对话历史 + 当前上下文
         conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
         messages: list[dict[str, Any]] = [{"role": "system", "content": cleaning_rules.strip()}]
+
+        # ── ProjectContext 注入（阶段 3）──
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("cleaner", context)
+            messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
         for turn in conv_history[-6:]:
             messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
 

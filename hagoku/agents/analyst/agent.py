@@ -868,6 +868,12 @@ class AnalystAgent(InteractionMixin):
             user_prompt += f"\n## 可用分析方法\n```json\n{_json.dumps(available_methods, ensure_ascii=False)}\n```"
             user_prompt += cleaning_section
 
+        # ── ProjectContext 注入（阶段 3）──
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("analyst", context)
+            system_prompt += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+
         from ...llm.client import create_raw_client
 
         client = create_raw_client(self.llm_config)

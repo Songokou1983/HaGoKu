@@ -1959,6 +1959,9 @@ class Orchestrator:
         )
         self._project_context.subscribe(self.event_bus, context_ref=context)
 
+        # ── 持久化路径（阶段 3：crash 恢复）──
+        self._project_context._save_path = str(run_dir / "project_context.jsonl")
+
         # ── 通道日志：初始化 ChannelLogger ──
         from ..observability.channel_logger import ChannelLogger
         self._channel_logger = ChannelLogger(run_dir)

@@ -36,15 +36,36 @@ class ProjectContext:
     entries: list[ContextEntry] = field(default_factory=list)
     _event_bus: Any = field(init=False, default=None)
     _context_ref: dict[str, Any] | None = field(init=False, default=None)
+    _save_path: str | None = field(init=False, default=None)
 
     # ── 追加接口 ──
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def _maybe_save(self) -> None:
+        """如果设置了 _save_path，追加写入最后一条 entry 到 JSONL。"""
+        if self._save_path and self.entries:
+            import json as _json
+            from pathlib import Path
+            e = self.entries[-1]
+            p = Path(self._save_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with open(p, "a") as f:
+                f.write(_json.dumps({
+                    "type": e.type,
+                    "stage": e.stage,
+                    "revision": e.revision,
+                    "timestamp": e.timestamp,
+                    "content": e.content,
+                    "raw_user_text": e.raw_user_text,
+                    "snapshot": e.snapshot,
+                }, ensure_ascii=False) + "\n")
+
     def add_entry(self, entry: ContextEntry) -> None:
         """追加一条记录。不可删除，不可修改已有记录。"""
         self.entries.append(entry)
+        self._maybe_save()
 
     def add_user_feedback(
         self,
@@ -237,3 +258,51 @@ class ProjectContext:
                 raw_text=raw,
                 content=raw[:200] if raw else "",
             )
+
+    # ── 持久化（阶段 3：crash 恢复）──────────────────────────
+
+    def save_jsonl(self, path: str) -> None:
+        """追加式写入 JSONL。每行一个 entry 的 JSON 序列化。"""
+        import json as _json
+        from pathlib import Path
+
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w") as f:
+            for e in self.entries:
+                f.write(_json.dumps({
+                    "type": e.type,
+                    "stage": e.stage,
+                    "revision": e.revision,
+                    "timestamp": e.timestamp,
+                    "content": e.content,
+                    "raw_user_text": e.raw_user_text,
+                    "snapshot": e.snapshot,
+                }, ensure_ascii=False) + "\n")
+
+    @classmethod
+    def load_jsonl(cls, path: str, run_id: str, analysis_goal: str) -> "ProjectContext":
+        """从 JSONL 文件恢复 ProjectContext。"""
+        import json as _json
+        from pathlib import Path
+
+        ctx = cls(run_id=run_id, analysis_goal=analysis_goal)
+        p = Path(path)
+        if not p.exists():
+            return ctx
+        with open(p) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                d = _json.loads(line)
+                ctx.entries.append(ContextEntry(
+                    type=d["type"],
+                    stage=d["stage"],
+                    revision=d["revision"],
+                    timestamp=d["timestamp"],
+                    content=d["content"],
+                    raw_user_text=d.get("raw_user_text"),
+                    snapshot=d.get("snapshot"),
+                ))
+        return ctx

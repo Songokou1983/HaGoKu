@@ -411,6 +411,12 @@ class ReporterAgent(InteractionMixin):
 
         system = "你是 HaGoKu Studio 的专业报告员。你的任务是把数据分析结果变成一份谁都看得懂的报告。只输出 JSON，不要任何解释。"
 
+        # ── ProjectContext 注入（阶段 3）──
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("reporter", context)
+            system += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+
         self._emit(EventType.AGENT_THINKING, {"thought": "正在通过 LLM 生成报告内容..."})
 
         response = self._call_llm(system=system, user=user_prompt)

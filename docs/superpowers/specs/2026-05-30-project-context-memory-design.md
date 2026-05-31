@@ -39,6 +39,10 @@ EventBus (已有)
 
 ### 3.2 数据模型
 
+> **律 5 决议**：`entries[type=user_feedback].raw_user_text` 作为律 2 唯一落地点。
+> 旧的 `context["utterances"]` 数组在 ProjectContext 接管后逐步移除——
+> 同一份用户原话不平行存储两处。
+
 ```python
 @dataclass
 class ProjectContext:
@@ -70,26 +74,49 @@ class ContextEntry:
 ```
 build_prompt(agent: str) -> dict:
   1. 从看板确认 agent 所处阶段及上游是否 done
-  2. system_prefix:
+  2. system_prefix:           # 注入到 system role（律 1）
      分析目标: {analysis_goal}
      当前字段状态: {从 column_semantics 实时派生}
      角色分配: target={}, features={}
      待确认: {pending 字段}
      命令上下文: {_pending_command_text}
-  3. history_context:
-     当前阶段的 user_feedback + agent_response entries（按时间序）
+  3. upstream_summary:        # 注入到 system role 末尾
      上游阶段的 agent_response entries（仅结构化快照，不含对话）
+  4. messages_history: list[dict]  # 标准 messages list（律 3）
+     当前阶段的 user_feedback + agent_response entries，按时间序，
+     每条渲染为 {"role": "user"|"assistant", "content": ...}
+     stage_transition 不进入 messages_history（避免 LLM 混淆角色）
+
+返回值:
+  {
+    "system_prefix": str,           # 拼到 system role
+    "upstream_summary": str,         # 拼到 system role 末尾
+    "messages_history": list[dict],  # 展开到 messages list
+  }
 ```
 
 ### 3.5 集成点
+
+**注入分工**（必修 2）：
+
+| 注入位 | 职责 | 内容 |
+|--------|------|------|
+| Agent 自身 system_prompt | **静态身份与工具行为** | "我是 Scout，我能调 X/Y/Z 工具" + `prompt.md` 行为约束 |
+| `ProjectContext.system_prefix` | **动态运行时状态** | analysis_goal / 当前字段状态 / pending / `_pending_command_text` |
+| `ProjectContext.upstream_summary` | **上游阶段摘要** | 结构化快照，注入到 system role 末尾 |
+
+`analysis_goal` 和 `command_context` **不得**在 Agent 自身 system_prompt 中重复注入——
+统一由 ProjectContext 在 `system_prefix` 中提供。
 
 每个 Agent 调 LLM 前，orchestrator 调用：
 
 ```python
 ctx_block = project_context.build_prompt(agent_name)
 messages = [
-    {"role": "system", "content": agent_system_prompt + "\n\n" + ctx_block["system_prefix"]},
-    {"role": "user",   "content": ctx_block["history_context"] + "\n\n" + current_task},
+    {"role": "system", "content": agent_system_prompt + "\n\n" + ctx_block["system_prefix"]
+                                  + "\n\n" + ctx_block["upstream_summary"]},
+    *ctx_block["messages_history"],  # 展开标准 messages list（律 3）
+    {"role": "user", "content": raw_user_input},
 ]
 ```
 
@@ -104,7 +131,7 @@ messages = [
 | 1a | `ProjectContext` + `ContextEntry` 数据类 | `hagoku/context/project_context.py`（新建） |
 | 1b | EventBus 消费者注册：监听 AGENT_STARTED / COMPLETED / USER_INPUT_RECEIVED | 同上 |
 | 1c | `build_prompt()` 方法 | 同上 |
-| 1d | Orchestrator 接入：在 Agent 调用点调用 `build_prompt()`，与旧路径并行 | `hagoku/manager/orchestrator.py` |
+| 1d | Orchestrator 接入：在最开始建空 `context` dict（保持引用稳定），`subscribe(event_bus, context_ref=context)`；Scout 跑完后 `context.update(scout_result)` 而非 `context = scout.run(...)` 重新赋值 | `hagoku/manager/orchestrator.py` |
 | 1e | 单元测试 | `tests/test_context/test_project_context.py`（新建） |
 
 ### 阶段 2：突破字段理解
@@ -117,6 +144,8 @@ messages = [
 | 2d | command_context 通过 system_prefix 送达（修复断裂点 3） | 同上 |
 | 2e | 清理旧代码：移除 `_session_messages` 手动拼接、`_conversation_history` 冗余路径 | `hagoku/manager/orchestrator.py`, `hagoku/agents/*/agent.py` |
 | 2f | 信息抵达正向断言（律 6） | `tests/test_product/test_information_arrival.py` 新增用例 |
+| 2g | 清理阶段 1 遗留的 `if project_ctx else 旧路径` 防御分支，ProjectContext 作为强制依赖 | `hagoku/manager/orchestrator.py` |
+| 2h | doctrine compliance 加守门：`_session_messages` 字面量不得残留 | `tests/test_doctrine_compliance.py` |
 
 ## 5. 错误处理与退化
 
@@ -138,7 +167,8 @@ messages = [
 | **律 1** | `analysis_goal` 在 `system_prefix` 首行 |
 | **律 2** | `raw_user_text` 在 entry 中保留直到标记 consumed |
 | **律 3** | `history_context` 含当前阶段全量交互 |
-| **律 5** | `snapshot` 从 `column_semantics` 实时派生，不平行存储 |
+| **律 5** | `snapshot` 从 `column_semantics` 实时派生，不平行存储；`utterances` 与 `entries` 二选一（§3.2） |
+| **格式化职责** | `build_prompt` 内 `bool/None → 中文标签` 映射（≤3 分支，不引入新业务概念）属于派生视图渲染，非语义判断。`test_doctrine_compliance.py` 守门 3 不会拦此类映射 |
 | **律 6** | 阶段 2f 新增信息抵达断言 |
 | **律 7** | 语义未理解时 `_last_understanding_failure` 写入 context（已有机制，不变） |
 | **最小改动** | 两阶段渐进式，旧路径先并行再替换 |
@@ -149,4 +179,7 @@ messages = [
 - 不替代 Scribe 4 通道——`ProjectContext` 管对话记忆，Scribe 管持久化文档
 - 不替代 MemoryManager——跨 run 的结构化知识仍由 MemoryManager 负责
 - 不跨 run 保留对话日志——对话依附于当次分析目标，跨 run 保留造成语义污染
+- 不替代律 4「工具 schema 覆盖完备律」——工具治理仍归各 Agent 各自维护
+- 不替代 `_last_understanding_failure`——律 7 的写入点仍是 context dict，ProjectContext 通过 EventBus 监听同步进 entries 作为审计
+- 不做跨 run 持久化——（重申，已有但需加粗强调）
 - 不在阶段 1 引入持久化——`ProjectContext` 在内存中运行，阶段 1 不写磁盘。crash 恢复是阶段 3（后续）工作

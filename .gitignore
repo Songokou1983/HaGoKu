@@ -48,3 +48,8 @@ coverage.xml
 
 # 本地快照：`cp … UI_CHANGELOG_backup_时间戳_原文件名`（见 CLAUDE.md）。正式历史以 Git 提交为准，勿纳入版本库。
 UI_CHANGELOG_backup_*
+
+# 工具/AI 助手本地缓存（不入仓）
+.codegraph/
+.reasonix/
+.vite/

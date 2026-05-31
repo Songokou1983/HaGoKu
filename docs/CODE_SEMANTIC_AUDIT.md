@@ -1,5 +1,19 @@
 # 代码语义理解审计报告
 
+> ⚠️ **本文件已部分被自动化取代（2026-05-31）**
+>
+> 本文件为 2026-05-25 一次性人工审计的快照，记录了当时发现的硬编码模式与修复路径。
+> 现在硬编码守门已机器化：
+>
+> - **机器化守门人**：[`tests/test_doctrine_compliance.py`](../tests/test_doctrine_compliance.py)（7 条规则覆盖业务关键词列表 / 中文语义正则 / 中文 if-elif 链 / 伪 LLM 函数 / except 静默吞）
+> - **历史债务清理路线**：[`docs/plans/doctrine-violations-cleanup.md`](plans/doctrine-violations-cleanup.md)
+> - **AI 实现者铁律**：[`CLAUDE.md`](../CLAUDE.md) §「铁律」
+>
+> 提交前必跑 `pytest tests/test_doctrine_compliance.py`——红 = 拒。
+> 本文件保留作为历史审计样本，**不要再依赖人工对照本文件做防硬编码审查**。
+
+---
+
 > **审计范围**：HaGoKu 代码库中所有"代码层代替 LLM 做语义理解"的模式
 > **审计日期**：2026-05-25
 > **原则**：代码应只做结构化通道（数据透传、格式转换、路由分发），语义理解全部交由 LLM 完成

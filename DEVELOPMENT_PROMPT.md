@@ -9,15 +9,17 @@
 
 | 文档 | 用途 |
 |------|------|
-| [PROJECT.md](PROJECT.md) | 项目灵魂—壳子/架构/通道、Agent 角色、人机互动、双轨报告、防退化机制 |
+| [PROJECT.md](PROJECT.md) | **唯一权威源**—设计哲学、通道完备性十律、四重刹车、失败处理三路径、代码层合法动作清单 |
+| [CLAUDE.md](CLAUDE.md) | **AI 实现者操作手册**—铁律 0/1/2/3、违禁代码速查、唯一合法写法、UI 原则。所有 AI 助手入仓库必读 |
+| [tests/test_doctrine_compliance.py](tests/test_doctrine_compliance.py) | **机器化守门人**—7 条 doctrine 守门测试。提交前必跑：`pytest tests/test_doctrine_compliance.py` |
+| [docs/decisions/](docs/decisions/) | **架构决策日志（ADR）**—关键设计决策的来源与后果，新设计前先查是否已被否决 |
+| [docs/cases/](docs/cases/) | **真实失效场景案例库**—现行犯档案，mock 测试不能脱离真实场景 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 设计手册—看板/向量/防护/审查清单 |
 | [docs/EXTERNAL_REFERENCES.md](docs/EXTERNAL_REFERENCES.md) | 外部项目思想参考（Hermes/CrewAI/Instructor/Pingouin 等） |
 | [docs/INTERACTION_MULTITURN_PLAN.md](docs/INTERACTION_MULTITURN_PLAN.md) | 多轮对齐互动：目标态、现状差距、分期实施与验收 |
 | [docs/AGENT_INTERACTION_CONTRACT.md](docs/AGENT_INTERACTION_CONTRACT.md) | Agent 交互可执行契约 |
 | [DEV.md](DEV.md) | 环境、日常命令 |
-| [README.md](README.md) | 用户安装与快速开始 |
 | [UI_CHANGELOG.md](UI_CHANGELOG.md) | 前端有界面改动时按 `CLAUDE.md` 记录 |
-| [CLAUDE.md](CLAUDE.md) | UI 原则、备份与变更日志规则 |
 
 **环境变量**：只认 `~/.hagoku/.env`；模板见仓库 `.env.example`。LLM 默认端口口径与 **HaGoKu Studio API（8000）** 区分见 `PROJECT.md`。
 

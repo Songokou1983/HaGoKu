@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **单源声明**：本文件是项目**唯一** AI 实现者手册（`AGENTS.md` 仅是指向本文件的指针）。所有 AI 助手（Claude / Codex / Cursor / Cascade 等）入仓库后均以本文件为操作手册。规则冲突时一律以 [`PROJECT.md`](PROJECT.md) 为权威源。
+
 ## Repository Context
 
 This repository contains **one primary project**: `hagoku/`（主项目）。其他同名目录下的项目不在此仓库管理范围内。

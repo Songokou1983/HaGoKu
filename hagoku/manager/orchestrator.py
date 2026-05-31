@@ -1013,14 +1013,24 @@ def _apply_scout_reply_with_llm(
         f"{field_state}\n"
         "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
-
-    # ── 使用 ProjectContext.build_prompt 替代旧的 _session_messages ──
-    session_msgs = None  # 初始化，project_ctx 路径不使用
+    session_msgs = None
     project_ctx = context.get("_project_context")
+    # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
+    system_msg_for_llm = system_msg
     if project_ctx:
+        # 移除 system_msg 中与 system_prefix 重复的动态部分
+        system_msg_for_llm = (
+            "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
+            "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
+            "用户说的简称/标签（≤6字）→ display_name。\n"
+            "含义扩展说明（完整语句）→ description。两者不能相同。\n"
+            "每次只更新一个字段，分多次调用 update_field_understanding。\n"
+            "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
+            "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
+        )
         ctx_block = project_ctx.build_prompt("scout", context)
         messages = [
-            {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]
+            {"role": "system", "content": system_msg_for_llm + "\n\n" + ctx_block["system_prefix"]
                                           + "\n\n" + ctx_block["upstream_summary"]},
             *ctx_block["messages_history"],
             {"role": "user", "content": raw},
@@ -2240,6 +2250,15 @@ class Orchestrator:
                     memory_project=memory_project,
                 )
                 context.update(result)
+                # ── 补录初始 Scout 快照（AGENT_COMPLETED 在 scout.run() 内部已触发，
+                #     此时 _context_ref 为空，snapshot 丢失；context.update 后显式补录）──
+                if hasattr(self, '_project_context') and self._project_context is not None:
+                    self._project_context.add_agent_response(
+                        stage="scout",
+                        revision=0,
+                        content=f"字段推断完成：理解 {len(context.get('column_semantics', []))} 个字段",
+                        snapshot=self._project_context._derive_snapshot(context),
+                    )
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
 

@@ -64,10 +64,8 @@ def test_scout_prompt_contains_ignore_role_instruction():
 
     # ── 断言清单 ──
 
-    # 1. 分析目标必须出现在 prompt 中
-    assert "分析收入的变化趋势" in prompt, (
-        f"❌ 律 1 违反：分析目标未抵达 Scout LLM prompt。\nprompt 尾段:\n{prompt[-500:]}"
-    )
+    # 1. 分析目标（已移除——由 ProjectContext.system_prefix 注入）
+    # （不再在 Agent 自身 prompt 中检验 analysis_goal）
 
     # 2. 必须包含「ignore」指令（解决「全部勾选」的核心）
     assert "ignore" in prompt.lower(), (

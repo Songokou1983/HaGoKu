@@ -1013,18 +1013,39 @@ def _apply_scout_reply_with_llm(
         f"{field_state}\n"
         "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
     )
-
-    # ── Session 上下文：用初始 Scout 的完整对话作为起点 ──
-    session_msgs = context.get("_session_messages", [])
-    if session_msgs:
-        messages = list(session_msgs)  # 拷贝初始对话（system + user + assistant）
-        messages.append({"role": "user", "content": raw})  # 追加用户纠正
-    else:
-        # 回退：没有 session 上下文时用独立 system_msg
+    session_msgs = None
+    project_ctx = context.get("_project_context")
+    # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
+    system_msg_for_llm = system_msg
+    if project_ctx:
+        # 移除 system_msg 中与 system_prefix 重复的动态部分
+        system_msg_for_llm = (
+            "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
+            "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
+            "用户说的简称/标签（≤6字）→ display_name。\n"
+            "含义扩展说明（完整语句）→ description。两者不能相同。\n"
+            "每次只更新一个字段，分多次调用 update_field_understanding。\n"
+            "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
+            "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
+        )
+        ctx_block = project_ctx.build_prompt("scout", context)
         messages = [
-            {"role": "system", "content": system_msg},
+            {"role": "system", "content": system_msg_for_llm + "\n\n" + ctx_block["system_prefix"]
+                                          + "\n\n" + ctx_block["upstream_summary"]},
+            *ctx_block["messages_history"],
             {"role": "user", "content": raw},
         ]
+    else:
+        # 降级：没有 ProjectContext 时回退旧路径
+        session_msgs = context.get("_session_messages", [])
+        if session_msgs:
+            messages = list(session_msgs)
+            messages.append({"role": "user", "content": raw})
+        else:
+            messages = [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": raw},
+            ]
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
@@ -1067,8 +1088,8 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
-        if session_msgs:
-            # 追加本轮更新后的字段状态摘要，供下一轮参考
+        if session_msgs is not None:
+            # 降级路径：旧的 _session_messages 追加
             state_after = []
             for sem in semantics:
                 col = sem.get("column_name", "")
@@ -1078,9 +1099,18 @@ def _apply_scout_reply_with_llm(
                 uia_str = "参与" if uia is True else ("不参与" if uia is False else "待定")
                 state_after.append(f"  {col}{dn_str}: {uia_str}")
             state_text = "当前字段状态：\n" + "\n".join(state_after) if state_after else ""
-            assistant_turn = state_text + "\n\n" + assistant_turn
-            session_msgs.append({"role": "assistant", "content": assistant_turn})
+            assistant_turn_full = state_text + "\n\n" + assistant_turn
+            session_msgs.append({"role": "assistant", "content": assistant_turn_full})
             context["_session_messages"] = session_msgs
+        elif project_ctx is not None:
+            # project_ctx 路径：通过 ProjectContext 记录本轮结果
+            applied_summary = ", ".join(applied) if applied else "无字段更新"
+            project_ctx.add_agent_response(
+                stage="scout",
+                revision=context.get("interaction_revision", 0),
+                content=applied_summary,
+                snapshot=project_ctx._derive_snapshot(context),
+            )
 
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
@@ -1937,6 +1967,9 @@ class Orchestrator:
         schema_file = self.output_mgr.project_dir / "progress.yaml"
         self.memory = MemoryManager(self.db, progress_path=schema_file)
 
+        # ── 持久 context 引用（必修 3）：Scribe 初始化前声明 ──
+        context: dict[str, Any] = {}
+
         # 初始化 Scribe Agent（看板驱动）
         self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
         self.scribe.init_pipeline()
@@ -1951,6 +1984,14 @@ class Orchestrator:
 
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
+
+        # ── ProjectContext：统一上下文记忆系统（阶段1：并行旧路径）──
+        from ..context.project_context import ProjectContext
+        self._project_context = ProjectContext(
+            run_id=run_id,
+            analysis_goal=query,
+        )
+        self._project_context.subscribe(self.event_bus, context_ref=context)
 
         # ── 通道日志：初始化 ChannelLogger ──
         from ..observability.channel_logger import ChannelLogger
@@ -1983,7 +2024,6 @@ class Orchestrator:
         reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
 
         # Resume 支持
-        context: dict | None = None
         df_clean = None
         cleaning_report = None
         cleaned_path_str = ""
@@ -1996,7 +2036,7 @@ class Orchestrator:
                 })
                 # 恢复上下文
                 if state.get("context") and isinstance(state["context"], dict):
-                    context = state["context"]
+                    context.update(state["context"])
                 # 加载清洗后数据
                 if state.get("cleaned_path"):
                     import pandas as pd
@@ -2200,15 +2240,25 @@ class Orchestrator:
 
         try:
             # Scout + Cleaner（如果不是 resume）
-            if context is None:
+            if not context:
                 # 3. Scout: 数据侦察
                 # 加载项目历史记忆，避免用户重复回答字段含义
                 memory_project = self.memory.build_memory_project(project_name) if self.memory else None
                 scout.memory_project = memory_project
-                context = scout.run(
+                result = scout.run(
                     data_path, query, project_id=project_name, emit_completed=False,
                     memory_project=memory_project,
                 )
+                context.update(result)
+                # ── 补录初始 Scout 快照（AGENT_COMPLETED 在 scout.run() 内部已触发，
+                #     此时 _context_ref 为空，snapshot 丢失；context.update 后显式补录）──
+                if hasattr(self, '_project_context') and self._project_context is not None:
+                    self._project_context.add_agent_response(
+                        stage="scout",
+                        revision=0,
+                        content=f"字段推断完成：理解 {len(context.get('column_semantics', []))} 个字段",
+                        snapshot=self._project_context._derive_snapshot(context),
+                    )
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
 
@@ -2221,6 +2271,8 @@ class Orchestrator:
                 # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
                 interaction_revision = 0
                 skip_gate = False  # 用户主动确认 → 跳过 gate
+                # ── 注入 ProjectContext 到 context ──
+                context["_project_context"] = getattr(self, '_project_context', None)
                 while True:
                     # 内层：Scout 字段对齐循环
                     while True:

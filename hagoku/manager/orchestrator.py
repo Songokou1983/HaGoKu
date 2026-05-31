@@ -1020,8 +1020,10 @@ def _apply_scout_reply_with_llm(
     if project_ctx:
         ctx_block = project_ctx.build_prompt("scout", context)
         messages = [
-            {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]},
-            {"role": "user", "content": ctx_block["history_context"] + "\n\n【当前用户输入】\n" + raw},
+            {"role": "system", "content": system_msg + "\n\n" + ctx_block["system_prefix"]
+                                          + "\n\n" + ctx_block["upstream_summary"]},
+            *ctx_block["messages_history"],
+            {"role": "user", "content": raw},
         ]
     else:
         # 降级：没有 ProjectContext 时回退旧路径
@@ -1955,6 +1957,9 @@ class Orchestrator:
         schema_file = self.output_mgr.project_dir / "progress.yaml"
         self.memory = MemoryManager(self.db, progress_path=schema_file)
 
+        # ── 持久 context 引用（必修 3）：Scribe 初始化前声明 ──
+        context: dict[str, Any] = {}
+
         # 初始化 Scribe Agent（看板驱动）
         self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
         self.scribe.init_pipeline()
@@ -1976,7 +1981,7 @@ class Orchestrator:
             run_id=run_id,
             analysis_goal=query,
         )
-        self._project_context.subscribe(self.event_bus, context_ref=None)
+        self._project_context.subscribe(self.event_bus, context_ref=context)
 
         # ── 通道日志：初始化 ChannelLogger ──
         from ..observability.channel_logger import ChannelLogger
@@ -2009,7 +2014,6 @@ class Orchestrator:
         reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
 
         # Resume 支持
-        context: dict | None = None
         df_clean = None
         cleaning_report = None
         cleaned_path_str = ""
@@ -2022,7 +2026,7 @@ class Orchestrator:
                 })
                 # 恢复上下文
                 if state.get("context") and isinstance(state["context"], dict):
-                    context = state["context"]
+                    context.update(state["context"])
                 # 加载清洗后数据
                 if state.get("cleaned_path"):
                     import pandas as pd
@@ -2226,20 +2230,18 @@ class Orchestrator:
 
         try:
             # Scout + Cleaner（如果不是 resume）
-            if context is None:
+            if not context:
                 # 3. Scout: 数据侦察
                 # 加载项目历史记忆，避免用户重复回答字段含义
                 memory_project = self.memory.build_memory_project(project_name) if self.memory else None
                 scout.memory_project = memory_project
-                context = scout.run(
+                result = scout.run(
                     data_path, query, project_id=project_name, emit_completed=False,
                     memory_project=memory_project,
                 )
+                context.update(result)
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
-                # ── 更新 ProjectContext 的 context_ref 引用 ──
-                if hasattr(self, '_project_context') and self._project_context is not None:
-                    self._project_context.set_context_ref(context)
 
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)

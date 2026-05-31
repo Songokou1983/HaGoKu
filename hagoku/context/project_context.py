@@ -124,7 +124,7 @@ class ProjectContext:
         """为指定 Agent 拼装上下文注入块。
 
         Returns:
-            {"system_prefix": str, "history_context": str}
+            {"system_prefix": str, "upstream_summary": str, "messages_history": list[dict]}
         """
         # 1. system_prefix：分析目标 + 当前字段状态 + 角色 + 命令上下文
         snapshot = self._derive_snapshot(context)
@@ -154,45 +154,34 @@ class ProjectContext:
 
         system_prefix = "\n".join(lines)
 
-        # 2. history_context：当前阶段的对话历史 + 上游阶段快照摘要
-        current_stage_entries = [e for e in self.entries if e.stage == agent]
+        # ── upstream_summary：上游阶段结构化快照 ──
         upstream_entries = [e for e in self.entries if e.stage != agent]
+        upstream_parts: list[str] = []
+        for e in upstream_entries:
+            if e.type == "agent_response" and e.snapshot:
+                t = e.snapshot.get("target", "")
+                f = e.snapshot.get("features", [])
+                p = e.snapshot.get("pending", [])
+                summary = f"{e.stage} 阶段完成: target={t}, features={f}"
+                if p:
+                    summary += f", 待确认={p}"
+                upstream_parts.append(summary)
+        upstream_summary = "【上游阶段摘要】\n" + "\n".join(upstream_parts) if upstream_parts else ""
 
-        history_parts: list[str] = []
-
-        # 上游阶段：仅保留 agent_response 的 snapshot 摘要
-        if upstream_entries:
-            history_parts.append("【上游阶段摘要】")
-            for e in upstream_entries:
-                if e.type == "agent_response" and e.snapshot:
-                    t = e.snapshot.get("target", "")
-                    f = e.snapshot.get("features", [])
-                    p = e.snapshot.get("pending", [])
-                    summary = f"{e.stage} 阶段完成: target={t}, features={f}"
-                    if p:
-                        summary += f", 待确认={p}"
-                    history_parts.append(summary)
-                elif e.type == "stage_transition":
-                    history_parts.append(f"→ {e.content}")
-            history_parts.append("")
-
-        # 当前阶段：完整对话历史
-        if current_stage_entries:
-            history_parts.append(f"【{agent} 阶段对话】")
-            for e in current_stage_entries:
-                if e.type == "user_feedback":
-                    history_parts.append(f"用户: {e.raw_user_text or e.content}")
-                elif e.type == "agent_response":
-                    history_parts.append(f"Agent: {e.content}")
-                elif e.type == "stage_transition":
-                    history_parts.append(f"── {e.content} ──")
-            history_parts.append("")
-
-        history_context = "\n".join(history_parts)
+        # ── messages_history：标准 messages list（律 3）──
+        # stage_transition 不进入 messages_history
+        current_stage_entries = [e for e in self.entries if e.stage == agent]
+        messages_history: list[dict[str, str]] = []
+        for e in current_stage_entries:
+            if e.type == "user_feedback":
+                messages_history.append({"role": "user", "content": e.raw_user_text or e.content})
+            elif e.type == "agent_response":
+                messages_history.append({"role": "assistant", "content": e.content})
 
         return {
             "system_prefix": system_prefix,
-            "history_context": history_context,
+            "upstream_summary": upstream_summary,
+            "messages_history": messages_history,
         }
 
     # ── EventBus 集成 ──

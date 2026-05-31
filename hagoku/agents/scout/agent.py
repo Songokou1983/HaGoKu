@@ -615,34 +615,10 @@ class ScoutAgent(InteractionMixin):
             }
         }
 
-        # ── 注入 Agent 行为约束（prompt.md）和用户命令上下文 ──
-        prompt_md_text = _load_prompt_md_text("scout")
-        command_context = ""
-        try:
-            ctx = getattr(self, "_context", {}) or {}
-            pt = (ctx.get("_pending_command_text") or "").strip()
-            if pt:
-                command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
-        except Exception as e:
-            logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
-
-        # ── 将用户分析目标前置为最高优先级指令 ──
-        analysis_goal_line = ""
-        if query and query.strip():
-            analysis_goal_line = (
-                f"\n\n【最高优先级 — 用户分析目标】\n"
-                f"「{query.strip()}」\n\n"
-                f"1. 给每个字段一个中文名（display_name）\n"
-                f"2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段；与目标无关的字段设 suggested_role 为 ignore\n"
-                f"现在调用 submit_field_inference。\n"
-            )
-
         system_prompt = (
             "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
-            f"{analysis_goal_line}"
             f"{knowledge_section}"
             f"{memory_notes}"
-            f"{command_context}"
         )
 
         import json as _json

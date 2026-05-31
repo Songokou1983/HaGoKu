@@ -615,7 +615,11 @@ class ScoutAgent(InteractionMixin):
             }
         }
 
+        # 过渡兜底：阶段 2 接 ProjectContext 后移除
+        analysis_goal_section = f"\n【最高优先级 — 用户分析目标】\n「{query.strip()}」\n\n" if query and query.strip() else ""
+
         system_prompt = (
+            f"{analysis_goal_section}"
             "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
             "1. 给每个字段一个中文名（display_name）\n"
             "2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段；与目标无关的字段设 suggested_role 为 ignore\n"
@@ -623,7 +627,6 @@ class ScoutAgent(InteractionMixin):
             f"{knowledge_section}"
             f"{memory_notes}"
         )
-
         import json as _json
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
 

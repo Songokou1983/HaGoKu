@@ -2074,7 +2074,8 @@ class Orchestrator:
         if phase == "cleaning_first":
             # Scout（使用缓存上下文或重新跑）
             if scout_context is not None and scout_context.get("query") == query:
-                context = scout_context
+                context.clear()
+                context.update(scout_context)
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
@@ -2101,9 +2102,9 @@ class Orchestrator:
                     })
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
                                           channel_logger=self._channel_logger)
-                context = scout_agent.run(data_path, query=query, project_id=project_name)
-
-            # Cleaner：只检测+计划，不执行清洗
+                scout_result = scout_agent.run(data_path, query=query, project_id=project_name)
+                context.clear()
+                context.update(scout_result)
             self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                 "thought": "🧹 检测数据质量，生成清洗策略...",
             })
@@ -2144,7 +2145,8 @@ class Orchestrator:
         if phase == "analyst_first":
             # Scout
             if scout_context is not None and scout_context.get("query") == query:
-                context = scout_context
+                context.clear()
+                context.update(scout_context)
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
                 })
@@ -2167,7 +2169,9 @@ class Orchestrator:
                             current_query=query)
                 scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
                                           channel_logger=self._channel_logger)
-                context = scout_agent.run(data_path, query=query, project_id=project_name)
+                scout_result = scout_agent.run(data_path, query=query, project_id=project_name)
+                context.clear()
+                context.update(scout_result)
 
             # Cleaner
             self.event_bus.emit(EventType.AGENT_THINKING, "manager", {

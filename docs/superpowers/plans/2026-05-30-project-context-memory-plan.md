@@ -599,6 +599,8 @@ git commit -m "test: ProjectContext EventBus 集成测试（4 条）"
 
 ## 阶段 2：突破字段理解
 
+> **前置**：确认 `orchestrator.py` 内不再有 `context = ...` 重绑（已修复 L2077/2104/2147/2170），否则 Cleaner/Analyst 接入后 snapshot 失效。
+
 ### 任务 5：修改 _apply_scout_reply_with_llm 使用 build_prompt
 
 **文件：**

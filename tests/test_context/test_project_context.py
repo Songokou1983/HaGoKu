@@ -238,3 +238,34 @@ class TestProjectContextEventBus:
         assert len(ctx.entries) == 3
         assert ctx.entries[1].raw_user_text == "反馈1"
         assert ctx.entries[2].raw_user_text == "反馈2"
+
+
+def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
+    """守门：subscribe(context_ref=空dict) → dict 被 update 后 → AGENT_COMPLETED 拿到的 snapshot 非空。
+
+    验证 必修 3：context dict 引用稳定，snapshot 不因 context 延迟填充而丢失。
+    """
+    from hagoku.observability.event_bus import EventBus
+    from hagoku.observability.events import EventType
+
+    ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+    ref = {}
+    bus = EventBus()
+    ctx.subscribe(bus, context_ref=ref)
+
+    # 模拟 scout.run() 完成后 context 被填充
+    ref.update({
+        "column_semantics": [
+            {"column_name": "Revenue", "display_name": "收入", "used_in_analysis": True},
+        ],
+        "target": "Revenue",
+        "features": ["Code"],
+    })
+
+    bus.emit(EventType.AGENT_COMPLETED, "scout", {"result_summary": "完成"})
+
+    assert len(ctx.entries) == 1
+    assert ctx.entries[0].type == "agent_response"
+    assert ctx.entries[0].snapshot is not None
+    assert len(ctx.entries[0].snapshot.get("fields", [])) == 1
+    assert ctx.entries[0].snapshot["target"] == "Revenue"

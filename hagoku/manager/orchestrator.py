@@ -2221,6 +2221,8 @@ class Orchestrator:
                         # 展示更新后的字段表，回到 Scout 内层循环让用户确认
                         continue
 
+                    break  # Scout 完成，退出外层循环
+
 # ── 分析目的确认暂停点（用户已确认则跳过，直接进 Cleaner）──
                 analysis_purpose = self._build_analysis_purpose(context)
                 context["analysis_purpose"] = analysis_purpose

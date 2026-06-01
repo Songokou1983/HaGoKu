@@ -57,22 +57,24 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-5 完成（orchestrator / memory / 4 agents / refinement+project_context）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 32 草稿
-- **状态分布**：32 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-6 完成（orchestrator / memory / 4 agents / refinement+project_context / storage）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 35 草稿
+- **状态分布**：35 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：32（全部 DRAFT）。
+**试错总假设数**：35（全部 DRAFT）。
 
-### 0.2 Phase 1 session 5 关键发现
+### 0.2 Phase 1 session 6 关键发现
 
-读完 refinement（256 行）+ project_context（328 行）后：
-- **两个文件都干净**——是 sessions 1-5 读过的最干净的 2 个文件
-- **F-031 NEW**：refinement.py line 183 bare `except:`（实际 `except Exception`）——已查证合规
-- **F-032 NEW**：**project_context.py `_derive_snapshot` 是 F-003 修复的正面参考**——只从 column_semantics 派生，零 dict 平行读取
-- **隐含发现**：F-003 的修复方向不是"加同步代码"，而是"只写 column_semantics，让其他读侧用 _derive_snapshot 模式派生"
+读完 `hagoku/storage/project_manager.py`（761 行）+ `hagoku/storage/database.py`（656 行）后：
+- **database.py 整体最干净**：SQL 字段白名单 + 事务上下文 + 线程锁 + WAL + 外键约束 = 教科书级
+- **project_manager.py 安全设计优秀**：路径遍历防御、符号链接检查、原子写入
+- **F-033 NEW**：project_manager.py line 442-449 "符号链接模式" comment 与代码不符——两个分支都 `shutil.copy2`
+- **F-034 NEW**：project_manager.py `_load_registry`/`list()` 3 处静默 except
+- **F-035 NEW（正面参考）**：database.py 安全模式可作为其他存储层代码的修复模板
+- **重大发现**：Phase 0 没读 storage 层，**漏掉 2 个 P3 finding 和 1 个正面参考**
 - **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
-- **已读行数 / 总代码行数**：9496 / ~30K = 32%
+- **已读行数 / 总代码行数**：10913 / ~30K = 36%
 
 ### 0.3 报告自身健康
 
@@ -776,6 +778,76 @@
 
 ---
 
+### F-2026-06-01-033 [DRAFT][P3-LOW] project_manager.py line 442-449 "符号链接模式" comment 与代码不符
+
+- **结果影响**：`hagoku/storage/project_manager.py:435-449` `add_data()` 有 `if copy: ... else: # 符号链接模式 ...` 结构，**两个分支都调用** `shutil.copy2(...)`——**实际都是复制，不是符号链接**。注释承诺"符号链接模式"但代码做的是复制。
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的边界——`copy=False` 时用户期望符号链接（避免大文件复制），但实际是复制——大文件场景下用户看到 storage 暴涨
+- **位置**：`hagoku/storage/project_manager.py:442-449`
+- **证据**：
+  ```python
+  if copy:
+      dest_name = source_path.name
+      dest_path = project_dir / "input" / dest_name
+      dest_path = self._unique_path(dest_path)
+      shutil.copy2(source_path, dest_path)  # 复制
+      stored_path = Path("input") / dest_path.name
+  else:
+      # 符号链接模式 - 始终复制文件，禁止创建指向外部的符号链接
+      # 安全原因：符号链接可能被用于读取敏感文件
+      dest_name = source_path.name
+      dest_path = project_dir / "input" / dest_name
+      dest_path = self._unique_path(dest_path)
+      shutil.copy2(source_path, dest_path)  # 复制！不是符号链接！
+      stored_path = Path("input") / dest_path.name
+  ```
+- **复现方式**：调 `add_data(project, big_file, copy=False)` → 大文件被复制（不是 symlink）
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-034 [DRAFT][P3-LOW] project_manager.py `_load_registry`/`list()` 多处静默 except
+
+- **结果影响**：`hagoku/storage/project_manager.py` 三处静默 except：
+  - Line 207-208 `_load_registry`: `except Exception: self._registry = {}` — YAML 加载失败时清空
+  - Line 298-299 `list()`: `except Exception: continue` — 单个项目失败时跳过
+  - Line 311-312 `list()`: `except Exception: continue` — 同上
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的部分失守——注册表加载失败时用户看到**空列表**（不是"注册表损坏"）
+- **位置**：`hagoku/storage/project_manager.py:207-208, 298-299, 311-312`
+- **证据**：
+  ```python
+  # line 207
+  if self._registry_path.exists():
+      try:
+          with open(self._registry_path) as f:
+              self._registry = yaml.safe_load(f) or {}
+      except Exception:
+          self._registry = {}
+  ```
+- **影响场景**：
+  - YAML 文件被破坏（手动编辑出错）→ `_registry = {}` → 用户看不到任何项目（**没有错误提示**）
+  - 某项目目录结构损坏 → 跳过 → 用户看不到该项目（**没有错误提示**）
+- **改进方向**：Scribe 的 `_scribe_fallback: True` 标记模式可作为参考
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-035 [DRAFT][P3-LOW] database.py 整体干净——SQL 白名单 + 事务 + 线程锁都规范
+
+- **结果影响**：`hagoku/storage/database.py` 是 sessions 1-6 读过的**最干净的存储层文件**：
+  - **SQL 字段白名单**（line 14-23 `_PROJECT_ALLOWED_FIELDS` / `_RUN_ALLOWED_FIELDS` / `_PROJECT_STATE_ALLOWED_FIELDS`）——防止 SQL 注入
+  - **事务上下文管理器**（line 177-185 `transaction()`）——自动 commit/rollback + 线程锁
+  - **线程安全**（line 144 `_lock = threading.RLock()`）——`check_same_thread=False` 时仍安全
+  - **WAL 模式**（line 146 `PRAGMA journal_mode=WAL`）——并发读写不阻塞
+  - **外键约束**（line 147 `PRAGMA foreign_keys=ON`）
+- **doctrine 关联（参考）**：律 2（LLM 失败 4 路径）的**正面参考**——storage 层不做"用户兜底默认值"，错误就抛
+- **位置**：`hagoku/storage/database.py` 全文
+- **状态**：DRAFT（Phase 1 已确认，**正面参考**——可作为其他存储层代码的修复模板）
+- **提出日期**：2026-06-01
+
+---
+
 ### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst/cleaner `_do_*` 5 个 handler + `assess` 静默 return — 范围扩大
 
 - **结果影响**：analyst 5 个 `_do_*` handler 静默 return None，cleaner `assess` 静默 return `{"summary": "评估未完成", "columns": []}`——**部分失败用户不知情**。
@@ -823,31 +895,31 @@ _（暂无）_
 - **Session 3 (2026-06-01)**：读完 `hagoku/agents/scout/agent.py` 1110 行 + `hagoku/agents/analyst/agent.py` 1177 行
 - **Session 4 (2026-06-01)**：读完 `hagoku/agents/cleaner/agent.py` 1000 行 + `hagoku/agents/reporter/agent.py` 641 行 + `hagoku/agents/_scribe/agent.py` 793 行
 - **Session 5 (2026-06-01)**：读完 `hagoku/manager/refinement.py` 256 行 + `hagoku/context/project_context.py` 328 行
+- **Session 6 (2026-06-01)**：读完 `hagoku/storage/project_manager.py` 761 行 + `hagoku/storage/database.py` 656 行
 
-**本次新增**（session 5）：
-- F-031 NEW [P3-LOW]：refinement.py line 183 bare `except:`——Python 3 实际为 `except Exception`，确认合规
-- F-032 NEW [P3-OBSERVATION]：**project_context.py `_derive_snapshot` 是 F-003 修复的正面参考**——只从 column_semantics 派生
+**本次新增**（session 6）：
+- F-033 NEW [P3-LOW]：project_manager.py line 442-449 "符号链接模式" comment 与代码不符——两个分支都 `shutil.copy2`
+- F-034 NEW [P3-LOW]：project_manager.py `_load_registry`/`list()` 3 处静默 except
+- F-035 NEW [P3-LOW]：database.py 整体干净——SQL 白名单 + 事务 + 线程锁都规范（**正面参考**）
 
 **新发现**：
-- **refinement.py 干净**：`_BLOCKED_GUIDANCE` 是 UI 文案硬编码（注释明确说明），`parse()` silent fallback 返回 visible guidance
-- **project_context.py 干净**：`_derive_snapshot` 严格只从 column_semantics 派生（律 5 正面参考）
+- **project_manager.py 安全设计优秀**：`_validate_project_name` / `_safe_rmtree` / `_validate_symlink_target` / `_save_meta` 原子写（tmp + rename）——防御路径遍历和符号链接攻击
+- **database.py 整体最干净**：SQL 字段白名单 + 事务 + 线程锁 + WAL + 外键约束 = 教科书级
 
 **仍未读的关键文件**：
 
 | 文件 | 行数 | 状态 |
 |------|------|------|
 | `hagoku/api/server.py` | 29K | 未读 |
-| `hagoku/tools/analysis.py` | 41K | 未读 — **Phase 0 推论最可能含硬编码语义规则** |
+| `hagoku/tools/analysis.py` | 41K | **下次 session 7** — **Phase 0 推论最可能含硬编码语义规则** |
 | `hagoku/tools/business.py` | 32K | 未读 |
 | `hagoku/tools/reporting.py` | 47K | 未读 |
 | `hagoku/tools/cleaning.py` | 31K | 未读 |
 | `hagoku/tools/visualization.py` | 26K | 未读 |
 | `hagoku/tools/power_analysis.py` | 26K | 未读 |
-| `hagoku/storage/project_manager.py` | 27K | **下次 session 6** |
-| `hagoku/storage/database.py` | 26K | **下次 session 6** |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：9496 / ~30K = 32%
+**已读行数 / 总代码行数**：10913 / ~30K = 36%
 
 ### 7.2 Phase 1 session 1 关键收获
 

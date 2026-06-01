@@ -7,7 +7,6 @@ Agent 互动与成长 — 可执行契约（见 docs/AGENT_INTERACTION_CONTRACT.
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import (
     Orchestrator,
-    _is_scout_aligned,
     analyst_review_pause_payload,
     cleaning_review_pause_payload,
     gate_cleaning_pause_payload,
@@ -115,32 +114,6 @@ def test_c3_scout_user_natural_language_llm_driven():
 
 # ─── Phase 1：Scout 多轮对齐子状态机 ───────────────────────────────────────────
 
-def test_is_scout_aligned_all_fields_resolved():
-    """所有字段 needs_user_input=False → 结构对齐。
-
-    _is_scout_aligned 仅做结构性检查，不判断用户是否「确认」。
-    用户确认判断由 _detect_user_intent_via_llm（LLM 通道）统一完成。
-    """
-    ctx = {
-        "column_semantics": [
-            {"column_name": "A", "needs_user_input": False},
-            {"column_name": "B", "needs_user_input": False},
-        ]
-    }
-    assert _is_scout_aligned(ctx) is True
-
-
-def test_is_scout_aligned_not_aligned():
-    """有字段仍 needs_user_input=True → 结构未对齐。"""
-    ctx = {"column_semantics": [{"column_name": "Code", "needs_user_input": True}]}
-    assert _is_scout_aligned(ctx) is False
-
-
-def test_is_scout_aligned_empty():
-    """空 context → 已对齐（无待确认字段）。"""
-    ctx = {"column_semantics": []}
-    assert _is_scout_aligned(ctx) is True
-
 
 def test_interaction_revision_in_scout_payload():
     """interaction_revision 须出现在 Scout pause payload（供前端区分多轮同阶段）。"""
@@ -189,9 +162,3 @@ def test_gate_cleaning_pause_payload_structure():
     assert gate["phase"] == "cleaning"
     assert gate.get("prompt") == ""
 
-
-def test_detect_user_intent_via_llm_empty():
-    """空输入 → _detect_user_intent_via_llm 返回 False（不调 LLM）。"""
-    from hagoku.manager.orchestrator import _detect_user_intent_via_llm
-
-    assert _detect_user_intent_via_llm("", None, "", stage="scout") is False

@@ -571,7 +571,6 @@ class CleanerAgent(InteractionMixin):
         col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
 
         # 拼 messages：系统规则 + 对话历史 + 当前上下文
-        conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
         messages: list[dict[str, Any]] = [{"role": "system", "content": cleaning_rules.strip()}]
 
         # ── ProjectContext 注入（阶段 3）──
@@ -579,8 +578,6 @@ class CleanerAgent(InteractionMixin):
         if project_ctx:
             ctx_block = project_ctx.build_prompt("cleaner", context)
             messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
-        for turn in conv_history[-6:]:
-            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
 
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
@@ -620,8 +617,7 @@ class CleanerAgent(InteractionMixin):
                 for t in tc:
                     fn = t.function
                     args = json.loads(fn.arguments) if fn.arguments else {}
-                    conv_history.append({"role": "assistant", "content": f"[调用] {fn.name}({fn.arguments})"})
-                    context["_conversation_history"] = conv_history
+                    # tool_calls 已通过标准 OpenAI 协议追加到 messages，不再写 conv_history
                     if fn.name == "submit_assessment":
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
                     result = _agt.dispatch(fn.name, args, context, df)
@@ -636,8 +632,7 @@ class CleanerAgent(InteractionMixin):
 
             if txt.strip():
                 messages.append({"role": "assistant", "content": txt})
-                conv_history.append({"role": "assistant", "content": txt})
-                context["_conversation_history"] = conv_history
+                # 纯文本响应已追加到 messages
                 continue
 
         return {"summary": "评估未完成", "columns": []}

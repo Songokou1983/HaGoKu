@@ -1523,7 +1523,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {scoutFieldReviewOpen && (
+              {scoutFieldReviewOpen && !gateOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
                     type="button"

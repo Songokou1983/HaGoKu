@@ -2262,9 +2262,9 @@ class Orchestrator:
                             context["_pending_command_text"] += cmd_result
                         interaction_revision += 1
 
-                    # LLM 表达完成 → 退出循环
-                    if context.pop("_scout_done", None):
-                        break
+                        # LLM 表达完成 → 退出循环
+                        if context.pop("_scout_done", None):
+                            break
 
                     # ── 律 9 重推断触发：结构性变更后重新让 Scout 做语义推断 ──
                     if context.pop("_pending_reinference", None):

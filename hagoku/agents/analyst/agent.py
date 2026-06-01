@@ -876,14 +876,17 @@ class AnalystAgent(InteractionMixin):
 
         from ...llm.client import create_raw_client
 
+        # ── 拼装 messages：system + messages_history + user ──
+        _analyst_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        if project_ctx:
+            _analyst_messages.extend(ctx_block.get("messages_history", []))  # 律 3
+        _analyst_messages.append({"role": "user", "content": user_prompt})
+
         client = create_raw_client(self.llm_config)
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                messages=_analyst_messages,
                 temperature=0.0,
                 max_tokens=2048,
                 response_format={"type": "json_object"},

@@ -422,7 +422,7 @@ class ReporterAgent(InteractionMixin):
 
         self._emit(EventType.AGENT_THINKING, {"thought": "正在通过 LLM 生成报告内容..."})
 
-        response = self._call_llm(system=system, user=user_prompt)
+        response = self._call_llm(system=system, user=user_prompt, messages_history=rpt_history)
 
         # 解析 LLM 返回的 JSON
         return self._parse_llm_json(response)

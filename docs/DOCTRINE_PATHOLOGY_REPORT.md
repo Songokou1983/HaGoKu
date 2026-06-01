@@ -57,12 +57,12 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01 → 2026-06-02 持续
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-9 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting / cleaning+visualization）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 45 草稿
-- **状态分布**：45 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-10 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting / cleaning+visualization / power+api）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 49 草稿
+- **状态分布**：49 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-02
 
-**试错总假设数**：45（全部 DRAFT）。
+**试错总假设数**：49（全部 DRAFT）。
 
 **试错总假设数**：37（全部 DRAFT）。
 
@@ -1034,6 +1034,81 @@
 - **改进方向**：用 strategy → handler 函数 dict 替代（类似 `analyst/agent.py:121-126` 的 `_ANALYSIS_DISPATCH`）
 - **影响**：添加新 strategy 需要修改 if-elif 链（**没有注册表**）
 - **状态**：DRAFT（Phase 1 已确认，P3 因为目前 14 个 strategy 已 stable）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-046 [DRAFT][P3-LOW] `power_analysis.py` `interpret_nonsignificant_result` 4 个 if-elif verdict 硬编码
+
+- **结果影响**：`hagoku/tools/power_analysis.py:723-752` `interpret_nonsignificant_result` 用 4 个 if-elif 做 verdict 分类：
+  ```python
+  if magnitude in ("negligible", "small") and estimated_power < 0.5:
+      verdict = "likely_no_effect"
+  elif magnitude == "small" and estimated_power < 0.8:
+      verdict = "possibly_underpowered"
+  elif magnitude in ("medium", "large") and estimated_power < 0.5:
+      verdict = "likely_no_effect"
+  else:
+      verdict = "likely_no_effect"
+  ```
+  4 个分支**有 3 个都设 `verdict = "likely_no_effect"`**——只 1 个分支走 `possibly_underpowered`——逻辑结构失衡
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**"结果不显著时的解读"** 应由 LLM 做
+- **位置**：`hagoku/tools/power_analysis.py:723-752`
+- **区别于 F-042**：
+  - F-042 是清洗策略推荐（机械阈值）
+  - F-046 是统计推断（功效 + 效应量综合判断）——**软决策**
+- **改进方向**：返回 raw 数据（magnitude/power/verdict 候选），LLM 写 verdict
+- **状态**：DRAFT（Phase 1 已确认，P3 因为 verdict 字段是 LLM 可见的——它可以选择重述）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-047 [DRAFT][P3-OBSERVATION] `power_analysis.py` `EFFECT_SIZE_REFERENCES` 硬编码 Cohen's 阈值 + 解释文本
+
+- **结果影响**：`hagoku/tools/power_analysis.py:36-81` 定义 Cohen's 效应量阈值（small/medium/large）——这是统计约定硬编码
+  - `cohen_d`: small=0.2 / medium=0.5 / large=0.8
+  - `eta_squared`: small=0.01 / medium=0.06 / large=0.14
+  - `pearson_r`: small=0.1 / medium=0.3 / large=0.5
+  - `f_squared`: small=0.02 / medium=0.15 / large=0.35
+- **doctrine 关联（参考）**：律 8 的边界——统计约定可硬编码（机械），**但解释文本是 UI 文案**
+- **位置**：`hagoku/tools/power_analysis.py:36-81`
+- **影响**：
+  - 阈值在 dict 里——是机械的，可接受
+  - **解释文本（"小效应：需要大样本才能可靠检测"）是 UI 文案硬编码**——F-041 同模式
+  - LLM 看到 dict 后选择使用——不绕过
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是统计约定 + UI 文案）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-048 [DRAFT][P3-LOW] `api/server.py` 多处 `except Exception: pass` 静默吞
+
+- **结果影响**：`hagoku/api/server.py` 5+ 处 `except Exception: pass` 静默吞：
+  - Line 110：`create_project` `try: ... except Exception: pass`（持久化到 DB 失败）
+  - Line 459：`get_project_detail` `except Exception: pass`（读 run_meta.json 失败）
+  - Line 567：`get_project_runs` `except Exception: pass`（同上）
+  - Line 668：`upload_project_file` `except Exception: pass`（DB 更新失败）
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的部分失守
+- **位置**：`hagoku/api/server.py:110, 459, 567, 668`
+- **风险**：
+  - DB 写入失败时**用户不知道**（但项目已创建到文件系统）
+  - 读 meta 失败时**用户看不到**该 run
+  - 风险较小（这些是次要操作），但**silent fail** 与 F-034 / F-025 同模式
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是次要操作且 API 仍然返回成功）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-049 [DRAFT][P3-OBSERVATION] `api/server.py` `clear_project_history` 直接 db.conn.execute 绕过 ORM 层
+
+- **结果影响**：`hagoku/api/server.py:380-394` `clear_project_history` 直接用 `db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))` 批量删除——**绕过 HaGoKuDB 业务方法**
+- **doctrine 关联（参考）**：律 5（状态层单一权威）的边界——ORM 层封装可能错过此层
+- **位置**：`hagoku/api/server.py:380-394`
+- **风险**：
+  - `table` 和 `col` 是硬编码 list（`for table, col in [...]`）——**不是用户输入**——无 SQL 注入
+  - 但**绕过业务方法**意味着：未来 HaGoKuDB 加外键检查 / 软删除时，此调用不受益
+- **改进方向**：在 HaGoKuDB 加 `clear_project_history(project_id)` 方法
+- **状态**：DRAFT（Phase 1 已确认，P3 因为 list 是硬编码不是用户输入）
 - **提出日期**：2026-06-02
 
 ---

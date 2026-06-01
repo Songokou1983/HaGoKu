@@ -1088,6 +1088,11 @@ def _apply_scout_reply_with_llm(
                     _apply_restrict_analysis_to(context, columns, applied, semantics, func_args_str)
                     continue
 
+                if func_name == "done_with_stage":
+                    context["_scout_done"] = True
+                    applied.append("[control] done_with_stage")
+                    continue
+
                 if func_name != "update_field_understanding":
                     continue
 
@@ -2253,10 +2258,11 @@ class Orchestrator:
                             if context["_pending_command_text"]:
                                 context["_pending_command_text"] += "\n"
                             context["_pending_command_text"] += cmd_result
-                        # 对齐判定：至少一轮交互 + 所有字段 resolved → 自动进入下一阶段
-                        if interaction_revision > 0 and _is_scout_aligned(context):
-                            break
                         interaction_revision += 1
+
+                    # LLM 表达完成 → 退出循环
+                    if context.pop("_scout_done", None):
+                        break
 
                     # ── 律 9 重推断触发：结构性变更后重新让 Scout 做语义推断 ──
                     if context.pop("_pending_reinference", None):

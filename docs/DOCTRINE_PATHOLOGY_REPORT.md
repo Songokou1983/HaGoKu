@@ -1310,16 +1310,102 @@ _（暂无）_
 
 ---
 
-## 9. 全局视角（待 Phase 1 后更新）
+## 9. 全局视角（Phase 1 完成）
 
-> 草稿 finding 不能进入全局视角——全局视角建立在完整审计之上。
-> 阶段 0 期间本节不填——避免基于不完整信息给"杠杆点"建议。
-> Phase 1 完成后本节才有意义。
+> **本节是建立在完整审计（30K+ Python + 8.5K TypeScript 全读）之上的全局判断。**
+> **Phase 0 推论错的几个地方**：F-036（analysis.py "最可能含硬编码业务关键词"——错的，只有统计方法名）、F-002（test_field_llm_e2e.py 收集错误——待技术 AI 验证）。
+> **Phase 0 漏掉的严重问题**：F-001（orchestrator 4 处 TODO 死循环）、F-019（清洗结果用户确认死分支）、F-020（guardrails 路径 NameError）、F-003（律 5 失守完整机制）、F-004（律 10 失守 learn_from_run 覆盖 description）、F-038（business.py 业务分类阈值硬编码 P1）——这些 Phase 0 完全没发现。
+
+### 9.1 项目健康总览（结果导向）
+
+**5 个已确认 P0**（用户能观察到的坏结果）：
+1. F-001 orchestrator 4 处 TODO → Cleaner/Analyst 闸门确认死循环（**最严重**——pipeline 走不到 Reporter）
+2. F-019 orchestrator:2338 清洗结果用户确认是死代码路径（`cleaning_report = None`）
+3. F-020 orchestrator:2537-2595 guardrails 路径 NameError（`output_path` / `duration_ms` 引用先于定义）
+4. F-003 律 5 失守 → 字段语义多层存储（`column_descriptions` 与 `column_semantics` 不全同步）
+5. F-004 律 10 失守 → `learn_from_run` 覆盖 `description`（用户纠正被抹掉）
+
+**1 个已确认 P1**（业务结果偏差）：
+- F-038 business.py 业务分类阈值硬编码（`_interpret_roi` / `_interpret_roas` / `calc_ltv_cac_ratio`）——LLM 应该是决策者
+
+**修复优先级建议（"如果只做 1 件事 → 用户的最大杠杆点"）**：
+1. **F-001 → F-019 → F-020（orchestrator 三连）**——orchestrator.py 3 个 P0 集中修复，可能 < 1 小时工作量
+2. **F-004（律 10 失守）**——`learn_from_run` 加 description/display_name 参数，1 行修复
+3. **F-003（律 5 失守）**——需要架构调整（参考 project_context.py `_derive_snapshot` 模式）
+4. **F-038（业务阈值 P1）**——把阈值移到 config 或让 LLM 决定
+
+### 9.2 模式（Patterns Across Findings）
+
+**最严重的问题模式**（重复出现 4+ 次）：
+- **静默失败（silent fail）**：F-021（CLI 兜底）/ F-025（analyst _do_*）/ F-034（project_manager 3 处）/ F-048（api 5+ 处）/ F-051（前端 5+ 处）——共 **20+ 处 `.catch(() => {})` / `except: return []` 静默吞**
+- **代码层策略选择硬编码**：F-037（analysis recommendation）/ F-038（business 阈值 P1）/ F-042（cleaning 阈值）/ F-043（cleaning sig_rate）/ F-046（power verdict）/ F-050（前端 status icon）——LLM 应该是决策者，但代码已经替 LLM 决定
+- **方法选择硬编码 if-elif 链**：F-022（orchestrator 死代码）/ F-045（cleaning 14 个 strategy 链）——应该用 dispatch dict 注册表模式
+
+**最积极的发现**（5+ 处正面参考）：
+- **project_context.py `_derive_snapshot`**（F-032）——只从 column_semantics 派生，零 dict 平行读取
+- **analyst/agent.py** ——所有 LLM 失败 raise RuntimeError 或 NeedUserClarification
+- **reporter/agent.py** ——`_parse_llm_json` 用 `degraded=True` 标记降级（比静默 None 好）
+- **scribe/agent.py `recover_field_descriptions`** ——`_scribe_fallback: True` 标记降级
+- **database.py** ——SQL 字段白名单 + 事务上下文 + 线程锁 + WAL + 外键约束 = 教科书级
+
+**Phase 0 推论的反思**：
+- "tools/analysis.py 最可能含硬编码业务关键词" → **错的**（F-036）。analysis.py 41K 行无业务关键词
+- 但**不是完全错**——session 8 在 `tools/business.py` 找到的是"业务分类阈值"，比"业务关键词"更隐蔽
+- 教训：**Phase 0 推论常错**——必须 Phase 1 验证
+
+### 9.3 风险地图（Risk Map）
+
+| 风险 | 概率 | 影响 | 当前守门 | 关键 finding |
+|------|------|------|---------|-----------|
+| 用户走完整 pipeline 卡死 | **高** | **高** | 0 | F-001 + F-019 + F-020（orchestrator 三连）|
+| 用户纠正失效（每次重输） | **高** | **高** | 0 | F-004（律 10）|
+| 字段语义不一致 | **高** | **高** | 0 | F-003（律 5）|
+| 业务结论偏差（ROI/ROAS/LTV） | **中** | **中** | 0 | F-038（P1 业务阈值）|
+| 真实 regression 漏检 | **中** | **高** | 0（CI 假绿）| F-002（待技术 AI 验证）+ F-007 |
+| 工具覆盖不完整 | **中** | **中** | 0 | F-008（律 4）|
+| 静默失败累积 | **极高** | **低-中** | 0 | F-021/025/034/048/051（20+ 处）|
+| 守门盲区 | **低** | **中** | 4 道守门 | F-010 / F-024 / F-027 |
+| 死代码 | **中** | **低** | 0 | F-012 / F-022 / F-052（3,500+ 行） |
+
+### 9.4 1 个月警示（1-Month Watch List）
+
+- **orchestrator.py 3457 行不拆分** → bug 累积 + 新 AI 写入越界风险持续上升（F-015）
+- **白名单机制扩** → 守门 5 失守的 2 阶风险（F-005 / F-017 / F-024）
+- **doctrine tests 通过率被"假绿"拖累** → 真实 regression 漏检（F-002 / F-007）
+- **守门 1-4 的结构性盲区被利用** → 新增伪装硬编码漏检（F-010）
+- **业务阈值 P1 升级为"自动用"** → 当前 LLM 是决策者，未来升级可能绕过 LLM（F-038 / F-046）
+
+### 9.5 试错价值（Trial-Error Value）
+
+本周期试错统计：
+- **52 个假设被提出**（18 Phase 0 + 34 Phase 1）
+- **5 个 P0 已确认**（F-001 / F-003 / F-004 / F-019 / F-020）
+- **1 个 P1 已确认**（F-038）
+- **~46 个 P3**（observation / observation-level findings）
+
+即使 50% 假设被否定，本次审计产生了 52 次"被提出"的学习价值——下次类似问题可对照。
+
+### 9.6 给用户的具体行动建议
+
+**今天就能修的（< 1 小时工作量）**：
+- F-019 + F-020 + F-001（orchestrator 3 个 P0 集中修复）
+- F-004（`learn_from_run` 加 1 行 description 参数）
+
+**本周能做的（1-2 天工作量）**：
+- F-003 律 5 修复（参考 `_derive_snapshot` 模式改 `apply_to_context` 和 `_apply_project_memory`）
+- F-038 业务阈值移到 config 或 LLM 决定
+
+**长期架构改进（1 周+）**：
+- 拆分 orchestrator.py（3457 → < 1000 行的 3-4 个模块）
+- 加 silent-fail detection 守门
+- 静默错误标记化（Scribe / Reporter 的 `degraded` 模式扩展到其他模块）
 
 ---
 
-> 当前阶段：Phase 0 完成 / Phase 1 pending
-> 总 DRAFT finding：18
-> 正式 finding：0
-> 下一动作：病理学家开始全代码审计（Phase 1）
-> 期望产出：18 DRAFT 重新评估 + 新 finding + 文档/代码 drift 清单
+> **当前阶段**：Phase 0 + Phase 1 完成 / Phase 2-3 pending
+> **总 DRAFT finding**：52
+> **已确认 P0**：5 个（orchestrator 三连 + 律 5 + 律 10）
+> **已确认 P1**：1 个（business.py 业务分类阈值）
+> **总已读行数 / 总代码行数**：~26K / ~30K = ~87%
+> **下一动作**：用户验收 + 启动 Phase 2（跨文件交叉验证）
+> 期望产出：正式 finding 升级 + 已确认 P0 修复方向 + Phase 2 准备

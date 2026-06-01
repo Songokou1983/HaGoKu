@@ -462,13 +462,7 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
                   {r.field_name}
                 </td>
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">
-                  {r.needs_attention ? (
-                    <span className="text-app-warning">{r.chinese_name}</span>
-                  ) : (
-                    r.chinese_name
-                  )}
-                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.chinese_name}</td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
                 <td className="px-2 py-1.5 text-center align-top break-words text-ui-sm">
                   {r.used_in_analysis === true ? "✔" : ""}

@@ -530,15 +530,6 @@ def test_meta_LLMSpy录制功能正常():
 
 def test_project_context_injects_goal_to_prompt():
     """律 1 + 律 6：build_prompt 的 system_prefix 首行必须包含 analysis_goal。"""
-    import sys
-    # 确保 worktree root 优先于主仓库，且清除已缓存的 hagoku 模块
-    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
-    if _wt in sys.path:
-        sys.path.remove(_wt)
-    sys.path.insert(0, _wt)
-    for _mod in list(sys.modules.keys()):
-        if _mod.startswith("hagoku"):
-            del sys.modules[_mod]
     from hagoku.context.project_context import ProjectContext
 
     ctx = ProjectContext(run_id="test", analysis_goal="分析销售趋势")
@@ -549,14 +540,6 @@ def test_project_context_injects_goal_to_prompt():
 
 def test_project_context_preserves_user_raw_text():
     """律 2 + 律 6：user_feedback entry 必须保留 raw_user_text。"""
-    import sys
-    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
-    if _wt in sys.path:
-        sys.path.remove(_wt)
-    sys.path.insert(0, _wt)
-    for _mod in list(sys.modules.keys()):
-        if _mod.startswith("hagoku"):
-            del sys.modules[_mod]
     from hagoku.context.project_context import ProjectContext
 
     ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
@@ -566,14 +549,6 @@ def test_project_context_preserves_user_raw_text():
 
 def test_project_context_history_includes_full_stage_dialog():
     """律 3 + 律 6：同一阶段的多轮对话必须全部出现在 history_context 中。"""
-    import sys
-    _wt = "/home/son_goku/HaGoKu/.worktrees/project-context"
-    if _wt in sys.path:
-        sys.path.remove(_wt)
-    sys.path.insert(0, _wt)
-    for _mod in list(sys.modules.keys()):
-        if _mod.startswith("hagoku"):
-            del sys.modules[_mod]
     from hagoku.context.project_context import ProjectContext
 
     ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")

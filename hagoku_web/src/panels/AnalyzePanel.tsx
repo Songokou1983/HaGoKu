@@ -1486,19 +1486,6 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
-              {scoutFieldReviewOpen && (
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("可以进入下一阶段了")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                  >
-                    <CheckCircle2 size={14} />
-                    进入下一阶段
-                  </button>
-                </div>
-              )}
               {(cleanerCleaningReviewOpen) && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button
@@ -1536,3 +1523,150 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
+              {scoutFieldReviewOpen && !gateOpen && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("可以进入下一阶段了")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    进入下一阶段
+                  </button>
+                </div>
+              )}
+              {waitingAgent === "cleaner" && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("确认继续")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    确认
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={replyInputRef}
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || e.shiftKey) return;
+                    // 中文输入法用 Enter 确认候选时勿 preventDefault，否则无法上屏
+                    const ne = e.nativeEvent as unknown as { isComposing?: boolean; keyCode?: number };
+                    if (e.nativeEvent.isComposing || ne.keyCode === 229) {
+                      return;
+                    }
+                    e.preventDefault();
+                    if (canSendReply) submitUserReply(replyText);
+                  }}
+                  placeholder={
+                    waitingAgent === "cleaner" && !cleanerCleaningReviewOpen
+                      ? "不同意建议？输入你的想法后 Enter 发送；进入下一阶段请点上方按钮"
+                      : scoutFieldReviewOpen
+                      ? "字段理解不对时输入说明，Enter 发送；进入下一阶段请点上方按钮"
+                      : cleanerCleaningReviewOpen
+                        ? "补充说明后 Enter 发送；确认结果请点上方按钮"
+                        : analystReviewOpen
+                          ? "补充关注点后 Enter 发送；确认结果请点上方按钮"
+                          : gateOpen && waitingAgent === "scout"
+                            ? "补充说明后 Enter 发送；确认请点上方按钮"
+                            : "输入回复后 Enter 发送 · Shift+Enter 换行"
+                  }
+                  rows={2}
+                  className={`flex-1 bg-app-bg-secondary border rounded px-3 py-2
+                             text-ui-sm text-app-text placeholder-app-text-muted resize-none
+                             focus:outline-none transition-colors
+                             ${scoutFieldReviewOpen
+                               ? "border-app-accent ring-1 ring-app-accent/30"
+                               : cleanerCleaningReviewOpen
+                                 ? "border-app-success/50 ring-1 ring-app-success/20"
+                                 : analystReviewOpen
+                                   ? "border-app-accent/60 ring-1 ring-app-accent/25"
+                                   : "border-app-accent/50 focus:border-app-accent"}`}
+                />
+                <button
+                  type="button"
+                  onClick={handleReply}
+                  disabled={!canSendReply}
+                  className={`px-4 py-2 rounded text-ui-sm font-medium transition-colors shrink-0 flex items-center gap-1.5
+                    ${canSendReply
+                      ? "bg-app-accent hover:bg-app-accent-hover text-white cursor-pointer"
+                      : "bg-app-bg-secondary border border-app-border text-app-text-muted cursor-not-allowed"}`}
+                >
+                  <ArrowRight size={14} />
+                  发送
+                </button>
+              </div>
+              <div className="mt-1 text-ui-xs text-app-text-muted">
+                {scoutFieldReviewOpen
+                  ? "用自然语言说明字段理解即可 · Scout 会带入后续 · Enter 发送 · Shift+Enter 换行"
+                  : cleanerCleaningReviewOpen
+                    ? "补充说明后 Enter 发送 · Shift+Enter 换行"
+                    : analystReviewOpen
+                      ? "补充关注点后 Enter 发送 · Shift+Enter 换行"
+                      : gateOpen && waitingAgent === "scout"
+                        ? "补充说明后 Enter 发送 · Shift+Enter 换行"
+                    : "Enter 发送 · Shift+Enter 换行"}
+              </div>
+            </div>
+          )}
+
+          {/* Done: report link + reset */}
+          {phase === "done" && resultReportUrl && !guardrailsBlocked && (
+            <div className="mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-success rounded flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <div className="text-ui-xs text-app-success font-semibold mb-0.5">分析完成</div>
+                <div className="text-ui-sm text-app-text">报告已生成</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={resultReportUrl} target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-app-accent hover:bg-app-accent-hover text-white text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1">
+                  查看报告 <ArrowRight size={12} />
+                </a>
+                <button onClick={handleReset}
+                  className="px-3 py-1.5 border border-app-border text-app-text-muted hover:text-app-text text-ui-xs rounded cursor-pointer transition-colors flex items-center gap-1">
+                  <RotateCcw size={12} /> 再次分析
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Done: guardrails blocked — different UI */}
+          {phase === "done" && guardrailsBlocked && (
+            <div className="mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-warning rounded flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <div className="text-ui-xs text-app-warning font-semibold mb-0.5 flex items-center gap-1">
+                  <ShieldAlert size={12} />
+                  报告未生成
+                </div>
+                <div className="text-ui-sm text-app-text">统计护栏未通过，请查看说明</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {blockedRunId && currentProject && (
+                  <a
+                    href={`/api/reports/${currentProject}/${blockedRunId}/GUARDRAILS_BLOCKED.md`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-app-warning hover:bg-app-warning-hover text-white text-ui-xs rounded cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1"
+                  >
+                    <ShieldAlert size={12} />
+                    查看护栏说明
+                  </a>
+                )}
+                <button onClick={handleReset}
+                  className="px-3 py-1.5 border border-app-border text-app-text-muted hover:text-app-text text-ui-xs rounded cursor-pointer transition-colors flex items-center gap-1">
+                  <RotateCcw size={12} /> 再次分析
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

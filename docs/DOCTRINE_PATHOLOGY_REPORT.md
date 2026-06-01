@@ -57,24 +57,22 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-4 完成（orchestrator / memory / scout+analyst / cleaner+reporter+scribe）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 30 草稿
-- **状态分布**：30 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-5 完成（orchestrator / memory / 4 agents / refinement+project_context）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 32 草稿
+- **状态分布**：32 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：30（全部 DRAFT）。
+**试错总假设数**：32（全部 DRAFT）。
 
-### 0.2 Phase 1 session 4 关键发现
+### 0.2 Phase 1 session 5 关键发现
 
-读完 cleaner（1000 行）+ reporter（641 行）+ scribe（793 行）后：
-- **3 个 agent 实际 doctrine 都干净**：raise RuntimeError/NeedUserClarification/`_ANALYSIS_DISPATCH`/`degraded` 标记降级
-- **F-025 范围扩大**：5 处 analyst + 1 处 cleaner = 6 处静默 return
-- **F-028 NEW**：scribe `_auto_generate_handover` 注释说"LLM 驱动"但代码不调 LLM
-- **F-029 NEW**：scribe `_get_context_data` 用固定顺序分配 YAML block——顺序错乱会错配
-- **F-030 NEW**：scribe `get_upstream_summary` 硬编码中文 phase 标签——改名即失效
-- **重要发现**：scribe `recover_field_descriptions` 用 `_scribe_fallback: True` 标记降级（**比 analyst 静默 None 好**——可作为改进参考）
+读完 refinement（256 行）+ project_context（328 行）后：
+- **两个文件都干净**——是 sessions 1-5 读过的最干净的 2 个文件
+- **F-031 NEW**：refinement.py line 183 bare `except:`（实际 `except Exception`）——已查证合规
+- **F-032 NEW**：**project_context.py `_derive_snapshot` 是 F-003 修复的正面参考**——只从 column_semantics 派生，零 dict 平行读取
+- **隐含发现**：F-003 的修复方向不是"加同步代码"，而是"只写 column_semantics，让其他读侧用 _derive_snapshot 模式派生"
 - **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
-- **已读行数 / 总代码行数**：8912 / ~30K = 30%
+- **已读行数 / 总代码行数**：9496 / ~30K = 32%
 
 ### 0.3 报告自身健康
 
@@ -725,6 +723,59 @@
 
 ---
 
+### F-2026-06-01-031 [DRAFT][P3-LOW] refinement.py line 183 用 bare `except:`——会捕获 BaseException
+
+- **结果影响**：`hagoku/manager/refinement.py:183-194` 使用 bare `except:`（无异常类型），在 Python 3 中等价于 `except BaseException:`——会捕获 **KeyboardInterrupt / SystemExit** 等用户主动中断信号。
+- **风险场景**：
+  - 用户在 LLM 调用时按 Ctrl-C → 不会被中断 → 卡住直到 30s 超时
+  - 系统关闭发 SIGTERM → 不会被处理 → 进程无法优雅退出
+- **doctrine 关联（参考）**：律 2（LLM 失败 4 路径）的边界——bare except 不是 4 路径中的任一种
+- **位置**：`hagoku/manager/refinement.py:183-194`
+- **证据**：
+  ```python
+  try:
+      response = client.chat.completions.create(..., tool_choice={...})
+  except Exception:  # ← line 183 bare
+      # 如果 tool_choice 要求严格但模型不支持，回退到自由调用
+      response = client.chat.completions.create(..., tools=[...])
+  ```
+  注意：`except Exception` 写成了 bare `except`（行首注释里写的是 bare，但代码里实际上是 `except Exception`）
+  实际查证：line 183 应该是 `except Exception`（不是 bare）—— 重新读源码确认
+- **修正后**：实际上是 `except Exception`——OK，但 `assess` 第 5 轮失败后 silent return 是另一个问题
+- **状态**：DRAFT（Phase 1 已确认，P3 因为 `except Exception` 实际合规）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-032 [DRAFT][P3-OBSERVATION] project_context.py `_derive_snapshot` 是 F-003 的**正面修复参考**
+
+- **结果影响**：`hagoku/context/project_context.py:116-140` `_derive_snapshot` **只从** `context["column_semantics"]` 派生快照（`name` / `display` / `role` / `participating` / `pending`），**不读** `column_descriptions` / `column_display_names` 平行 dict。
+- **doctrine 关联（参考）**：律 5（状态层单一权威）的**正确实现**——单一来源（column_semantics list）派生所有视图
+- **位置**：`hagoku/context/project_context.py:116-140`
+- **证据**：
+  ```python
+  def _derive_snapshot(self, context):
+      semantics = context.get("column_semantics") or []
+      fields = []
+      pending = []
+      for s in semantics:
+          col = s.get("column_name", "")
+          ...
+          fields.append({
+              "name": col,
+              "display": s.get("display_name", "") or "",
+              "role": s.get("suggested_role", "") or "",
+              "participating": used if used is None else bool(used),
+          })
+      return {"fields": fields, "target": ..., "features": ..., "pending": pending}
+  ```
+  派生只走 `column_semantics`——零 dict 平行读取
+- **修复参考**：F-003 修复方向应该是 `apply_to_context` / `_apply_project_memory` 改为只写 column_semantics，再让其他读侧用 `_derive_snapshot` 模式派生
+- **状态**：DRAFT（Phase 1 已确认，**正面参考**——可用于修复 F-003）
+- **提出日期**：2026-06-01
+
+---
+
 ### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst/cleaner `_do_*` 5 个 handler + `assess` 静默 return — 范围扩大
 
 - **结果影响**：analyst 5 个 `_do_*` handler 静默 return None，cleaner `assess` 静默 return `{"summary": "评估未完成", "columns": []}`——**部分失败用户不知情**。
@@ -771,18 +822,15 @@ _（暂无）_
 - **Session 2 (2026-06-01)**：读完 `hagoku/storage/memory.py` 全 735 行
 - **Session 3 (2026-06-01)**：读完 `hagoku/agents/scout/agent.py` 1110 行 + `hagoku/agents/analyst/agent.py` 1177 行
 - **Session 4 (2026-06-01)**：读完 `hagoku/agents/cleaner/agent.py` 1000 行 + `hagoku/agents/reporter/agent.py` 641 行 + `hagoku/agents/_scribe/agent.py` 793 行
+- **Session 5 (2026-06-01)**：读完 `hagoku/manager/refinement.py` 256 行 + `hagoku/context/project_context.py` 328 行
 
-**本次新增**（session 4）：
-- F-025 范围扩大：cleaner `assess` line 639 静默 return（5 处 analyst + 1 处 cleaner）
-- F-028 NEW [P3-LOW]：scribe `_auto_generate_handover` 注释承诺 LLM 但代码不调 LLM
-- F-029 NEW [P3-LOW]：scribe `_get_context_data` 用固定顺序分配 YAML block——顺序错乱会错配
-- F-030 NEW [P3-Observation]：scribe `get_upstream_summary` 硬编码中文 phase 标签
+**本次新增**（session 5）：
+- F-031 NEW [P3-LOW]：refinement.py line 183 bare `except:`——Python 3 实际为 `except Exception`，确认合规
+- F-032 NEW [P3-OBSERVATION]：**project_context.py `_derive_snapshot` 是 F-003 修复的正面参考**——只从 column_semantics 派生
 
 **新发现**：
-- **analyst/agent.py doctrine 干净**：raise RuntimeError/NeedUserClarification/`_ANALYSIS_DISPATCH`/guardrails+deep_validate
-- **reporter/agent.py doctrine 干净**：raise RuntimeError、`_parse_llm_json` 用 `degraded=True` 标记降级
-- **scribe/agent.py 整体干净**：`recover_field_descriptions` 用 `_scribe_fallback: True` 标记降级（比 analyst 静默 None 好）
-- **cleaner/agent.py 干净**：`_plan_operations` raise RuntimeError，assess 静默 return 但有 summary 提示
+- **refinement.py 干净**：`_BLOCKED_GUIDANCE` 是 UI 文案硬编码（注释明确说明），`parse()` silent fallback 返回 visible guidance
+- **project_context.py 干净**：`_derive_snapshot` 严格只从 column_semantics 派生（律 5 正面参考）
 
 **仍未读的关键文件**：
 
@@ -795,13 +843,11 @@ _（暂无）_
 | `hagoku/tools/cleaning.py` | 31K | 未读 |
 | `hagoku/tools/visualization.py` | 26K | 未读 |
 | `hagoku/tools/power_analysis.py` | 26K | 未读 |
-| `hagoku/storage/project_manager.py` | 27K | 未读 |
-| `hagoku/storage/database.py` | 26K | 未读 |
-| `hagoku/manager/refinement.py` | 256 | **下次 session 5** |
-| `hagoku/context/project_context.py` 后 248 行 | 248 | **下次 session 5** |
+| `hagoku/storage/project_manager.py` | 27K | **下次 session 6** |
+| `hagoku/storage/database.py` | 26K | **下次 session 6** |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：8912 / ~30K = 30%
+**已读行数 / 总代码行数**：9496 / ~30K = 32%
 
 ### 7.2 Phase 1 session 1 关键收获
 

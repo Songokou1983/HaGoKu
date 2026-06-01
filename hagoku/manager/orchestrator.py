@@ -245,14 +245,16 @@ def _detect_user_intent_via_llm(
             ],
             temperature=0.0,
             max_tokens=64,
-            response_format={"type": "json_object"},
         )
         content = (resp.choices[0].message.content or "").strip()
+        import re as _re2
+        m = _re2.search(r'"intent"\s*:\s*"(confirm|modify)"', content)
+        if m:
+            return m.group(1) == "confirm"
+        # fallback: try full JSON parse
         parsed = _json.loads(content)
         return parsed.get("intent") == "confirm"
     except Exception:
-        # LLM 不可用 → 安全默认值：视为有修改内容，
-        # 确保用户输入不会被静默丢弃。
         return False
 
 

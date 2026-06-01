@@ -56,11 +56,13 @@
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-7 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 37 草稿
-- **状态分布**：37 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
-- **上次更新**：2026-06-01
+- **当前评估周期**：2026-06-01 → 2026-06-02 持续
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-8 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 41 草稿
+- **状态分布**：41 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **上次更新**：2026-06-02
+
+**试错总假设数**：41（全部 DRAFT）。
 
 **试错总假设数**：37（全部 DRAFT）。
 
@@ -881,6 +883,80 @@
 
 ---
 
+### F-2026-06-01-038 [DRAFT][P1-HIGH] `business.py` 3 处业务分类阈值硬编码
+
+- **结果影响**：`hagoku/tools/business.py` 多处**业务健康度阈值硬编码**：
+  - `_interpret_roi` (line 914-923)：ROI > 2 → "回报丰厚" / > 0 → "有正回报" / == 0 → "刚好回本" / < 0 → "亏损"
+  - `_interpret_roas` (line 926-934)：ROAS >= 4 → "效果优秀" / >= 2 → "效果良好" / >= 1 → "效果一般"
+  - `calc_ltv_cac_ratio` (line 306-313)：ratio < 1 → "差" / < 3 → "一般" / < 5 → "良好" / >= 5 → "优秀"
+  - `calc_ltv_cac_ratio` line 294 注释：**"LTV/CAC > 3 是健康标准"**——行业经验硬编码
+- **LLM 失去的机会**：LLM 应该是**业务分类的决策者**（"什么 ROI 算优秀" / "什么 LTV/CAC 算健康"），但代码已经替 LLM 决定——不同行业（SaaS / 零售 / 金融）阈值应该不同
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的边界 + 业务关键词阈值的隐式硬编码
+- **位置**：`hagoku/tools/business.py:306-313, 914-923, 926-934`
+- **风险**：
+  - 业务场景变化时（如 SaaS / 零售）阈值应不同——用户改不了
+  - LLM 看到 interpretation 后可能不质疑（**认知锚定效应**）
+- **改进方向**：阈值应通过 LLM 或 config 注入，不应在代码中硬编码
+- **复现方式**：调用 `calc_ltv_cac_ratio(ltv=3, cac=1)` → 返回 "一般：需要优化获取效率"——用户无法改阈值
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-039 [DRAFT][P3-LOW] `attribution_analysis` position 归因 40/20 split 硬编码
+
+- **结果影响**：`hagoku/tools/business.py:766-775` `position_credit` 函数：
+  ```python
+  first_c = 0.4 / n  # 首 40%
+  last_c = 0.4 / n   # 尾 40%
+  mid_c = 0.2 / (n - 2) if n > 2 else 0  # 中间 20%
+  ```
+  这是 U-shape 归因模型的标准做法，但**比例硬编码**——LLM 应该根据业务场景选归因模型
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**"如何归因"** 是业务决策
+- **位置**：`hagoku/tools/business.py:766-775`
+- **影响**：
+  - 这是 4 个归因方法之一（last_touch/first_touch/linear/position）——用户已经通过 `method` 参数选择了
+  - **但** position 内部的 40/20 比例仍然硬编码
+  - LLM 不能动态调整
+- **状态**：DRAFT（Phase 1 已确认，P3 因为方法本身可换）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-040 [DRAFT][P3-OBSERVATION] `funnel_analysis` 自动顺序假设
+
+- **结果影响**：`hagoku/tools/business.py:832-834` `if stage_order is None: df[stage_col].value_counts().index.tolist()`。注释："按频数降序排列（假设上面的漏斗量更大）"
+- **doctrine 关联（参考）**：karpathy 原则 1（明确需求）的边界——**业务假设**硬编码
+- **位置**：`hagoku/tools/business.py:832-834`
+- **脆弱性**：
+  - 通常漏斗从上到下递减——但不是必然（如"试用 → 付费 → 推荐"漏斗中间可能反弹）
+  - 用户没指定 `stage_order` 时，**代码假设递减**——可能错位
+- **改进方向**：LLM 应该从上下文判断 stage_order，或强制用户指定
+- **状态**：DRAFT（Phase 1 已确认，P3 因为默认值有合理 fallback）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-041 [DRAFT][P3-LOW] `reporting.py` `generate_markdown` significance icon 映射硬编码
+
+- **结果影响**：`hagoku/tools/reporting.py:1094-1099`：
+  ```python
+  if significance == "significant": icon = "✅"
+  elif significance == "marginal": icon = "⚠️"
+  else: icon = "📌"
+  ```
+  3-level 显著性 → icon 映射硬编码
+- **doctrine 关联（参考）**：karpathy 原则 1（明确需求）的边界——**"什么显著性对应什么 icon"** 是 UI 决策
+- **位置**：`hagoku/tools/reporting.py:1094-1099`
+- **影响**：
+  - Markdown 输出样式固定
+  - LLM 不会看到这一步（只是 render）
+  - 但**用户改不了**——如果想用 🔬 或别的 icon，得改代码
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是 UI 视觉层）
+- **提出日期**：2026-06-01
+
+---
+
 ### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst/cleaner `_do_*` 5 个 handler + `assess` 静默 return — 范围扩大
 
 - **结果影响**：analyst 5 个 `_do_*` handler 静默 return None，cleaner `assess` 静默 return `{"summary": "评估未完成", "columns": []}`——**部分失败用户不知情**。
@@ -930,29 +1006,32 @@ _（暂无）_
 - **Session 5 (2026-06-01)**：读完 `hagoku/manager/refinement.py` 256 行 + `hagoku/context/project_context.py` 328 行
 - **Session 6 (2026-06-01)**：读完 `hagoku/storage/project_manager.py` 761 行 + `hagoku/storage/database.py` 656 行
 - **Session 7 (2026-06-01)**：读完 `hagoku/tools/analysis.py` 全 1195 行
+- **Session 8 (2026-06-02)**：读完 `hagoku/tools/business.py` 935 行 + `hagoku/tools/reporting.py` 1130 行
 
-**本次新增**（session 7）：
-- F-036 NEW [P3-OBSERVATION]：**Phase 0 推论错**——analysis.py 41K 行**没有"硬编码业务关键词"**，只有统计方法名
-- F-037 NEW [P3-LOW]：`check_test_assumptions` 含方法选择硬编码（normality 违反 → Mann-Whitney U 检验）——LLM 决定的边界
+**本次新增**（session 8）：
+- F-038 NEW [P1-HIGH]：`business.py` 3 处**业务分类阈值硬编码**（_interpret_roi / _interpret_roas / calc_ltv_cac_ratio）
+- F-039 NEW [P3-LOW]：`attribution_analysis` position 归因 40/20 split 硬编码
+- F-040 NEW [P3-OBSERVATION]：`funnel_analysis` 自动顺序假设（"假设上面的漏斗量更大"）
+- F-041 NEW [P3-LOW]：`reporting.py` `generate_markdown` significance icon 映射硬编码
 
 **新发现**：
-- **analysis.py 整体干净**：标准统计方法（ttest/anova/regression/correlation）+ 防御输入验证 + 错误返回 _insufficient_data（带 message）
-- **重大教训**：Phase 0 推论"最可能含 X"常错——**Phase 1 验证后才能下结论**
-- **`check_test_assumptions` 的 5 个 recommendation 是 P3 边界问题**：当前 LLM 仍是最终决策者，但未来升级可能绕过 LLM
+- **business.py 整体可执行金融计算**（NPV/IRR/CAGR/break_even）——机械正确
+- **但 interpretation 层（_interpret_roi/_interpret_roas/lth_cac 健康度）是业务规则——**LLM 应该是决策者**
+- **reporting.py 主要是 Jinja2 模板渲染——没有业务规则硬编码**
+- **重大反推**：**Phase 0 推论"最可能含硬编码业务关键词" 错**——但 session 8 找到的是"业务分类阈值"，比"业务关键词"更隐蔽
+- **找到 1 个 P1！** 这是 session 1-8 找到的第 6 个 P0/P1 严重问题
 
 **仍未读的关键文件**：
 
 | 文件 | 行数 | 状态 |
 |------|------|------|
 | `hagoku/api/server.py` | 29K | 未读 |
-| `hagoku/tools/business.py` | 32K | 未读 |
-| `hagoku/tools/reporting.py` | 47K | 未读 |
-| `hagoku/tools/cleaning.py` | 31K | 未读 |
-| `hagoku/tools/visualization.py` | 26K | 未读 |
+| `hagoku/tools/cleaning.py` | 31K | **下次 session 9** |
+| `hagoku/tools/visualization.py` | 26K | **下次 session 9** |
 | `hagoku/tools/power_analysis.py` | 26K | 未读 |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：12108 / ~30K = 40%
+**已读行数 / 总代码行数**：14173 / ~30K = 47%
 
 ### 7.2 Phase 1 session 1 关键收获
 

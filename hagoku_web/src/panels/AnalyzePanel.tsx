@@ -1560,16 +1560,6 @@ export default function AnalyzePanel() {
                     <CheckCircle2 size={14} />
                     确认进入清洗
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("还有补充")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
-                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
-                      motion-safe:transition-colors"
-                  >
-                    <MessageSquarePlus size={14} />
-                    还有补充
-                  </button>
                 </div>
               )}
               <div className="flex gap-2 items-end">

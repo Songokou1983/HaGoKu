@@ -901,7 +901,7 @@ def _apply_scout_reply_with_llm(
         f"{command_context}"
         "当前字段表格（参与分析列已由初始分析判断）：\n"
         f"{field_state}\n"
-        "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
+        "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时根据分析目标同步重新判断是否参与。\n"
     )
     project_ctx = context.get("_project_context")
     # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
@@ -915,7 +915,7 @@ def _apply_scout_reply_with_llm(
             "含义扩展说明（完整语句）→ description。两者不能相同。\n"
             "每次只更新一个字段，分多次调用 update_field_understanding。\n"
             "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
-            "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时不要盲目改成true。\n"
+            "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时根据分析目标同步重新判断是否参与。\n"
         )
         ctx_block = project_ctx.build_prompt("scout", context)
         messages = [

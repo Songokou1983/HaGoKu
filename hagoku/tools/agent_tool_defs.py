@@ -309,17 +309,3 @@ agent_tools.register(Tool(
     handler=_handle_restrict_analysis_to,
     agents=["scout"],
 ))
-agent_tools.register(Tool(
-    name="done_with_stage",
-    description="当前阶段完成，进入下一阶段。用户确认无误或表示可以继续时调用。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "rationale": {"type": "string", "description": "简要说明"},
-        },
-        "required": [],
-    },
-    handler=lambda args, ctx, df: {"done": True},
-    agents=["scout", "cleaner", "analyst"],
-))
-

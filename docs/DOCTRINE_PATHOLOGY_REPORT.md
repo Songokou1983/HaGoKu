@@ -57,22 +57,24 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 session 1 完成（orchestrator.py）/ Phase 1 session 2 完成（memory.py）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 24 草稿
-- **状态分布**：24 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-3 完成（orchestrator / memory / scout+analyst agents）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 27 草稿
+- **状态分布**：27 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：24（全部 DRAFT）。
+**试错总假设数**：27（全部 DRAFT）。
 
-### 0.2 Phase 1 session 2 关键发现
+### 0.2 Phase 1 session 3 关键发现
 
-读完 `hagoku/storage/memory.py`（735 行）后：
-- **F-003 升级（律 5 失守）**：`apply_to_context` 写 `column_descriptions[col]` 但**不写** `s.description`——读侧不对称
-- **F-004 升级（律 10 失守）**：`learn_from_run` 构造 `ColumnSemanticDef` 不传 `description`/`display_name`，**覆盖** `persist_field_descriptions` 早先写入的真实描述——**用户纠正被抹掉**
-- **F-023 NEW（P3）**：`build_memory_project` 只返 `description`/`display_name`，丢 6+ 字段（role/ignore/confidence 等）——Scout 看到历史子集
-- **F-024 NEW（P3-Observation）**：`learn_from_run` 用 `"用户" in evidence` 子串匹配——**doctrine 4 道守门都抓不到**的盲区
-- **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个
-- **已读行数 / 总代码行数**：4192 / ~30K = 14%
+读完 `hagoku/agents/scout/agent.py`（1110 行）+ `hagoku/agents/analyst/agent.py`（1177 行）后：
+- **F-003 升级**：scout `_apply_project_memory` 同样只写单侧；好消息是 scout `_generate_field_descriptions` **正确双写**——修复样本在同文件内
+- **F-006 降级 P0→P1**：analyst 5 处异常路径的 **2 处已 raise RuntimeError**（`_plan_analysis_via_llm` line 896, 919），剩下 3 处在 orchestrator.py
+- **F-025 NEW [P1-HIGH]**：analyst 5 个 `_do_*` handler 用 `except: return None`——部分失败用户不知情
+- **F-026 NEW [P3-LOW]**：scout + analyst `_learn_from_results` 自动写知识库无用户确认
+- **F-027 NEW [P3-Observation]**：scout `_TYPE_ECHO_PATTERN_RE` 中文结构正则——守门 2 假阳风险（用法合规但设计需更细）
+- **新发现——analyst/agent.py 实际 doctrine 干净**：raise RuntimeError、NeedUserClarification、`_ANALYSIS_DISPATCH` 注册表、guardrails + deep_validate 都规范
+- **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
+- **已读行数 / 总代码行数**：6479 / ~30K = 22%
 
 ### 0.3 报告自身健康
 
@@ -255,6 +257,18 @@
 - **项目级 schema 失守**：`column_semantics` (list[object]) 和 `column_descriptions` (dict) 是不同物理结构，**没有"权威结构"**——所有写侧都得手动同步到两处
 - **P0 严重性已确认**：写入多侧不统一 + 读取依赖具体位置 = 5 处律 5 失守都有真实坏结果风险
 
+**Phase 1 session 3 验证更新（2026-06-01，读完 scout/agent.py 全 1110 行）**：
+
+- ✅ **scout `_apply_project_memory` (line 862-878) 同样只写单侧**：
+  - Line 873: `context["column_descriptions"][col] = fields[col]` ✅ 写
+  - Line 874: `sem["confidence"] = 1.0` ✅ 写
+  - Line 877: `context["column_display_names"][col] = display_names[col]` ✅ 写
+  - **Line 877 之后没写** `sem["description"]` 或 `sem["display_name"]` ❌
+- ✅ **scout `_generate_field_descriptions` (line 904-948) 是反例**——这个函数**正确地双写**到 `column_descriptions` 和 `sem["description"]`（line 921-922, 935-936）
+- **项目级不一致**：scout agent 自己写新字段时双写，**但读项目记忆时只写单侧**——读路径 bug
+- **修复样本存在**：scout `_generate_field_descriptions` 的写法可作为 `_apply_project_memory` 的修复参考（同一文件，同一 agent）
+- **影响放大确认**：用户从记忆恢复时 → column_descriptions 有值 → s.description 没值 → 下次写时部分同步 → 最终不一致
+
 ---
 
 ### F-2026-06-01-004 [DRAFT][P0-CRITICAL] 律 10 失守 → 项目记忆覆盖用户本 run 纠正
@@ -311,6 +325,18 @@
 - **复现方式**：mock LLM 抛异常 → 看 orchestrator 是否 raise RuntimeError 或继续走
 - **状态**：DRAFT
 - **提出日期**：2026-06-01
+
+**Phase 1 session 3 验证更新（2026-06-01，读完 analyst/agent.py 全 1177 行）**：
+
+- ✅ **analyst `_plan_analysis_via_llm` 异常路径已正确**：line 896-898 `raise RuntimeError(...)`、line 919-921 `raise RuntimeError(...)`
+- ✅ **analyst `_run` 优雅降级**：line 288-307 失败时 retry → 仍失败 raise `NeedUserClarification`（让用户澄清）
+- **因此 F-006 的 analyst 部分已修复**——5 处异常路径中的 2 处（来自 analyst 函数体）已经 raise RuntimeError
+- **剩下 3 处仍在 orchestrator.py**（line 2889 / 3074 / 3382）
+- **P0 严重性降为 P1-HIGH**：因为部分已修，且 retry + NeedUserClarification 是合理降级
+- **建议**：
+  - 保留 DRAFT 状态
+  - 后续 session 验证 orchestrator 3 处是否仍存在（已在 session 1 确认）
+  - Phase 3 终态时若 3 处都修了，标 RESOLVED
 
 ---
 
@@ -579,6 +605,63 @@
 
 ---
 
+### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst `_do_*` 5 个 handler 静默 return None
+
+- **结果影响**：`_do_regression` / `_do_correlation` / `_do_trend` / `_do_hypothesis_test` 全部用 `except Exception: logger.warning(...); return None` 兜底。**单个 step 失败时用户不知情**——`results` 列表少一项，UI 显示少一项。
+- **缓解**：外层 `_run` 在所有 step 都失败时 retry via LLM，再失败 raise `NeedUserClarification` → 用户能看到。但**部分失败**（1/3 步骤失败）的场景下，用户只看到 2 个结果，不知道本应 3 个。
+- **LLM 失去的机会**：用户无法告诉系统"这个 step 的结果不靠谱，换个方法"
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的部分失守
+- **位置**：
+  - `hagoku/agents/analyst/agent.py:522-524` `_do_regression`
+  - `hagoku/agents/analyst/agent.py:671-673` `_do_hypothesis_test`
+  - `hagoku/agents/analyst/agent.py:783-785` `_do_trend`
+  - `hagoku/agents/analyst/agent.py:701-703, 1095-1097` 交叉验证等
+- **证据**：
+  ```python
+  except Exception:
+      logger.warning("回归分析执行失败", exc_info=True)
+      return None
+  ```
+- **复现方式**：mock 一个 `regression()` 抛异常 → 跑 Analyst → results 少一项，但 user 看到的 message 不变
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-026 [DRAFT][P3-LOW] `_learn_from_results` 在 scout + analyst 自动写知识库（无用户确认）
+
+- **结果影响**：`scout._learn_from_results` (scout/agent.py:1048) 和 `analyst._learn_from_results` (analyst/agent.py:1147) 都在 agent 完成时**自动**调用 `knowledge.learn()` 写知识库。`scout` 用 confidence≥0.85 门槛 + 相似度去重；`analyst` 用显著性决定 confidence (0.8 if sig else 0.6)。
+- **doctrine 关联（参考）**：律 10（用户优先）的边界——知识库是跨 run 共享的，自动写入会**污染**未来分析
+- **位置**：
+  - `hagoku/agents/scout/agent.py:1064-1076` `scout._learn_from_results`
+  - `hagoku/agents/analyst/agent.py:1159-1180` `analyst._learn_from_results`
+- **风险**：
+  - 用户没机会审核写入的条目
+  - 知识库相似度去重（0.85 / 0.9）会保留旧的，可能与新分析矛盾
+  - 长期积累可能让知识库"凝固"，LLM 看到的 reference 越来越固定
+- **复现方式**：跑两次分析，第二次跑不同数据集但相似字段 → 知识库条目被引用
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-027 [DRAFT][P3-OBSERVATION] scout `_TYPE_ECHO_PATTERN_RE` 中文正则——守门 2 假阳风险
+
+- **结果影响**：`scout/agent.py:50` 定义 `_TYPE_ECHO_PATTERN_RE = re.compile(r"^.+\（.+?\）$")` 用于检测"列名（内容）"结构回显。**这是中文正则**——按守门 2 字面规则会触发。
+- **实际合规性**：函数 `_description_is_user_facing_meaningful` 的注释明确说"纯字符串形状匹配，不涉及语义判断"，**用法是合规的**（结构匹配不是业务判断）。
+- **守门风险**：如果守门 2 写得过严，会拦下这个无害的**结构匹配**用法。守门扫描者要识别"结构匹配" vs "业务分类"的差别。
+- **doctrine 关联（参考）**：守门 2 的设计需要更细粒度——区分"中文结构正则"（OK）和"中文业务分类正则"（违规）
+- **位置**：`hagoku/agents/scout/agent.py:50`
+- **证据**：
+  ```python
+  _TYPE_ECHO_PATTERN_RE = re.compile(r"^.+\（.+?\）$")
+  ```
+  和 `==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====` (line 470) 注释后
+- **状态**：DRAFT（Phase 1 已确认，P3 因为用法合规）
+- **提出日期**：2026-06-01
+
+---
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -606,12 +689,14 @@ _（暂无）_
 **已完成 session**：
 - **Session 1 (2026-06-01)**：读完 `hagoku/manager/orchestrator.py` 全 3457 行
 - **Session 2 (2026-06-01)**：读完 `hagoku/storage/memory.py` 全 735 行
+- **Session 3 (2026-06-01)**：读完 `hagoku/agents/scout/agent.py` 1110 行 + `hagoku/agents/analyst/agent.py` 1177 行
 
-**本次新增**（session 2）：
-- F-003 升级（律 5 失守，apply_to_context 写单侧机制已确认）
-- F-004 升级（律 10 失守，learn_from_run 覆盖 description 完整机制已确认）
-- F-023 NEW：`build_memory_project` 返回记忆子集
-- F-024 NEW：`learn_from_run` evidence 字符串匹配是 doctrine 守门盲区
+**本次新增**（session 3）：
+- F-003 升级：scout `_apply_project_memory` 同样只写单侧（与 memory.py `apply_to_context` 同一模式）
+- F-006 状态更新：analyst `_plan_analysis_via_llm` 异常路径 raise RuntimeError——**5 处中的 2 处已修**
+- F-025 NEW [P1-HIGH]：analyst 5 个 `_do_*` handler 静默 return None
+- F-026 NEW [P3-LOW]：scout + analyst `_learn_from_results` 自动写知识库
+- F-027 NEW [P3-Observation]：scout `_TYPE_ECHO_PATTERN_RE` 中文结构正则——守门 2 假阳风险
 
 **仍未读的关键文件**：
 
@@ -627,15 +712,13 @@ _（暂无）_
 | `hagoku/storage/project_manager.py` | 27K | 未读 |
 | `hagoku/storage/database.py` | 26K | 未读 |
 | `hagoku/manager/refinement.py` | 256 | 未读 |
-| `hagoku/agents/scout/agent.py` 后 800 行 | 800 | 未读 |
-| `hagoku/agents/analyst/agent.py` 后 800 行 | 800 | 未读 |
-| `hagoku/agents/cleaner/agent.py` | 1K | 未读 |
-| `hagoku/agents/reporter/agent.py` | 641 | 未读 |
-| `hagoku/agents/_scribe/agent.py` | 793 | 未读 |
+| `hagoku/agents/cleaner/agent.py` | 1K | **下次 session 4** |
+| `hagoku/agents/reporter/agent.py` | 641 | **下次 session 4** |
+| `hagoku/agents/_scribe/agent.py` | 793 | **下次 session 4** |
 | `hagoku/context/project_context.py` 后 248 行 | 248 | 未读 |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：4192 / ~30K = 14%
+**已读行数 / 总代码行数**：6479 / ~30K = 22%
 
 ### 7.2 Phase 1 session 1 关键收获
 

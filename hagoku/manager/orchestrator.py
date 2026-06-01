@@ -985,16 +985,6 @@ def _apply_scout_reply_with_llm(
             assistant_turn = "[调用] " + "; ".join(tc_parts)
             if _raw_text:
                 assistant_turn += " " + _raw_text
-        # 用户反馈由 USER_INPUT_RECEIVED 事件自动写入 entries（orchestrator.py L2291）
-        if project_ctx is not None:
-            applied_summary = ", ".join(applied) if applied else "无字段更新"
-            project_ctx.add_agent_response(
-                stage="scout",
-                revision=context.get("interaction_revision", 0),
-                content=applied_summary,
-                snapshot=project_ctx._derive_snapshot(context),
-            )
-
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
             import json as _json
@@ -2173,6 +2163,16 @@ class Orchestrator:
                                     applied_scout,
                                     interaction_revision,
                                 ),
+                            )
+                        # ── 时序修复（G1）：agent_response 必须在 user_feedback 之后写入 ──
+                        project_ctx = context.get("_project_context")
+                        if project_ctx is not None:
+                            applied_summary = ", ".join(applied_scout) if applied_scout else "无字段更新"
+                            project_ctx.add_agent_response(
+                                stage="scout",
+                                revision=interaction_revision,
+                                content=applied_summary,
+                                snapshot=project_ctx._derive_snapshot(context),
                             )
                         # 命令文本注入到上下文，供下一轮 Scout LLM 理解
                         if cmd_result:

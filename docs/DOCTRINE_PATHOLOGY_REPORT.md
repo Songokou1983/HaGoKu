@@ -57,21 +57,22 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成（18 DRAFT）/ Phase 1 session 1 完成（orchestrator.py 全读，+4 DRAFT）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 22 草稿
-- **状态分布**：22 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 session 1 完成（orchestrator.py）/ Phase 1 session 2 完成（memory.py）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 24 草稿
+- **状态分布**：24 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：22（全部 DRAFT）。
+**试错总假设数**：24（全部 DRAFT）。
 
-### 0.2 Phase 1 session 1 关键发现
+### 0.2 Phase 1 session 2 关键发现
 
-读完 `hagoku/manager/orchestrator.py`（3457 行）后：
-- **F-001 完全确认**（4 处 TODO → 必然死循环，not 推论）
-- **+3 条新 P0**：F-019 死分支 / F-020 NameError / 既有 F-001 升级
-- **+1 条 P1**：F-021 CLI 兜底 → 死循环
-- **+1 条 P2**：F-022 45 行死代码
-- **Phase 0 漏掉严重度** ~ 1 倍（从 1 个 P0 升到 4 个 P0 + 1 个 P1）
+读完 `hagoku/storage/memory.py`（735 行）后：
+- **F-003 升级（律 5 失守）**：`apply_to_context` 写 `column_descriptions[col]` 但**不写** `s.description`——读侧不对称
+- **F-004 升级（律 10 失守）**：`learn_from_run` 构造 `ColumnSemanticDef` 不传 `description`/`display_name`，**覆盖** `persist_field_descriptions` 早先写入的真实描述——**用户纠正被抹掉**
+- **F-023 NEW（P3）**：`build_memory_project` 只返 `description`/`display_name`，丢 6+ 字段（role/ignore/confidence 等）——Scout 看到历史子集
+- **F-024 NEW（P3-Observation）**：`learn_from_run` 用 `"用户" in evidence` 子串匹配——**doctrine 4 道守门都抓不到**的盲区
+- **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个
+- **已读行数 / 总代码行数**：4192 / ~30K = 14%
 
 ### 0.3 报告自身健康
 
@@ -246,6 +247,14 @@
 - **状态**：DRAFT
 - **提出日期**：2026-06-01
 
+**Phase 1 session 2 验证更新（2026-06-01，读完 memory.py 全 735 行）**：
+
+- ✅ **新增机制**：`apply_to_context` (line 530-544) 写入 `context.column_descriptions[col_name] = sem_def.description`，但**不写** `s.description` (column_semantics 列表项的 description 字段)
+- **影响放大**：记忆恢复时只更新一处。下次读到 `s.description` 仍是空的（LLM 推断的旧值或空）
+- **读侧不对称**：orchestrator.py:131 `scout_field_review_pause_payload` 防御性写法——`s.get("description", "") or descs.get(name, "")` 读两处都看——但**不是所有读侧都这么写**。其他 code path 可能只看 `s.description` → 看到空 → 拿不到记忆
+- **项目级 schema 失守**：`column_semantics` (list[object]) 和 `column_descriptions` (dict) 是不同物理结构，**没有"权威结构"**——所有写侧都得手动同步到两处
+- **P0 严重性已确认**：写入多侧不统一 + 读取依赖具体位置 = 5 处律 5 失守都有真实坏结果风险
+
 ---
 
 ### F-2026-06-01-004 [DRAFT][P0-CRITICAL] 律 10 失守 → 项目记忆覆盖用户本 run 纠正
@@ -258,6 +267,21 @@
 - **复现方式**：在 project 里改一个字段名 → 第二次分析 → 看 LLM 看到的字段理解
 - **状态**：DRAFT
 - **提出日期**：2026-06-01
+
+**Phase 1 session 2 验证更新（2026-06-01，读完 memory.py 全 735 行）**：
+
+- ✅ **完整机制已找到**：`learn_from_run` (line 662-668) 在 run 末尾被调用
+- ✅ **关键 bug**：构造 `ColumnSemanticDef` 时**完全不传 `description` 和 `display_name` 参数**——Pydantic 默认值是 `None`
+- ✅ **`save_column_semantic` 保存这个 description=None 的新对象** → **覆盖了** `persist_field_descriptions` 在 run 早期（orchestrator.py:2155）写入的真实描述
+- ✅ **调用顺序确认**：`persist_field_descriptions` → `learn_from_run`。后者覆盖前者。
+- **用户可观察到的坏结果**：
+  1. 用户在 run 1 纠正 field X 的 description 为 "销售额"
+  2. orchestrator.py:2155 调 `_persist_scout_field_updates` → 写入 description="销售额" 到记忆
+  3. run 1 末尾 `learn_from_run` → 构造新 `ColumnSemanticDef(description=None)` → 保存
+  4. run 2 开始 → `apply_to_context` 读记忆 → description=None → 不更新 `context.column_descriptions[X]`
+  5. 用户看到：field X 的描述**没记住**，必须重新说
+- **P0 严重性已确认**：可复现的、用户能观察到的"记不住"问题
+- **额外 bug 链接**：`learn_from_run` 同时不传 `display_name`——`persist_field_descriptions` 写入的 display_name 也被抹掉
 
 ---
 
@@ -510,6 +534,51 @@
 
 ---
 
+### F-2026-06-01-023 [DRAFT][P3-LOW] `memory.py:559` `build_memory_project` 返回记忆的**子集**——Scout 看不到完整历史
+
+- **结果影响**：`build_memory_project` 只返回 `description` 和 `display_name` 两类信息。但 `ColumnSemanticDef` 实际存了 8 个字段：`semantic` / `ignore` / `ordinal` / `order` / `unit` / `display_name` / `description` / `role` / `confidence` / `source` / `confirmed_by_user`。Scout 看到的是历史记忆的**残缺版本**。
+- **LLM 失去的机会**：
+  - LLM 不知道历史已经认定这个字段是 `target` —— 必须自己重新推断
+  - LLM 不知道历史已经认定这个字段是 `ignore` —— 每次都问
+  - LLM 不知道历史 `confidence` 是 1.0 还是 0.6 —— 自己的推断可能覆盖
+- **doctrine 关联（参考）**：律 5（状态层单一权威）+ 律 10（当前 run 优先于历史）——历史没读全
+- **位置**：`hagoku/storage/memory.py:559-576`
+- **证据**：
+  ```python
+  fields: dict[str, str] = {}
+  display_names: dict[str, str] = {}
+  confirmed = self.get_column_semantics(project_id)
+  for col_name, sem_def in confirmed.items():
+      if sem_def.description:
+          fields[col_name] = sem_def.description
+      if sem_def.display_name:
+          display_names[col_name] = sem_def.display_name
+  return {"fields": fields, "display_names": display_names}
+  ```
+  只取 2 个字段，丢 6+ 个
+- **复现方式**：在 progress.yaml 写 `role: target` for field X → 跑 Scout → 看 memory_project 里有没有 role 信息
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-024 [DRAFT][P3-OBSERVATION] `memory.py:659` `learn_from_run` 用 evidence 字符串匹配决定是否保存
+
+- **结果影响**：`if confidence >= 0.8 or "用户" in evidence or "记忆" in evidence:`——基于 evidence 字段的子串匹配决定是否学习这条记忆。这**不是**业务关键词列表，**但仍是**代码层字符串判断。
+- **LLM 失去的机会**：如果 Scout 把 evidence 写成"已确认 / 系统暂理解为 / LLM 推测为"等变体，这些**不会被识别为"用户确认过"**——记忆丢失
+- **doctrine 关联（参考）**：doctrine test 守门 1 守"业务关键词字面量集合"，但**不守**"evidence 字符串匹配"。这是 doctrinal 守门的盲区
+- **位置**：`hagoku/storage/memory.py:659`
+- **证据**：
+  ```python
+  if confidence >= 0.8 or "用户" in evidence or "记忆" in evidence:
+  ```
+- **doctrine 守门盲区**：守门 1 扫 list 字面量 / 守门 2 扫中文 `|` 正则 / 守门 3 扫中文 if-elif。但**这种 "if x in y" 形式的字符串子串匹配**不在任何守门范围内
+- **真实影响**：如果未来 LLM 改了 evidence 写法（如"已确认"或"用户已说明"），**守门不会发现，但 learn_from_run 行为已变**
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -536,33 +605,37 @@ _（暂无）_
 
 **已完成 session**：
 - **Session 1 (2026-06-01)**：读完 `hagoku/manager/orchestrator.py` 全 3457 行
+- **Session 2 (2026-06-01)**：读完 `hagoku/storage/memory.py` 全 735 行
 
-**本次新增**：
-- 4 条新 DRAFT finding（F-019, F-020, F-021, F-022）
-- 1 条 DRAFT 升级（F-001 加 Phase 1 验证段）
+**本次新增**（session 2）：
+- F-003 升级（律 5 失守，apply_to_context 写单侧机制已确认）
+- F-004 升级（律 10 失守，learn_from_run 覆盖 description 完整机制已确认）
+- F-023 NEW：`build_memory_project` 返回记忆子集
+- F-024 NEW：`learn_from_run` evidence 字符串匹配是 doctrine 守门盲区
 
 **仍未读的关键文件**：
 
-| 文件 | 行数 | 重要性 |
-|------|------|--------|
-| `hagoku/api/server.py` | 29K | API 入口 |
-| `hagoku/tools/analysis.py` | 41K | 最可能含硬编码语义规则 |
-| `hagoku/tools/business.py` | 32K | 业务指标 |
-| `hagoku/tools/reporting.py` | 47K | 报告生成 |
-| `hagoku/tools/cleaning.py` | 31K | 清洗实现 |
-| `hagoku/tools/visualization.py` | 26K | 可视化 |
-| `hagoku/tools/power_analysis.py` | 26K | 功效分析 |
-| `hagoku/storage/memory.py` | 27K | **律 10 失守证据集中地（F-004 待 Phase 1 验证）** |
-| `hagoku/storage/project_manager.py` | 27K | 项目管理 |
-| `hagoku/storage/database.py` | 26K | 数据库层 |
-| `hagoku/manager/refinement.py` | 256 | 字段细化 |
-| `hagoku/agents/scout/agent.py` 后 800 行 | 800 | Scout 主体 |
-| `hagoku/agents/analyst/agent.py` 后 800 行 | 800 | Analyst 主体 |
-| `hagoku/agents/cleaner/agent.py` | 1K | Cleaner 主体 |
-| `hagoku/agents/reporter/agent.py` | 641 | Reporter 主体 |
-| `hagoku/agents/_scribe/agent.py` | 793 | Scribe 主体 |
-| `hagoku/context/project_context.py` 后 248 行 | 248 | ProjectContext 主体 |
-| `hagoku_web/` 9K 行 TSX | 9K | 前端几乎全部 |
+| 文件 | 行数 | 状态 |
+|------|------|------|
+| `hagoku/api/server.py` | 29K | 未读 |
+| `hagoku/tools/analysis.py` | 41K | 未读 — **Phase 0 推论最可能含硬编码语义规则** |
+| `hagoku/tools/business.py` | 32K | 未读 |
+| `hagoku/tools/reporting.py` | 47K | 未读 |
+| `hagoku/tools/cleaning.py` | 31K | 未读 |
+| `hagoku/tools/visualization.py` | 26K | 未读 |
+| `hagoku/tools/power_analysis.py` | 26K | 未读 |
+| `hagoku/storage/project_manager.py` | 27K | 未读 |
+| `hagoku/storage/database.py` | 26K | 未读 |
+| `hagoku/manager/refinement.py` | 256 | 未读 |
+| `hagoku/agents/scout/agent.py` 后 800 行 | 800 | 未读 |
+| `hagoku/agents/analyst/agent.py` 后 800 行 | 800 | 未读 |
+| `hagoku/agents/cleaner/agent.py` | 1K | 未读 |
+| `hagoku/agents/reporter/agent.py` | 641 | 未读 |
+| `hagoku/agents/_scribe/agent.py` | 793 | 未读 |
+| `hagoku/context/project_context.py` 后 248 行 | 248 | 未读 |
+| `hagoku_web/` 9K 行 TSX | 9K | 未读 |
+
+**已读行数 / 总代码行数**：4192 / ~30K = 14%
 
 ### 7.2 Phase 1 session 1 关键收获
 

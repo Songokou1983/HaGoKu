@@ -57,12 +57,12 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01 → 2026-06-02 持续
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-10 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting / cleaning+visualization / power+api）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 49 草稿
-- **状态分布**：49 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-11 完成（**Python 后端 + 前端全部读完**）/ Phase 1 接近完成
+- **Finding 数**：0 正式 / 52 草稿
+- **状态分布**：52 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-02
 
-**试错总假设数**：49（全部 DRAFT）。
+**试错总假设数**：52（全部 DRAFT）。
 
 **试错总假设数**：37（全部 DRAFT）。
 
@@ -1109,6 +1109,67 @@
   - 但**绕过业务方法**意味着：未来 HaGoKuDB 加外键检查 / 软删除时，此调用不受益
 - **改进方向**：在 HaGoKuDB 加 `clear_project_history(project_id)` 方法
 - **状态**：DRAFT（Phase 1 已确认，P3 因为 list 是硬编码不是用户输入）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-050 [DRAFT][P3-OBSERVATION] 前端 `ProjectPanel` `STATUS_CONFIG` 硬编码 status → icon/label 映射
+
+- **结果影响**：`hagoku_web/src/panels/ProjectPanel.tsx:33-43` `STATUS_CONFIG` 字典硬编码 5 个 status → {dot, label, icon} 映射：
+  ```typescript
+  const STATUS_CONFIG: Record<PStatus, { dot: string; label: string; icon: React.ReactNode }> = {
+    running:   { dot: "bg-app-warning animate-pulse", label: "分析中", icon: <Activity   size={11} /> },
+    completed: { dot: "bg-app-success",               label: "已完成", icon: <CheckCircle2 size={11} /> },
+    unknown:   { dot: "bg-app-text-muted",            label: "未知",   icon: <AlertCircle  size={11} /> },
+    none:      { dot: "bg-app-text-muted/50",         label: "未开始", icon: <Circle       size={11} /> },
+    guardrails_blocked: { dot: "bg-app-warning", label: "护栏未过", icon: <ShieldAlert size={11} /> },
+  };
+  ```
+- **doctrine 关联（参考）**：F-041 同一模式——UI 文案/icon 硬编码
+- **位置**：`hagoku_web/src/panels/ProjectPanel.tsx:33-43`
+- **区别于 F-041**：F-041 是 Markdown 输出，F-050 是 UI 组件
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是 UI 视觉层）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-051 [DRAFT][P3-LOW] 前端多处 `.catch(() => {})` 静默吞
+
+- **结果影响**：前端 TypeScript 文件中 5+ 处 `.catch(() => {})` 静默吞：
+  - `hagoku_web/src/panels/ProjectPanel.tsx:71-72`：`loadDetail` 失败时静默
+  - `hagoku_web/src/panels/ProjectPanel.tsx:91`：`saveDesc` 失败时静默
+  - `hagoku_web/src/panels/ProjectPanel.tsx:106`：`handleDelete` 失败时静默
+  - `hagoku_web/src/hooks/useWebSocket.ts:109-111`：`/* ignore malformed messages */`
+  - `hagoku_web/src/panels/SettingsPanel.tsx:116-118, 124-126`：`try { localStorage } catch { setOpen(false) }`
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的部分失守——前端静默失败 → 用户不知道
+- **位置**：`hagoku_web/src/panels/ProjectPanel.tsx:71-72, 91, 106`、`hooks/useWebSocket.ts:109-111`、`panels/SettingsPanel.tsx:116-118, 124-126`
+- **风险**：
+  - ProjectPanel `loadDetail` 失败 → 项目卡片始终显示 loading=true → 用户看不到详情
+  - SettingsPanel `try localStorage` 失败 → 静默用默认值 → 用户不知道 localStorage 损坏
+  - WebSocket malformed message → 静默丢 → 用户不知道有协议错误
+- **改进方向**：用 Scribe 的 `_scribe_fallback: True` 标记模式 / ReportPanel 的 `degraded=True` 标记
+- **状态**：DRAFT（Phase 1 已确认，P3 因为前端是 UI 层）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-052 [DRAFT][P3-LOW] 前端 `panels/` 目录有 4 个死代码 `UI_CHANGELOG_backup_*.tsx` 已 git tracked
+
+- **结果影响**：`hagoku_web/src/panels/` 目录下有 4 个 `UI_CHANGELOG_backup_*.tsx`（3,522 行总和）：
+  - `UI_CHANGELOG_backup_20260512221339_AnalyzePanel_field_review.tsx` (654 行)
+  - `UI_CHANGELOG_backup_20260512223011_AnalyzePanel_field_review_interactive.tsx` (772 行)
+  - `UI_CHANGELOG_backup_20260512224719_AnalyzePanel_scout_applied_feedback.tsx` (934 行)
+  - `UI_CHANGELOG_backup_20260513061101_AnalyzePanel_analyst_review.tsx` (1162 行)
+  - **这些是 git tracked 死代码**（在 git 中）
+  - 项目根目录的 `UI_CHANGELOG_backup_*.tsx` 在 `.gitignore` 但 `src/panels/` 子目录的没匹配
+- **doctrine 关联（参考）**：karpathy 原则 2（Simplicity First）——死代码膨胀 codebase
+- **位置**：`hagoku_web/src/panels/UI_CHANGELOG_backup_*.tsx` × 4
+- **风险**：
+  - 新 AI 读 codebase 时看到这 4 个文件——可能误以为有 call site
+  - 干扰 `git grep` 搜索真实代码
+  - 模糊历史与当前的边界
+- **改进方向**：删除 / 移到 `.gitignore` / 或正确移到项目根 `.gitignore` 模式
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是死代码不影响运行）
 - **提出日期**：2026-06-02
 
 ---

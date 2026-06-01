@@ -175,19 +175,39 @@ class ProjectContext:
 
         system_prefix = "\n".join(lines)
 
-        # ── upstream_summary：上游阶段结构化快照 ──
+        # ── upstream_summary：上游阶段结构化快照 + 用户原话 ──
         upstream_entries = [e for e in self.entries if e.stage != agent]
-        upstream_parts: list[str] = []
-        for e in upstream_entries:
-            if e.type == "agent_response" and e.snapshot:
+
+        # 结构化快照：每 stage 只取最后一条（去重，P2）
+        seen_stages: set[str] = set()
+        snapshot_parts: list[str] = []
+        for e in reversed(upstream_entries):
+            if e.type == "agent_response" and e.snapshot and e.stage not in seen_stages:
+                seen_stages.add(e.stage)
                 t = e.snapshot.get("target", "")
                 f = e.snapshot.get("features", [])
                 p = e.snapshot.get("pending", [])
                 summary = f"{e.stage} 阶段完成: target={t}, features={f}"
                 if p:
                     summary += f", 待确认={p}"
-                upstream_parts.append(summary)
-        upstream_summary = "【上游阶段摘要】\n" + "\n".join(upstream_parts) if upstream_parts else ""
+                snapshot_parts.insert(0, summary)
+
+        # 上游用户原话：按时间序保留（P3）
+        user_word_parts: list[str] = []
+        for e in upstream_entries:
+            if e.type == "user_feedback" and e.raw_user_text:
+                user_word_parts.append(f"({e.stage}) {e.raw_user_text}")
+
+        upstream_lines: list[str] = []
+        if snapshot_parts:
+            upstream_lines.append("【上游阶段摘要】")
+            upstream_lines.extend(snapshot_parts)
+        if user_word_parts:
+            if upstream_lines:
+                upstream_lines.append("")
+            upstream_lines.append("【上游用户原话】")
+            upstream_lines.extend(user_word_parts)
+        upstream_summary = "\n".join(upstream_lines)
 
         # ── messages_history：标准 messages list（律 3）──
         # stage_transition 不进入 messages_history

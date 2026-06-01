@@ -2817,6 +2817,10 @@ class Orchestrator:
             if not col or not val:
                 continue
 
+            # 不持久化 used_in_analysis 和 role（当次分析特有，非字段描述）
+            if ':[used_in_analysis]' in col or ':[role]' in col:
+                continue
+
             if col.endswith(":[display]"):
                 col = col.replace(":[display]", "").strip()
                 new_dnames[col] = val

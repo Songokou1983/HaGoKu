@@ -592,6 +592,16 @@ class CleanerAgent(InteractionMixin):
         _tools = _agt.to_openai("cleaner")
 
         client = create_raw_client(self.llm_config)
+
+        # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
+        from ...observability.llm_dump import dump_messages
+        dump_messages(
+            "cleaner_dialogue",
+            messages,
+            model=self.llm_config.model,
+            extra={"query": query, "tools": [t["function"]["name"] for t in _tools]},
+        )
+
         for _round in range(5):
             try:
                 response = client.chat.completions.create(
@@ -805,6 +815,17 @@ class CleanerAgent(InteractionMixin):
         system_prompt = cleaning_rules.strip()
 
         client = create_raw_client(self.llm_config)
+
+        # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
+        from ...observability.llm_dump import dump_messages
+        dump_messages(
+            "cleaner_planning",
+            [{"role": "system", "content": system_prompt},
+             {"role": "user", "content": "清洗规划数据：\n```json\n" + _json.dumps(payload, ensure_ascii=False, default=str) + "\n```"}],
+            model=self.llm_config.model,
+            extra={"n_cols": len(column_list)},
+        )
+
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,

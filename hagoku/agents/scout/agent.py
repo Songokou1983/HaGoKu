@@ -636,6 +636,17 @@ class ScoutAgent(InteractionMixin):
 
         client = create_raw_client(self.llm_config)
         _call_start = datetime.now(timezone.utc)
+
+        # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
+        from ...observability.llm_dump import dump_messages
+        dump_messages(
+            "scout_infer_all_semantics",
+            [{"role": "system", "content": system_prompt},
+             {"role": "user", "content": "请分析以下数据集的字段语义：\n```json\n" + user_prompt_str + "\n```"}],
+            model=self.llm_config.model_quick or self.llm_config.model,
+            extra={"query": query, "tools": ["submit_field_inference"]},
+        )
+
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,

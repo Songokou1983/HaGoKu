@@ -941,6 +941,15 @@ def _apply_scout_reply_with_llm(
         if channel_logger:
             channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(system_msg), phase="field_reply")
 
+        # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
+        from ..observability.llm_dump import dump_messages
+        dump_messages(
+            "scout_reply_review",
+            messages,
+            model=llm_model,
+            extra={"query": context.get("query", ""), "tools": [t["function"]["name"] for t in _get_scout_tools()]},
+        )
+
         resp = llm_client.chat.completions.create(
             model=llm_model,
             messages=messages,

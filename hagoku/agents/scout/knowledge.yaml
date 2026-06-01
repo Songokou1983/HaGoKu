@@ -9427,3 +9427,63 @@ knowledge:
     confidence: 0.85
   created_at: '2026-05-29 17:08:22'
   use_count: 0
+- id: 54409cac
+  content: 字段名：门店或业务单元的唯一标识代码，用于区分不同店铺；含义：门店或业务单元的唯一标识代码，用于区分不同店铺；数据特征：categorical
+    5个唯一业务单元代码（B01~B05），每个代码对应多个记录，推测为店铺/门店标识；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0601
+    field: 门店或业务单元的唯一标识代码，用于区分不同店铺
+    meaning: 门店或业务单元的唯一标识代码，用于区分不同店铺
+    data_pattern: categorical 5个唯一业务单元代码（B01~B05），每个代码对应多个记录，推测为店铺/门店标识
+    inferred_role: feature
+    confidence: 0.95
+  created_at: '2026-06-01 08:20:34'
+  use_count: 0
+- id: f55f7484
+  content: 字段名：时间维度字段，表示数据的统计周期（年月或年周格式），用于追踪收入随时间的变化；含义：时间维度字段，表示数据的统计周期（年月或年周格式），用于追踪收入随时间的变化；数据特征：datetime
+    整数值如202540、202541等，范围202540~202612，推测为年月格式（如2025年第40周）；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 时间维度字段，表示数据的统计周期（年月或年周格式），用于追踪收入随时间的变化
+    meaning: 时间维度字段，表示数据的统计周期（年月或年周格式），用于追踪收入随时间的变化
+    data_pattern: datetime 整数值如202540、202541等，范围202540~202612，推测为年月格式（如2025年第40周）
+    inferred_role: feature
+    confidence: 0.9
+  created_at: '2026-06-01 08:20:35'
+  use_count: 0
+- id: bbabd33d
+  content: 字段名：主要收入指标，数值范围和分布特征符合收入定义，620条记录中619个唯一值表明数据粒度较细；含义：主要收入指标，数值范围和分布特征符合收入定义，620条记录中619个唯一值表明数据粒度较细；数据特征：numeric
+    浮点数值，范围0.004~397.6，均值59.7，中位数16.1，呈右偏分布，符合收入数据特征；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 主要收入指标，数值范围和分布特征符合收入定义，620条记录中619个唯一值表明数据粒度较细
+    meaning: 主要收入指标，数值范围和分布特征符合收入定义，620条记录中619个唯一值表明数据粒度较细
+    data_pattern: numeric 浮点数值，范围0.004~397.6，均值59.7，中位数16.1，呈右偏分布，符合收入数据特征
+    inferred_role: target
+    confidence: 0.95
+  created_at: '2026-06-01 08:20:36'
+  use_count: 0
+- id: 7053a525
+  content: 字段名：次要收入指标，可能表示另一类型的收入（如净收入、毛收入或分渠道收入）；含义：次要收入指标，可能表示另一类型的收入（如净收入、毛收入或分渠道收入）；数据特征：numeric
+    浮点数值，范围0~296.3，均值43.4，与Inc1类似但规模较小，可能为另一类收入；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 次要收入指标，可能表示另一类型的收入（如净收入、毛收入或分渠道收入）
+    meaning: 次要收入指标，可能表示另一类型的收入（如净收入、毛收入或分渠道收入）
+    data_pattern: numeric 浮点数值，范围0~296.3，均值43.4，与Inc1类似但规模较小，可能为另一类收入
+    inferred_role: unknown
+    confidence: 0.9
+  created_at: '2026-06-01 08:20:37'
+  use_count: 0

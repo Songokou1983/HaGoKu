@@ -221,6 +221,16 @@ def _detect_user_intent_via_llm(
     if not t:
         return False
 
+    # ── 结构性预检：明确的确认短语绕过 LLM（状态机管理判断，非语义决策）──
+    import re as _re
+    _CONFIRM_PATTERNS = [
+        r"^确认", r"^可以", r"^好的", r"^没问题", r"^继续", r"^下一步", r"^进入",
+        r"^同意", r"^行$", r"^ok\b", r"^yes\b", r"^y\b",
+    ]
+    for pat in _CONFIRM_PATTERNS:
+        if _re.match(pat, t, _re.IGNORECASE):
+            return True
+
     try:
         system = (
             '你是一个意图分类器。只输出单个 JSON 对象：{"intent": "confirm"|"modify"}。'

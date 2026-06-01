@@ -2315,7 +2315,17 @@ class Orchestrator:
                                 scribe=self.scribe,
                             )
                             # 带累积修正重跑 Scout 语义推断（保留用户已确认的描述/显示名）
+                            # ── 保存用户已确认的 used_in_analysis，重推断后恢复 ──
+                            saved_uia = {
+                                str(s.get("column_name", "")): s.get("used_in_analysis")
+                                for s in context.get("column_semantics", [])
+                            }
                             scout_reinfer._infer_all_semantics(context, df_reinfer)
+                            # 恢复用户已确认的 used_in_analysis（LLM 重推断可能覆盖）
+                            for s in context.get("column_semantics", []):
+                                col = str(s.get("column_name", ""))
+                                if col in saved_uia and saved_uia[col] is not None:
+                                    s["used_in_analysis"] = saved_uia[col]
                             scout_reinfer._generate_field_descriptions(context, df_reinfer)
                             # 重推断后重新同步 target/features
                             from hagoku.agents.types import derive_target_features

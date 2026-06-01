@@ -57,12 +57,12 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01 → 2026-06-02 持续
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-8 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 41 草稿
-- **状态分布**：41 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-9 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis / business+reporting / cleaning+visualization）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 45 草稿
+- **状态分布**：45 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-02
 
-**试错总假设数**：41（全部 DRAFT）。
+**试错总假设数**：45（全部 DRAFT）。
 
 **试错总假设数**：37（全部 DRAFT）。
 
@@ -954,6 +954,87 @@
   - 但**用户改不了**——如果想用 🔬 或别的 icon，得改代码
 - **状态**：DRAFT（Phase 1 已确认，P3 因为是 UI 视觉层）
 - **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-042 [DRAFT][P3-LOW] `cleaning.py` `suggest_cleaning_strategy` 阈值驱动策略推荐——LLM 决定的边界
+
+- **结果影响**：`hagoku/tools/cleaning.py:525-568` `suggest_cleaning_strategy` 用阈值驱动决策：
+  ```python
+  if null_rate > _config.drop_column_null_rate:
+      return CleaningStrategy.DROP_COLUMN, f"缺失率 {null_rate:.1%} > ..."
+  if null_rate < _config.drop_rows_null_rate:
+      return CleaningStrategy.DROP_ROWS, f"..."
+  if missing_mechanism == "mcar":
+      if null_rate < _config.mcar_drop_rows_null_rate:
+          return CleaningStrategy.DROP_ROWS, ...
+      return CleaningStrategy.FILL_MEDIAN, ...
+  if missing_mechanism == "mar":
+      return CleaningStrategy.MULTIPLE_IMPUTATION, ...
+  return CleaningStrategy.FLAG_AND_KEEP, ...
+  ```
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**策略选择** 应由 LLM 做
+- **位置**：`hagoku/tools/cleaning.py:549-568`
+- **缓解**：
+  - 函数名是 "**suggest**" 不是 "decide"——返回建议
+  - 阈值在 `_config`，可调整
+  - `clean_data` line 684 docstring 明确"operations 必须由 LLM 提供"
+  - **LLM 是最终决策者**
+- **风险**：LLM 可能直接采纳建议不质疑（认知锚定）
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是 "suggest" 不是 "decide"）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-043 [DRAFT][P3-OBSERVATION] `cleaning.py` `detect_missing_mechanism` 用 sig_rate 阈值做 MCAR/MAR/MNAR 分类
+
+- **结果影响**：`hagoku/tools/cleaning.py:241-297` 用 t-test p-values 比例决定 MCAR/MAR/MNAR：
+  ```python
+  if sig_rate < _config.sig_rate_mcar_below:
+      return "mcar"
+  elif sig_rate < _config.sig_rate_mnar_above:
+      return "mar"
+  else:
+      return "mnar"
+  ```
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**统计推断** vs 业务分类
+- **位置**：`hagoku/tools/cleaning.py:292-297`
+- **区别于 F-038**：
+  - F-038 是"什么 ROI 算优秀"（业务分类）
+  - F-043 是"多少 sig_rate 算 MCAR"（**统计推断**）
+  - 统计推断是机械的；业务分类是软决策
+- **缓解**：阈值在 `_config`，可调整
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是统计推断不是业务规则）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-044 [DRAFT][P3-OBSERVATION] `visualization.py` `generate_insight_charts` 按 analysis_type 选图表——机械映射
+
+- **结果影响**：`hagoku/tools/visualization.py:285-350` `generate_insight_charts` 按 analysis_type 选图表：
+  - `regression` → 拟合图 + 残差诊断图
+  - `hypothesis_test` → 分组对比图 (box/violin)
+  - `correlation` → 相关散点图
+  - `trend_analysis` → 时间趋势图
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**"什么分析用什么图"** 是展示选择
+- **位置**：`hagoku/tools/visualization.py:285-350` 附近
+- **区别于 F-038 / F-042**：
+  - F-038 / F-042 是业务规则/策略选择
+  - F-044 是**机械映射**（统计学上标准的可视化选择）
+- **状态**：DRAFT（Phase 1 已确认，P3 因为是机械映射不是业务规则）
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-01-045 [DRAFT][P3-LOW] `cleaning.py` `clean_data` 14 个 strategy if-elif 链膨胀
+
+- **结果影响**：`hagoku/tools/cleaning.py:730-812` `clean_data` 用 14 个 `elif strategy == CleaningStrategy.X:` 链处理 14 种 strategy（drop_rows / drop_column / fill_mean / fill_median / ...）——**每个新 strategy 都要加 elif**。
+- **doctrine 关联（参考）**：karpathy 原则 1（明确需求）的边界——dispatch 应注册而非分支
+- **位置**：`hagoku/tools/cleaning.py:730-812`
+- **改进方向**：用 strategy → handler 函数 dict 替代（类似 `analyst/agent.py:121-126` 的 `_ANALYSIS_DISPATCH`）
+- **影响**：添加新 strategy 需要修改 if-elif 链（**没有注册表**）
+- **状态**：DRAFT（Phase 1 已确认，P3 因为目前 14 个 strategy 已 stable）
+- **提出日期**：2026-06-02
 
 ---
 

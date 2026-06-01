@@ -57,24 +57,23 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-6 完成（orchestrator / memory / 4 agents / refinement+project_context / storage）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 35 草稿
-- **状态分布**：35 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-7 完成（orchestrator / memory / 4 agents / refinement+project_context / storage / analysis）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 37 草稿
+- **状态分布**：37 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：35（全部 DRAFT）。
+**试错总假设数**：37（全部 DRAFT）。
 
-### 0.2 Phase 1 session 6 关键发现
+### 0.2 Phase 1 session 7 关键发现
 
-读完 `hagoku/storage/project_manager.py`（761 行）+ `hagoku/storage/database.py`（656 行）后：
-- **database.py 整体最干净**：SQL 字段白名单 + 事务上下文 + 线程锁 + WAL + 外键约束 = 教科书级
-- **project_manager.py 安全设计优秀**：路径遍历防御、符号链接检查、原子写入
-- **F-033 NEW**：project_manager.py line 442-449 "符号链接模式" comment 与代码不符——两个分支都 `shutil.copy2`
-- **F-034 NEW**：project_manager.py `_load_registry`/`list()` 3 处静默 except
-- **F-035 NEW（正面参考）**：database.py 安全模式可作为其他存储层代码的修复模板
-- **重大发现**：Phase 0 没读 storage 层，**漏掉 2 个 P3 finding 和 1 个正面参考**
+读完 `hagoku/tools/analysis.py` 全 1195 行后：
+- **重大反推**：Phase 0 推论"tools/analysis.py 最可能含硬编码语义规则"——**错的**
+- 实际：全文件无业务关键词（grep 0 命中），只有标准统计方法名
+- **F-036 NEW**（**修正 Phase 0 推论**）：analysis.py 41K 行没有"硬编码业务关键词"
+- **F-037 NEW**：`check_test_assumptions` 5 个 recommendation 是方法选择硬编码——LLM 决定的边界
+- **教训**：Phase 0 推论"最可能含 X"常错——**Phase 1 验证后才能下结论**
 - **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
-- **已读行数 / 总代码行数**：10913 / ~30K = 36%
+- **已读行数 / 总代码行数**：12108 / ~30K = 40%
 
 ### 0.3 报告自身健康
 
@@ -848,6 +847,40 @@
 
 ---
 
+### F-2026-06-01-036 [DRAFT][P3-OBSERVATION] **Phase 0 推论错的**——analysis.py 没有"硬编码业务关键词"
+
+- **结果影响**：Phase 0 推论"`tools/analysis.py` 最可能含硬编码语义规则"——**错的**。读完 1195 行后：
+  - **无业务关键词列表**——`grep "收入\|营收\|销售"` 等 0 命中
+  - 所有函数名是**标准统计方法**：ttest / anova / chi_square / correlation / regression / mann_whitney_u / kruskal_wallis / cross_validate / multiple_comparison_correction / check_test_assumptions / interaction_analysis
+  - 这些是**机械统计过程**，不是业务分类
+  - 守门 1（业务关键词字面量集合）在此文件**不会触发**
+- **doctrine 关联（参考）**：教训——"最可能含 X" 的推论常错。**Phase 1 验证后才能下结论**——再次印证用户的方法论
+- **位置**：`hagoku/tools/analysis.py` 全文
+- **反例**：grep `r"收入|营收|销售|客流"` 全文件 0 命中
+- **状态**：DRAFT（Phase 1 已确认，**修正 Phase 0 推论**）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-037 [DRAFT][P3-LOW] `check_test_assumptions` 含方法选择硬编码——LLM 决定的边界
+
+- **结果影响**：`hagoku/tools/analysis.py:707-940` `check_test_assumptions` 的 recommendation 字符串含**方法选择硬编码**：
+  - Line 779："正态性不满足，建议使用 Mann-Whitney U 检验（非参数替代）"
+  - Line 782："方差齐性不满足，建议使用 Welch's t 检验"
+  - Line 818："正态性不满足，建议使用 Kruskal-Wallis H 检验（非参数替代）"
+  - Line 892："变量非正态，建议使用 Spearman 等级相关"
+  - Line 929："期望频数过低（>20% 格子 < 5），建议使用 Fisher 精确检验"
+- **doctrine 关联（参考）**：律 8（控制通道律）的边界——**"如果 A 违反则用 B"** 是方法选择决策，应由 LLM 做（analyst `_plan_analysis_via_llm`）
+- **位置**：`hagoku/tools/analysis.py:779, 782, 818, 892, 929`
+- **风险**：
+  - **当前设计**：recommendation 传给 LLM，LLM 可以选择忽略——**LLM 是最终决策者**
+  - **未来风险**：如果 LLM 不读 recommendation 但代码升级为"自动用 B 替代 A"，**LLM 被绕过**
+- **复现方式**：mock `check_test_assumptions` 返回 violated → 看 `_plan_analysis_via_llm` 是否读 `result["recommendation"]`
+- **状态**：DRAFT（Phase 1 已确认，P3 因为当前 LLM 仍是最终决策者）
+- **提出日期**：2026-06-01
+
+---
+
 ### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst/cleaner `_do_*` 5 个 handler + `assess` 静默 return — 范围扩大
 
 - **结果影响**：analyst 5 个 `_do_*` handler 静默 return None，cleaner `assess` 静默 return `{"summary": "评估未完成", "columns": []}`——**部分失败用户不知情**。
@@ -896,22 +929,22 @@ _（暂无）_
 - **Session 4 (2026-06-01)**：读完 `hagoku/agents/cleaner/agent.py` 1000 行 + `hagoku/agents/reporter/agent.py` 641 行 + `hagoku/agents/_scribe/agent.py` 793 行
 - **Session 5 (2026-06-01)**：读完 `hagoku/manager/refinement.py` 256 行 + `hagoku/context/project_context.py` 328 行
 - **Session 6 (2026-06-01)**：读完 `hagoku/storage/project_manager.py` 761 行 + `hagoku/storage/database.py` 656 行
+- **Session 7 (2026-06-01)**：读完 `hagoku/tools/analysis.py` 全 1195 行
 
-**本次新增**（session 6）：
-- F-033 NEW [P3-LOW]：project_manager.py line 442-449 "符号链接模式" comment 与代码不符——两个分支都 `shutil.copy2`
-- F-034 NEW [P3-LOW]：project_manager.py `_load_registry`/`list()` 3 处静默 except
-- F-035 NEW [P3-LOW]：database.py 整体干净——SQL 白名单 + 事务 + 线程锁都规范（**正面参考**）
+**本次新增**（session 7）：
+- F-036 NEW [P3-OBSERVATION]：**Phase 0 推论错**——analysis.py 41K 行**没有"硬编码业务关键词"**，只有统计方法名
+- F-037 NEW [P3-LOW]：`check_test_assumptions` 含方法选择硬编码（normality 违反 → Mann-Whitney U 检验）——LLM 决定的边界
 
 **新发现**：
-- **project_manager.py 安全设计优秀**：`_validate_project_name` / `_safe_rmtree` / `_validate_symlink_target` / `_save_meta` 原子写（tmp + rename）——防御路径遍历和符号链接攻击
-- **database.py 整体最干净**：SQL 字段白名单 + 事务 + 线程锁 + WAL + 外键约束 = 教科书级
+- **analysis.py 整体干净**：标准统计方法（ttest/anova/regression/correlation）+ 防御输入验证 + 错误返回 _insufficient_data（带 message）
+- **重大教训**：Phase 0 推论"最可能含 X"常错——**Phase 1 验证后才能下结论**
+- **`check_test_assumptions` 的 5 个 recommendation 是 P3 边界问题**：当前 LLM 仍是最终决策者，但未来升级可能绕过 LLM
 
 **仍未读的关键文件**：
 
 | 文件 | 行数 | 状态 |
 |------|------|------|
 | `hagoku/api/server.py` | 29K | 未读 |
-| `hagoku/tools/analysis.py` | 41K | **下次 session 7** — **Phase 0 推论最可能含硬编码语义规则** |
 | `hagoku/tools/business.py` | 32K | 未读 |
 | `hagoku/tools/reporting.py` | 47K | 未读 |
 | `hagoku/tools/cleaning.py` | 31K | 未读 |
@@ -919,7 +952,7 @@ _（暂无）_
 | `hagoku/tools/power_analysis.py` | 26K | 未读 |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：10913 / ~30K = 36%
+**已读行数 / 总代码行数**：12108 / ~30K = 40%
 
 ### 7.2 Phase 1 session 1 关键收获
 

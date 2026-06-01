@@ -146,6 +146,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
             "field_name": name,
             "chinese_name": dname,
             "meaning": mean,
+            "evidence": str(s.get("evidence", "") or "").strip()[:200],
             "needs_attention": uncertain,
             "suggested_role": role_display,
             "used_in_analysis": used_in_analysis,

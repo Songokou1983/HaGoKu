@@ -10687,3 +10687,247 @@ knowledge:
     confidence: 1.0
   created_at: '2026-06-01 14:58:44'
   use_count: 0
+- id: '53875760'
+  content: 字段名：业务单元，代表公司维度，用于区分不同公司所属的店铺；含义：业务单元，代表公司维度，用于区分不同公司所属的店铺；数据特征：categorical
+    取值如 B01~B05 共5个业务单元分类，每类下有25~225条记录，代表不同公司维度；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0601
+    field: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    meaning: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    data_pattern: categorical 取值如 B01~B05 共5个业务单元分类，每类下有25~225条记录，代表不同公司维度
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:28'
+  use_count: 0
+- id: 558cb8d8
+  content: 字段名：每个店铺的唯一编码，用于标识和分析单个店铺；含义：每个店铺的唯一编码，用于标识和分析单个店铺；数据特征：id 取值如 A0000001~A0000025
+    共25个唯一店铺编码，每个编码恰好对应25条记录（与25个统计周期对应），是店铺的唯一标识；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0601
+    field: 每个店铺的唯一编码，用于标识和分析单个店铺
+    meaning: 每个店铺的唯一编码，用于标识和分析单个店铺
+    data_pattern: id 取值如 A0000001~A0000025 共25个唯一店铺编码，每个编码恰好对应25条记录（与25个统计周期对应），是店铺的唯一标识
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:29'
+  use_count: 0
+- id: a9006039
+  content: 字段名：数据统计的时间周期，用于刻画收入随时间变动的趋势；含义：数据统计的时间周期，用于刻画收入随时间变动的趋势；数据特征：datetime
+    取值从202540到202612，共25个唯一值，形如"年份+周次/期次"编码（如202540表示2025年第40期），每个值对应25条记录，覆盖完整的时间序列；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 数据统计的时间周期，用于刻画收入随时间变动的趋势
+    meaning: 数据统计的时间周期，用于刻画收入随时间变动的趋势
+    data_pattern: datetime 取值从202540到202612，共25个唯一值，形如"年份+周次/期次"编码（如202540表示2025年第40期），每个值对应25条记录，覆盖完整的时间序列
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:30'
+  use_count: 0
+- id: 93000cb7
+  content: 字段名：各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量；含义：各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量；数据特征：numeric
+    取值范围0~398，均值约60，为连续型金额数据；620条记录中仅619个唯一值，几乎每行独立，是各店铺各周期的营业收入金额；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量
+    meaning: 各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量
+    data_pattern: numeric 取值范围0~398，均值约60，为连续型金额数据；620条记录中仅619个唯一值，几乎每行独立，是各店铺各周期的营业收入金额
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:31'
+  use_count: 0
+- id: 3e076a9b
+  content: 字段名：店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因；含义：店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因；数据特征：numeric
+    取值范围0~296，均值约43，与Inc1量级和分布形态接近，615个唯一值，推测为与营业收入挂钩的积分获取金额；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因
+    meaning: 店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因
+    data_pattern: numeric 取值范围0~296，均值约43，与Inc1量级和分布形态接近，615个唯一值，推测为与营业收入挂钩的积分获取金额
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:32'
+  use_count: 0
+- id: ad31038f
+  content: 字段名：与积分挂钩的第一种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第一种费用支出，可能影响店铺收入水平；数据特征：numeric 取值范围0~175.25，均值约25.1，253个唯一值，以0.25为步长（典型计费粒度），推测为与积分挂钩的第一种费用支出；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第一种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第一种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 取值范围0~175.25，均值约25.1，253个唯一值，以0.25为步长（典型计费粒度），推测为与积分挂钩的第一种费用支出
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:33'
+  use_count: 0
+- id: 6dd00e1e
+  content: 字段名：与积分挂钩的第二种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第二种费用支出，可能影响店铺收入水平；数据特征：numeric 取值范围0~5.46，均值约0.93，202个唯一值，量级远小于Bos1，推测为与积分挂钩的第二种费用支出；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第二种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第二种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 取值范围0~5.46，均值约0.93，202个唯一值，量级远小于Bos1，推测为与积分挂钩的第二种费用支出
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:35'
+  use_count: 0
+- id: d6aaad66
+  content: 字段名：与积分挂钩的第三种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第三种费用支出，可能影响店铺收入水平；数据特征：numeric 取值范围0~6.69，均值约1.12，373个唯一值，分布与Bos2接近但略大，推测为与积分挂钩的第三种费用支出；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第三种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第三种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 取值范围0~6.69，均值约1.12，373个唯一值，分布与Bos2接近但略大，推测为与积分挂钩的第三种费用支出
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:19:36'
+  use_count: 0
+- id: 859a4c5a
+  content: 字段名：业务单元，代表公司维度，用于区分不同公司所属的店铺；含义：业务单元，代表公司维度，用于区分不同公司所属的店铺；数据特征：categorical
+    取值如 B01~B05，共5个业务单元，各频次差异较大（如 B01 出现 225 次，B03 仅 25 次），属分类字段；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0601
+    field: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    meaning: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    data_pattern: categorical 取值如 B01~B05，共5个业务单元，各频次差异较大（如 B01 出现 225 次，B03 仅 25
+      次），属分类字段
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:07'
+  use_count: 0
+- id: d21b09ef
+  content: 字段名：每个店铺的唯一编码，用于标识和分析单个店铺；含义：每个店铺的唯一编码，用于标识和分析单个店铺；数据特征：categorical 取值如
+    A0000001~A0000025，共25个唯一编码，每个编码恰好出现 25 次（与 Period 一一对应），属店铺唯一标识；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0601
+    field: 每个店铺的唯一编码，用于标识和分析单个店铺
+    meaning: 每个店铺的唯一编码，用于标识和分析单个店铺
+    data_pattern: categorical 取值如 A0000001~A0000025，共25个唯一编码，每个编码恰好出现 25 次（与 Period
+      一一对应），属店铺唯一标识
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:08'
+  use_count: 0
+- id: '43406390'
+  content: 字段名：数据统计的时间周期，用于刻画收入随时间变动的趋势；含义：数据统计的时间周期，用于刻画收入随时间变动的趋势；数据特征：datetime
+    取值范围 202540~202612，格式为 YYYYWW（年份+周次），共 25 个连续周，每个值出现 25 次（对应 25 家店铺）；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 数据统计的时间周期，用于刻画收入随时间变动的趋势
+    meaning: 数据统计的时间周期，用于刻画收入随时间变动的趋势
+    data_pattern: datetime 取值范围 202540~202612，格式为 YYYYWW（年份+周次），共 25 个连续周，每个值出现 25
+      次（对应 25 家店铺）
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:09'
+  use_count: 0
+- id: ad6b7750
+  content: 字段名：各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量；含义：各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量；数据特征：numeric
+    样本值如 115.11、99.24、120.43 等连续数值，620 行中近 620 个唯一值，范围 0.004~397.62，均值约 59.70，符合营业收入量级；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量
+    meaning: 各店铺在统计周期内的营业收入，是分析收入变动趋势的目标变量
+    data_pattern: numeric 样本值如 115.11、99.24、120.43 等连续数值，620 行中近 620 个唯一值，范围 0.004~397.62，均值约
+      59.70，符合营业收入量级
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:10'
+  use_count: 0
+- id: c3bc2d74
+  content: 字段名：店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因；含义：店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因；数据特征：numeric
+    样本值如 85.46、74.47、87.26，与 Inc1 同量级且高度相关（Inc2/Inc1 ≈ 0.73），与积分获取挂钩；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因
+    meaning: 店铺获取的积分数据，与费用挂钩，可辅助解释收入变动原因
+    data_pattern: numeric 样本值如 85.46、74.47、87.26，与 Inc1 同量级且高度相关（Inc2/Inc1 ≈ 0.73），与积分获取挂钩
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:12'
+  use_count: 0
+- id: ed11e448
+  content: 字段名：与积分挂钩的第一种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第一种费用支出，可能影响店铺收入水平；数据特征：numeric 样本值如
+    55.5、49.0、52.25，多以 0.25 为步长离散取值（可能为积分兑换件数 × 单价），与 Inc2 同步变动；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第一种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第一种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 样本值如 55.5、49.0、52.25，多以 0.25 为步长离散取值（可能为积分兑换件数 × 单价），与 Inc2
+      同步变动
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:13'
+  use_count: 0
+- id: 8f58ec31
+  content: 字段名：与积分挂钩的第二种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第二种费用支出，可能影响店铺收入水平；数据特征：numeric 样本值如
+    1.86、1.68、2.00，量级远小于 Bos1，可能为费率或单价类费用；范围 0~5.46，均值约 0.93；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第二种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第二种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 样本值如 1.86、1.68、2.00，量级远小于 Bos1，可能为费率或单价类费用；范围 0~5.46，均值约
+      0.93
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:14'
+  use_count: 0
+- id: f82aba97
+  content: 字段名：与积分挂钩的第三种费用支出，可能影响店铺收入水平；含义：与积分挂钩的第三种费用支出，可能影响店铺收入水平；数据特征：numeric 样本值如
+    2.69、2.34、2.78，量级介于 Bos1 和 Bos2 之间，与 Inc2/Bos1 同步变动；范围 0~6.69，均值约 1.12；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第三种费用支出，可能影响店铺收入水平
+    meaning: 与积分挂钩的第三种费用支出，可能影响店铺收入水平
+    data_pattern: numeric 样本值如 2.69、2.34、2.78，量级介于 Bos1 和 Bos2 之间，与 Inc2/Bos1 同步变动；范围
+      0~6.69，均值约 1.12
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:30:15'
+  use_count: 0

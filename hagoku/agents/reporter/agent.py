@@ -416,9 +416,11 @@ class ReporterAgent(InteractionMixin):
 
         # ── ProjectContext 注入（阶段 3）──
         project_ctx = context.get("_project_context")
+        rpt_history: list[dict] = []
         if project_ctx:
             ctx_block = project_ctx.build_prompt("reporter", context)
             system += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+            rpt_history = ctx_block.get("messages_history", [])
 
         self._emit(EventType.AGENT_THINKING, {"thought": "正在通过 LLM 生成报告内容..."})
 

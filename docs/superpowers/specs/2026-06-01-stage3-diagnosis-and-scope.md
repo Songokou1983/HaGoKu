@@ -286,6 +286,14 @@ Analyst / Reporter 同样几行改动，位置同上表。
 
 **验收指标**：重跑 dump，Cleaner / Analyst / Reporter 在同阶段第 2 次 LLM 调用的 messages 含上一轮 user/assistant 对话。
 
+**重做指引（2026-06-01，首次 commit 1e252f4 审查不通过）**：
+
+首次提交只 Cleaner 真改对。Analyst 文件未触碰；Reporter `_call_llm` 加了 `messages_history` 参数但 caller (`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425`) 没传，新参数为死代码；守门测试只测了 `build_prompt` 输出而非 Agent 实际拼装出的 messages，无法构成真守门。重做要点：
+
+1. **Analyst**：`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:872-876` 之后的 messages 拼装位置 extend `ctx_block["messages_history"]`（先看 system_prompt 怎么进 LLM 的，找到 `messages = [...]` 那一行夹入）。
+2. **Reporter caller**：`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425` 改为 `self._call_llm(system=system, user=user_prompt, messages_history=ctx_block["messages_history"] if project_ctx else None)`（注意 `ctx_block` 此时作用域）。
+3. **守门测试**：新增 `test_下游_agent_实际注入_messages_history`，monkeypatch `chat.completions.create` 截 `messages=` 参数，分别触发 cleaner/analyst/reporter 拼装路径，断言截获 messages 含 `messages_history` 条目。原 `test_下游_agent_注入_messages_history` 测 `build_prompt`，可保留但改名 `test_build_prompt_messages_history_分组` 或移至 `tests/test_context/`。
+
 ### 5.2 Tier 2：设计层修复
 
 #### 任务 J：upstream_summary 去重（P2）— ✅ 已随任务 I 完成

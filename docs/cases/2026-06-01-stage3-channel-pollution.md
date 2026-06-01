@@ -408,3 +408,41 @@ Cleaner dump 005-007 每次都是 `system → user(intro)` 两条消息，无对
 
 详见 spec §5.1 任务 J。范围：3 个 Agent 文件 + 守门测试。
 
+---
+
+## 任务 M 首次提交（commit 1e252f4）审查不通过 — 3 个 critical bug（2026-06-01）
+
+### Bug 1：Analyst 根本没改
+
+commit message 写「Analyst: _messages list 拼装后 extend」，`git show HEAD --stat` 显示**未触碰 `hagoku/agents/analyst/agent.py`**。`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:872-876` 仍只拼 `system_prefix + upstream_summary`，丢弃 `messages_history`。
+
+### Bug 2：Reporter 加了参数但 caller 没传
+
+`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:103-106` 改造 `_call_llm` 接口加 `messages_history` 参数 ✅，但唯一 caller `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425` 调用时未传该参数：
+
+```python
+response = self._call_llm(system=system, user=user_prompt)  # 缺 messages_history=
+```
+
+新参数成为死代码，Reporter 实际行为与改造前相同。
+
+### Bug 3：守门测试错位（最严重）
+
+`@/home/son_goku/HaGoKu/tests/test_product/test_stage_handoff.py` 的 `test_下游_agent_注入_messages_history` 测的是 **`build_prompt` 输出**，不是 **3 个 Agent 实际发给 LLM 的 messages**：
+
+```python
+block = ctx.build_prompt("cleaner", context={})
+mh = block.get("messages_history", [])
+assert len(mh) >= 2, ...
+```
+
+`build_prompt` 在任务 I 完成时已正确。这个 assert 即使 Cleaner / Analyst / Reporter 全部丢弃 `messages_history` 也照样过 → 不构成守门。
+
+### 影响
+
+测试全绿但实际只有 Cleaner 真接上 `messages_history`，Analyst / Reporter 仍违反律 3。如未及时复盘，下次 dump 验收会再次发现「LLM 跨轮无记忆」。
+
+### 修法
+
+补 Analyst extend、补 Reporter caller 参数、新增 spy LLM client 真守门测试。详见 spec §5.1 任务 M 重做指引。
+

@@ -9600,3 +9600,236 @@ knowledge:
     confidence: 1.0
   created_at: '2026-06-01 08:38:59'
   use_count: 0
+- id: 710d9ca0
+  content: 字段名：公司或事业部的唯一标识代码；含义：公司或事业部的唯一标识代码；数据特征：categorical 5个唯一值（B01~B05），样本均为前缀B加数字的代码格式，符合公司/事业部代码特征；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0601
+    field: 公司或事业部的唯一标识代码
+    meaning: 公司或事业部的唯一标识代码
+    data_pattern: categorical 5个唯一值（B01~B05），样本均为前缀B加数字的代码格式，符合公司/事业部代码特征
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 09:58:57'
+  use_count: 0
+- id: 17d29d92
+  content: 字段名：店铺的唯一标识代码，用于区分不同门店；含义：店铺的唯一标识代码，用于区分不同门店；数据特征：id 25个唯一店铺代码（A0000001~A0000025），每个店铺在25个周期均有数据（每行出现25次），是标准的店铺维度标识；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0601
+    field: 店铺的唯一标识代码，用于区分不同门店
+    meaning: 店铺的唯一标识代码，用于区分不同门店
+    data_pattern: id 25个唯一店铺代码（A0000001~A0000025），每个店铺在25个周期均有数据（每行出现25次），是标准的店铺维度标识
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 09:58:58'
+  use_count: 0
+- id: 66592b73
+  content: 字段名：时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势；含义：时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势；数据特征：datetime
+    数值格式为202540表示2025年第40周，范围202540~202612共25个连续周期，符合年周格式的时间序列特征；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势
+    meaning: 时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势
+    data_pattern: datetime 数值格式为202540表示2025年第40周，范围202540~202612共25个连续周期，符合年周格式的时间序列特征
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 09:58:59'
+  use_count: 0
+- id: 8ff71ea6
+  content: 字段名：店铺的主要收入金额，是分析收入变动趋势的核心指标；含义：店铺的主要收入金额，是分析收入变动趋势的核心指标；数据特征：numeric 620行中619个唯一值，数值范围0.004~397.6，均值59.7中位数16.1，呈右偏分布，与收入数据特征完全吻合；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 店铺的主要收入金额，是分析收入变动趋势的核心指标
+    meaning: 店铺的主要收入金额，是分析收入变动趋势的核心指标
+    data_pattern: numeric 620行中619个唯一值，数值范围0.004~397.6，均值59.7中位数16.1，呈右偏分布，与收入数据特征完全吻合
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-01 09:59:00'
+  use_count: 0
+- id: 4ba6c479
+  content: 字段名：店铺的会员积分数据，与收入变动相关联；含义：店铺的会员积分数据，与收入变动相关联；数据特征：numeric 620行中615个唯一值，数值范围0~296.3，均值43.4与收入Inc1量级接近，推测为与收入关联的会员积分数据；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 店铺的会员积分数据，与收入变动相关联
+    meaning: 店铺的会员积分数据，与收入变动相关联
+    data_pattern: numeric 620行中615个唯一值，数值范围0~296.3，均值43.4与收入Inc1量级接近，推测为与收入关联的会员积分数据
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 09:59:01'
+  use_count: 0
+- id: a449f42e
+  content: 字段名：与店铺积分挂钩的费用支出项；含义：与店铺积分挂钩的费用支出项；数据特征：numeric 253个唯一值，范围0~175.25，均值25.1，数值特征与费用支出类指标吻合；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项
+    meaning: 与店铺积分挂钩的费用支出项
+    data_pattern: numeric 253个唯一值，范围0~175.25，均值25.1，数值特征与费用支出类指标吻合
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 09:59:02'
+  use_count: 0
+- id: b063f2d0
+  content: 字段名：与店铺积分挂钩的费用支出项；含义：与店铺积分挂钩的费用支出项；数据特征：numeric 202个唯一值，范围0~5.46，均值0.93，量级较小，符合附加费用特征；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项
+    meaning: 与店铺积分挂钩的费用支出项
+    data_pattern: numeric 202个唯一值，范围0~5.46，均值0.93，量级较小，符合附加费用特征
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 09:59:03'
+  use_count: 0
+- id: 357835be
+  content: 字段名：与店铺积分挂钩的费用支出项；含义：与店铺积分挂钩的费用支出项；数据特征：numeric 373个唯一值，范围0~6.69，均值1.12，与Bos2量级接近，推测为同类费用字段；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项
+    meaning: 与店铺积分挂钩的费用支出项
+    data_pattern: numeric 373个唯一值，范围0~6.69，均值1.12，与Bos2量级接近，推测为同类费用字段
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 09:59:04'
+  use_count: 0
+- id: 44a3a5e9
+  content: 字段名：公司或事业部的唯一标识代码，用于区分不同业务单元；含义：公司或事业部的唯一标识代码，用于区分不同业务单元；数据特征：categorical
+    公司代码字段，取值包括B01、B05、B02、B04、B03共5个业务单元，无缺失值；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0601
+    field: 公司或事业部的唯一标识代码，用于区分不同业务单元
+    meaning: 公司或事业部的唯一标识代码，用于区分不同业务单元
+    data_pattern: categorical 公司代码字段，取值包括B01、B05、B02、B04、B03共5个业务单元，无缺失值
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:01'
+  use_count: 0
+- id: 518ecaf8
+  content: 字段名：店铺的唯一标识代码，用于区分不同门店，是追踪单店趋势的关键维度；含义：店铺的唯一标识代码，用于区分不同门店，是追踪单店趋势的关键维度；数据特征：categorical
+    店铺代码字段，共25个唯一店铺，每个店铺在25个周期内均有数据，样本值如A0000001等；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0601
+    field: 店铺的唯一标识代码，用于区分不同门店，是追踪单店趋势的关键维度
+    meaning: 店铺的唯一标识代码，用于区分不同门店，是追踪单店趋势的关键维度
+    data_pattern: categorical 店铺代码字段，共25个唯一店铺，每个店铺在25个周期内均有数据，样本值如A0000001等
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:02'
+  use_count: 0
+- id: 496cc4f9
+  content: 字段名：时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势；含义：时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势；数据特征：numeric
+    统计周期字段，格式为年周（如202540表示2025年第40周），范围从202540到202612，共25个唯一周期；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势
+    meaning: 时间维度字段，表示数据的统计周期（年周格式如202540表示2025年第40周），用于追踪收入随时间的变化趋势
+    data_pattern: numeric 统计周期字段，格式为年周（如202540表示2025年第40周），范围从202540到202612，共25个唯一周期
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:03'
+  use_count: 0
+- id: c28e0408
+  content: 字段名：店铺的主要收入金额，是分析收入变动趋势的核心指标，也是用户问题的直接目标变量；含义：店铺的主要收入金额，是分析收入变动趋势的核心指标，也是用户问题的直接目标变量；数据特征：numeric
+    收入字段，数值范围0.0039至397.6249，均值59.70，中位数16.10，共620条记录无缺失值；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 店铺的主要收入金额，是分析收入变动趋势的核心指标，也是用户问题的直接目标变量
+    meaning: 店铺的主要收入金额，是分析收入变动趋势的核心指标，也是用户问题的直接目标变量
+    data_pattern: numeric 收入字段，数值范围0.0039至397.6249，均值59.70，中位数16.10，共620条记录无缺失值
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:04'
+  use_count: 0
+- id: 90b7aee9
+  content: 字段名：店铺的会员积分数据，与收入变动相关联，可作为分析收入趋势的辅助特征；含义：店铺的会员积分数据，与收入变动相关联，可作为分析收入趋势的辅助特征；数据特征：numeric
+    积分字段，数值范围0至296.32，均值43.45，中位数11.27，与收入Inc1的变化趋势相关联；推断角色：feature
+  tags:
+  - numeric
+  - feature
+  metadata:
+    project: test0601
+    field: 店铺的会员积分数据，与收入变动相关联，可作为分析收入趋势的辅助特征
+    meaning: 店铺的会员积分数据，与收入变动相关联，可作为分析收入趋势的辅助特征
+    data_pattern: numeric 积分字段，数值范围0至296.32，均值43.45，中位数11.27，与收入Inc1的变化趋势相关联
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:05'
+  use_count: 0
+- id: aba0d3ce
+  content: 字段名：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；含义：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；数据特征：numeric
+    费用字段1，数值范围0至175.25，均值25.14，与店铺积分挂钩的费用支出项；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    meaning: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    data_pattern: numeric 费用字段1，数值范围0至175.25，均值25.14，与店铺积分挂钩的费用支出项
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:06'
+  use_count: 0
+- id: b53afb7b
+  content: 字段名：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；含义：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；数据特征：numeric
+    费用字段2，数值范围0至5.46，均值0.93，与店铺积分挂钩的费用支出项；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    meaning: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    data_pattern: numeric 费用字段2，数值范围0至5.46，均值0.93，与店铺积分挂钩的费用支出项
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:07'
+  use_count: 0
+- id: d391ee26
+  content: 字段名：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；含义：与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联；数据特征：numeric
+    费用字段3，数值范围0至6.69，均值1.12，与店铺积分挂钩的费用支出项；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    meaning: 与店铺积分挂钩的费用支出项，与收入变动趋势分析无直接关联
+    data_pattern: numeric 费用字段3，数值范围0至6.69，均值1.12，与店铺积分挂钩的费用支出项
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 10:39:08'
+  use_count: 0

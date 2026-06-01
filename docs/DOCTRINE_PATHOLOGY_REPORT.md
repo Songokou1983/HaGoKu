@@ -57,24 +57,24 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-3 完成（orchestrator / memory / scout+analyst agents）/ Phase 1 持续中
-- **Finding 数**：0 正式 / 27 草稿
-- **状态分布**：27 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-4 完成（orchestrator / memory / scout+analyst / cleaner+reporter+scribe）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 30 草稿
+- **状态分布**：30 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：27（全部 DRAFT）。
+**试错总假设数**：30（全部 DRAFT）。
 
-### 0.2 Phase 1 session 3 关键发现
+### 0.2 Phase 1 session 4 关键发现
 
-读完 `hagoku/agents/scout/agent.py`（1110 行）+ `hagoku/agents/analyst/agent.py`（1177 行）后：
-- **F-003 升级**：scout `_apply_project_memory` 同样只写单侧；好消息是 scout `_generate_field_descriptions` **正确双写**——修复样本在同文件内
-- **F-006 降级 P0→P1**：analyst 5 处异常路径的 **2 处已 raise RuntimeError**（`_plan_analysis_via_llm` line 896, 919），剩下 3 处在 orchestrator.py
-- **F-025 NEW [P1-HIGH]**：analyst 5 个 `_do_*` handler 用 `except: return None`——部分失败用户不知情
-- **F-026 NEW [P3-LOW]**：scout + analyst `_learn_from_results` 自动写知识库无用户确认
-- **F-027 NEW [P3-Observation]**：scout `_TYPE_ECHO_PATTERN_RE` 中文结构正则——守门 2 假阳风险（用法合规但设计需更细）
-- **新发现——analyst/agent.py 实际 doctrine 干净**：raise RuntimeError、NeedUserClarification、`_ANALYSIS_DISPATCH` 注册表、guardrails + deep_validate 都规范
+读完 cleaner（1000 行）+ reporter（641 行）+ scribe（793 行）后：
+- **3 个 agent 实际 doctrine 都干净**：raise RuntimeError/NeedUserClarification/`_ANALYSIS_DISPATCH`/`degraded` 标记降级
+- **F-025 范围扩大**：5 处 analyst + 1 处 cleaner = 6 处静默 return
+- **F-028 NEW**：scribe `_auto_generate_handover` 注释说"LLM 驱动"但代码不调 LLM
+- **F-029 NEW**：scribe `_get_context_data` 用固定顺序分配 YAML block——顺序错乱会错配
+- **F-030 NEW**：scribe `get_upstream_summary` 硬编码中文 phase 标签——改名即失效
+- **重要发现**：scribe `recover_field_descriptions` 用 `_scribe_fallback: True` 标记降级（**比 analyst 静默 None 好**——可作为改进参考）
 - **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
-- **已读行数 / 总代码行数**：6479 / ~30K = 22%
+- **已读行数 / 总代码行数**：8912 / ~30K = 30%
 
 ### 0.3 报告自身健康
 
@@ -662,6 +662,86 @@
 
 ---
 
+### F-2026-06-01-028 [DRAFT][P3-LOW] `_auto_generate_handover` 注释承诺"LLM 驱动"但代码不调 LLM
+
+- **结果影响**：`scribe/agent.py:554-629` `_auto_generate_handover` 的 docstring 说"LLM 驱动全过程理解版"。但实际**只调用** `generate_handover_note()`，后者是 `json.dumps(source_summary)`——**纯序列化，不调 LLM**。
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的边界——"LLM-driven" 是个产品承诺，**用户期望 LLM 给出全过程解读**，实际拿到的是 JSON 堆叠
+- **位置**：
+  - 注释：`scribe/agent.py:555` `_auto_generate_handover` docstring
+  - 代码：`scribe/agent.py:386-411` `generate_handover_note` 实现
+- **证据**：
+  ```python
+  def generate_handover_note(self, from_agent, to_agent, source_summary, context=None):
+      ...
+      self._log(f"HANDOVER transport: {from_agent} → {to_agent}")
+      return json.dumps(source_summary, ensure_ascii=False, indent=2, default=str)
+  ```
+  没有任何 LLM 调用
+- **影响**：handover_notes.md 内容是 JSON 堆叠，**不是 LLM 全过程解读**——下游 agent 看到的是机械数据搬运
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-029 [DRAFT][P3-LOW] `_get_context_data` 用**固定顺序**分配 YAML block——顺序错乱会错配
+
+- **结果影响**：`scribe/agent.py:422-444` 用 `re.findall(r"```yaml\n(.*?)\n```", content, re.DOTALL)` 提取所有 YAML block，然后**按固定顺序**（Scout → Cleaner → Analyst → Reporter）分配。
+- **LLM 失去的机会**：如果用户手工编辑过 context.md（罕见但可能），block 顺序变了 → Cleaner 产出被识别为 Analyst 产出 → **handover 内容错乱**——LLM 解读的是错误的数据
+- **doctrine 关联（参考）**：律 5（状态层单一权威）的边界——"按顺序分配" 隐含 schema 假设，但 schema 改动时容易 silently 错配
+- **位置**：`scribe/agent.py:422-444`
+- **证据**：
+  ```python
+  blocks = re.findall(r"```yaml\n(.*?)\n```", content, re.DOTALL)
+  phases = ("Scout", "Cleaner", "Analyst", "Reporter")
+  for i, block in enumerate(blocks):
+      if i >= len(phases): break
+      parsed = yaml.safe_load(block)
+      if isinstance(parsed, dict):
+          result[phases[i].lower()] = parsed
+  ```
+- **改进方向**：用 yaml 块前的 Markdown 标题（## Scout 产出 / ## Cleaner 产出）做 key，而非按数组下标
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-030 [DRAFT][P3-OBSERVATION] `get_upstream_summary` 硬编码中文 phase 标签
+
+- **结果影响**：`scribe/agent.py:526-552` 用 `phase_labels` 字典硬编码 "数据侦察" / "数据清洗" / "统计分析" / "报告生成"——在 `handover_notes.md` 中匹配 `## {from_label} → {to_label} 交接笔记` 模式。
+- **脆弱性**：如果未来 prompt.md 改名（例如把"数据侦察"改为"数据扫描"），`get_upstream_summary` 会**找不到任何交接笔记**——`matches` 为空 → 返回 None → 下游 agent 拿不到上游摘要
+- **doctrine 关联（参考）**：karpathy 原则 2（Simplicity First）的实操困难——硬编码 vs 单一权威的取舍
+- **位置**：`scribe/agent.py:526-552`
+- **证据**：
+  ```python
+  phase_labels: dict[str, str] = {
+      "scout": "数据侦察",
+      "cleaner": "数据清洗",
+      "analyst": "统计分析",
+      "reporter": "报告生成",
+  }
+  ```
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-025 [DRAFT][P1-HIGH] analyst/cleaner `_do_*` 5 个 handler + `assess` 静默 return — 范围扩大
+
+- **结果影响**：analyst 5 个 `_do_*` handler 静默 return None，cleaner `assess` 静默 return `{"summary": "评估未完成", "columns": []}`——**部分失败用户不知情**。
+- **范围扩大**（Phase 1 session 4 验证更新）：
+  - analyst：`_do_regression` / `_do_hypothesis_test` / `_do_correlation` / `_do_trend` / `_do_regression`'s CV（5 处静默 return None）
+  - cleaner：`assess` line 639 静默 return 但有 `"summary": "评估未完成"` 文字——比 analyst 略好（有提示）
+- **缓解**：
+  - analyst：外层 `_run` 在所有 step 都失败时 retry via LLM + raise `NeedUserClarification`（部分失败时**用户不知道**）
+  - cleaner：Scribe 调 `recover_field_descriptions` 用 `_scribe_fallback` 标记（**用户能看到**）——是更好的降级模式
+- **doctrine 关联（参考）**：律 7（语义不确定可见）的部分失守
+- **位置**：
+  - `hagoku/agents/analyst/agent.py:522-524, 671-673, 783-785, 701-703, 1095-1097`
+  - `hagoku/agents/cleaner/agent.py:639`
+- **改进方向**：Scribe 的 `_scribe_fallback: True` 标记模式可作为参考
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -690,13 +770,19 @@ _（暂无）_
 - **Session 1 (2026-06-01)**：读完 `hagoku/manager/orchestrator.py` 全 3457 行
 - **Session 2 (2026-06-01)**：读完 `hagoku/storage/memory.py` 全 735 行
 - **Session 3 (2026-06-01)**：读完 `hagoku/agents/scout/agent.py` 1110 行 + `hagoku/agents/analyst/agent.py` 1177 行
+- **Session 4 (2026-06-01)**：读完 `hagoku/agents/cleaner/agent.py` 1000 行 + `hagoku/agents/reporter/agent.py` 641 行 + `hagoku/agents/_scribe/agent.py` 793 行
 
-**本次新增**（session 3）：
-- F-003 升级：scout `_apply_project_memory` 同样只写单侧（与 memory.py `apply_to_context` 同一模式）
-- F-006 状态更新：analyst `_plan_analysis_via_llm` 异常路径 raise RuntimeError——**5 处中的 2 处已修**
-- F-025 NEW [P1-HIGH]：analyst 5 个 `_do_*` handler 静默 return None
-- F-026 NEW [P3-LOW]：scout + analyst `_learn_from_results` 自动写知识库
-- F-027 NEW [P3-Observation]：scout `_TYPE_ECHO_PATTERN_RE` 中文结构正则——守门 2 假阳风险
+**本次新增**（session 4）：
+- F-025 范围扩大：cleaner `assess` line 639 静默 return（5 处 analyst + 1 处 cleaner）
+- F-028 NEW [P3-LOW]：scribe `_auto_generate_handover` 注释承诺 LLM 但代码不调 LLM
+- F-029 NEW [P3-LOW]：scribe `_get_context_data` 用固定顺序分配 YAML block——顺序错乱会错配
+- F-030 NEW [P3-Observation]：scribe `get_upstream_summary` 硬编码中文 phase 标签
+
+**新发现**：
+- **analyst/agent.py doctrine 干净**：raise RuntimeError/NeedUserClarification/`_ANALYSIS_DISPATCH`/guardrails+deep_validate
+- **reporter/agent.py doctrine 干净**：raise RuntimeError、`_parse_llm_json` 用 `degraded=True` 标记降级
+- **scribe/agent.py 整体干净**：`recover_field_descriptions` 用 `_scribe_fallback: True` 标记降级（比 analyst 静默 None 好）
+- **cleaner/agent.py 干净**：`_plan_operations` raise RuntimeError，assess 静默 return 但有 summary 提示
 
 **仍未读的关键文件**：
 
@@ -711,14 +797,11 @@ _（暂无）_
 | `hagoku/tools/power_analysis.py` | 26K | 未读 |
 | `hagoku/storage/project_manager.py` | 27K | 未读 |
 | `hagoku/storage/database.py` | 26K | 未读 |
-| `hagoku/manager/refinement.py` | 256 | 未读 |
-| `hagoku/agents/cleaner/agent.py` | 1K | **下次 session 4** |
-| `hagoku/agents/reporter/agent.py` | 641 | **下次 session 4** |
-| `hagoku/agents/_scribe/agent.py` | 793 | **下次 session 4** |
-| `hagoku/context/project_context.py` 后 248 行 | 248 | 未读 |
+| `hagoku/manager/refinement.py` | 256 | **下次 session 5** |
+| `hagoku/context/project_context.py` 后 248 行 | 248 | **下次 session 5** |
 | `hagoku_web/` 9K 行 TSX | 9K | 未读 |
 
-**已读行数 / 总代码行数**：6479 / ~30K = 22%
+**已读行数 / 总代码行数**：8912 / ~30K = 30%
 
 ### 7.2 Phase 1 session 1 关键收获
 

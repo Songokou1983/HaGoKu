@@ -578,6 +578,7 @@ class CleanerAgent(InteractionMixin):
         if project_ctx:
             ctx_block = project_ctx.build_prompt("cleaner", context)
             messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+            messages.extend(ctx_block["messages_history"])  # 律 3
 
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:

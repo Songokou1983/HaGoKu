@@ -100,18 +100,21 @@ class ReporterAgent(InteractionMixin):
 
     # ── LLM 调用 ────────────────────────────────────────────
 
-    def _call_llm(self, system: str, user: str) -> str:
+    def _call_llm(
+        self, system: str, user: str,
+        messages_history: list[dict[str, str]] | None = None,
+    ) -> str:
         """调用 LLM，返回文本响应"""
         if self._llm_client is None:
             raise RuntimeError("ReporterAgent 没有 LLM 客户端")
-        # 使用标准 chat.completions.create 接口（兼容 instructor 包装和原始 OpenAI）
+        _messages: list[dict] = [{"role": "system", "content": system}]
+        if messages_history:
+            _messages.extend(messages_history)  # 律 3
+        _messages.append({"role": "user", "content": user})
         try:
             response = self._llm_client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                messages=_messages,
                 temperature=0.3,
                 max_tokens=4096,
             )

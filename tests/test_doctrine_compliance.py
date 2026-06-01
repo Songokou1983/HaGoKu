@@ -496,3 +496,20 @@ def test_doctrine_无_session_messages_残留():
         f"_session_messages 残留（应全部替换为 ProjectContext）:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_doctrine_无_conversation_history_残留():
+    """任务 F 完工后，_conversation_history 不得在 cleaner/manager 中作为功能引用。"""
+    violations = []
+    for path in HAGOKU_ROOT.rglob("*.py"):
+        rel = str(path.relative_to(HAGOKU_ROOT))
+        # Only check agent and manager dirs
+        if not rel.startswith("hagoku/agents/") and not rel.startswith("hagoku/manager/"):
+            continue
+        text = _read(path)
+        if '_conversation_history"' in text or "'_conversation_history'" in text:
+            violations.append(rel)
+    assert not violations, (
+        f"_conversation_history 残留（应退役）:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

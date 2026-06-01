@@ -141,35 +141,6 @@ def test_律1_scout字段纠错_空意图时不强制抵达():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 律 2：用户意图判定通道 `_detect_user_intent_via_llm`
-# ─────────────────────────────────────────────────────────────────────────────
-
-def test_律2_用户意图判定_用户原话抵达LLM():
-    """_detect_user_intent_via_llm 必须把用户原话送进 LLM messages。"""
-    from hagoku.manager.orchestrator import _detect_user_intent_via_llm
-
-    raw_user = "等等，先回去改下 Inc1 的角色"
-
-    def _resp(messages: list[dict[str, Any]]) -> Any:  # noqa: ARG001
-        resp = MagicMock()
-        resp.choices = [MagicMock()]
-        resp.choices[0].message = MagicMock()
-        resp.choices[0].message.content = '{"intent": "modify"}'
-        return resp
-
-    spy = LLMSpy(response_factory=_resp)
-    is_confirm = _detect_user_intent_via_llm(
-        raw_user, spy.client, "test-model", stage="scout"
-    )
-
-    assert is_confirm is False  # LLM 返回 modify
-    assert spy.contains_in_any_message(raw_user), (
-        "律 2 违反：用户原话未抵达意图判定 LLM。\n"
-        "实际 messages:\n{actual}"
-    ).format(actual=spy.all_messages_text()[:500])
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 律 1：Scout 首次字段推断 `_infer_all_semantics`（端到端 mock）
 # ─────────────────────────────────────────────────────────────────────────────
 

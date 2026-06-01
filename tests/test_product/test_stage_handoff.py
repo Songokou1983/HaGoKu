@@ -145,3 +145,25 @@ def test_下游_agent_实际注入_messages_history(agent_key):
     )
     assert anchor_a in flat, f"[{agent_key}] 缺锚点 A: {flat[:300]}"
     assert anchor_b in flat, f"[{agent_key}] 缺锚点 B: {flat[:300]}"
+
+
+def test_upstream_summary_不重复():
+    """任务 J：upstream_summary 中每 stage 只出现一次。"""
+    from hagoku.context.project_context import ProjectContext
+    ctx = ProjectContext(run_id="dedup", analysis_goal="test")
+    for i in range(5):
+        ctx.add_agent_response(stage="scout", revision=i, content="ok",
+            snapshot={"target": "X", "features": [], "pending": []})
+    block = ctx.build_prompt("cleaner", context={})
+    assert block["upstream_summary"].count("scout 阶段完成") <= 1
+
+
+def test_cleaner看到scout用户原话():
+    """任务 I：Cleaner 的 upstream_summary 含 Scout 用户原话。"""
+    from hagoku.context.project_context import ProjectContext
+    ctx = ProjectContext(run_id="p3", analysis_goal="test")
+    ctx.add_user_feedback(stage="scout", revision=0, raw_text="只用店铺周期收入")
+    ctx.add_agent_response(stage="scout", revision=0, content="ok",
+        snapshot={"target": "X", "features": [], "pending": []})
+    block = ctx.build_prompt("cleaner", context={})
+    assert "只用店铺周期收入" in block["upstream_summary"]

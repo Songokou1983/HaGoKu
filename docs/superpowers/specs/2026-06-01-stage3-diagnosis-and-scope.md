@@ -1,7 +1,8 @@
 # 阶段 3 诊断与范围 spec
 
 **日期**：2026-06-01
-**状态**：待诊断 → 待评审 → 待实施
+**状态**：诊断完成（2026-06-01 17:35）→ 范围已重写 → 待开发实施
+**诊断产出**：`docs/cases/2026-06-01-stage3-channel-pollution.md`（7 项问题已定位）
 **作者**：审查方（Cascade）
 **实施方**：开发
 
@@ -12,9 +13,9 @@
 ### 0.1 阅读顺序（约 15 分钟）
 
 1. **`CLAUDE.md`** — AI 实现者铁律（律 1-7、通道规则、自检流程）。每次 commit message 必须有「【自检】」段
-2. **本 spec 全文** — 重点看 §1 现状、§3 实施清单、§7 实施步骤
-3. **`docs/decisions/ADR-005-project-context-memory-system.md`** — ProjectContext 为什么存在、设计意图
-4. **`docs/superpowers/specs/2026-05-30-project-context-memory-design.md` §3.5「集成点」** — 三层注入分工，理解为什么诊断要看「通道污染」
+2. **`docs/cases/2026-06-01-stage3-channel-pollution.md`** — 诊断 case。所有 P1-P7 问题现场 + 根因都在这里。实现任何任务前必读该任务对应的 P 项
+3. **本 spec §5 / §6** — 任务定义 + 验收守门测试
+4. **`docs/decisions/ADR-005-project-context-memory-system.md`** — ProjectContext 设计意图（设计背景）
 
 ### 0.2 选读（遇到具体问题再翻）
 
@@ -22,37 +23,40 @@
 - `tests/README.md` — 5 层测试金字塔（dump 加了不能挂现有测试）
 - `DEVELOPMENT_PROMPT.md` — 提交流程
 
-### 0.3 当前任务（仅一件）
+### 0.3 当前任务
 
-**第 0 步：诊断 dump**（详见 §4）
+**阶段【Tier 1 修复】**（详见 §5.1）—— G → H → I 顺序独立完成。
 
-按 §4.2 加 dump 代码 → 跑一次 test0526 类场景 → 把 `.hagoku/llm_dumps/<run_id>/` 整个目录交给审查方。
+**每一个任务一次 commit，提交后暂停等审查方 review**，过了再推下一个。不要一口气拼完 3 个。
 
-**严格只做这一件事**——不要顺手改 prompt、不要改通道、不要动 Cleaner。dump 完才决定阶段 3 真实范围。
+**只动 spec 中明确点名的代码**——不要顺手重构、不要改 prompt 文本、不要动 Analyst / Reporter。
 
-### 0.4 完成标志
+### 0.4 当前任务验收
+
+Tier 1 三个任务都完成后：
 
 ```bash
 HAGOKU_DUMP_LLM=1 <你的启动方式>
-# 跑一遍：上传数据 → Scout 字段评审 1-2 轮 → 进 Cleaner 看到清洗策略
-ls .hagoku/llm_dumps/<run_id>/
-# 期望看到 4-6 份 JSON：
-#   001_scout_infer_all_semantics_*.json
-#   002_scout_reply_review_*.json   （字段评审每轮一份）
-#   003_cleaner_dialogue_*.json
-#   004_cleaner_planning_*.json
+# 跑同样场景
+ls ~/.hagoku/llm_dumps/  # 看新 dump
 ```
+
+对比旧 dump（在 `docs/cases/2026-06-01-stage3-channel-pollution.md` 里）验证：
+
+- P1 修了：messages 顺序严格 user/assistant 交替
+- P3 修了：Cleaner messages 中能看到 Scout 阶段用户原话
+- P4 修了：Cleaner messages 中 tool_calls 是结构化字段，不是 content 字符串
 
 ### 0.5 Commit message 模板
 
 ```
-chore: 加 LLM messages 诊断 dump（HAGOKU_DUMP_LLM=1 开关）
+fix: 任务 G（或 H / I）— <精简标题>
 
-Issue：阶段 3 前置诊断（本 spec §4）
-范围：仅加观测，不改业务逻辑。诊断完成后整体删除。
+Issue：阶段 3 Tier 1（本 spec §5.1）修 P1 / P3 / P4 之一
+范围：只动 spec 点名的文件，不越茂
 
 【自检】判断：LLM 拿到分析目标和数据后能自己判断 [X] 吗？
-答案：N/A — 本次只加观测，不改决策路径
+答案：<能 → 不写规则 / 不能 → 代码的活>
 ```
 
 ---
@@ -199,107 +203,178 @@ ls .hagoku/llm_dumps/<run_id>/  # 期望看到 4-6 份 JSON
 
 ---
 
-## 5. 第 1 步：阶段 3 范围（候选：A + D + F）
+## 5. 第 1 步：阶段 3 范围（已重写）
 
-> ⚠️ 确认范围前必须先完成 §4 诊断。本节仅是当前最可能的方向，dump 结果可能调整任务取舍。
+> **重要**：本节于 2026-06-01 根据诊断 case 重写。原候选范围 A+D+F 使命宣告废弃。诊断 case 中 Cleaner 被发现已接入 ProjectContext，但 build_prompt 本身有 3 处设计缺陷 + Cleaner 拼装有 1 处遗漏。本阶段范围重定向为「修 build_prompt + Cleaner tool_calls 协议」。
 
-### 5.1 任务 A：Cleaner 接入 ProjectContext.build_prompt
+### 5.1 Tier 1：直接解决用户两个困惑的修复
 
-**目标**：Cleaner 启动时看到 Scout 阶段用户与 LLM 的全部对话记忆。
+#### 任务 G：修复 messages_history 顺序错乱（P1）
 
-**改动**：
+**现状**：`add_agent_response` 在 `_apply_scout_reply_with_llm` 函数内写入（L1077），早于函数返回后 emit 的 `USER_INPUT_RECEIVED`（约 L2290）。entries 中 agent_response 永远在 user_feedback 之前 → build_prompt 输出 `assistant×2 → user×2` 序列。
 
-- `hagoku/agents/cleaner/agent.py`
-  - `cleaner_dialogue` 入口：注入 `_project_context`（从 context dict 取）
-  - 调 `project_ctx.build_prompt("cleaner", context)` 得到 `{system_prefix, upstream_summary, messages_history}`
-  - 用 system_msg + system_prefix + upstream_summary 拼 system role；展开 messages_history
-  - 兼容旧路径：`if project_ctx is None` 走最小降级 + warning（参考 Scout 现写法）
+**修法二选一**：
 
-- `hagoku/manager/orchestrator.py`
-  - 调 cleaner 前确保 `context["_project_context"]` 已注入（Scout 路径已有，Cleaner 路径需补）
+- **G1（推荐，改时序）**：将 `_apply_scout_reply_with_llm` 内部 `add_agent_response` 从函数内移出。改为：orchestrator 主环以 `USER_INPUT_RECEIVED → 函数调用 → AGENT_COMPLETED` 顺序控制。让 EventBus 事件顺序反映真实对话顺序。
+- **G2（保守，不改时序，改 build_prompt）**：在 `ProjectContext.build_prompt` 中对 entries 做 `user/assistant` 配对重排（同 revision 内 user 在前 assistant 在后）。
 
-### 5.2 任务 D：upstream_summary 真正被消费
+**选择**：G1。G2 是掌责补丁，变量同步不严谨的设计愿望在远期会复响。
 
-**目标**：build_prompt 输出的 upstream_summary 字段不再是死代码。
+#### 任务 H：修复 Cleaner tool_calls 协议违反（P4 —— 「白痴」的真现行犯）
 
-**已具备**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:155-169` 已计算
-
-**待办**：在 A 落地的同时，确保 Cleaner 的 system role 拼接 upstream_summary。Scout 阶段不需要（无上游）。
-
-### 5.3 任务 F：退役 `_conversation_history`
-
-**目标**：消除并行通道，ProjectContext 单一权威。
+**现状**：`@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:616` 把 tool_calls 序列化为字符串 `"[调用] {fn.name}({fn.arguments})"` 塑进 conv_history。下一轮 LLM 看到中文串但看不到 tool_call 结果。LLM 认为「以前调过 submit_assessment 但没看到返回」→ 反复调用、反复探索、表现「白痴」。
 
 **改动**：
 
-- 移除 `hagoku/agents/cleaner/agent.py:574, 608, 624` 处对 `_conversation_history` 的读写
-- 移除 `hagoku/manager/orchestrator.py:961` 的同名引用
-- doctrine 守门测试 `tests/test_doctrine_compliance.py` 加新条目：`_conversation_history` 字面量不得残留（如 `_session_messages` 已守门）
+- `cleaner_dialogue` 内部重写 messages 累积逻辑：
+  - 保留 LLM 返回的原始 assistant message（含 `tool_calls` 字段，不要序列化）
+  - 工具返回值以 `{"role": "tool", "tool_call_id": tc.id, "content": result_json}` 形式追加
+  - 下一轮调用时完整透传给 OpenAI
+- 删除二次处理逻辑 `"[调用] xxx({json})"` 字符串拼接
+
+**验收指标**：同一任务不再出现 LLM 重复调用 `submit_assessment` ；工具返回值出现在 dump messages 中。
+
+#### 任务 I：build_prompt upstream_summary 增加上游用户原话（P3 设计层修复）
+
+**现状**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190` 的 upstream_summary 只取 `agent_response.snapshot` 结构化字段（target / features / pending），**不传上游 user_feedback 原话**。下游 Agent 一个字都看不到用户说过什么。
+
+**改动**：`build_prompt` 拼装 upstream_summary 时，除 agent_response 结构化摘要外，加入上游阶段的关键 user_feedback 原话（以 raw_user_text 取原始，不刪减）。建议格式：
+
+```
+【上游阶段摘要】
+scout 阶段完成: target=Inc1, features=['BU','Code','Period']
+
+【上游用户原话】
+(scout) BU 代表的是公司，Code 才是店铺的编码，…
+(scout) 本次参与分析的应该是店铺、周期、收入3个字段…
+```
+
+**限制**：上游原话只取关键轮（含重点关键词的 user_feedback，可以先全部传，估评体量后再决定是否限后 N 条）。
+
+### 5.2 Tier 2：设计层修复
+
+#### 任务 J：upstream_summary 去重（P2）
+
+**现状**：upstream_summary 重复 5 次「scout 阶段完成: target=Inc1, features=[...]」。每轮 Scout reply 都生一条 agent_response → 全部展开。
+
+**改动**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190` 使用 OrderedDict + key（stage + snapshot 摘要哈希）去重；**或者**按 stage 分组仅取最后一条 snapshot 生成摘要。
+
+**选择**：后者（每 stage 取最后一条）——状态是递进的，只需最新快照。
+
+#### 任务 K：agent_response.content 记录 LLM 实际输出（P6）
+
+**现状**：`@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:1083` 只记 `applied_summary`（「无字段更新」/「BU←公司」这种摘要）。LLM 实际调的 tool_calls / 思考全部丢。
+
+**改动**：agent_response.content 同时保留 LLM 原始 assistant turn（含 raw_text + tool_calls）。拆为两个字段或考虑为 entry 加 `tool_calls` 结构化字段。
+
+**依赖**：H 在 Cleaner 侧已设计不序列化 tool_calls，本任务是在 ProjectContext 侧同步设计。
+
+### 5.3 Tier 3：清理
+
+#### 任务 F（原 spec）：退役 `_conversation_history`
+
+**现状**：Cleaner system 已走 build_prompt，但 messages 拼装仍循环 `conv_history[-6:]`。H 完成后顺手退役。
+
+**改动**：
+
+- `cleaner_dialogue` 拼装改为用 `ctx_block["messages_history"]` 展开，删除 `conv_history` 逻辑
+- 同步删 `hagoku/manager/orchestrator.py:961` 引用
+- `tests/test_doctrine_compliance.py` 加守门：`_conversation_history` 字面量不得出现于 `hagoku/agents/` 和 `hagoku/manager/`
+
+#### 任务 L（低优）：system 字段信息三段重叠（P7）
+
+**现状**：system 中 target / features 出现 7 次（字段表 + 显式标注 + upstream_summary×5）。
+
+**改动**：J 完成后重复度会从 7 降到 3；如需进一步裁减，删「目标变量 / 特征变量」两行（信息在字段表中已含）。可选。
 
 ### 5.4 暂不做（推迟阶段 4+）
 
-- Analyst 接入：模式可能不同，等 Cleaner 验证后再判断
-- Reporter 接入：低优先
+- Analyst / Reporter 接入：等 Cleaner 验证 G/H/I 修法实际效果后再判断
 - 崩溃恢复持久化：与本次困惑无关
+- Scout `_infer_all_semantics` 接入 build_prompt：已 analysis_goal_section 兜底，当前可接受
 
 ---
 
-## 6. 第 2 步：跨阶段衔接守门测试
+## 6. 第 2 步：跨阶段衔接守门测试（验收硬指标）
 
-新增 `tests/test_product/test_stage_handoff.py`，至少包含：
+新增 `tests/test_product/test_stage_handoff.py`，包含以下 5 条：
 
 ```python
-def test_律3跨阶段_cleaner看到scout用户原话():
-    """Cleaner 启动时 LLM 调用的 messages 中应包含 Scout 阶段的关键用户反馈。
+# ===== Tier 1 验收（3 条必备）=====
 
-    场景：用户在 Scout 阶段说「Code 是店铺编号，不参与分析」
-    断言：进入 Cleaner 后，第一次 LLM 调用 messages_history 或 upstream_summary
-          中存在该原话或其结构化摘要。
-    """
-    # 用 LLMSpy 拦截 Cleaner 的 client.chat.completions.create
-    # 跑通 Scout 字段评审 → emit AGENT_COMPLETED → 进 Cleaner
-    # 断言 LLMSpy.last_messages 含目标信息
+def test_messages_history_顺序_user_assistant_交替():
+    """任务 G 验收：scout 用户连续 2 轮反馈后，第 3 轮 build_prompt 输出的 messages_history
+    严格按 user → assistant → user → assistant 交替顺序。不能出现 assistant×2 → user×2。"""
+    # 构造 ProjectContext，按真实时序 emit USER_INPUT_RECEIVED + AGENT_COMPLETED
+    # 断言 build_prompt("scout", context)["messages_history"] 顺序严格交替
 
 
-def test_律5_cleaner不读_conversation_history():
-    """守门：F 任务完成后，Cleaner 路径不再依赖 _conversation_history。"""
-    # 启动 cleaner_dialogue 但 context 中无 _conversation_history 键
-    # 期望不报错、能正常运行（数据来自 ProjectContext）
+def test_cleaner_看到_scout_用户原话():
+    """任务 I 验收：scout 阶段用户说「只用店铺、周期、收入 3 个字段」，进入 Cleaner 后
+    LLM 首次调用 messages 中含该原话（或 ±8 个字的子串）。"""
+    # LLMSpy 拦截 Cleaner client
+    # 断言 system 或 messages_history 中出现该原话子串
 
 
-def test_upstream_summary有内容_当下游agent调用buildprompt():
-    """A + D 联合守门：Cleaner 调 build_prompt 时 upstream_summary 非空。"""
-    # 构造 ProjectContext，scout 阶段已 add_agent_response
-    # ctx.build_prompt("cleaner", context)["upstream_summary"] 应含 scout 摘要
+def test_cleaner_tool_calls_协议合法():
+    """任务 H 验收：Cleaner 多轮 dialogue 后，messages 中任何 assistant turn 含 tool_calls 的：
+      1) 使用 OpenAI tool_calls 结构字段，不是 content 字符串中存 '[调用] xxx({...})'。
+      2) 紧跟一条 role=tool message，携带 tool_call_id。
+    同任务下 LLM 不重复调用 submit_assessment 超过 1 次。"""
+    # 构造 Cleaner 多轮调用，检查 messages 结构
+
+
+# ===== Tier 2 验收（2 条）=====
+
+def test_upstream_summary_不重复():
+    """任务 J 验收：scout 阶段 add_agent_response 5 次后，Cleaner 调 build_prompt 输出的
+    upstream_summary 中 'scout 阶段完成' 只出现 1 次。"""
+    # 构造 5 次 add_agent_response
+    # 断言 upstream_summary.count('scout 阶段完成') == 1
+
+
+def test_agent_response_含_LLM_原始输出():
+    """任务 K 验收：_apply_scout_reply_with_llm 调用后，entries 中最新一条 agent_response
+    的字段含 LLM 原始 tool_calls 信息，不是仅「无字段更新」这种摘要。"""
+    # Spy 返回 tool_calls，验证 entry.content 或新增字段保留原始信息
 ```
 
-**这三条是阶段 3 验收硬指标**——任一未过不能合并。
+**Tier 1 三条必过才能合并。Tier 2 两条验收设计层修复**。
+
+另需修复 1 个独立问题：
+
+- **孤儿测试**：`tests/test_product/test_information_arrival.py:149` 仍 import `_detect_user_intent_via_llm`（已在 commit 1d30f5a 被删）——修复或删除该测试
 
 ---
 
 ## 7. 不做什么（边界）
 
 - 不重构 system_msg 文本本身（属 prompt 工程，与通道无关）
-- 不改 ProjectContext 数据模型（律 5 已稳定）
-- 不动 EventBus 订阅机制
+- 不动 EventBus 订阅机制（G 任务仅调整 emit 顺序，不改 subscribe 逻辑）
 - 不引入持久化（阶段 4+ 工作）
 - 不改 Analyst / Reporter（待 Cleaner 验证后决策）
+- 不补丁 Scout `_infer_all_semantics`（analysis_goal_section 兜底已够用）
+- 任务 K 可能需调整 ProjectContextEntry 数据模型（增加 `tool_calls` 字段），是本阶段唯一允许的模型变动
 
 ---
 
 ## 8. 实施步骤总览
 
 ```
-[ ] 1. 开发实施 §4：加 llm_dump.py + 4 处 hook（HAGOKU_DUMP_LLM=1 开关）
-[ ] 2. 开发跑一次真实场景（test0526 类型）→ 把 dump 文件交给审查方
-[ ] 3. 审查方填写 docs/cases/2026-06-01-stage3-channel-pollution.md
-[ ] 4. 审查方根据 case 调整 §5 任务取舍（确认 A/D/F 是否仍合理）
-[ ] 5. 开发实施 A + D + F
-[ ] 6. 开发实施 §6 三条守门测试
-[ ] 7. 审查方做最终审查 → 合并
+[✅] 1. 开发实施 §4：加 llm_dump.py + 4 处 hook
+[✅] 2. 开发跑一次真实场景 → 交付 7 份 dump
+[✅] 3. 审查方填写 docs/cases/2026-06-01-stage3-channel-pollution.md
+[✅] 4. 审查方重写阶段 3 范围（本 spec §5 / §6）
+[ ] 5. 开发实施 Tier 1：G → H → I（3 个任务顺序独立完成，每个任务一次 commit + 审查方 review）
+[ ] 6. 开发实施 Tier 2：J + K
+[ ] 7. 开发实施 Tier 3：F（退役 conv_history）+ L（如需）
+[ ] 8. 开发实施 §6 五条守门测试
+[ ] 9. 开发补丢失测试：修/删 test_information_arrival.py:149 孤儿 import
+[ ] 10. 再跑一次 HAGOKU_DUMP_LLM=1 场景 → 交新 dump
+[ ] 11. 审查方对比新旧 dump 证明 7 项问题都修了 → 合并、删除 llm_dump 环境开关代码
 ```
 
-每一步完成后由审查方批准才进入下一步。
+每个 Tier 完成后由审查方批准才进入下一个。不要一口气做完所有任务。
 
 ---
 

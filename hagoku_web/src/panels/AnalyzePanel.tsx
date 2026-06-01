@@ -381,10 +381,10 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
         <caption className="sr-only">字段理解核对</caption>
         <thead>
           <tr className="bg-app-bg/50 border-b border-app-border">
-            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[12%]">字段</th>
-            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[14%]">中文名称</th>
-            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[40%]">含义理解</th>
-            <th className="px-3 py-2 font-medium text-left w-[34%]">参与分析</th>
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-24">字段</th>
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-28">中文名称</th>
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border">含义理解</th>
+            <th className="px-3 py-2 font-medium text-left" style={{minWidth: 180}}>参与分析</th>
           </tr>
         </thead>
         <tbody>

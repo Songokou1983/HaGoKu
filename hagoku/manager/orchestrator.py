@@ -858,9 +858,8 @@ def _apply_restrict_analysis_to(
         s["needs_user_input"] = False
         applied.append(f"{col}:[used_in_analysis]←{'true' if target else 'false'}")
 
-    # 触发重推断信号（律 9）
-    context["_pending_reinference"] = True
-    applied.append("[signal]_pending_reinference←true")
+    # 不触发 _pending_reinference：restrict_analysis_to 是用户显式限定字段范围，
+    # 非结构性角色变更。触发 LLM 重推断会覆盖用户刚设定的 used_in_analysis。
 
 
 def _apply_scout_reply_with_llm(

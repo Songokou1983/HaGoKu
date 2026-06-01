@@ -2253,8 +2253,8 @@ class Orchestrator:
                             if context["_pending_command_text"]:
                                 context["_pending_command_text"] += "\n"
                             context["_pending_command_text"] += cmd_result
-                        # 对齐判定：所有字段 needs_user_input=False → 自动进入下一阶段
-                        if _is_scout_aligned(context):
+                        # 对齐判定：至少一轮交互 + 所有字段 resolved → 自动进入下一阶段
+                        if interaction_revision > 0 and _is_scout_aligned(context):
                             break
                         interaction_revision += 1
 

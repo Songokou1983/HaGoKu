@@ -294,6 +294,16 @@ Analyst / Reporter 同样几行改动，位置同上表。
 2. **Reporter caller**：`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425` 改为 `self._call_llm(system=system, user=user_prompt, messages_history=ctx_block["messages_history"] if project_ctx else None)`（注意 `ctx_block` 此时作用域）。
 3. **守门测试**：新增 `test_下游_agent_实际注入_messages_history`，monkeypatch `chat.completions.create` 截 `messages=` 参数，分别触发 cleaner/analyst/reporter 拼装路径，断言截获 messages 含 `messages_history` 条目。原 `test_下游_agent_注入_messages_history` 测 `build_prompt`，可保留但改名 `test_build_prompt_messages_history_分组` 或移至 `tests/test_context/`。
 
+**第二次重做指引（2026-06-01，commit 7a522fb 又出 Bug 4 + 覆盖缺口）**：
+
+第二次提交修对了 Analyst 与 Cleaner 守门，但 Reporter caller `rpt_history` 变量从未定义（`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425`），运行时必 `NameError`；守门测试只 spy 了 Cleaner，未覆盖 Analyst / Reporter，故 Bug 4 被「未覆盖路径」遮蔽。重做要点：
+
+1. **Reporter rpt_history 初始化**：在 `project_ctx` 分支外预置 `rpt_history: list[dict] = []`，分支内赋值 `rpt_history = ctx_block.get("messages_history", [])`，确保 caller 处变量永远已定义。
+2. **守门参数化**：把 `test_下游_agent_实际注入_messages_history` 改为 `@pytest.mark.parametrize("agent_key", ["cleaner", "analyst", "reporter"])`，三 Agent 各跑一次。Cleaner / Analyst spy `hagoku.llm.client.create_raw_client`；Reporter 走 `self._llm_client`，需要单独 monkeypatch 其客户端实例的 `chat.completions.create`。
+3. **反向自验**：故意删 Analyst 的 `_analyst_messages.extend(...)` → analyst 守门必 fail；删 Reporter 的 `messages_history=rpt_history` 传参 → reporter 守门必 fail。两边都验证后再提交。
+
+**机制改进（提交后另起 issue 跟进）**：横切关注点（如律 3 messages_history 必传）的守门测试必须**穷举所有应遵守的 Agent**，单 Agent 测试不构成横切守门。建议把此规则上升到 CLAUDE.md 或 spec §6 验收规则。
+
 ### 5.2 Tier 2：设计层修复
 
 #### 任务 J：upstream_summary 去重（P2）— ✅ 已随任务 I 完成

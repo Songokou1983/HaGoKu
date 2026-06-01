@@ -446,3 +446,48 @@ assert len(mh) >= 2, ...
 
 补 Analyst extend、补 Reporter caller 参数、新增 spy LLM client 真守门测试。详见 spec §5.1 任务 M 重做指引。
 
+---
+
+## 任务 M 第二次提交（commit 7a522fb）审查 — 🟡 部分通过 + Bug 4 + 覆盖缺口（2026-06-01）
+
+### ✅ 通过项
+
+- Analyst 真改对：`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:879-883` 用 `_analyst_messages` 拼装含 `messages_history.extend`
+- Cleaner 守门测试可证伪：用「锚点_确认_A/B」字符串锚点，删 extend 必 fail
+- 旧测试改名 `test_build_prompt_messages_history_分组` 归位
+- 38 测试全绿
+
+### ❌ Bug 4：Reporter `rpt_history` 未定义 — 运行时 NameError
+
+`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-425`：
+
+```python
+project_ctx = context.get("_project_context")
+if project_ctx:
+    ctx_block = project_ctx.build_prompt("reporter", context)
+    system += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+…
+response = self._call_llm(system=system, user=user_prompt, messages_history=rpt_history)
+```
+
+**`rpt_history` 从未赋值**，全文件只有 L425 一处提到该名字。Reporter 每次跑都会 `NameError: name 'rpt_history' is not defined`。
+
+测试全绿是因为**没有任何测试触发 Reporter LLM 路径**——bug 被「未覆盖」遮蔽。
+
+### ⚠️ 覆盖缺口
+
+守门测试 `test_下游_agent_实际注入_messages_history` 只 spy 了 Cleaner，**Analyst 与 Reporter 没有真守门**。这正是 Bug 4 没被测试抓到的根因。
+
+### 反思与机制改进
+
+「测试全绿」≠「代码正确」，仅意味着「测试覆盖到的路径正确」。本次重做引入了 Bug 4 + 覆盖缺口同时发生，二者互相掩护：
+
+- 如有 Reporter 真守门 → Bug 4 必被抓到（spy 调用前就 NameError）
+- 如无 Bug 4 → 覆盖缺口仅暴露为「Reporter 改动无验证」，相对低危
+
+教训：**律 3 这种横切关注点的守门测试必须参数化覆盖所有应遵守的 Agent**，否则等于只测了 1/3。建议把「Agent 横切关注点测试必须穷举所有 Agent」上升到 CLAUDE.md 守则或 spec §6 验收规则。
+
+### 修法
+
+详见 spec §5.1 任务 M「第二次重做指引」。范围：Reporter rpt_history 初始化 + 守门测试参数化为 cleaner/analyst/reporter 三 Agent。
+

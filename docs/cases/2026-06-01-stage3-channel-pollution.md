@@ -372,3 +372,39 @@ Cleaner dump 005-007 每次都是 `system → user(intro)` 两条消息，无对
 | H' | ❌ 需修 |
 
 **下一步**：H' 修复 + 进入 Tier 2。
+
+---
+
+## 命名澄清 + 任务 J 升 Tier 1（2026-06-01 review）
+
+### 命名澄清
+
+- **原 H'**（spec §5.1 任务 H 末尾备注）：单次 LLM response 多 tool_calls 时被拆成 N 个 assistant turn、`txt` 复制 N 次。当前 dump 在 `for _round` 循环之外只打一次，无法证伪，**暂搁置**。
+- **本次 dump 验收发现**的「Cleaner 跨调用无对话累积」是**另一个独立问题**，正式命名为**任务 J**，与 H' 解耦。
+
+### 任务 J — Cleaner / Analyst / Reporter 丢弃 `messages_history`（系统性违反律 3）
+
+#### 现行犯
+
+`cleaner_dialogue` 入口 dump（005/006/007）三次独立 `assess()` 调用 messages 永远是 `[system, user_intro]`，跨轮不累积。根因是 `build_prompt` 算出来的 `ctx_block["messages_history"]` 被丢弃。
+
+#### 旁路扫描结果
+
+| Agent | 文件位置 | 是否展开 `messages_history` |
+|-------|---------|---------------------------|
+| Scout | `@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:921-927` | ✅ |
+| Cleaner | `@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:579-580` | ❌ |
+| Analyst | `@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:874-875` | ❌ |
+| Reporter | `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-418` | ❌ |
+
+四个 Agent 中三个违反律 3。这是 ProjectContext 接入时的统一遗漏，不是 Cleaner 单点 bug。
+
+#### 影响
+
+- 用户在 Cleaner 阶段做第 2 轮反馈时，第 2 次 `assess()` 看不到第 1 轮用户/助手对话 → 直接对应「LLM 变白痴」用户主诉。
+- Analyst / Reporter 同病。
+
+#### 修法
+
+详见 spec §5.1 任务 J。范围：3 个 Agent 文件 + 守门测试。
+

@@ -258,15 +258,39 @@ scout 阶段完成: target=Inc1, features=['BU','Code','Period']
 
 **限制**：上游原话只取关键轮（含重点关键词的 user_feedback，可以先全部传，估评体量后再决定是否限后 N 条）。
 
+#### 任务 M：Cleaner / Analyst / Reporter 注入 `messages_history`（升 Tier 1，2026-06-01 dump 验收发现）
+
+**现状**：四个下游 Agent 中仅 Scout 在 `@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:921-927` 展开 `*ctx_block["messages_history"]`，其余三个仅拼 system_prefix + upstream_summary，丢弃 `ctx_block["messages_history"]`：
+
+- `@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:579-580` ❌
+- `@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:874-875` ❌
+- `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-418` ❌
+
+**证据**：Tier 1 后 dump 005/006/007 三次独立 `assess()` 调用 messages 永远是 `[system, user_intro]`，跨轮不累积 → 直接对应「LLM 变白痴」用户主诉。
+
+**改动**：三个 Agent 拼 messages 时 展开 `messages_history`。指导示意（Cleaner）：
+
+```python
+messages: list[dict[str, Any]] = [{"role": "system", "content": cleaning_rules.strip()}]
+if project_ctx:
+    ctx_block = project_ctx.build_prompt("cleaner", context)
+    messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
+    messages.extend(ctx_block["messages_history"])  # 律 3
+intro = ...
+messages.append({"role": "user", "content": intro})
+```
+
+Analyst / Reporter 同样几行改动，位置同上表。
+
+**零硬编码自检**：messages_history 是 ProjectContext 已组装好的标准 messages list，Agent 只「全量透传」，不解读、不裁剪、不重排 — 通道行为，不是规则。
+
+**验收指标**：重跑 dump，Cleaner / Analyst / Reporter 在同阶段第 2 次 LLM 调用的 messages 含上一轮 user/assistant 对话。
+
 ### 5.2 Tier 2：设计层修复
 
-#### 任务 J：upstream_summary 去重（P2）
+#### 任务 J：upstream_summary 去重（P2）— ✅ 已随任务 I 完成
 
-**现状**：upstream_summary 重复 5 次「scout 阶段完成: target=Inc1, features=[...]」。每轮 Scout reply 都生一条 agent_response → 全部展开。
-
-**改动**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190` 使用 OrderedDict + key（stage + snapshot 摘要哈希）去重；**或者**按 stage 分组仅取最后一条 snapshot 生成摘要。
-
-**选择**：后者（每 stage 取最后一条）——状态是递进的，只需最新快照。
+诊断发现 P2 实现与 P3 同位置，任务 I 重写 `build_prompt` upstream_summary 拼装时顺手修了去重逻辑（`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:181-194`，`reversed + seen_stages + insert(0)`）。Tier 1 dump 验收后 P2 5→1 。保留本节作为此决策留纪录。
 
 #### 任务 K：agent_response.content 记录 LLM 实际输出（P6）
 
@@ -296,7 +320,7 @@ scout 阶段完成: target=Inc1, features=['BU','Code','Period']
 
 ### 5.4 暂不做（推迟阶段 4+）
 
-- Analyst / Reporter 接入：等 Cleaner 验证 G/H/I 修法实际效果后再判断
+- Analyst / Reporter 接入：等 Cleaner 验证 G/H/I 修法实际效果后再判断【说明】任务 M 仅补齐 messages_history 注入，本条原意指 system 文本工程与 prompt 深化，仍沿用
 - 崩溃恢复持久化：与本次困惑无关
 - Scout `_infer_all_semantics` 接入 build_prompt：已 analysis_goal_section 兜底，当前可接受
 
@@ -329,6 +353,12 @@ def test_cleaner_tool_calls_协议合法():
       2) 紧跟一条 role=tool message，携带 tool_call_id。
     同任务下 LLM 不重复调用 submit_assessment 超过 1 次。"""
     # 构造 Cleaner 多轮调用，检查 messages 结构
+
+
+def test_下游_agent_注入_messages_history():
+    """任务 M 验收：构造 ProjectContext 含 2 轮同阶段 user_feedback + agent_response，
+    调用 cleaner / analyst / reporter 拼装逻辑（或 e2e），断言各自 LLM messages 含这 2 轮且顺序与 build_prompt 一致。"""
+    # 覆盖 cleaner / analyst / reporter 三个 Agent
 
 
 # ===== Tier 2 验收（2 条）=====

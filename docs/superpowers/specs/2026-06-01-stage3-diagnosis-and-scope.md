@@ -234,6 +234,13 @@ ls .hagoku/llm_dumps/<run_id>/  # 期望看到 4-6 份 JSON
 
 **验收指标**：同一任务不再出现 LLM 重复调用 `submit_assessment` ；工具返回值出现在 dump messages 中。
 
+**Follow-up H'（低优，不阻塞 Tier 1）**：当前实现（`@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:617-630`）在循环中按每个 `tool_call` 各 append 一个 `assistant` message + 一个 `tool` message，导致：
+
+- 同一次 LLM response 被拆成 N 个 assistant turn（应为 1 个含 N tool_calls 的 turn）
+- `txt` 内容被复制 N 次，浪费上下文 token
+
+OpenAI 协议接受这种结构（每对 assistant/tool 自洽），所以 H 主验收指标不受影响。但与「一次 LLM response = 一个 assistant turn」的最佳实践有距离。Tier 1 全部完成后跑新 dump，如果 dump 仍显示 `txt` 重复或上下文压力，再修为：1 个 assistant message 含全部 tool_calls + 紧跟 N 个 tool messages。修法约 5 行。
+
 #### 任务 I：build_prompt upstream_summary 增加上游用户原话（P3 设计层修复）
 
 **现状**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190` 的 upstream_summary 只取 `agent_response.snapshot` 结构化字段（target / features / pending），**不传上游 user_feedback 原话**。下游 Agent 一个字都看不到用户说过什么。

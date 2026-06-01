@@ -194,6 +194,7 @@ def _detect_user_intent_via_llm(
     *,
     stage: str = "confirm",
     extra_context: str = "",
+    channel_logger: Any = None,
 ) -> bool:
     """用 LLM 判断用户意图：True = 确认/放行，False = 有修改/补充内容。
 
@@ -229,6 +230,9 @@ def _detect_user_intent_via_llm(
             f"用户输入：{user_reply}\n\n"
             f"判断意图：confirm=用户确认当前结果、同意继续推进；modify=用户有修改意见、补充信息或不同意见。"
         )
+        if channel_logger:
+            channel_logger.log("manager", "intent_llm_call", model=llm_model, stage=stage)
+
         resp = llm_client.chat.completions.create(
             model=llm_model,
             messages=[
@@ -241,7 +245,10 @@ def _detect_user_intent_via_llm(
         )
         content = (resp.choices[0].message.content or "").strip()
         parsed = _json.loads(content)
-        return parsed.get("intent") == "confirm"
+        result = parsed.get("intent") == "confirm"
+        if channel_logger:
+            channel_logger.log("manager", "intent_result", raw=user_reply, content=content, intent="confirm" if result else "modify")
+        return result
     except Exception:
         # LLM 不可用 → 安全默认值：视为有修改内容，
         # 确保用户输入不会被静默丢弃。
@@ -1608,6 +1615,7 @@ class Orchestrator:
             llm_model=self.config.llm.model_quick or self.config.llm.model,
             stage=stage,
             extra_context=extra_context,
+            channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None,
         )
 
     def _pause_and_wait(self, agent: str, payload: str | dict[str, Any], timeout: float = 300.0) -> str:

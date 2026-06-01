@@ -10931,3 +10931,134 @@ knowledge:
     confidence: 1.0
   created_at: '2026-06-01 15:30:15'
   use_count: 0
+- id: 1063fe36
+  content: 字段名：业务单元，代表公司维度，用于区分不同公司所属的店铺；含义：业务单元，代表公司维度，用于区分不同公司所属的店铺；数据特征：categorical
+    5个唯一值（B01~B05），各值频次差异明显（B01=225最多，B03=25最少），符合业务单元/公司维度的分类特征；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0601
+    field: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    meaning: 业务单元，代表公司维度，用于区分不同公司所属的店铺
+    data_pattern: categorical 5个唯一值（B01~B05），各值频次差异明显（B01=225最多，B03=25最少），符合业务单元/公司维度的分类特征
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:10'
+  use_count: 0
+- id: 996f7017
+  content: 字段名：每个店铺的唯一编码，用于标识和分析单个店铺；含义：每个店铺的唯一编码，用于标识和分析单个店铺；数据特征：id 25个唯一编码（A0000001~A0000025），每个编码恰好出现25次（25个周期×25个店铺=620行），是店铺的唯一标识；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0601
+    field: 每个店铺的唯一编码，用于标识和分析单个店铺
+    meaning: 每个店铺的唯一编码，用于标识和分析单个店铺
+    data_pattern: id 25个唯一编码（A0000001~A0000025），每个编码恰好出现25次（25个周期×25个店铺=620行），是店铺的唯一标识
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:11'
+  use_count: 0
+- id: fa1d7b9a
+  content: 字段名：数据统计的时间周期，；含义：数据统计的时间周期，；数据特征：datetime int64类型，范围202540~202612，前4位为年份、后2位疑似周次号，共25个唯一周期，25行/周期，是数据统计的时间维度；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 数据统计的时间周期，
+    meaning: 数据统计的时间周期，
+    data_pattern: datetime int64类型，范围202540~202612，前4位为年份、后2位疑似周次号，共25个唯一周期，25行/周期，是数据统计的时间维度
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:12'
+  use_count: 0
+- id: fce62ca1
+  content: 字段名：各店铺在统计周期内的营业收入，；含义：各店铺在统计周期内的营业收入，；数据特征：numeric float64类型，619个唯一值接近总行数620，均值约59.7，分布右偏（中位数16远小于均值），是分析目标"收入"的核心字段；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0601
+    field: 各店铺在统计周期内的营业收入，
+    meaning: 各店铺在统计周期内的营业收入，
+    data_pattern: numeric float64类型，619个唯一值接近总行数620，均值约59.7，分布右偏（中位数16远小于均值），是分析目标"收入"的核心字段
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:13'
+  use_count: 0
+- id: 57bf1129
+  content: 字段名：店铺获取的积分数据，与费用挂钩；含义：店铺获取的积分数据，与费用挂钩；数据特征：numeric float64类型，615个唯一值，范围0~296.3，与Inc1相关但含义不同，代表积分数据而非货币收入；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 店铺获取的积分数据，与费用挂钩
+    meaning: 店铺获取的积分数据，与费用挂钩
+    data_pattern: numeric float64类型，615个唯一值，范围0~296.3，与Inc1相关但含义不同，代表积分数据而非货币收入
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:15'
+  use_count: 0
+- id: 6b673f7b
+  content: 字段名：与积分挂钩的第一种费用支出；含义：与积分挂钩的第一种费用支出；数据特征：numeric float64类型，253个唯一值，范围0~175.25，属于费用类支出而非收入；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第一种费用支出
+    meaning: 与积分挂钩的第一种费用支出
+    data_pattern: numeric float64类型，253个唯一值，范围0~175.25，属于费用类支出而非收入
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:16'
+  use_count: 0
+- id: 8e183abc
+  content: 字段名：与积分挂钩的第二种费用支出；含义：与积分挂钩的第二种费用支出；数据特征：numeric float64类型，202个唯一值，范围0~5.46，数值远小于Bos1，属于另一类费用支出；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第二种费用支出
+    meaning: 与积分挂钩的第二种费用支出
+    data_pattern: numeric float64类型，202个唯一值，范围0~5.46，数值远小于Bos1，属于另一类费用支出
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:17'
+  use_count: 0
+- id: 0df14e20
+  content: 字段名：与积分挂钩的第三种费用支出；含义：与积分挂钩的第三种费用支出；数据特征：numeric float64类型，373个唯一值，范围0~6.69，Q1=0存在较多零值，属于第三类费用支出；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0601
+    field: 与积分挂钩的第三种费用支出
+    meaning: 与积分挂钩的第三种费用支出
+    data_pattern: numeric float64类型，373个唯一值，范围0~6.69，Q1=0存在较多零值，属于第三类费用支出
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-01 15:41:18'
+  use_count: 0
+- id: 1e0a32ab
+  content: 字段名：可能表示统计周期（按周），从 2025 年第 40 周延续到 2026 年第 12 周，共 25 个时间点，是分析"变动趋势"的时间轴。；含义：可能表示统计周期（按周），从
+    2025 年第 40 周延续到 2026 年第 12 周，共 25 个时间点，是分析"变动趋势"的时间轴。；数据特征：datetime 整数型，25 个唯一值，范围
+    202540~202612，样本值 202540、202541…202612 形如"YYYYWW"（年份+周序号）：2025 W40~W52 共 13 周
+    + 2026 W01~W12 共 12 周 = 25 个周；是时间维度。；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0601
+    field: 可能表示统计周期（按周），从 2025 年第 40 周延续到 2026 年第 12 周，共 25 个时间点，是分析"变动趋势"的时间轴。
+    meaning: 可能表示统计周期（按周），从 2025 年第 40 周延续到 2026 年第 12 周，共 25 个时间点，是分析"变动趋势"的时间轴。
+    data_pattern: datetime 整数型，25 个唯一值，范围 202540~202612，样本值 202540、202541…202612 形如"YYYYWW"（年份+周序号）：2025
+      W40~W52 共 13 周 + 2026 W01~W12 共 12 周 = 25 个周；是时间维度。
+    inferred_role: feature
+    confidence: 0.88
+  created_at: '2026-06-01 15:45:38'
+  use_count: 0

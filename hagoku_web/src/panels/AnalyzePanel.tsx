@@ -52,6 +52,8 @@ interface FieldReviewPayload {
     chinese_name: string;
     /** AI 对字段的含义理解（column_descriptions 或语义兜底） */
     meaning: string;
+    /** LLM 对参与分析的判断原因 */
+    evidence?: string;
     /** 建议分析角色：target / feature / identifier（由 Scout 语义推断） */
     suggested_role: string;
     needs_attention?: boolean;
@@ -75,6 +77,7 @@ function parseFieldReview(raw: unknown): FieldReviewPayload | null {
       meaning: String(r.meaning ?? ""),
       suggested_role: String(r.suggested_role ?? "—"),
       needs_attention: Boolean(r.needs_attention),
+      evidence: String(r.evidence ?? ''),
         used_in_analysis: "used_in_analysis" in r ? (r.used_in_analysis === null ? null : Boolean(r.used_in_analysis)) : undefined,
     });
   }
@@ -465,7 +468,8 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.chinese_name}</td>
                 <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
                 <td className="px-2 py-1.5 text-center align-top break-words text-ui-sm">
-                  {r.used_in_analysis === true ? "✔" : ""}
+                  {r.used_in_analysis === true ? '是' : r.used_in_analysis === false ? '否' : '-'}
+                  {r.evidence ? <div className="text-ui-xs text-app-text-muted mt-0.5">{r.evidence}</div> : null}
                 </td>
               </tr>
             );

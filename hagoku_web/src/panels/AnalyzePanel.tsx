@@ -362,7 +362,8 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
           </ul>
         )}
       </div>
-      
+  );
+}
 
 function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
   const summaryLine = data.analysis_fields_summary

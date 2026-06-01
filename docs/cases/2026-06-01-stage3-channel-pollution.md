@@ -491,3 +491,21 @@ response = self._call_llm(system=system, user=user_prompt, messages_history=rpt_
 
 详见 spec §5.1 任务 M「第二次重做指引」。范围：Reporter rpt_history 初始化 + 守门测试参数化为 cleaner/analyst/reporter 三 Agent。
 
+
+
+---
+
+## M 任务完成后更新（2026-06-01 终）
+
+| 问题 | 状态 |
+|------|------|
+| P1 messages_history 顺序 | ✅ G 修复 |
+| P2 upstream_summary 重复 | ✅ I 顺带修复 |
+| P3 Cleaner 看不到上游原话 | ✅ I 修复 |
+| P4 tool_calls 协议 | ✅ H 修复 |
+| P5 conv_history 残留 | ✅ F 守门测试 |
+| P6 agent_response 内容空洞 | ⏸️ 任务 K 待做（需改函数签名） |
+| P7 字段信息重叠 | ⏸️ 任务 L 低优 |
+| M 下游 Agent messages_history | ✅ 三 Agent 全注入 + 守门测试 |
+
+剩余工作：K（Tier 2 设计层）、L（低优裁剪）、重跑 dump 验证

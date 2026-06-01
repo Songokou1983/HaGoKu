@@ -620,7 +620,7 @@ class ScoutAgent(InteractionMixin):
             f"{analysis_goal_section}"
             "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
             "1. 给每个字段一个中文名（display_name）\n"
-            "2. 判断是否参与本次分析（used_in_analysis）：对每个字段说明勾选或不勾选的原因，写在 evidence 里\n"
+            "2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段；与目标无关的设 suggested_role 为 ignore。勾选原因写在 evidence 里\n"
             "现在调用 submit_field_inference。\n"
             f"{knowledge_section}"
             f"{memory_notes}"

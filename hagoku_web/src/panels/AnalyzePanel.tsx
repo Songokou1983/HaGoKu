@@ -362,61 +362,7 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
           </ul>
         )}
       </div>
-      <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">清洗操作摘要</caption>
-        <colgroup>
-          <col className="w-[16%]" />
-          <col className="w-[18%]" />
-          <col className="w-[10%]" />
-          <col className="w-[56%]" />
-        </colgroup>
-        <thead>
-          <tr className="bg-app-bg border-b border-app-border">
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              列
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              策略
-            </th>
-            <th
-              scope="col"
-              title="该列被改写取值的行数（与删行影响率含义不同）"
-              className="px-2 py-2 font-medium text-center border-r border-app-border align-middle cursor-help"
-            >
-              影响行
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
-              说明
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.rows.length === 0 ? (
-            <tr>
-              <td colSpan={4} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
-                （无单独逐条操作记录）
-              </td>
-            </tr>
-          ) : (
-            data.rows.map((r, i) => (
-              <tr key={`${r.column}-${i}`} className="border-b border-app-border last:border-b-0">
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
-                  {r.column}
-                </td>
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
-                  {r.strategy}
-                </td>
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border tabular-nums">
-                  {r.rows_affected}
-                </td>
-                <td className="px-2 py-1.5 text-left align-top break-words">{r.reason}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+      
 }
 
 function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
@@ -431,49 +377,30 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
       <div className="px-3 py-2 border-b border-app-border text-ui-xs text-app-text-muted leading-snug">
         {summaryLine}
       </div>
-      <table className="w-full text-ui-sm border-collapse table-fixed">
-        <caption className="sr-only">字段理解核对：字段名称、中文名称、含义理解、参与分析</caption>
-        <colgroup>
-          <col className="w-[15%]" />
-          <col className="w-[15%]" />
-          <col className="w-[45%]" />
-          <col className="w-[25%]" />
-        </colgroup>
+      <table className="w-full text-ui-sm border-collapse">
+        <caption className="sr-only">字段理解核对</caption>
         <thead>
-          <tr className="bg-app-bg border-b border-app-border">
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              字段名称
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              中文名称
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
-              含义理解
-            </th>
-            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
-              参与分析
-            </th>
+          <tr className="bg-app-bg/50 border-b border-app-border">
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[12%]">字段</th>
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[14%]">中文名称</th>
+            <th className="px-3 py-2 font-medium text-left border-r border-app-border w-[40%]">含义理解</th>
+            <th className="px-3 py-2 font-medium text-left w-[34%]">参与分析</th>
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((r, i) => {
-            return (
-              <tr
-                key={`${r.field_name}-${i}`}
-                className="border-b border-app-border last:border-b-0"
-              >
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
-                  {r.field_name}
-                </td>
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.chinese_name}</td>
-                <td className="px-2 py-1.5 text-left align-top border-r border-app-border break-words">{r.meaning}</td>
-                <td className="px-2 py-1.5 text-center align-top break-words text-ui-sm">
+          {data.rows.map((r, i) => (
+            <tr key={`${r.field_name}-${i}`} className="border-b border-app-border/40 hover:bg-app-bg/30">
+              <td className="px-3 py-2 align-top border-r border-app-border/40 font-mono text-ui-xs">{r.field_name}</td>
+              <td className="px-3 py-2 align-top border-r border-app-border/40 font-medium">{r.chinese_name}</td>
+              <td className="px-3 py-2 align-top border-r border-app-border/40 text-app-text-muted">{r.meaning}</td>
+              <td className="px-3 py-2 align-top">
+                <span className={r.used_in_analysis === true ? 'text-green-400' : r.used_in_analysis === false ? 'text-app-text-muted' : ''}>
                   {r.used_in_analysis === true ? '是' : r.used_in_analysis === false ? '否' : '-'}
-                  {r.evidence ? <div className="text-ui-xs text-app-text-muted mt-0.5">{r.evidence}</div> : null}
-                </td>
-              </tr>
-            );
-          })}
+                </span>
+                {r.evidence && <div className="text-ui-xs text-app-text-muted/70 mt-1 leading-relaxed">{r.evidence}</div>}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

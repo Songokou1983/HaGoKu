@@ -1486,6 +1486,19 @@ export default function AnalyzePanel() {
           {/* Agent reply input — shown when any agent is waiting */}
           {waitingAgent && (
             <div className="px-3 pb-2 shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
+              {scoutFieldReviewOpen && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => submitUserReply("可以进入下一阶段了")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
+                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    进入下一阶段
+                  </button>
+                </div>
+              )}
               {(cleanerCleaningReviewOpen) && (
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <button

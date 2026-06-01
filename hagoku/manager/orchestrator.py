@@ -2295,8 +2295,8 @@ class Orchestrator:
                         # 对齐判定：LLM 确认 或 所有字段 needs_user_input=False → 出内层循环
                         user_confirmed = user_reply_scout and self._is_user_confirm(user_reply_scout, stage="scout")
                         if user_confirmed or _is_scout_aligned(context):
-                            if user_confirmed:
-                                skip_gate = True  # 用户主动确认 → 跳过 gate
+                            # 用户确认 或 字段已对齐 → 跳过 gate，直接进清洗
+                            skip_gate = True
                             break
                         interaction_revision += 1
 

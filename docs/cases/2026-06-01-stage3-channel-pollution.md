@@ -306,3 +306,69 @@ target 和 features 在 system 中出现 **7 次**（字段表 + 显式标注 + 
 - `~/.hagoku/llm_dumps/001_scout_infer_all_semantics_*.json`
 - `~/.hagoku/llm_dumps/002-004_scout_reply_review_*.json`
 - `~/.hagoku/llm_dumps/005-007_cleaner_dialogue_*.json`
+
+
+---
+
+## Tier 1 后验收（2026-06-01）
+
+- **新 dump 路径**：`~/.hagoku/llm_dumps/`（7 文件）
+- **旧 dump 路径**：`~/.hagoku/llm_dumps_before_tier1/`（7 文件）
+
+### 逐项对比
+
+#### P1 — messages_history 顺序
+
+| | 旧 dump (002-004) | 新 dump (002-004) |
+|---|---|---|
+| 002 顺序 | system → assistant → user | system → assistant → user |
+| 003 顺序 | assistant → assistant → user → user (错乱) | **user → assistant → user ✅** |
+| 004 顺序 | assistant → assistant → user → user → user | **user → assistant → user ✅** |
+
+**结论**：✅ 通过。新 dump 中 assistant 在 user 之后出现，序列正确交替。旧 dump 中 assistant 总是堆在 user 前面。
+
+**证据**：`003_scout_reply_review_20260601_111457.json` 显示 `user → assistant → user` 严格交替。
+
+#### P2 — upstream_summary 去重
+
+| | 旧 dump (005) | 新 dump (005) |
+|---|---|---|
+| 重复次数 | 5 条 "scout 阶段完成" | **1 条 ✅** |
+
+**结论**：✅ 通过。去重生效，每 stage 只保留最后一条 snapshot。
+
+#### P3 — Cleaner 看到上游用户原话
+
+| | 旧 dump (005) | 新 dump (005) |
+|---|---|---|
+| 用户原话 | ❌ 无 | **✅ 3 条** |
+
+新 dump 005 system 段末尾包含 `【上游用户原话】` 段，含 3 条 Scout 原话。
+
+**结论**：✅ 通过。
+
+#### P4 — Cleaner tool_calls 协议
+
+| 检查项 | 旧 dump | 新 dump | 状态 |
+|--------|---------|---------|------|
+| conv_history 字符串序列化 | `"[调用] fn(args)"` | 已删除 ✅ | |
+| OpenAI 标准协议 | 新旧两套并存 | 仅保留标准 ✅ | |
+| 跨调用对话历史 | conv_history 保留 | **messages_history 未展开 ❌** | |
+
+**结论**：🟡 部分通过。单次调用内协议已修复，但 `messages_history` 未在 Cleaner 拼装中展开——每次 `assess()` 调用重新起 messages，005-007 之间无对话累积。
+
+#### H' 现象
+
+Cleaner dump 005-007 每次都是 `system → user(intro)` 两条消息，无对话累积。**H' 需修**：Cleaner 需展开 `ctx_block["messages_history"]`。
+
+### 验收总结
+
+| 问题 | 结论 |
+|------|------|
+| P1 | ✅ 通过 |
+| P2 | ✅ 通过（顺带修） |
+| P3 | ✅ 通过 |
+| P4 | 🟡 部分通过 |
+| H' | ❌ 需修 |
+
+**下一步**：H' 修复 + 进入 Tier 2。

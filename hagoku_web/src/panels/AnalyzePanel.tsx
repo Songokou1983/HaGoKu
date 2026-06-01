@@ -362,6 +362,60 @@ function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
           </ul>
         )}
       </div>
+      <table className="w-full text-ui-sm border-collapse table-fixed">
+        <caption className="sr-only">清洗操作摘要</caption>
+        <colgroup>
+          <col className="w-[16%]" />
+          <col className="w-[18%]" />
+          <col className="w-[10%]" />
+          <col className="w-[56%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-app-bg border-b border-app-border">
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              列
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center border-r border-app-border align-middle">
+              策略
+            </th>
+            <th
+              scope="col"
+              title="该列被改写取值的行数（与删行影响率含义不同）"
+              className="px-2 py-2 font-medium text-center border-r border-app-border align-middle cursor-help"
+            >
+              影响行
+            </th>
+            <th scope="col" className="px-2 py-2 font-medium text-center align-middle">
+              说明
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-2 py-2 text-left text-app-text-muted text-ui-xs">
+                （无单独逐条操作记录）
+              </td>
+            </tr>
+          ) : (
+            data.rows.map((r, i) => (
+              <tr key={`${r.column}-${i}`} className="border-b border-app-border last:border-b-0">
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.column}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border font-mono text-ui-xs break-all">
+                  {r.strategy}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top border-r border-app-border tabular-nums">
+                  {r.rows_affected}
+                </td>
+                <td className="px-2 py-1.5 text-left align-top break-words">{r.reason}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

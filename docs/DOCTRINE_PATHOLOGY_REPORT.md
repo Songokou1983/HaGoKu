@@ -57,23 +57,31 @@
 ### 0.1 项目健康
 
 - **当前评估周期**：2026-06-01
-- **审计阶段**：Phase 0 完成（文档预审 18 DRAFT findings）/ Phase 1 pending（全代码审计）
-- **Finding 数**：0 正式 / 18 草稿
-- **状态分布**：18 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
+- **审计阶段**：Phase 0 完成（18 DRAFT）/ Phase 1 session 1 完成（orchestrator.py 全读，+4 DRAFT）/ Phase 1 持续中
+- **Finding 数**：0 正式 / 22 草稿
+- **状态分布**：22 DRAFT / 0 OPEN / 0 RESOLVED / 0 RETRACTED / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-01
 
-**试错总假设数**：18（全部 DRAFT）。**全代码审计后将重新评估**——可能升级为正式 finding，可能被撤回，可能与新发现合并。
+**试错总假设数**：22（全部 DRAFT）。
 
-### 0.2 报告自身健康
+### 0.2 Phase 1 session 1 关键发现
+
+读完 `hagoku/manager/orchestrator.py`（3457 行）后：
+- **F-001 完全确认**（4 处 TODO → 必然死循环，not 推论）
+- **+3 条新 P0**：F-019 死分支 / F-020 NameError / 既有 F-001 升级
+- **+1 条 P1**：F-021 CLI 兜底 → 死循环
+- **+1 条 P2**：F-022 45 行死代码
+- **Phase 0 漏掉严重度** ~ 1 倍（从 1 个 P0 升到 4 个 P0 + 1 个 P1）
+
+### 0.3 报告自身健康
 
 | 指标 | 当前 | 健康阈值 |
 |------|------|---------|
-| 审计阶段完成度 | 1/4 (Phase 0) | 4/4 终态 |
-| 正式 finding 占比 | 0/18 = 0% | 100%（Phase 1 完成后）|
+| 审计阶段完成度 | Phase 1 1/N session | Phase 1 全 session 完成 |
+| 正式 finding 占比 | 0/22 = 0% | 100%（Phase 1 完成后）|
 | 距上次用户验证 | 0 天 | ≤ 30 天 |
 | 反馈率 | 0%（草稿不收反馈） | n/a（Phase 1 才开始） |
-
-**首次发布状态**：18 DRAFT 是 Phase 0 正常产物，**不是报告失败**。失败征兆从 Phase 1 完成时才开始评估。
+| **已读行数 / 总代码行数** | 3457 / ~30K = 11% | 100% |
 
 ---
 
@@ -203,6 +211,15 @@
 - **状态**：DRAFT（待 Phase 1 验证）
 - **提出日期**：2026-06-01
 - **最后更新**：2026-06-01
+
+**Phase 1 验证更新（2026-06-01，读完 orchestrator.py 全 3457 行）**：
+
+- ✅ 4 处 TODO 全部确认存在，line 编号无误
+- ✅ line 2395 `if cleaner_confirmed: break` 因 `cleaner_confirmed = False` 永远不达
+- ✅ line 2523 `if analyst_confirmed: break` 同上
+- ✅ 唯一出口是 HAGOKU_CANCEL_PAUSE_TOKEN（用户必须主动取消才能出循环）
+- **影响范围**：任何走完整 pipeline 的用户在 Cleaner/Analyst 阶段都面临死循环
+- **真实破坏性**：P0（已确认）
 
 ---
 
@@ -430,6 +447,69 @@
 
 ---
 
+### F-2026-06-01-019 [DRAFT][P0-CRITICAL] orchestrator.py:2338 死分支 — 清洗结果待用户确认永远不触发
+
+- **结果影响**：在 Cleaner → 用户确认清洗结果 → 进 Analyst 的关键闸门处，代码逻辑被破坏。`cleaning_report = None`（line 2323）让 `if not skip_cleaning and cleaning_report is not None:`（line 2338）**永远为 False** → 整个 60 行的"清洗结果用户确认"块**永远不会执行**。用户**看不到**清洗结果的 review，**无法阻止**清洗执行。
+- **LLM 失去的机会**：用户永远没机会对清洗结果说"这个列的清洗方式不对"——代码替他确认了
+- **doctrine 关联（参考）**：律 7（语义不确定可见）+ 律 8（控制通道）
+- **位置**：
+  - `hagoku/manager/orchestrator.py:2323`  `cleaning_report = None`
+  - `hagoku/manager/orchestrator.py:2338`  `if not skip_cleaning and cleaning_report is not None:`
+- **证据**：grep 确认 `skip_cleaning` 在 orchestrator.py **只有 1 处引用**（line 2338），**无定义**——该 if 还会在评估时 NameError
+- **复现方式**：跑完整 pipeline（phase="full"） → 跑过 Cleaner 阶段 → 直接跳到 Analyst，**没有**任何 cleaning_review 暂停
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-020 [DRAFT][P0-CRITICAL] orchestrator.py:2537-2595 guardrails 路径 NameError
+
+- **结果影响**：当 Analyst 触发强制级护栏违规时，代码意图是给用户一个"LLM 风险分析 + 用户决策"的暂停。**但 RUN_COMPLETED 事件（line 2575-2586）和 return（line 2587-2595）引用了 `output_path`（line 2610 才定义）和 `duration_ms`（line 2637 才定义）**。结果是：**NameError**，用户看到的是"分析失败"而不是"护栏触发"——LLM 风险分析生成的时间被浪费。
+- **LLM 失去的机会**：护栏违规是统计问题，本应由 LLM 解释并让用户决策。但 LLM 解释完成、用户即将决策时，整个 run 崩溃。LLM 永远没机会被用户回应。
+- **doctrine 关联（参考）**：律 7（语义不确定可见）+ 铁律 2（LLM 失败 4 路径的边界外）
+- **位置**：
+  - `hagoku/manager/orchestrator.py:2575-2586`  RUN_COMPLETED 事件 emit，引用 `output_path`、`duration_ms`
+  - `hagoku/manager/orchestrator.py:2587-2595`  return，引用 `output_path`、`duration_ms`
+  - `hagoku/manager/orchestrator.py:2610`  `output_path` 实际定义
+  - `hagoku/manager/orchestrator.py:2637`  `duration_ms` 实际定义
+- **证据**：grep `output_path` 在 line 2575-2610 区间 4 次引用，line 2610 才是赋值。`duration_ms` 类似
+- **复现方式**：mock Analyst 输出让 guardrails 触发 → 期望 guardrails_blocked → 实际 NameError
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-021 [DRAFT][P1-HIGH] orchestrator.py:3253 `_llm_classify_confirmation` 兜底导致死循环
+
+- **结果影响**：CLI 路径（`_request_field_confirmation`）调用此函数判断用户输入是"确认"还是"纠正"。**当 LLM 不可达时，except 返回 `{"type": "correction", "updates": {}}`**（line 3253-3256）——这意味着用户的"确认"被分类为"无更新的纠正"。`_apply_field_corrections` 跑了但啥都没改。**循环没有 break，CLI 字段确认永远卡住**。
+- **LLM 失去的机会**：LLM 失败时本应让用户知道"AI 暂时不可用"，代码却静默把"确认"当成"无操作纠正"，让用户继续在循环里
+- **doctrine 关联（参考）**：律 7（语义不确定可见）+ 铁律 2（LLM 失败 4 路径）
+- **位置**：`hagoku/manager/orchestrator.py:3253-3256`
+- **证据**：
+  ```python
+  except Exception:
+      return {"type": "correction", "updates": {}}
+  ```
+  注释说"安全默认值：视为有纠正内容"——但实际是"**永远不视为确认**"，等于禁用 break
+- **复现方式**：mock LLM 抛异常 → 跑 CLI 字段确认 → 用户说"好" → 卡在循环
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
+### F-2026-06-01-022 [DRAFT][P2-MEDIUM] orchestrator.py:3258-3302 `_llm_understand_field_update` 是死代码
+
+- **结果影响**：函数完整定义（45 行）但**全仓 grep 确认无任何调用方**。是旧版本 `apply_scout_user_field_reply_to_context`（line 390）重构前的遗留。死代码增加阅读负担 + 干扰"找死代码"工具的判断。
+- **LLM 失去的机会**：无
+- **doctrine 关联（参考）**：Karpathy 原则 2（Simplicity First）
+- **位置**：`hagoku/manager/orchestrator.py:3258-3302`
+- **证据**：`grep -rn "_llm_understand_field_update" hagoku/` 全仓**只有定义那一行**（line 3258）
+- **复现方式**：删除该函数 → 跑全部测试 → 应全绿（因为没有调用方）
+- **状态**：DRAFT（Phase 1 已确认）
+- **提出日期**：2026-06-01
+
+---
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -452,9 +532,16 @@ _（暂无）_
 
 ## 7. 病理学家自评
 
-### 7.1 本次试错我没读到的（试错诚实）
+### 7.1 Phase 1 进度
 
-**未读的关键文件**（按潜在 finding 集中度排序）：
+**已完成 session**：
+- **Session 1 (2026-06-01)**：读完 `hagoku/manager/orchestrator.py` 全 3457 行
+
+**本次新增**：
+- 4 条新 DRAFT finding（F-019, F-020, F-021, F-022）
+- 1 条 DRAFT 升级（F-001 加 Phase 1 验证段）
+
+**仍未读的关键文件**：
 
 | 文件 | 行数 | 重要性 |
 |------|------|--------|
@@ -465,10 +552,9 @@ _（暂无）_
 | `hagoku/tools/cleaning.py` | 31K | 清洗实现 |
 | `hagoku/tools/visualization.py` | 26K | 可视化 |
 | `hagoku/tools/power_analysis.py` | 26K | 功效分析 |
-| `hagoku/storage/memory.py` | 27K | **律 10 失守证据集中地** |
+| `hagoku/storage/memory.py` | 27K | **律 10 失守证据集中地（F-004 待 Phase 1 验证）** |
 | `hagoku/storage/project_manager.py` | 27K | 项目管理 |
 | `hagoku/storage/database.py` | 26K | 数据库层 |
-| `hagoku/manager/orchestrator.py` 中段 | ~2K | 上帝对象中段 |
 | `hagoku/manager/refinement.py` | 256 | 字段细化 |
 | `hagoku/agents/scout/agent.py` 后 800 行 | 800 | Scout 主体 |
 | `hagoku/agents/analyst/agent.py` 后 800 行 | 800 | Analyst 主体 |
@@ -478,23 +564,53 @@ _（暂无）_
 | `hagoku/context/project_context.py` 后 248 行 | 248 | ProjectContext 主体 |
 | `hagoku_web/` 9K 行 TSX | 9K | 前端几乎全部 |
 
-**Phase 0 的盲区 = Phase 1 要解决的事**。**不要在读完这些文件之前下结论**。
+### 7.2 Phase 1 session 1 关键收获
 
-### 7.2 试错诚实声明
+读完 orchestrator.py 的最大发现——**Phase 0 漏了严重程度**：
 
-- **18 DRAFT finding 是基于"读文档 + 读测试 + 扫几处热点"的产物**
-- **不要在 Phase 1 之前给 DRAFT finding 标状态变更**
-- **不要在 Phase 1 之前把 DRAFT finding 当作"行动清单"**
+- **F-001 完全确认**：4 处 TODO 不仅仅是占位，它们**直接导致死循环**
+- **F-019（NEW P0）**：清洗结果用户确认是**死代码路径**——`cleaning_report = None` 写在判定之前
+- **F-020（NEW P0）**：guardrails 路径有 **NameError**——会直接把 LLM 风险分析的结果给用户看之前崩溃
+- **F-021（NEW P1）**：CLI 路径的兜底把"确认"永远分类为"无操作纠正"——CLI 走完整 pipeline 必然死循环
+- **F-022（NEW P2）**：`_llm_understand_field_update` 全仓无调用方——45 行死代码
 
-### 7.3 Phase 1 验证后可能的命运
+**Phase 0 的严重性评估是错的**。Phase 0 给 F-001 标 P0 是基于"可能失控或死循环"的推论；Phase 1 实际读代码后发现"必然死循环" + 还多出 2 个 P0（NameError + 死分支）+ 1 个 P1（CLI 死循环）。**Phase 0 漏掉的严重度比 Phase 0 报告的多 1 倍。**
 
-每条 DRAFT finding 终态可能是：
-- **升级为正式 OPEN**（70% 概率？未知）
-- **撤回 RETRACTED**（~20%？基于全代码视角发现是误报）
-- **与新 finding 合并**（~10%？）
-- **severity 调整**（任何 P0 降为 P1，反之亦然）
+**这是为什么"先读全代码再下结论"是你的核心方法论。**
 
-这些数字是猜测——Phase 1 之后才知道真实分布。
+### 7.3 Phase 1 后续建议节奏
+
+- **每个 session 读 1-2 个大文件**（~30K 行总，~3K/session = ~10 session）
+- **每个 session 末尾追加 3-5 条 DRAFT finding**（基于实际读到的）
+- **F-001 → F-018 全部 Phase 1 验证后**才进入"正式 finding"状态
+- **未来 session 启动先读第 0、1、5、6 节 + 本节 7.1** 了解已读什么、未读什么
+
+### 7.4 Phase 1 已确认 vs 仍待验证
+
+| 旧 DRAFT | Phase 1 状态 |
+|---------|------------|
+| F-001 orchestrator TODO 4 处 | ✅ 完全确认，追加 P0 严重性升级 |
+| F-002 test_field_llm_e2e.py 收集错误 | ⏳ 待技术 AI 验证（不在代码审计范围） |
+| F-003 律 5 失守 | ⏳ 需读 storage/memory.py 找具体证据 |
+| F-004 律 10 失守 | ⏳ 需读 storage/memory.py 找具体证据 |
+| F-005 白名单 | ⏳ 需读 test_doctrine_compliance.py 后半段 |
+| F-006 LLM 静默失败 | ⏳ 需读 analyst/agent.py 找 _plan_analysis_via_llm 全部 |
+| F-007 律 3 xfailed | ⏳ 等技术 AI 推进（不在代码审计范围） |
+| F-008 律 4 工具覆盖 | ⏳ 需 grep 工具注册表 |
+| F-009 前端契约 | ⏳ 需读前端代码 |
+| F-010 守门 1-4 假守 | ⏳ 需更细的边界分析 |
+| F-011 commit hook | ⏳ 需读 scripts/check-selfcheck-hook.py |
+| F-012 scout 死代码 | ✅ 已知，等清理 |
+| F-013 数字漂移 | ⏳ 等清理 |
+| F-014 PROJECT.md fallback 描述 | ⏳ 等清理 |
+| F-015 orchestrator 3457 行 | ✅ 确认，追加 3 个 P0 强化 |
+| F-016 UI 0 测试 | ⏳ 需读前端 |
+| F-017 白名单机制 | ⏳ 同 F-005 |
+| F-018 doctrine schema | ⏳ 待评估 |
+
+---
+
+**当前 DRAFT 计数**：18 (Phase 0) + 4 (Phase 1 session 1) = **22 DRAFT findings**
 
 ---
 

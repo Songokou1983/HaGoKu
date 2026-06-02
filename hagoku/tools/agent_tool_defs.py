@@ -309,3 +309,171 @@ agent_tools.register(Tool(
     handler=_handle_restrict_analysis_to,
     agents=["scout"],
 ))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Analyst 对话式分析工具
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_propose_method(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    return {
+        "method_name": args.get("method_name", ""),
+        "reasoning": args.get("reasoning", ""),
+        "prerequisites": args.get("prerequisites", ""),
+    }
+
+agent_tools.register(Tool(
+    name="propose_method",
+    description="向用户建议一种分析方法，说明理由和前提。调用后会暂停等待用户回复。用户可接受、否定或调整。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "method_name": {"type": "string", "description": "方法名（如「趋势分解」「线性回归」「分组t检验」）"},
+            "reasoning": {"type": "string", "description": "为什么建议这个方法"},
+            "prerequisites": {"type": "string", "description": "前提条件（如「需要至少 30 个样本」）"},
+        },
+        "required": ["method_name", "reasoning"],
+    },
+    handler=_handle_propose_method,
+    agents=["analyst"],
+))
+
+
+def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    return {
+        "question": args.get("question", ""),
+        "options": args.get("options", []),
+    }
+
+agent_tools.register(Tool(
+    name="ask_user",
+    description="向用户提问，需要用户方向性决策时使用。调用后会暂停等待用户回复。普通分析陈述用纯文本输出。如果你提供 options，前端渲染为可点击按钮。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {"type": "string", "description": "问题文本"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "可选回复项"},
+        },
+        "required": ["question"],
+    },
+    handler=_handle_ask_user,
+    agents=["analyst"],
+))
+
+
+def _handle_submit_analysis(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    return {
+        "findings": args.get("findings", []),
+        "method_used": args.get("method_used", []),
+        "summary": args.get("summary", ""),
+    }
+
+agent_tools.register(Tool(
+    name="submit_analysis",
+    description="提交分析发现，结束分析阶段。调用前确保已覆盖用户关心的方向。confidence 取 high/medium/low 三选一。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "findings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "detail": {"type": "string"},
+                        "evidence_columns": {"type": "array", "items": {"type": "string"}},
+                        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    },
+                    "required": ["title", "detail", "evidence_columns", "confidence"],
+                },
+            },
+            "method_used": {"type": "array", "items": {"type": "string"}},
+            "summary": {"type": "string"},
+        },
+        "required": ["findings", "method_used", "summary"],
+    },
+    handler=_handle_submit_analysis,
+    agents=["analyst"],
+))
+
+import numpy as _np
+from scipy import stats as _scipy_stats
+
+def _handle_run_statistical_test(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    test_type = str(args.get("test_type", "")).strip()
+    columns = list(args.get("columns") or [])
+    if not test_type or not columns or _df is None:
+        return {"error": "test_type 和 columns 必填，且需要 DataFrame"}
+
+    try:
+        if test_type == "ttest" and len(columns) >= 2:
+            a = _df[columns[0]].dropna().astype(float)
+            b = _df[columns[1]].dropna().astype(float)
+            stat, p = _scipy_stats.ttest_ind(a, b)
+            return {"test": "ttest", "statistic": float(stat), "p_value": float(p)}
+        elif test_type == "anova":
+            groups = [_df[c].dropna().astype(float) for c in columns if c in _df.columns]
+            if len(groups) >= 2:
+                stat, p = _scipy_stats.f_oneway(*groups)
+                return {"test": "anova", "statistic": float(stat), "p_value": float(p)}
+        elif test_type == "pearson_r" and len(columns) >= 2:
+            a = _df[columns[0]].dropna().astype(float)
+            b = _df[columns[1]].dropna().astype(float)
+            mask = a.notna() & b.notna()
+            r, p = _scipy_stats.pearsonr(a[mask], b[mask])
+            return {"test": "pearson_r", "statistic": float(r), "p_value": float(p)}
+        elif test_type == "spearman_r" and len(columns) >= 2:
+            a = _df[columns[0]].dropna().astype(float)
+            b = _df[columns[1]].dropna().astype(float)
+            mask = a.notna() & b.notna()
+            r, p = _scipy_stats.spearmanr(a[mask], b[mask])
+            return {"test": "spearman_r", "statistic": float(r), "p_value": float(p)}
+        elif test_type == "chi2" and len(columns) >= 2:
+            import pandas as _pd
+            a = _df[columns[0]].dropna()
+            b = _df[columns[1]].dropna()
+            ct = _pd.crosstab(a, b)
+            stat, p, dof, _ = _scipy_stats.chi2_contingency(ct)
+            return {"test": "chi2", "statistic": float(stat), "p_value": float(p), "dof": int(dof)}
+        elif test_type == "linear_regression" and len(columns) >= 2:
+            import statsmodels.api as _sm
+            import pandas as _pd
+            X = _sm.add_constant(_df[columns[1:]].dropna().astype(float))
+            y = _df[columns[0]].loc[X.index].dropna().astype(float)
+            X = X.loc[y.index]
+            model = _sm.OLS(y, X).fit()
+            return {
+                "test": "linear_regression",
+                "r_squared": float(model.rsquared),
+                "params": {str(k): float(v) for k, v in model.params.items()},
+                "p_values": {str(k): float(v) for k, v in model.pvalues.items()},
+            }
+        elif test_type == "trend_decomposition" and columns:
+            s = _df[columns[0]].dropna().astype(float)
+            w = min(7, max(1, len(s) // 4))
+            trend = s.rolling(window=w, center=True).mean()
+            return {
+                "test": "trend_decomposition",
+                "column": columns[0],
+                "trend_mean": float(trend.mean()) if not trend.isna().all() else None,
+                "detrended_std": float((s - trend).std()) if not trend.isna().all() else None,
+            }
+        return {"error": f"不支持或参数不足: {test_type}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+agent_tools.register(Tool(
+    name="run_statistical_test",
+    description="执行统计检验。可用类型：ttest, anova, chi2, pearson_r, spearman_r, linear_regression, trend_decomposition",
+    parameters={
+        "type": "object",
+        "properties": {
+            "test_type": {"type": "string", "enum": ["ttest", "anova", "chi2", "pearson_r", "spearman_r", "linear_regression", "trend_decomposition"]},
+            "columns": {"type": "array", "items": {"type": "string"}, "description": "列名（第一个通常是目标变量）"},
+            "params": {"type": "object", "description": "额外参数"},
+        },
+        "required": ["test_type", "columns"],
+    },
+    handler=_handle_run_statistical_test,
+    agents=["analyst"],
+))

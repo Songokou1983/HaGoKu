@@ -867,12 +867,14 @@ class ScoutAgent(InteractionMixin):
             return
 
         # 从全局记忆加载字段描述和显示名
+        # F-060 修复：当前 run 用户已纠正的字段（confirmed_by_user=True）
+        # 优先于项目记忆，不得被旧值覆盖（律 10）。
         for sem in context["column_semantics"]:
             col = sem["column_name"]
-            if col in fields:
+            if col in fields and not sem.get("confirmed_by_user"):
                 context["column_descriptions"][col] = fields[col]
                 sem["confidence"] = 1.0  # 记忆中的定义是高置信度
-            if col in display_names:
+            if col in display_names and not sem.get("confirmed_by_user"):
                 context.setdefault("column_display_names", {})
                 context["column_display_names"][col] = display_names[col]
                 sem["needs_user_input"] = False  # 记忆中的名称减少确认需求

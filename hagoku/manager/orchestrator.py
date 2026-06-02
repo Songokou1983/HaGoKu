@@ -2894,6 +2894,10 @@ class Orchestrator:
                 if s["column_name"] == col:
                     s["evidence"] = info["business_meaning"]
                     s["needs_user_input"] = False
+                    # F-053 修复：同步 description / display_name 到 column_semantics，
+                    # 确保律 5 SSoT 中的字段语义与 column_descriptions 一致。
+                    s["description"] = info["business_meaning"]
+                    s["display_name"] = info["chinese_name"]
                     break
             print(f"   ✅ {col} = {info['chinese_name']}（{info['business_meaning']}）")
 
@@ -2933,56 +2937,12 @@ class Orchestrator:
                 if result_text.startswith("json"):
                     result_text = result_text[4:]
             return json.loads(result_text.strip())
-        except Exception:
-            # LLM 不可用 → 安全默认值：视为有纠正内容，
-            # 确保用户输入不会被当作「确认」而静默跳过。
-            return {"type": "correction", "updates": {}}
-
-    def _llm_understand_field_update(
-        self,
-        context: dict,
-        user_input: str,
-    ) -> dict[str, dict[str, str]] | None:
-        """让 LLM 理解用户说的字段更新，返回更新的字段字典"""
-        try:
-            from ..llm.client import create_raw_client
-
-            columns = [s["column_name"] for s in context["column_semantics"]]
-
-            client = create_raw_client(self.config.llm)
-
-            response = client.chat.completions.create(
-                model=self.config.llm.model,
-                messages=[
-                    {"role": "system", "content": "你是数据分析师。用户告诉你字段的含义。请理解用户说的话，提取出字段名、中文名、业务含义。\n输出格式（JSON，只输出JSON）：\n{\"字段名\": {\"chinese_name\": \"中文名\", \"business_meaning\": \"业务含义\"}}"},
-                    {"role": "user", "content": f"字段列表：{', '.join(columns)}\n用户说：{user_input}"}
-                ],
-                temperature=0.1,
-                max_tokens=200,
-            )
-            import json
-            result_text = response.choices[0].message.content.strip()
-            if result_text.startswith("```"):
-                result_text = result_text.split("```")[1]
-                if result_text.startswith("json"):
-                    result_text = result_text[4:]
-            result = json.loads(result_text.strip())
-
-            valid_updates = {}
-            for col, info in result.items():
-                if col in columns:
-                    valid_updates[col] = info
-                    print(f"   ✅ {col} = {info['chinese_name']}（{info['business_meaning']}）")
-
-            return valid_updates if valid_updates else None
-
         except Exception as e:
-            context["_last_understanding_failure"] = {
-                "raw_text": user_input,
-                "error": str(e),
-                "stage": "field_update",
-            }
-            return None
+            # F-021 修复：LLM 不可达时必须 raise RuntimeError（铁律 2 路径 A），
+            # 不得返回兜底默认值 {"type": "correction", "updates": {}}。
+            raise RuntimeError(
+                f"_llm_classify_confirmation: LLM 不可达。原始错误: {e}"
+            ) from e
 
     def respond(
         self,

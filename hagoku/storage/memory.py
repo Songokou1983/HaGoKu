@@ -659,12 +659,16 @@ class MemoryManager:
             if confidence >= 0.8 or "用户" in evidence or "记忆" in evidence:
                 # 律 10：传播 confirmed_by_user
                 confirmed = bool(_get(sem, "confirmed_by_user", False))
+                # F-004 修复：持久化时保留 description / display_name，
+                # 避免 run 1 用户纠正的字段语义在 run 2 丢失。
                 sem_def = ColumnSemanticDef(
                     semantic=str(inferred_type),
                     role=suggested_role,
                     confidence=confidence,
                     source="user" if ("用户" in evidence or confirmed) else "auto",
                     confirmed_by_user=confirmed,
+                    display_name=_get(sem, "display_name", None),
+                    description=_get(sem, "description", None),
                 )
                 self.save_column_semantic(project_id, col_name, sem_def)
                 count += 1

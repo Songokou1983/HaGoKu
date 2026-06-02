@@ -7,9 +7,7 @@ Agent 互动与成长 — 可执行契约（见 docs/AGENT_INTERACTION_CONTRACT.
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import (
     Orchestrator,
-    analyst_review_pause_payload,
     cleaning_review_pause_payload,
-    gate_cleaning_pause_payload,
     scout_field_review_pause_payload,
 )
 
@@ -62,34 +60,6 @@ def test_c2_cleaning_review_structured_empty_message():
     cr = p.get("cleaning_review")
     assert cr is not None
     assert "rows_removed" in cr
-
-
-def test_c2_analyst_review_structured_empty_message():
-    """Analyst 暂停须 analyst_review + 空 message（与 Scout/Cleaner 一致）。"""
-    findings = [
-        {
-            "result_id": "a1",
-            "analysis_type": "regression",
-            "question": "Q?",
-            "significance": "significant",
-            "conclusion_plain": "ok",
-            "p_value": 0.01,
-            "effect_size": 0.35,
-            "effect_type": "r",
-            "confidence_interval": "[0,1]",
-        },
-    ]
-    p = analyst_review_pause_payload(findings)
-    assert p.get("message") == ""
-    ar = p.get("analyst_review")
-    assert ar is not None
-    assert ar["n_findings"] == 1
-    assert ar["n_significant"] == 1
-    assert len(ar["rows"]) == 1
-    row0 = ar["rows"][0]
-    assert row0.get("p_value") == "0.01"
-    assert row0.get("effect_summary") == "r=0.35"
-    assert row0.get("confidence_interval") == "[0,1]"
 
 
 def test_c3_scout_user_natural_language_llm_driven():
@@ -151,14 +121,4 @@ def test_scout_user_input_received_payload_has_machine_fields():
     p2 = scout_user_input_received_payload(ctx, "确认", [], 3)
     assert p2["parse_applied_count"] == 0
     assert p2["parse_failed"] is True  # 有输入但无应用更新
-
-
-def test_gate_cleaning_pause_payload_structure():
-    """gate_cleaning 暂停载荷含 gate.phase；prompt 留空（不由后端注入话术）。"""
-    p = gate_cleaning_pause_payload()
-    assert p["message"] == ""
-    gate = p.get("gate")
-    assert gate is not None
-    assert gate["phase"] == "cleaning"
-    assert gate.get("prompt") == ""
 

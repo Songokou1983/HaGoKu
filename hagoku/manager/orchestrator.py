@@ -189,89 +189,8 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 # 代码只做通道：组装上下文 → 调 LLM → 解析结构化输出 → 返回结果。
 # LLM 不可用或出错时回退到「有补充」路径（安全默认值）。
 
-def analysis_purpose_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
-    """分析目的确认暂停：展示 LLM 推断的 target/features/roles，供用户确认或修正。"""
-    ap = context.get("analysis_purpose") or _build_analysis_purpose_static(context)
-    target = ap.get("target")
-    features = ap.get("features") or []
-    roles = ap.get("variable_roles") or {}
-    cols = context.get("column_semantics") or []
 
-    # 构建分析字段表格行
-    rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    # 先 target
-    if target:
-        seen.add(target)
-        rows.append({"column_name": target, "role": "target", "role_label": "目标变量（因变量）"})
-    # 再 features
-    for f in features:
-        if f not in seen:
-            seen.add(f)
-            rows.append({"column_name": f, "role": "feature", "role_label": "特征变量（自变量）"})
-    # 其余列
-    for s in cols:
-        name = str(s.get("column_name", ""))
-        if name and name not in seen:
-            seen.add(name)
-            role = str(s.get("suggested_role", "")).strip()
-            if role in ("ignore", "identifier"):
-                rows.append({"column_name": name, "role": role, "role_label": "不参与分析"})
-            else:
-                rows.append({"column_name": name, "role": "other", "role_label": "其他"})
 
-    prompt_lines = [
-        "以上是 LLM 推断的本次分析涉及的核心字段。",
-        "请核对目标变量和特征变量是否正确；",
-        "如有调整请直接说明（例如「目标变量应该是 B，特征变量去掉 C」）。",
-        "确认无误后点击「确认继续」进入数据清洗。",
-    ]
-
-    return {
-        "message": "",
-        "analysis_purpose_review": {
-            "rows": rows,
-            "prompt": "\n".join(prompt_lines),
-        },
-    }
-
-def _build_analysis_purpose_static(context: dict[str, Any]) -> dict[str, Any]:
-    """模块级静态版本的 _build_analysis_purpose（供模块级函数调用）。"""
-    target = context.get("target")
-    features = context.get("features") or []
-    variable_roles = context.get("variable_roles") or {}
-    summary_parts: list[str] = []
-    if target:
-        summary_parts.append(f"目标变量（因变量）：{target}")
-    if features:
-        summary_parts.append(f"特征变量（自变量）：{', '.join(str(f) for f in features)}")
-    if variable_roles:
-        role_lines = [f"  {k}: {v}" for k, v in sorted(variable_roles.items())]
-        summary_parts.append(f"变量角色：\n{chr(10).join(role_lines)}")
-    return {
-        "target": target,
-        "features": features,
-        "variable_roles": variable_roles,
-        "summary": "\n".join(summary_parts) or "（未指定分析字段角色）",
-    }
-
-def gate_cleaning_pause_payload(context: dict[str, Any] | None = None) -> dict[str, Any]:
-    """跨阶段闸门：字段对齐后、进入清洗前（附带最终 field_review 供前端展示）。"""
-    payload: dict[str, Any] = {
-        "message": "",
-        "gate": {
-            "phase": "cleaning",
-            "prompt": "",
-        },
-    }
-    if context:
-        fr = scout_field_review_pause_payload(context)
-        payload["field_review"] = fr.get("field_review")
-        payload["analysis_fields_summary"] = fr.get("analysis_fields_summary")
-    return payload
-
-# 闸门回复判定：语义判断全部由 LLM 完成，代码不参与。
-# 调用方通过 _detect_user_intent_via_llm 统一判断。
 
 def _known_scout_columns(context: dict[str, Any]) -> list[str]:
     out: list[str] = []
@@ -1358,53 +1277,6 @@ def _fmt_pause_ci(ci: Any, max_len: int = 56) -> str:
         return s[: max_len - 1] + "…"
     return s
 
-def analyst_review_pause_payload(findings: list[Any]) -> dict[str, Any]:
-    """Analyst 暂停：结构化统计结果摘要表；`message` 留空，避免用 LLM 冒充「Agent 对话」。"""
-    rows_out: list[dict[str, Any]] = []
-    sig_n = 0
-    seq = findings if isinstance(findings, list) else []
-    for item in seq[:80]:
-        d: dict[str, Any]
-        if isinstance(item, dict):
-            d = item
-        elif hasattr(item, "to_dict") and callable(getattr(item, "to_dict")):
-            try:
-                raw = item.to_dict()  # type: ignore[union-attr]
-                d = dict(raw) if isinstance(raw, dict) else {}
-            except Exception:
-                d = {}
-        else:
-            d = {}
-        sig = str(d.get("significance") or "")
-        if sig == "significant":
-            sig_n += 1
-        rid = str(d.get("result_id") or "")
-        q = str(d.get("question") or "")
-        if len(q) > 320:
-            q = q[:317] + "…"
-        at = str(d.get("analysis_type") or "")
-        plain = str(d.get("conclusion_plain") or "")
-        if len(plain) > 240:
-            plain = plain[:237] + "…"
-        rows_out.append({
-            "result_id": rid,
-            "analysis_type": at,
-            "question": q,
-            "significance": sig,
-            "conclusion_plain": plain,
-            "p_value": _fmt_pause_p_value(d.get("p_value")),
-            "effect_summary": _fmt_pause_effect_summary(str(d.get("effect_type") or ""), d.get("effect_size")),
-            "confidence_interval": _fmt_pause_ci(d.get("confidence_interval")),
-        })
-    n_tot = len(seq)
-    return {
-        "message": "",
-        "analyst_review": {
-            "n_findings": n_tot,
-            "n_significant": sig_n,
-            "rows": rows_out,
-        },
-    }
 
 # ── 编排器 ────────────────────────────────────────────────────
 

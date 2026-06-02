@@ -112,10 +112,10 @@ class TestOrchestratorRunGuardrailGate:
 
 class TestAnalystGuardrailsIntegration:
     def test_analyst_calls_guardrails_check_on_results(self):
-        from hagoku.agents.analyst import AnalystAgent
-
-        source = inspect.getsource(AnalystAgent.run)
-        assert "guardrails.check" in source
+        """护栏检查在编排层 orchestrator.run() 中通过 _check_mandatory_guardrails 调用。
+        Analyst 对话式重构（commit c9a1efb）后不再直接调 guardrails.check。"""
+        source = inspect.getsource(Orchestrator.run)
+        assert "_check_mandatory_guardrails" in source
 
 
 class TestFailurePath:

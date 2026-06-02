@@ -1945,24 +1945,26 @@ class Orchestrator:
             analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
             analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
             if isinstance(analyst_result, dict):
+                # F-054 修复：submit_analysis handler 返回 {findings, method_used, summary}
+                # 旧代码使用不存在的 key（preliminary_findings/suggested_focus/…），
+                # 导致 UI 永久显示"初步发现 0 个"
+                raw_findings = analyst_result.get("findings", [])
+                suggested = analyst_result.get("summary", "")
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst", {
-                    "result_summary": f"初步发现 {len(analyst_result.get('preliminary_findings', []))} 个，待确认",
+                    "result_summary": f"初步发现 {len(raw_findings)} 个，待确认",
                 })
-                findings = analyst_result.get("preliminary_findings", [])
-                suggested = analyst_result.get("suggested_focus", "")
-                power_warnings = analyst_result.get("power_warnings", [])[:2]
                 llm_message = self._generate_phase_message(
                     "analyst_preliminary",
-                    findings=findings,
-                    power_warnings=power_warnings,
+                    findings=raw_findings,
+                    power_warnings=[],
                     suggested_focus=suggested,
                 )
                 return {
                     "status": "analyst_preliminary",
                     "message": llm_message,
-                    "power_warnings": power_warnings,
-                    "business_metrics": analyst_result.get("business_metrics", []),
-                    "preliminary_findings": findings,
+                    "power_warnings": [],
+                    "business_metrics": [],
+                    "preliminary_findings": raw_findings,
                     "suggested_focus": suggested,
                     "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
                     "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
@@ -2166,67 +2168,8 @@ class Orchestrator:
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-                # ── 暂停：清洗结果待用户确认 ───────────────────────────────
-                if not skip_cleaning and cleaning_report is not None:
-                    cleaner_results = {
-                        "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
-                        "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
-                        "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
-                    }
-                    cleaning_revision = 0
-                    while True:
-                        cleaner_msg = cleaning_review_pause_payload(
-                            cleaning_report,
-                            data_quality=str(cleaner_results["data_quality"]),
-                            impact_rate=float(cleaner_results["impact_rate"] or 0.0),
-                        )
-                        cleaner_msg["interaction_revision"] = cleaning_revision
-                        cleaner_msg = self._attach_pause_dialogue_message("cleaner", cleaner_msg)
-                        user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
-                        if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
-                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                        cmd_result = self._handle_command_if_present(user_reply_cleaner, "cleaner", context)
-                        cleaner_confirmed = user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了")
-                        if user_reply_cleaner:
-                            self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "cleaner", {
-                                "reply": user_reply_cleaner,
-                                "interaction_revision": cleaning_revision,
-                                "proceed_accepted": cleaner_confirmed,
-                            })
-                            if not cleaner_confirmed:
-                                if cmd_result:
-                                    query = f"{query}\n{cmd_result}".strip()
-                                else:
-                                    query = f"{query}\n[用户补充] {user_reply_cleaner}".strip()
-                                self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
-                                    "thought": f"🔄 根据用户反馈重新清洗数据（第 {cleaning_revision + 1} 轮修订）",
-                                })
-                                upstream_note = self._get_upstream_summary("cleaner")
-                                if upstream_note:
-                                    context["upstream_summary"] = upstream_note
-                                context["query"] = query
-                                if user_reply_cleaner and not cmd_result:
-                                    apply_scout_user_field_reply_to_context(
-                                        context,
-                                        user_reply_cleaner,
-                                        llm_client=self.llm_quick_raw,
-                                        llm_model=self.config.llm.model_quick or self.config.llm.model,
-                                    )
-                                df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                                    data_path, context,
-                                    impact_warning=self.config.manager.cleaning_impact_warning,
-                                    emit_completed=False,
-                                )
-                                if self._is_cancel_requested():
-                                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                                cleaner_results = {
-                                    "operations": [op.to_dict() if hasattr(op, 'to_dict') else op for op in (cleaning_report.operations if cleaning_report else [])],
-                                    "data_quality": getattr(cleaning_report, "data_quality", "unknown"),
-                                    "impact_rate": cleaning_report.impact_rate if cleaning_report else 0,
-                                }
-                        if cleaner_confirmed:
-                            break
-                        cleaning_revision += 1
+                # F-019 修复：原 cleaning_report = None 使后续 review block 永远不可达。
+                # assess 循环已处理用户交互（确认/修改），此处无需重复清洗审核。
                 ir = cleaning_report.impact_rate if cleaning_report else 0.0
                 self.event_bus.emit(
                     EventType.AGENT_COMPLETED,
@@ -2315,6 +2258,13 @@ class Orchestrator:
             # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
             # findings→results 兼容：旧代码期望 list，新 findings 是 dict
             _analyst_results = findings.get("findings", []) if isinstance(findings, dict) else []
+
+            # F-020 修复：output_path / duration_ms 在 violations block 内被引用，
+            # 但原代码在 block 之后才赋值（line 2337/2364），导致 NameError。
+            # 提前初始化，violations block 可直接使用。
+            output_path = str(run_dir / "output" / "report.html")
+            duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
+
             violations, violations_md = self._check_mandatory_guardrails(
                 _analyst_results,
             )
@@ -2653,7 +2603,15 @@ class Orchestrator:
         power_warnings: list[str] | None = None,
         suggested_focus: str = "",
     ) -> str:
-        """LLM 生成阶段用户消息（零硬编码文案）。LLM 不可达时返回最小兜底。"""
+        """LLM 生成阶段用户消息（零硬编码文案）。LLM 不可达时直接 raise。"""
+
+        # 所有变量统一初始化，避免 phase 分支导致 UnboundLocalError
+        n_ops = 0
+        ops_desc = ""
+        n_findings = 0
+        findings_desc = ""
+        sf = ""
+        pw = ""
 
         if phase == "cleaning_strategy":
             n_ops = len(operations) if operations else 0
@@ -2682,38 +2640,13 @@ class Orchestrator:
         else:
             return ""
 
-        # 一层：LLM 主模型生成消息
-        try:
-            msg = self._try_generate_phase_llm(
-                phase=phase, data_quality=data_quality,
-                n_ops=n_ops, ops_desc=ops_desc,
-                n_findings=n_findings, findings_desc=findings_desc,
-                sf=sf, pw=pw,
-                retry=False,
-            )
-            if msg is not None:
-                return msg
-        except RuntimeError:
-            pass  # LLM 不可达，尝试下一层
-
-        # 二层：LLM 快速模型重试
-        try:
-            msg = self._try_generate_phase_llm(
-                phase=phase, data_quality=data_quality,
-                n_ops=n_ops, ops_desc=ops_desc,
-                n_findings=n_findings, findings_desc=findings_desc,
-                sf=sf, pw=pw,
-                retry=True,
-            )
-            if msg is not None:
-                return msg
-        except RuntimeError:
-            pass  # LLM 仍不可达，走确定性兜底
-
-        # 三层：LLM 完全不可达时的纯数据兜底（零语义归因）
-        return self._build_fallback_phase_message(
+        # F-055 修复：LLM 不可达时必须 raise RuntimeError（铁律 2 路径 A），不得 pass 吞掉
+        return self._try_generate_phase_llm(
             phase=phase, data_quality=data_quality,
-            operations=operations, findings=findings,
+            n_ops=n_ops, ops_desc=ops_desc,
+            n_findings=n_findings, findings_desc=findings_desc,
+            sf=sf, pw=pw,
+            retry=False,
         )
 
     def _try_generate_phase_llm(
@@ -2775,40 +2708,6 @@ class Orchestrator:
             raise RuntimeError(
                 f"_try_generate_phase_llm: LLM 不可达（retry={retry}）。原始错误: {e}"
             ) from e
-
-    def _build_fallback_phase_message(
-        self,
-        phase: str,
-        data_quality: str,
-        operations: list | None = None,
-        findings: list | None = None,
-    ) -> str:
-        """LLM 完全不可达时的纯数据兜底（零语义归因）。"""
-        if phase == "cleaning_strategy":
-            n_ops = len(operations) if operations else 0
-            quality_labels = {
-                "good": "数据质量良好",
-                "medium": "数据质量一般",
-                "poor": "数据质量问题较多",
-            }
-            q = quality_labels.get(data_quality, data_quality)
-            if n_ops == 0:
-                return f"{q}，未检测到需要清洗的问题，可以直接分析。"
-            lines = [f"共 {n_ops} 个清洗操作："]
-            for op in (operations or [])[:6]:
-                lines.append(f"  • {op.get('column', '?')}: {op.get('reason', '')}")
-            lines.append("请确认是否按此方案清洗。")
-            return "\n".join(lines)
-        elif phase == "analyst_preliminary":
-            n_findings = len(findings) if findings else 0
-            if n_findings == 0:
-                return "初步分析没有发现明显的统计规律。你想从哪个维度再看一下？"
-            lines = [f"初步发现 {n_findings} 个分析方向："]
-            for f_item in (findings or [])[:6]:
-                lines.append(f"  • {f_item.get('question', '?')}")
-            lines.append("你想重点关注哪个方向？")
-            return "\n".join(lines)
-        return ""
 
     def _describe_intent(self, parsed_intent: Any) -> str:
         """将解析后的意图译成接在「让我来」后的自然短句。

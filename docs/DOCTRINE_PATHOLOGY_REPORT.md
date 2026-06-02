@@ -74,8 +74,6 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 - **状态分布**：65 DRAFT / 0 OPEN / **1 RESOLVED (F-001)** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
 - **上次更新**：2026-06-02（Phase 3.5 复验轮）
 
-**试错总假设数**：52（51 DRAFT + 1 RETRACTED）。
-
 **试错总假设数**：67（65 DRAFT + 1 RESOLVED + 1 RETRACTED）。
 
 ### 0.2 Phase 2 + Phase 3 + Phase 3.5 关键发现（2026-06-02）
@@ -102,8 +100,9 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 **最终累计**（Phase 3.5 复验后）：
 - **F-001 → RESOLVED**（用户晨间修 commits `9d826f2..61a35d2`，详 3.Z 节）
-- **P0 = 6**（F-002/F-003/F-004/F-019/F-020/F-053/F-054 — 等等 F-002 待技术 AI 验证算 P0 候选，硬剩 6 个仍在）
-- **P1 = 4**（F-038/F-055/F-057/F-060 — 全部仍在）
+- **P0 仍存在 = 6**：F-003 / F-004 / F-019 / F-020 / F-053 / F-054（纯架构 / 用户能看见坏结果）
+- **F-002 [P0]** CI 收集挂掉单独列 — 属于基础设施层失守，不计入"用户能观察到的坏结果"计数，但严重程度同 P0
+- **P1 仍存在 = 4**（F-038 / F-055 / F-057 / F-060 — 全部仍在）
 - **P2 ≈ 8** / **P3 ≈ 47**
 - **Phase 3.5 新发现**：F-066 [P2]（commit `61a35d2` 清理死代码漏删 `_llm_understand_field_update`）
 
@@ -233,6 +232,12 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 > - 撤回（RETRACTED）——全代码读后发现是误报
 > - 与新 finding 合并
 > - 调整 severity（基于全代码视角）
+
+> 📌 **给开发者的定位指引（2026-06-02 Phase 3.5 后）**：
+> finding 头部 / 旧 line 号引用反映**记录时刻**的代码状态。代码改动后 line 号会漂移。
+> **当前最新 line 号 / RESOLVED 状态 → 见 §3.Z.2 一表看完**。
+> 例：F-019 头部写 `orchestrator.py:2338`，3.Z.2 表给出 Phase 3.5 新位置 `orch:2155/2170`。
+> F-020 头部写 `2537-2595`，新位置 `if violations block 2321 / output_path 2394 / duration_ms 2421`。
 
 ---
 
@@ -540,6 +545,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 - **复现方式**：`wc -l hagoku/manager/orchestrator.py`
 - **状态**：DRAFT
 - **提出日期**：2026-06-01
+- **Phase 3.5 复验**（2026-06-02）：当前 `wc -l hagoku/manager/orchestrator.py` = **3241**（commit `61a35d2` 清理死代码 -216 行），"上帝对象"问题量级未变，仍 P3 保留
 
 ---
 
@@ -1890,7 +1896,18 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ## 5. 已 Resolved
 
-_（暂无）_
+### F-001 — orchestrator.py 4 处 `if False: # TODO` 闸门死循环
+
+- **原状态**：DRAFT-Phase 1+R / P0-CRITICAL
+- **修复确认日期**：2026-06-02（Phase 3.5 复验）
+- **修复 commits**：`9d826f2..61a35d2` 范围内（主要 `50a52c1` / `10dc583` 把 cleaner_confirmed 改成文本匹配；`c9a1efb feat(O+P+Q+T)` Analyst 改对话式让 analyst_confirmed 整体消失）
+- **修复证据**：
+  - `grep -nE 'TODO.*_is_user_confirm' hagoku/manager/orchestrator.py` → **0 命中**
+  - `grep -nE 'if False:' hagoku/manager/orchestrator.py` → **0 命中**
+  - `grep -nE 'analyst_confirmed' hagoku/manager/orchestrator.py` → **0 命中**
+  - orchestrator.py 行数：3457 → 3241（commit `61a35d2` 清理死代码 -216）
+- **完整 finding 历史**：见 §3 F-2026-06-01-001
+- **意义**：本报告反馈循环的第一条 RESOLVED — 证实病理学家诊断 → 用户修复 → R 等级复验通过 的路径成立
 
 ---
 
@@ -2094,14 +2111,16 @@ _（暂无）_
 
 ### 9.1 项目健康总览（结果导向）
 
-**5 个已确认 P0**（用户能观察到的坏结果）：
-1. F-001 orchestrator 4 处 TODO → Cleaner/Analyst 闸门确认死循环（**最严重**——pipeline 走不到 Reporter）
-2. F-019 orchestrator:2338 清洗结果用户确认是死代码路径（`cleaning_report = None`）
-3. F-020 orchestrator:2537-2595 guardrails 路径 NameError（`output_path` / `duration_ms` 引用先于定义）
+> ⚠️ **本节是 Phase 1 终态历史快照（2026-06-02 上午）**。Phase 3.5 复验后最新计数请看 §0.1 / §0.2 / §3.Z。这里保留是为了显示 Phase 1 阶段的判断如何在 Phase 2/3.5 进化。
+
+**Phase 1 终态 — 5 个已确认 P0**（用户能观察到的坏结果）：
+1. F-001 orchestrator 4 处 TODO → Cleaner/Analyst 闸门确认死循环（**最严重**——pipeline 走不到 Reporter）—— **Phase 3.5 已 RESOLVED**
+2. F-019 orchestrator:2338 清洗结果用户确认是死代码路径（`cleaning_report = None`）—— Phase 3.5 新位置 orch:2155/2170
+3. F-020 orchestrator:2537-2595 guardrails 路径 NameError（`output_path` / `duration_ms` 引用先于定义）—— Phase 3.5 新位置 orch:2321 block
 4. F-003 律 5 失守 → 字段语义多层存储（`column_descriptions` 与 `column_semantics` 不全同步）
 5. F-004 律 10 失守 → `learn_from_run` 覆盖 `description`（用户纠正被抹掉）
 
-**1 个已确认 P1**（业务结果偏差）：
+**Phase 1 终态 — 1 个已确认 P1**（业务结果偏差）：
 - F-038 business.py 业务分类阈值硬编码（`_interpret_roi` / `_interpret_roas` / `calc_ltv_cac_ratio`）——LLM 应该是决策者
 
 **修复优先级建议（"如果只做 1 件事 → 用户的最大杠杆点"）**：
@@ -2171,20 +2190,26 @@ _（暂无）_
 
 ### 9.5 试错价值（Trial-Error Value）
 
-本周期试错统计：
-- **60 个假设被提出**（18 Phase 0 + 34 Phase 1 + 1 META + 7 Phase 2 session 1）
-- **7 个 P0 已确认**（F-001 / F-003 / F-004 / F-019 / F-020 / **F-053 / F-054**）
-- **3 个 P1 已确认**（F-038 / **F-055 / F-057**）
-- **1 个 P2 新**（**F-056**）
-- **~48 个 P3**（observation / observation-level findings）
-- **1 个 RETRACTED**（F-007）
+> ⚠️ **本节统计是 Phase 3 终态值（2026-06-02 下午）**。Phase 3.5 复验后已变（详 §0.2 / §3.Z）：F-001 → RESOLVED（首个），P0 减 1。
 
-即使 50% 假设被否定，本次审计产生了 60 次"被提出"的学习价值——下次类似问题可对照。
+Phase 3 终态 — 本周期试错统计：
+- **66 个假设被提出**（18 Phase 0 + 34 Phase 1 + 1 META + 13 Phase 2）
+- **7 个 P0 已确认**（F-001 / F-003 / F-004 / F-019 / F-020 / **F-053 / F-054**）—— Phase 3.5 后 F-001 RESOLVED，**仍存在 P0 = 6**
+- **4 个 P1 已确认**（F-038 / **F-055 / F-057 / F-060**）—— Phase 3.5 后全部仍在
+- **~47 个 P3**（observation / observation-level findings）
+- **1 个 RETRACTED**（F-007）
+- **Phase 3.5 后新增 1 条**：F-066（漏删死代码）
+
+即使 50% 假设被否定，本次审计产生了 66+1 次"被提出"的学习价值——下次类似问题可对照。**反馈循环首次激活成功**（F-001 → RESOLVED，1/67 ≈ 1.5%）。
 
 ### 9.6 给用户的具体行动建议
 
+> ⚠️ **本节是 Phase 3 终态建议（2026-06-02 下午）**。Phase 3.5 复验后 F-001 已 RESOLVED — 本节保留作历史。**当前最新行动清单见 §9.8**。
+
+Phase 3 终态 — 给用户的具体行动建议：
+
 **今天就能修的（< 1 小时工作量）**：
-- F-019 + F-020 + F-001（orchestrator 3 个 P0 集中修复）
+- ~~F-001~~ + F-019 + F-020（orchestrator 3 个 P0 集中修复）—— **F-001 已 RESOLVED**，剩 2 个
 - F-004（`learn_from_run` 加 1 行 description 参数）
 - **F-054**（orchestrator.py:1946 调用方 4 个 get 改成正确 key — `findings.get("findings")` 而不是 `preliminary_findings`；或者把 `_handle_submit_analysis` 改成额外 emit `preliminary_findings` 别名）
 - **F-053 一半**（`orchestrator.py:2993-2998` `_apply_field_corrections` 加 2 行：`s["description"] = ...` + `s["display_name"] = ...`）
@@ -2208,13 +2233,15 @@ _（暂无）_
 
 **本节是 Phase 3 终态评估**。66 条 DRAFT 按真实性 / 影响 / 可操作性评估，分为 4 类。**本节仅是病理学家"推荐"，第 4 节"正式 Findings"仍保持空状态等待反馈循环激活**（用户 / 审核 AI 标 RESOLVED / DISPUTED / 用户驳回则 RETRACTED）。
 
-#### 推荐立即升级到 OPEN（11 条）— 用户能观察到坏结果 + 已 R 等级 / 强 Phase 1 证据 + 修复路径清晰
+#### 推荐立即升级到 OPEN（10 条）— 用户能观察到坏结果 + 已 R 等级 / 强 Phase 1 证据 + 修复路径清晰
+
+> Phase 3.5 后 F-001 已 RESOLVED，从原 11 条降为 10 条。
 
 | Finding | 等级 | 推荐升级理由 |
 |---|---|---|
-| **F-001** | P0 | R 等级已验证（4 处 TODO 死循环精确命中）+ Cleaner/Analyst 闸门确认必然失败 |
-| **F-019** | P0 | R 等级已验证（cleaning_report=None 死分支）+ 用户看不到清洗结果审核 |
-| **F-020** | P0 | line citation 100% 准确（NameError 路径）+ 违规一旦护栏触发就崩 |
+| ~~F-001~~ | ~~P0~~ | ✅ **已 RESOLVED（2026-06-02 用户晨修）** — 反馈循环首次激活样本 |
+| **F-019** | P0 | R 等级已验证（cleaning_report=None 死分支，Phase 3.5 新位置 2155/2170）+ 用户看不到清洗结果审核 |
+| **F-020** | P0 | line citation 100% 准确（Phase 3.5 新位置：if violations block 2321 / output_path 2394 / duration_ms 2421）+ 违规一旦护栏触发就崩 |
 | **F-003** | P0 | Phase 1 多 session 多文件验证（5 处平行存储 + 写侧不同步）+ F-053 给出全景 |
 | **F-004** | P0 | Phase 1 完整机制（learn_from_run 抹 description）+ 1 行修复 |
 | **F-053** | P0 | Phase 2 SSoT 反差证据（5 个 derive_* 4 个零调用 + 8 处直写）+ `_apply_field_corrections:2993` 是源头 |
@@ -2272,11 +2299,14 @@ _（暂无）_
 
 ### 9.8 给用户的最简版决策清单（如果只看一节）
 
-**如果只能修 1 件事**（最大杠杆 / < 1 小时）：
-- **F-001** orchestrator 4 处 `if False: # TODO` → `if True:` 或恢复 `_is_user_confirm` 替代品
+> Phase 3.5 复验后最新版（F-001 已 RESOLVED）。
 
-**如果有半天**（4 个 P0 集中修）：
-- F-001 + F-019 + F-020（orchestrator 三连）+ F-054（line 1946 的 `get('preliminary_findings')` 改成 `get('findings')`）
+**如果只能修 1 件事**（最大杠杆 / < 1 小时）：
+- **F-054**（orchestrator.py:1946 改 `get("preliminary_findings")` 为 `get("findings")` — 让 UI "初步发现 N 个" 不再永远显示 0）
+
+**如果有半天**（剩 3 个 P0 集中修，原 4 个里 F-001 已 RESOLVED）：
+- F-019 + F-020（orchestrator 邻居死分支：line 2155/2170 死分支 + line 2321 块 NameError）
+- F-054（同上）
 
 **如果有 1 天**（解决律 5 失守的全部根源）：
 - 加 F-053（`_apply_field_corrections:2993` 双写 column_semantics 字段）
@@ -2287,6 +2317,7 @@ _（暂无）_
 - F-055（删 `except RuntimeError: pass`，改 raise）
 - F-057 + F-056 + F-063 + F-065（扩展守门扫描范围 + 检测模式）
 - F-038（业务阈值移到 config 或 LLM）
+- F-022 + F-066（删 `_llm_understand_field_update` 45 行死代码 — commit `61a35d2` 漏删的）
 
 **长期（1 月+）**：
 - 拆 orchestrator.py（3241 行 → 模块化）
@@ -2298,7 +2329,7 @@ _（暂无）_
 > **当前阶段**：Phase 0 / 1 / 2 / 3 / **3.5（复验）全部完成**
 > **总 DRAFT finding**：67（18 Phase 0 + 34 Phase 1 + 1 META + 13 Phase 2 + 1 Phase 3.5）
 > **已 RESOLVED**：1（**F-001** 用户晨间修复，反馈循环首次激活）
-> **已确认 P0（仍存在）**：6 个（F-002/F-003/F-004/F-019/F-020/F-053/F-054 — F-001 已 RESOLVED 从 P0 名单移出）
+> **已确认 P0（仍存在）**：6 个（F-003 / F-004 / F-019 / F-020 / F-053 / F-054 — F-001 已 RESOLVED 从名单移出；F-002 CI 假绿同 P0 严重程度，单独跟踪）
 > **已确认 P1（仍存在）**：4 个（F-038 业务阈值 + F-055 铁律 2 失守 + F-057 守门盲区 + F-060 律 10 装饰字段）
 > **推荐升级 OPEN**：14 条（去掉 F-001 — 已 RESOLVED；10 个 P0/P1 仍待修 + 4 个跨文件证据）
 > **推荐 DEFERRED**：15 条 P3-OBS

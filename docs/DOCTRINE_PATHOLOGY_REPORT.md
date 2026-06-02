@@ -68,13 +68,13 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-02 完成 + **Phase 3.5 复验轮** 完成
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5（复验）全部完成**
-- **Finding 数**：0 正式 / 67 草稿（含 +1 Phase 3.5 新发现）/ **1 RESOLVED**（F-001 用户晨间已修）
-- **状态分布**：65 DRAFT / 0 OPEN / **1 RESOLVED (F-001)** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
-- **上次更新**：2026-06-02（Phase 3.5 复验轮）
+- **当前评估周期**：2026-06-01 → 2026-06-02 完成 + **Phase 3.5 / 3.6 复验轮** 完成
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 全部完成**
+- **Finding 数**：0 正式 / 67 草稿 / **5 RESOLVED**（F-001 + Phase 3.6 修 F-019/F-020/F-054/F-055）
+- **状态分布**：61 DRAFT / 0 OPEN / **5 RESOLVED** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
+- **上次更新**：2026-06-02（Phase 3.6 复验轮 — 开发修 4 条 P0/P1）
 
-**试错总假设数**：67（65 DRAFT + 1 RESOLVED + 1 RETRACTED）。
+**试错总假设数**：67（61 DRAFT + 5 RESOLVED + 1 RETRACTED）。
 
 ### 0.2 Phase 2 + Phase 3 + Phase 3.5 关键发现（2026-06-02）
 
@@ -98,13 +98,17 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 - **维持 DRAFT 等 R 等级**：36 条
 - **无新增 RETRACTED**
 
-**最终累计**（Phase 3.5 复验后）：
-- **F-001 → RESOLVED**（用户晨间修 commits `9d826f2..61a35d2`，详 3.Z 节）
-- **P0 仍存在 = 6**：F-003 / F-004 / F-019 / F-020 / F-053 / F-054（纯架构 / 用户能看见坏结果）
+**最终累计**（Phase 3.6 复验后）：
+- **5 条已 RESOLVED**：
+  - F-001（Phase 3.5）— orchestrator 4 处闸门死循环
+  - F-019 / F-020 / F-054（Phase 3.6）— 3 个 P0 关键修复
+  - F-055（Phase 3.6）— 铁律 2 失守 P1
+- **P0 仍存在 = 3**：F-003 / F-004 / F-053（律 5/律 10 全景 — 都跟字段语义同步链有关）
 - **F-002 [P0]** CI 收集挂掉单独列 — 属于基础设施层失守，不计入"用户能观察到的坏结果"计数，但严重程度同 P0
-- **P1 仍存在 = 4**（F-038 / F-055 / F-057 / F-060 — 全部仍在）
+- **P1 仍存在 = 3**：F-038 / F-057 / F-060
 - **P2 ≈ 8** / **P3 ≈ 47**
-- **Phase 3.5 新发现**：F-066 [P2]（commit `61a35d2` 清理死代码漏删 `_llm_understand_field_update`）
+- **F-058 silent except**：50 → 48（开发本轮顺便消除 2 处）
+- **Phase 3.5 / 3.6 新发现**：F-066 [P2]（commit `61a35d2` / `0a3ea25` 两轮清理死代码都漏删 `_llm_understand_field_update`）
 
 **已读行数 / 总代码行数**：26 246 / 26 246（Python 后端 **100%**）+ 8 476 / 8 476（TS/TSX **100%**）
 
@@ -112,14 +116,14 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 | 指标 | 当前 | 健康阈值 |
 |------|------|---------|
-| 审计阶段完成度 | **Phase 0 / 1 / 2 / 3 / 3.5 全部完成** | 全部完成 ✅ |
+| 审计阶段完成度 | **Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 全部完成** | 全部完成 ✅ |
 | 正式 finding 占比 | 0/67 — 待用户反馈循环激活 | 升级到 OPEN 后 % 走起 |
-| **反馈循环首次激活** | ✅ F-001 → RESOLVED（晨间修复证实病理学家诊断准确） | 持续验证 |
+| **反馈循环激活** | ✅ **5 条已闭环 RESOLVED**（F-001 + F-019 + F-020 + F-054 + F-055）| 持续验证 |
 | 距上次用户验证 | 0 天 | ≤ 30 天 |
-| 反馈率 | 1/67 ≈ 1.5%（F-001 一条已闭环 RESOLVED） | 持续提升 |
+| 反馈率 | **5/67 ≈ 7.5%**（从 1.5% 升到 7.5%） | 持续提升 |
 | **已读行数 / 总代码行数** | 100%（Python + TS/TSX） | 100% ✅ |
 | **META-finding 自评** | META-001（7.1 状态过期）已记录 | 报告内部状态一致 |
-| **状态机适配** | 推荐升级 / 撤回 / 延期 分类（9.7）+ 复验轮（3.Z） | Phase 3.5 完成 ✅ |
+| **状态机适配** | 推荐升级 / 撤回 / 延期 分类（9.7）+ 复验轮（3.Z + 3.Ω） | Phase 3.6 完成 ✅ |
 
 ---
 
@@ -233,11 +237,10 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 > - 与新 finding 合并
 > - 调整 severity（基于全代码视角）
 
-> 📌 **给开发者的定位指引（2026-06-02 Phase 3.5 后）**：
+> 📌 **给开发者的定位指引（2026-06-02 Phase 3.6 后）**：
 > finding 头部 / 旧 line 号引用反映**记录时刻**的代码状态。代码改动后 line 号会漂移。
-> **当前最新 line 号 / RESOLVED 状态 → 见 §3.Z.2 一表看完**。
-> 例：F-019 头部写 `orchestrator.py:2338`，3.Z.2 表给出 Phase 3.5 新位置 `orch:2155/2170`。
-> F-020 头部写 `2537-2595`，新位置 `if violations block 2321 / output_path 2394 / duration_ms 2421`。
+> **当前最新 line 号 / RESOLVED 状态 → 见 §3.Z.2（Phase 3.5）+ §3.Ω.2（Phase 3.6）两表**。
+> RESOLVED 名单见 §5（5 条：F-001 / F-019 / F-020 / F-054 / F-055）。
 
 ---
 
@@ -584,7 +587,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
-### F-2026-06-01-019 [DRAFT-Phase 1+R][P0-CRITICAL] orchestrator.py:2338 死分支 — 清洗结果待用户确认永远不触发——R 等级已验证
+### F-2026-06-01-019 [RESOLVED][P0-CRITICAL] orchestrator.py:2338 死分支 — 清洗结果待用户确认永远不触发——已修复（Phase 3.6）
 
 - **结果影响**：在 Cleaner → 用户确认清洗结果 → 进 Analyst 的关键闸门处，代码逻辑被破坏。`cleaning_report = None`（line 2323）让 `if not skip_cleaning and cleaning_report is not None:`（line 2338）**永远为 False** → 整个 60 行的"清洗结果用户确认"块**永远不会执行**。用户**看不到**清洗结果的 review，**无法阻止**清洗执行。
 - **LLM 失去的机会**：用户永远没机会对清洗结果说"这个列的清洗方式不对"——代码替他确认了
@@ -614,7 +617,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
-### F-2026-06-01-020 [DRAFT-Phase 1+R][P0-CRITICAL] orchestrator.py:2537-2595 guardrails 路径 NameError——R 等级部分验证
+### F-2026-06-01-020 [RESOLVED][P0-CRITICAL] orchestrator.py:2537-2595 guardrails 路径 NameError——已修复（Phase 3.6）
 
 - **结果影响**：当 Analyst 触发强制级护栏违规时，代码意图是给用户一个"LLM 风险分析 + 用户决策"的暂停。**但 RUN_COMPLETED 事件（line 2575-2586）和 return（line 2587-2595）引用了 `output_path`（line 2610 才定义）和 `duration_ms`（line 2637 才定义）**。结果是：**NameError**，用户看到的是"分析失败"而不是"护栏触发"——LLM 风险分析生成的时间被浪费。
 - **LLM 失去的机会**：护栏违规是统计问题，本应由 LLM 解释并让用户决策。但 LLM 解释完成、用户即将决策时，整个 run 崩溃。LLM 永远没机会被用户回应。
@@ -1377,7 +1380,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
-### F-2026-06-02-054 [DRAFT-Phase 2][P0-CRITICAL] orchestrator.run preliminary 分支：4 个 dict.get 总返默认值 — Analyst 阶段消息永远空
+### F-2026-06-02-054 [RESOLVED][P0-CRITICAL] orchestrator.run preliminary 分支：4 个 dict.get 总返默认值 — Analyst 阶段消息永远空——已修复（Phase 3.6）
 
 - **结果影响**：用户走完整 pipeline 时，UI 阶段消息 "📊 初步分析，发现数据中的规律..." 的下一条 message 中：
   - "初步发现 N 个" 的 **N 永远是 0**
@@ -1425,7 +1428,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
-### F-2026-06-02-055 [DRAFT-Phase 2][P1-HIGH] 铁律 2 失守：`_generate_phase_message` 三层兜底走"确定性兜底"路径
+### F-2026-06-02-055 [RESOLVED][P1-HIGH] 铁律 2 失守：`_generate_phase_message` 三层兜底走"确定性兜底"路径——已修复（Phase 3.6）
 
 - **结果影响**：当 LLM 主模型 + 快速模型都不可达时，**代码自己拼装中文阶段消息**给用户（`_build_fallback_phase_message` line 2779-2811），用户不知道 LLM 失败了 — 这违反铁律 2（"LLM 失败的唯一合法路径"中没有"代码拼装兜底"这条）+ 律 7（语义不确定可见）。
 - **证据**（line citation）：
@@ -1886,6 +1889,88 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
+## 3.Ω Phase 3.6 复验轮（开发修 4 条 P0/P1 后 / 2026-06-02 接续）
+
+> 本轮触发：开发提交 `0a3ea25 fix(orchestrator): 修复 4 条 P0/P1 doctrine finding + 死代码清理`，声称已修 F-019 / F-020 / F-054 / F-055。病理学家做 R 等级复验。
+
+### 3.Ω.1 修复 commit 摘要
+
+- **commit**：`0a3ea25`
+- **改动文件**：
+  - `hagoku/manager/orchestrator.py`（净 -119 行；3241 → 3140）
+  - `tests/test_manager/test_doctrine_fix_f054.py` 新增（TDD）
+  - `tests/test_manager/test_doctrine_fix_f055.py` 新增（TDD）
+  - `tests/test_pipeline/test_failure_path.py` 改 8 行
+- **commit message 自检声明**：明确"全是纯代码 / 通道修复，无业务语义判断 / 中文分类 / if-elif 分支链改动"——符合铁律 0 要求
+
+### 3.Ω.2 复验结果（4 RESOLVED + 12 仍在 + F-058 数字校准）
+
+| Finding | 等级 | 复验 | 证据 |
+|---|---|---|---|
+| **F-019** | P0 | ✅ **RESOLVED** | `grep "if not skip_cleaning and cleaning_report is not None:"` → **0 命中**；原 59 行死分支删除（commit -103 行的主要构成） |
+| **F-020** | P0 | ✅ **RESOLVED** | run() 范围 `1640..2454`：`output_path` 首次赋值 line 2265 / `duration_ms` line 2266，**均在 `if violations:` block (line 2271) 之前**；NameError 不再触发 |
+| **F-054** | P0 | ✅ **RESOLVED** | `orchestrator.py:1951-1952` 改用正确 key：`get("findings", [])` / `get("summary", "")`；UI "初步发现 N 个" 数字将正常显示；TDD 测试 `tests/test_manager/test_doctrine_fix_f054.py` 通过 |
+| **F-055** | P1 | ✅ **RESOLVED** | `_generate_phase_message` 内 `except RuntimeError: pass` **全删**；底层 `_try_generate_phase_llm:2707` `except Exception as e: raise RuntimeError(...) from e`（铁律 2 路径 A）；`_build_fallback_phase_message` 整函数已删（0 调用）；TDD 测试通过 |
+| F-002 | P0 | ❌ 仍存在 | `tests/test_field_llm_e2e.py` 未触达本次修复（属基础设施级，开发未声称修） |
+| F-003 | P0 | ❌ 仍存在 | `column_descriptions[col]=` 直写仍 **8 处**（未变） |
+| F-004 | P0 | ❌ 仍存在 | `memory.py:662-668` `ColumnSemanticDef(...)` 构造仍不传 `description` / `display_name`（未变） |
+| F-053 | P0 | ❌ 仍存在 | `derive_*` 调用率仍 4/5 = 0（未变）；`_apply_field_corrections:2993` 仍不双写（未变） |
+| F-038 | P1 | ❌ 仍存在 | `business.py:306 if ratio < 1` / `:916 if roi > 2` 阈值原样 |
+| F-057 | P1 | ❌ 仍存在 | `_DOCTRINE_SUBDIRS = ("agents", "manager", "api", "memory", "guardrails")` 未变 |
+| F-060 | P1 | ❌ 仍存在 | `scout._apply_project_memory` 仍不检查 `confirmed_by_user`；`last_confirmed_at_run` 读侧仍 **0 处** |
+| F-021 | P2 | ❌ 仍存在 | `orch.py:2939 return {"type": "correction", "updates": {}}` 原样 |
+| F-022 | P2 | ❌ 仍存在 | `_llm_understand_field_update` 定义 line 2941，调用方 0 处 |
+| F-061 | P2 | ❌ 仍存在 | `orch.py:1936/1938` 3 元组解构 `df_clean, cleaning_report, _ = cleaner_result` 原样 |
+| F-062 | P3 | ❌ 仍存在 | `orch.py:2345 reporter.run(...)` 无变量赋值 |
+| F-066 | P2 | ❌ 仍存在 | commit 0a3ea25 也删了死代码（_build_fallback_phase_message），但 `_llm_understand_field_update`（F-022 / F-066 同一目标）仍未删 |
+
+### 3.Ω.3 数字校准
+
+- **silent except 总数**（F-058 重算）：50 → **48**（commit 0a3ea25 删 `_build_fallback_phase_message` + 重构 `_generate_phase_message` 顺带消除 2 处）
+- **orchestrator.py 行数**：3241 → **3140**（commit 自报 3138，实际 3140，差 2 — 可接受范围内）
+- **column_descriptions 直写**：8 处（未变）
+- **derive_\* 函数调用率**：未变
+- **F-058 50 → 48 的具体 -2 处**：是 `_generate_phase_message` 内 2 处 `except RuntimeError: pass`（F-055 修复）
+
+### 3.Ω.4 测试结果（R 等级证据）
+
+```bash
+$ .venv/bin/python -m pytest tests/test_doctrine_compliance.py \
+    tests/test_product/test_information_arrival.py \
+    tests/test_manager/ \
+    --tb=no -q --ignore=tests/test_field_llm_e2e.py
+
+45 passed in 1.81s
+```
+
+包含：
+- 10 个 doctrine compliance 守门测试 ✅
+- 15 个律 1-10 信息到达测试 ✅
+- 全部 test_manager/ 测试（含新加的 test_doctrine_fix_f054 / test_doctrine_fix_f055）✅
+- 全 45 个测试通过，无 regression
+
+### 3.Ω.5 关键观察
+
+**开发本轮干得漂亮**：
+- ✅ TDD 风格：先写 test_doctrine_fix_f054 / test_doctrine_fix_f055 再修
+- ✅ 自检声明完整（commit message 含【自检】块）
+- ✅ commit message 详细列每个 fix 的具体做法
+- ✅ 顺手删 `_build_fallback_phase_message` 死代码（F-055 修复后 0 调用）
+
+**漏点（建议下次顺手做）**：
+- F-022 / F-066 同样是死代码删除（_llm_understand_field_update 45 行），本轮顺手做了 _build_fallback_phase_message 但漏了这条 — 与 commit `61a35d2 清理死代码` 漏删 F-022 同模式（这是 F-066 提示的"漏删邻居"）
+- F-021（`_llm_classify_confirmation:2939` 仍返回 `{"type": "correction", "updates": {}}` 默认值）— 与 F-055 同样是"LLM 失败兜底"，但 F-055 修了 phase_message 路径、F-021 的 classify_confirmation 路径未修
+
+**累计反馈循环**（截至 Phase 3.Ω）：
+- 已 RESOLVED：5 条（F-001 [Phase 3.5] + F-019 / F-020 / F-054 / F-055 [Phase 3.6]）
+- 反馈率：5/67 ≈ **7.5%**（从 1.5% 升到 7.5%）
+- 用户提的 14 条推荐升级名单（§9.7）：5 条已闭环、9 条待修
+
+---
+
+
+---
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -1908,6 +1993,62 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
   - orchestrator.py 行数：3457 → 3241（commit `61a35d2` 清理死代码 -216）
 - **完整 finding 历史**：见 §3 F-2026-06-01-001
 - **意义**：本报告反馈循环的第一条 RESOLVED — 证实病理学家诊断 → 用户修复 → R 等级复验通过 的路径成立
+
+---
+
+### F-019 — orchestrator.py 清洗结果待用户确认死分支
+
+- **原状态**：DRAFT-Phase 1+R / P0-CRITICAL
+- **修复确认日期**：2026-06-02（Phase 3.6 复验）
+- **修复 commit**：`0a3ea25 fix(orchestrator): 修复 4 条 P0/P1 doctrine finding + 死代码清理`
+- **修复证据**：
+  - `grep -nE 'if not skip_cleaning and cleaning_report is not None:' hagoku/manager/orchestrator.py` → **0 命中**
+  - 原 59 行死分支（cleaning review block）整段删除，注释自陈："assess 循环已处理用户交互，此处无需重复清洗审核"
+- **完整 finding 历史**：见 §3 F-2026-06-01-019
+- **意义**：F-001 的"邻居 bug"修复（同一文件同阶段），印证 §3.Z.4 的提示
+
+---
+
+### F-020 — orchestrator.py guardrails 路径 NameError
+
+- **原状态**：DRAFT-Phase 1+R / P0-CRITICAL
+- **修复确认日期**：2026-06-02（Phase 3.6 复验）
+- **修复 commit**：`0a3ea25`
+- **修复证据**（AST 验证）：
+  - `output_path` 首次赋值 line **2265**
+  - `duration_ms` 首次赋值 line **2266**
+  - `if violations:` block 起点 line **2271**
+  - 两个变量都在 violations block **之前**赋值 → NameError 不再触发
+- **完整 finding 历史**：见 §3 F-2026-06-01-020
+
+---
+
+### F-054 — orchestrator.run preliminary 分支 4 个 dict.get 错 key
+
+- **原状态**：DRAFT-Phase 2 / P0-CRITICAL
+- **修复确认日期**：2026-06-02（Phase 3.6 复验）
+- **修复 commit**：`0a3ea25`
+- **修复证据**：
+  - `orchestrator.py:1951` `raw_findings = analyst_result.get("findings", [])`（旧用 `preliminary_findings` 错 key）
+  - `orchestrator.py:1952` `suggested = analyst_result.get("summary", "")`（旧用 `suggested_focus` 错 key）
+  - TDD 测试 `tests/test_manager/test_doctrine_fix_f054.py` 通过
+- **影响**：UI "初步发现 N 个" 现在正确显示数字（之前永远 0）
+- **完整 finding 历史**：见 §3 F-2026-06-02-054
+
+---
+
+### F-055 — `_generate_phase_message` 铁律 2 失守（确定性兜底）
+
+- **原状态**：DRAFT-Phase 2 / P1-HIGH
+- **修复确认日期**：2026-06-02（Phase 3.6 复验）
+- **修复 commit**：`0a3ea25`
+- **修复证据**：
+  - `_generate_phase_message` 内 `except RuntimeError: pass` **全删**
+  - 底层 `_try_generate_phase_llm:2707` `except Exception as e: raise RuntimeError(...) from e`（铁律 2 路径 A）
+  - `_build_fallback_phase_message`（73 行确定性兜底）整函数删除（F-055 修复后 0 调用）
+  - 函数 docstring 明确"LLM 不可达时直接 raise"
+  - TDD 测试 `tests/test_manager/test_doctrine_fix_f055.py` 通过
+- **完整 finding 历史**：见 §3 F-2026-06-02-055
 
 ---
 
@@ -2233,21 +2374,21 @@ Phase 3 终态 — 给用户的具体行动建议：
 
 **本节是 Phase 3 终态评估**。66 条 DRAFT 按真实性 / 影响 / 可操作性评估，分为 4 类。**本节仅是病理学家"推荐"，第 4 节"正式 Findings"仍保持空状态等待反馈循环激活**（用户 / 审核 AI 标 RESOLVED / DISPUTED / 用户驳回则 RETRACTED）。
 
-#### 推荐立即升级到 OPEN（10 条）— 用户能观察到坏结果 + 已 R 等级 / 强 Phase 1 证据 + 修复路径清晰
+#### 推荐立即升级到 OPEN（6 条仍未修）— 用户能观察到坏结果 + 已 R 等级 / 强 Phase 1 证据 + 修复路径清晰
 
-> Phase 3.5 后 F-001 已 RESOLVED，从原 11 条降为 10 条。
+> Phase 3.5 后 F-001 RESOLVED；Phase 3.6 后 F-019 / F-020 / F-054 / F-055 RESOLVED；剩 6 条待修。
 
 | Finding | 等级 | 推荐升级理由 |
 |---|---|---|
-| ~~F-001~~ | ~~P0~~ | ✅ **已 RESOLVED（2026-06-02 用户晨修）** — 反馈循环首次激活样本 |
-| **F-019** | P0 | R 等级已验证（cleaning_report=None 死分支，Phase 3.5 新位置 2155/2170）+ 用户看不到清洗结果审核 |
-| **F-020** | P0 | line citation 100% 准确（Phase 3.5 新位置：if violations block 2321 / output_path 2394 / duration_ms 2421）+ 违规一旦护栏触发就崩 |
+| ~~F-001~~ | ~~P0~~ | ✅ **已 RESOLVED（Phase 3.5 — 用户晨修）** |
+| ~~F-019~~ | ~~P0~~ | ✅ **已 RESOLVED（Phase 3.6 — commit 0a3ea25）** |
+| ~~F-020~~ | ~~P0~~ | ✅ **已 RESOLVED（Phase 3.6 — commit 0a3ea25）** |
+| ~~F-054~~ | ~~P0~~ | ✅ **已 RESOLVED（Phase 3.6 — commit 0a3ea25）** |
+| ~~F-055~~ | ~~P1~~ | ✅ **已 RESOLVED（Phase 3.6 — commit 0a3ea25）** |
 | **F-003** | P0 | Phase 1 多 session 多文件验证（5 处平行存储 + 写侧不同步）+ F-053 给出全景 |
 | **F-004** | P0 | Phase 1 完整机制（learn_from_run 抹 description）+ 1 行修复 |
 | **F-053** | P0 | Phase 2 SSoT 反差证据（5 个 derive_* 4 个零调用 + 8 处直写）+ `_apply_field_corrections:2993` 是源头 |
-| **F-054** | P0 | Phase 2 契约破裂（4 个 dict.get 用错 key + 前端 phase=full 必触达）+ UI 永远显示"初步发现 0 个" |
 | **F-038** | P1 | Phase 1 完整 grep（ROI/ROAS/LTV/CAC 阈值在 business.py）+ 业务结论偏差 |
-| **F-055** | P1 | Phase 2 line citation（2696/2710 `pass` + 注释自陈）+ 铁律 2 失守 |
 | **F-057** | P1 | Phase 2 配置分析（5 个声明 / 4 个实存 + 已确认 P0/P1 大半发生地不扫）+ 配置 bug（"memory" 死指向） |
 | **F-060** | P1 | Phase 2 跨文件证据（律 10 双字段写而不读 + 6 处写入 / 0 处真读）+ 与 F-004/F-023 形成全景 |
 
@@ -2299,39 +2440,35 @@ Phase 3 终态 — 给用户的具体行动建议：
 
 ### 9.8 给用户的最简版决策清单（如果只看一节）
 
-> Phase 3.5 复验后最新版（F-001 已 RESOLVED）。
+> Phase 3.6 复验后最新版（F-001 + F-019 + F-020 + F-054 + F-055 共 5 条 RESOLVED；剩 6 条 OPEN 候选）。
 
 **如果只能修 1 件事**（最大杠杆 / < 1 小时）：
-- **F-054**（orchestrator.py:1946 改 `get("preliminary_findings")` 为 `get("findings")` — 让 UI "初步发现 N 个" 不再永远显示 0）
+- **F-004**（`learn_from_run` 加 `description` / `display_name` 参数 — 1 行修复，让用户纠正不再被记忆抹掉）
 
-**如果有半天**（剩 3 个 P0 集中修，原 4 个里 F-001 已 RESOLVED）：
-- F-019 + F-020（orchestrator 邻居死分支：line 2155/2170 死分支 + line 2321 块 NameError）
-- F-054（同上）
+**如果有半天**（律 5 + 律 10 全景一次性修，跟 F-001~F-055 RESOLVED 后剩下最大杠杆）：
+- F-053（`_apply_field_corrections:2993` 双写 `s["description"]` / `s["display_name"]`）
+- F-004（`learn_from_run` 加 description / display_name 参数）
+- F-060（`_apply_project_memory` 检查 `confirmed_by_user`）
+- → 三条一起修才能真正解决"用户纠正失效"问题
 
-**如果有 1 天**（解决律 5 失守的全部根源）：
-- 加 F-053（`_apply_field_corrections:2993` 双写 column_semantics 字段）
-- 加 F-004（`learn_from_run` 加 description 参数）
-- 加 F-060（`_apply_project_memory` 检查 `confirmed_by_user`）
-
-**如果有 1 周**（机制层 + 大头清理）：
-- F-055（删 `except RuntimeError: pass`，改 raise）
+**如果有 1 天**（机制层守门 + 大头清理）：
+- F-038（业务阈值移到 config 或让 LLM 决定）
 - F-057 + F-056 + F-063 + F-065（扩展守门扫描范围 + 检测模式）
-- F-038（业务阈值移到 config 或 LLM）
-- F-022 + F-066（删 `_llm_understand_field_update` 45 行死代码 — commit `61a35d2` 漏删的）
+- F-022 + F-066（删 `_llm_understand_field_update` 45 行死代码 — 两轮清理都漏删的）
 
-**长期（1 月+）**：
-- 拆 orchestrator.py（3241 行 → 模块化）
+**长期（1 周+）**：
+- 拆 orchestrator.py（3140 行 → 模块化）
 - 强制使用 types.py 的 `derive_*` 接口，删 column_descriptions / column_display_names 字段
 - 把 prompt 集中到 `hagoku/prompts/`（F-059 + F-065 联动）
 
 ---
 
-> **当前阶段**：Phase 0 / 1 / 2 / 3 / **3.5（复验）全部完成**
-> **总 DRAFT finding**：67（18 Phase 0 + 34 Phase 1 + 1 META + 13 Phase 2 + 1 Phase 3.5）
-> **已 RESOLVED**：1（**F-001** 用户晨间修复，反馈循环首次激活）
-> **已确认 P0（仍存在）**：6 个（F-003 / F-004 / F-019 / F-020 / F-053 / F-054 — F-001 已 RESOLVED 从名单移出；F-002 CI 假绿同 P0 严重程度，单独跟踪）
-> **已确认 P1（仍存在）**：4 个（F-038 业务阈值 + F-055 铁律 2 失守 + F-057 守门盲区 + F-060 律 10 装饰字段）
-> **推荐升级 OPEN**：14 条（去掉 F-001 — 已 RESOLVED；10 个 P0/P1 仍待修 + 4 个跨文件证据）
+> **当前阶段**：Phase 0 / 1 / 2 / 3 / **3.5 / 3.6 全部完成**
+> **总 finding**：67（18 Phase 0 + 34 Phase 1 + 1 META + 13 Phase 2 + 1 Phase 3.5）
+> **已 RESOLVED**：5 条（F-001 Phase 3.5；F-019 / F-020 / F-054 / F-055 Phase 3.6）
+> **已确认 P0（仍存在）**：3 个 — F-003 / F-004 / F-053（律 5/律 10 全景）+ F-002 CI 假绿（基础设施单独跟踪）
+> **已确认 P1（仍存在）**：3 个（F-038 业务阈值 + F-057 守门盲区 + F-060 律 10 装饰字段）
+> **推荐升级 OPEN**：6 条仍未修（F-003 / F-004 / F-053 / F-038 / F-057 / F-060）+ 4 条 P2/P3 跨文件证据
 > **推荐 DEFERRED**：15 条 P3-OBS
 > **维持 DRAFT 等 R 等级**：36 条 + Phase 3.5 新 F-066
 > **总已读行数 / 总代码行数**：26 246 / 26 246 (Python 后端 100%) + 8 476 / 8 476 (TS/TSX 100%)

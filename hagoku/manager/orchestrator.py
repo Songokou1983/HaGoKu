@@ -2446,7 +2446,7 @@ class Orchestrator:
                 if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
                 cmd_result = self._handle_command_if_present(user_reply_analyst, "analyst", context)
-                analyst_confirmed = False  # TODO: _is_user_confirm 已删
+                analyst_confirmed = user_reply_analyst and user_reply_analyst.strip() in ("确认继续", "可以进入下一阶段了")
                 if user_reply_analyst:
                     self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
                         "reply": user_reply_analyst,

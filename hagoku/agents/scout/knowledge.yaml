@@ -11648,3 +11648,117 @@ knowledge:
     confidence: 0.88
   created_at: '2026-06-02 08:29:52'
   use_count: 0
+- id: 37855cf0
+  content: 字段名：公司编号，代表数据所属的公司层级；含义：公司编号，代表数据所属的公司层级；数据特征：categorical BU为公司编号（5个类别），可将店铺按所属公司分组，用于在分析收入趋势时按公司层级进行对比和归因，不参与单店趋势计算但提供分组维度。；推断角色：feature
+  tags:
+  - categorical
+  - feature
+  metadata:
+    project: test0602
+    field: 公司编号，代表数据所属的公司层级
+    meaning: 公司编号，代表数据所属的公司层级
+    data_pattern: categorical BU为公司编号（5个类别），可将店铺按所属公司分组，用于在分析收入趋势时按公司层级进行对比和归因，不参与单店趋势计算但提供分组维度。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:12'
+  use_count: 0
+- id: 88bd7439
+  content: 字段名：店铺编码，唯一标识一家店铺；含义：店铺编码，唯一标识一家店铺；数据特征：id Code为店铺唯一编码（25个店铺各出现25次），是"分析每个店铺"的核心分组维度，必须参与分析以区分不同店铺的收入趋势。；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0602
+    field: 店铺编码，唯一标识一家店铺
+    meaning: 店铺编码，唯一标识一家店铺
+    data_pattern: id Code为店铺唯一编码（25个店铺各出现25次），是"分析每个店铺"的核心分组维度，必须参与分析以区分不同店铺的收入趋势。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:13'
+  use_count: 0
+- id: 5fce1d14
+  content: 字段名：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；含义：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；数据特征：datetime
+    Period为YYYYWW格式的周度时间编号（202540~202612），是构建收入随时间变化趋势轴的必要字段，必须参与分析。；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0602
+    field: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    meaning: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    data_pattern: datetime Period为YYYYWW格式的周度时间编号（202540~202612），是构建收入随时间变化趋势轴的必要字段，必须参与分析。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:14'
+  use_count: 0
+- id: f9bfb085
+  content: 字段名：第一类收入指标(可能为销售收入或主营业务收入)，连续型金额字段，是分析"收入变动趋势"的核心被解释变量。；含义：第一类收入指标(可能为销售收入或主营业务收入)，连续型金额字段，是分析"收入变动趋势"的核心被解释变量。；数据特征：numeric
+    Inc1为连续型金额字段（0~397.62），是"收入变动趋势"分析的核心被解释变量（target），直接回答收入如何变动。；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0602
+    field: 第一类收入指标(可能为销售收入或主营业务收入)，连续型金额字段，是分析"收入变动趋势"的核心被解释变量。
+    meaning: 第一类收入指标(可能为销售收入或主营业务收入)，连续型金额字段，是分析"收入变动趋势"的核心被解释变量。
+    data_pattern: numeric Inc1为连续型金额字段（0~397.62），是"收入变动趋势"分析的核心被解释变量（target），直接回答收入如何变动。
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:16'
+  use_count: 0
+- id: aacacd42
+  content: 字段名：店铺积分值，与店铺费用相关联；含义：店铺积分值，与店铺费用相关联；数据特征：numeric Inc2为店铺积分值，与店铺费用(Bos字段)挂钩，不直接属于"收入"范畴。虽然含"Inc"前缀但项目记忆确认其为积分而非收入指标，不参与本次收入趋势分析。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺积分值，与店铺费用相关联
+    meaning: 店铺积分值，与店铺费用相关联
+    data_pattern: numeric Inc2为店铺积分值，与店铺费用(Bos字段)挂钩，不直接属于"收入"范畴。虽然含"Inc"前缀但项目记忆确认其为积分而非收入指标，不参与本次收入趋势分析。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:17'
+  use_count: 0
+- id: db7233b7
+  content: 字段名：店铺费用类型1，与店铺积分挂钩；含义：店铺费用类型1，与店铺积分挂钩；数据特征：numeric Bos1为店铺费用类型1（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型1，与店铺积分挂钩
+    meaning: 店铺费用类型1，与店铺积分挂钩
+    data_pattern: numeric Bos1为店铺费用类型1（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:18'
+  use_count: 0
+- id: d8732b77
+  content: 字段名：店铺费用类型2，与店铺积分挂钩；含义：店铺费用类型2，与店铺积分挂钩；数据特征：numeric Bos2为店铺费用类型2（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型2，与店铺积分挂钩
+    meaning: 店铺费用类型2，与店铺积分挂钩
+    data_pattern: numeric Bos2为店铺费用类型2（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:20'
+  use_count: 0
+- id: '92903812'
+  content: 字段名：店铺费用类型3，与店铺积分挂钩；含义：店铺费用类型3，与店铺积分挂钩；数据特征：numeric Bos3为店铺费用类型3（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型3，与店铺积分挂钩
+    meaning: 店铺费用类型3，与店铺积分挂钩
+    data_pattern: numeric Bos3为店铺费用类型3（与积分挂钩），属于成本/费用类指标，与"收入变动趋势"分析目标无直接关系，不参与分析。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 08:59:21'
+  use_count: 0

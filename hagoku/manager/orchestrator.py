@@ -980,9 +980,9 @@ def _apply_scout_reply_with_llm(
         if _think_match and channel_logger:
             channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip())
         # 过滤 think 标签，防止泄露到前端
-        _display_text = _re2.sub(r"<think>.*?</think>", "", _raw_text or "", flags=_re2.DOTALL).strip()
+        _raw_text = _re2.sub(r"<think>.*?</think>", "", _raw_text or "", flags=_re2.DOTALL).strip()
 
-        assistant_turn = _display_text or ""
+        assistant_turn = _raw_text or ""
         if tool_calls and isinstance(tool_calls, list):
             tc_parts = []
             for tc in tool_calls:
@@ -2297,6 +2297,9 @@ class Orchestrator:
                     })
 
                 # 4. Cleaner: 评估 → 确认/修改（多轮对齐，同 Scout 模式）
+                self.event_bus.emit(EventType.AGENT_STARTED, "cleaner", {
+                    "goal": "评估数据清洗需求",
+                })
                 self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
                     "thought": "正在评估数据清洗需求…",
                 })
@@ -2316,7 +2319,8 @@ class Orchestrator:
                     user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
                     if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
                         return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    if False:  # TODO: _is_user_confirm 已删，Cleaner 确认待重做
+                    # 用户确认进下一阶段
+                    if user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了"):
                         break
                     # 用户修改意见 → 通过 LLM function calling 更新评估
                     context["_user_feedback"] = user_reply_cleaner

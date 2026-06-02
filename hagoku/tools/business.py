@@ -59,7 +59,6 @@ def calc_roi(
                 "total_revenue": float(revenue.sum()),
                 "total_cost": float(cost.sum()),
                 "roi_series": roi_series.dropna().to_dict(),
-                "interpretation": _interpret_roi(avg_roi),
             }
         else:
             r = float(revenue)
@@ -74,7 +73,6 @@ def calc_roi(
                 "net_profit": r - c,
                 "revenue": r,
                 "cost": c,
-                "interpretation": _interpret_roi(roi),
             }
     except Exception as e:
         return _insufficient_data(f"ROI 计算失败: {e}")
@@ -111,7 +109,6 @@ def calc_roas(
                 "total_revenue": float(revenue.sum()),
                 "total_ad_spend": float(ad_spend.sum()),
                 "roas_series": roas_series.dropna().to_dict(),
-                "interpretation": _interpret_roas(avg_roas),
             }
         else:
             r = float(revenue)
@@ -125,7 +122,6 @@ def calc_roas(
                 "roas": roas,
                 "revenue": r,
                 "ad_spend": a,
-                "interpretation": _interpret_roas(roas),
             }
     except Exception as e:
         return _insufficient_data(f"ROAS 计算失败: {e}")
@@ -303,22 +299,15 @@ def calc_ltv_cac_ratio(ltv: float, cac: float) -> dict[str, Any]:
     if ltv <= 0 or cac <= 0:
         return _insufficient_data("LTV 和 CAC 必须为正数")
     ratio = ltv / cac
-    if ratio < 1:
-        health = "差：获取用户亏本"
-    elif ratio < 3:
-        health = "一般：需要优化获取效率"
-    elif ratio < 5:
-        health = "良好：业务可持续发展"
-    else:
-        health = "优秀：增长空间大"
+    # F-038 修复：不返回硬编码中文 health / interpretation。
+    # 业务健康度判断（"优秀"/"一般"/"差"）应由 LLM 根据 raw ratio 自行解读。
     return {
         "metric": "LTV/CAC",
         "formula": "用户生命周期价值 / 客户获取成本",
         "ratio": ratio,
         "ltv": ltv,
         "cac": cac,
-        "health": health,
-        "interpretation": f"LTV/CAC = {ratio:.1f}x（{health}）。行业经验：LTV/CAC > 3x 为健康标准。",
+        "benchmark_note": "行业经验：LTV/CAC > 3x 为健康标准",
     }
 
 
@@ -911,25 +900,6 @@ def funnel_analysis(
 # ── 辅助函数 ───────────────────────────────────────────────
 
 
-def _interpret_roi(roi: float) -> str:
-    """ROI 解读"""
-    if roi > 2:  # 200%
-        return f"ROI = {roi:.1f}%，回报丰厚。投入 1 元，净赚 {roi/100:.2f} 元。"
-    elif roi > 0:
-        return f"ROI = {roi:.1f}%，有正回报。"
-    elif roi == 0:
-        return "ROI = 0%，刚好回本。"
-    else:
-        return f"ROI = {roi:.1f}%，亏损！投入 1 元，亏 {abs(roi)/100:.2f} 元。"
-
-
-def _interpret_roas(roas: float) -> str:
-    """ROAS 解读"""
-    if roas >= 4:
-        return f"ROAS = {roas:.1f}x，效果优秀。投入 1 元广告，带来 {roas:.1f} 元收益。"
-    elif roas >= 2:
-        return f"ROAS = {roas:.1f}x，效果良好。"
-    elif roas >= 1:
-        return f"ROAS = {roas:.1f}x，效果一般，勉强覆盖成本。"
-    else:
-        return f"ROAS = {roas:.1f}x，效果差，广告投放亏损！"
+# F-038 修复：_interpret_roi / _interpret_roas 已删除。
+# 业务解读（"回报丰厚"/"效果优秀"等）由 LLM 根据 raw 数值自行判断，
+# 代码不再替 LLM 做业务结论（铁律 1）。

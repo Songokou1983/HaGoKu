@@ -2441,17 +2441,19 @@ class Orchestrator:
             )
 
             # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
+            # findings→results 兼容：旧代码期望 list，新 findings 是 dict
+            _analyst_results = findings.get("findings", []) if isinstance(findings, dict) else []
             violations, violations_md = self._check_mandatory_guardrails(
-                results if isinstance(results, list) else [],
+                _analyst_results,
             )
             if violations:
                 # 护栏失败本质是统计问题 — 交给 LLM 解释风险并让用户决策
                 decision = self._handle_mandatory_violations(
-                    violations, results if isinstance(results, list) else [],
+                    violations, _analyst_results,
                     run_dir,
                 )
                 # 保存 findings（供审计）
-                for result in results:
+                for result in _analyst_results:
                     self.db.save_finding({
                         "id": result["result_id"],
                         "run_id": run_id,
@@ -2519,7 +2521,7 @@ class Orchestrator:
             # 7b. Reporter: 生成报告
             output_path = str(run_dir / "output" / "report.html")
             reporter.run(
-                results=results,
+                results=_analyst_results,
                 context=context,
                 cleaning_summary=cleaning_report.to_dict() if cleaning_report else {},
                 project_name=project_name,
@@ -2548,7 +2550,7 @@ class Orchestrator:
             self.db.complete_run(run_id, duration_ms=duration_ms, output_path=output_path)
 
             # 保存 findings
-            for result in results:
+            for result in _analyst_results:
                 self.db.save_finding({
                     "id": result["result_id"],
                     "run_id": run_id,
@@ -2564,7 +2566,7 @@ class Orchestrator:
                 })
 
             # 10. 学习 + 导出 progress.yaml
-            learned = self.memory.learn_from_run(project_name, context, results, cleaning_report)
+            learned = self.memory.learn_from_run(project_name, context, _analyst_results, cleaning_report)
             if learned > 0:
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",

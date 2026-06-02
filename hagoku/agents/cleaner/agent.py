@@ -619,7 +619,13 @@ class CleanerAgent(InteractionMixin):
             if tc:
                 for t in tc:
                     fn = t.function
-                    args = json.loads(fn.arguments) if fn.arguments else {}
+                    try:
+                        args = json.loads(fn.arguments) if fn.arguments else {}
+                    except json.JSONDecodeError:
+                        import logging
+                        logging.getLogger("hagoku.cleaner").warning(
+                            "Cleaner tool call JSON 截断: %s", fn.arguments[:100] if fn.arguments else "(empty)")
+                        continue
                     # tool_calls 已通过标准 OpenAI 协议追加到 messages，不再写 conv_history
                     if fn.name == "submit_assessment":
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}

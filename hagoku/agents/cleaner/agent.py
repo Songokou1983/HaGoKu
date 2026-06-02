@@ -601,6 +601,7 @@ class CleanerAgent(InteractionMixin):
         )
 
         for _round in range(5):
+            self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
             try:
                 response = client.chat.completions.create(
                     model=self.llm_config.model,

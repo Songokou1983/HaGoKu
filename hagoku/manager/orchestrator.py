@@ -644,13 +644,15 @@ def _apply_role_update(
                 old_target = context.get("target")
                 context["target"] = resolved_target
                 applied.append(f"[role]target:{old_target}→{resolved_target}")
-                # 同步 suggested_role
+                # 同步 suggested_role + used_in_analysis
                 for s in semantics:
                     cname = str(s.get("column_name", ""))
                     if cname == resolved_target:
                         s["suggested_role"] = "target"
+                        s["used_in_analysis"] = True
                     elif cname == old_target and s.get("suggested_role") == "target":
                         s["suggested_role"] = "feature"
+                        s["used_in_analysis"] = True
 
         if new_features:
             resolved_features: list[str] = []
@@ -661,11 +663,12 @@ def _apply_role_update(
             if resolved_features:
                 context["features"] = resolved_features
                 applied.append(f"[role]features:{resolved_features}")
-                # 同步 suggested_role
+                # 同步 suggested_role + used_in_analysis
                 for s in semantics:
                     cname = str(s.get("column_name", ""))
                     if cname in resolved_features:
                         s["suggested_role"] = "feature"
+                        s["used_in_analysis"] = True
 
         if new_ignored:
             for ig in new_ignored:
@@ -675,6 +678,7 @@ def _apply_role_update(
                     for s in semantics:
                         if str(s.get("column_name", "")) == r:
                             s["suggested_role"] = "ignore"
+                            s["used_in_analysis"] = False
 
         # 更新 variable_roles 映射
         roles: dict[str, str] = context.get("variable_roles", {}) or {}
@@ -974,8 +978,10 @@ def _apply_scout_reply_with_llm(
         _think_match = _re2.search(r"<think>(.*?)</think>", _raw_text or "", _re2.DOTALL)
         if _think_match and channel_logger:
             channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip())
+        # 过滤 think 标签，防止泄露到前端
+        _display_text = _re2.sub(r"<think>.*?</think>", "", _raw_text or "", flags=_re2.DOTALL).strip()
 
-        assistant_turn = _raw_text or ""
+        assistant_turn = _display_text or ""
         if tool_calls and isinstance(tool_calls, list):
             tc_parts = []
             for tc in tool_calls:

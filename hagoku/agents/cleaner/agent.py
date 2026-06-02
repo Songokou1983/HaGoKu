@@ -572,9 +572,7 @@ class CleanerAgent(InteractionMixin):
 
         # 拼 messages：系统规则 + 对话历史 + 当前上下文
         phase_id = "【当前阶段：数据清洗评估 — Scout 已完成，你只负责评估每列是否需要清洗，不要讨论后续阶段】"
-        messages: list[dict[str, Any]] = [{"role": "system", "content": phase_id + "
-
-" + cleaning_rules.strip()}]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": phase_id + "\n\n" + cleaning_rules.strip()}]
 
         # ── ProjectContext 注入（阶段 3）──
         project_ctx = context.get("_project_context")

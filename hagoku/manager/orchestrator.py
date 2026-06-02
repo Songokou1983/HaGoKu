@@ -2240,6 +2240,9 @@ class Orchestrator:
 
                     break  # Scout 完成，退出外层循环
 
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
+                    "result_summary": "字段理解完成",
+                })
                 context["analysis_purpose"] = self._build_analysis_purpose(context)
 
                 # 4. Cleaner: 评估 → 确认/修改（多轮对齐，同 Scout 模式）

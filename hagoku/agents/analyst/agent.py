@@ -223,154 +223,130 @@ class AnalystAgent(InteractionMixin):
         self,
         df: pd.DataFrame,
         context: dict,
-        plan: dict,
+        plan: dict | None = None,
         project_id: str | None = None,
         phase: str = "full",
         *,
         emit_completed: bool = True,
-    ) -> tuple[list[dict], list[dict]]:
+    ) -> dict:
+        """对话式分析循环。LLM 自由探索，submit_analysis 工具退出。
+
+        将 plan 参数改为可选（兼容旧调用方）。分析不再走 JSON 计划路径，
+        而是 through LLM 对话 + 工具调用。
         """
-        执行统计分析
+        import json as _json
+        from hagoku.tools.registry import agent_tools as _agt
 
-        Args:
-            df: 清洗后的数据
-            context: 数据上下文
-            plan: 分析计划
-            project_id: 项目 ID
-            phase: "full"=完整分析, "preliminary"=初步发现
-            emit_completed: 为 False 时 full 阶段结束时不再发 AGENT_COMPLETED（由编排层在用户确认后再发）。
+        self._emit(EventType.AGENT_STARTED, {"goal": "对话式数据分析"})
 
-        Returns:
-            phase="full": (分析结果列表, 商业指标列表)
-            phase="preliminary": 初步发现字典
-        """
-        self._emit(EventType.AGENT_STARTED, {"goal": "用统计方法挖出数据真相"})
+        query = context.get("query", "") or context.get("analysis_goal", "")
+        project_ctx = context.get("_project_context")
+        _tools = _agt.to_openai("analyst")
 
-        results = []
-        business_metrics: list[dict[str, Any]] = []
-        focus = plan.get("analyst_focus", [])
-        target_col = plan.get("target")
-        query = plan.get("query", "")
-        n = len(df)
-
-        self._emit(EventType.AGENT_THINKING, {"thought": f"分析计划: focus={focus}, target={target_col}"})
-
-        # 检索相关分析方法经验
-        recalled = analyst_knowledge.recall(
-            f"{query} {' '.join(focus)} n={n}",
-            top_k=2,
+        # 拼 system prompt
+        system = (
+            "你是专业数据分析师。可以用工具探索数据、跑统计检验、向用户提问、提议分析方法。\n"
+            "每次集中做一个操作，用清晰的文字配合工具输出。\n"
+            "想给用户多选题时用 ask_user 工具，开放式讨论用纯文本。\n"
+            "方法建议用 propose_method 工具。\n"
+            "准备好了就调 submit_analysis 提交分析发现，结束分析。\n"
+            "confidence 取 high/medium/low 三选一。\n"
         )
-        if recalled:
-            hint = "参考经验：" + " | ".join(f"{r['metadata'].get('method','?')}({r['metadata'].get('scenario','')}相似度{r['similarity']:.0%})" for r in recalled)
-            self._emit(EventType.AGENT_THINKING, {"thought": hint})
 
-        # 功效预检
-        power_warnings = self._check_power(df, context, focus, n)
-        for warning in power_warnings:
-            self._emit(EventType.AGENT_THINKING, {"thought": warning})
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("analyst", context)
+            system += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
 
-        # ==== CHANNEL ZONE: LLM 自主选择分析方法，禁止硬编码分支 ====
-        # LLM 根据数据画像（列类型/角色/缺失率/清洗影响）和用户提问，
-        # 输出结构化分析计划（JSON），代码仅做机械分发，不做语义判断。
-        analysis_steps = self._plan_analysis_via_llm(df, context, target_col, query)
+        messages: list[dict] = [{"role": "system", "content": system}]
+        if project_ctx:
+            messages.extend(ctx_block.get("messages_history", []))  # 律 3
 
-        if analysis_steps:
-            for step in analysis_steps:
-                atype = step["analysis_type"]
-                result = self._dispatch_analysis(atype, df, context, step)
-                if result:
-                    result["method_reason"] = step.get("reason", "")
-                    result["method_name"] = step.get("method_name", "")
-                    results.append(result)
+        intro = f"分析目标：{query}\n可用列：{', '.join(df.columns)}\n数据行数：{len(df)}"
+        messages.append({"role": "user", "content": intro})
 
-        # 如果 LLM 计划为空或全部失败，不执行代码预设的机械序列
-        # 而是增强上下文后重试一次，仍失败则抛出异常请求用户澄清
-        if not results:
-            self._emit(EventType.AGENT_THINKING, {"thought": "LLM 未生成分析计划，正在增强上下文重试..."})
-            retry_steps = self._plan_analysis_via_llm(
-                df, context, target_col, query, retry=True
+        from ...llm.client import create_raw_client
+        client = create_raw_client(self.llm_config)
+
+        for round_idx in range(30):
+            if round_idx >= 25:
+                messages.append({"role": "system", "content": "（已分析多轮，请准备 submit_analysis 提交发现）"})
+
+            resp = client.chat.completions.create(
+                model=self.llm_config.model, messages=messages,
+                temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
             )
-            if retry_steps:
-                for step in retry_steps:
-                    result = self._dispatch_analysis(step["analysis_type"], df, context, step)
-                    if result:
-                        result["method_reason"] = step.get("reason", "")
-                        result["method_name"] = step.get("method_name", "")
-                        results.append(result)
+            msg = resp.choices[0].message
+            txt = (msg.content or "").strip()
+            tc_list = getattr(msg, "tool_calls", None)
+            findings = None
 
-            if not results:
-                # 两次 LLM 调用都失败 → 向用户请求澄清，不执行机械分析
-                raise NeedUserClarification(
-                    f"无法自动确定「{query or '当前数据'}」的分析策略。"
-                    f"数据包含 {len(df.columns)} 列、{len(df)} 行。"
-                    f"请告诉我您更关注哪些方面？例如：差异对比、相关性、趋势、预测建模等。"
+            if tc_list:
+                tool_call_blocks = []
+                for tc in tc_list:
+                    fn = tc.function
+                    try:
+                        args = _json.loads(fn.arguments) if fn.arguments else {}
+                    except _json.JSONDecodeError:
+                        continue
+                    result = _agt.dispatch(fn.name, args, context, df)
+
+                    if fn.name == "submit_analysis":
+                        findings = result
+                        break
+
+                    tc_id = getattr(tc, "id", "") or ""
+                    tool_call_blocks.append({
+                        "id": tc_id, "type": "function",
+                        "function": {"name": fn.name, "arguments": fn.arguments},
+                    })
+                    messages.append({
+                        "role": "tool", "tool_call_id": tc_id,
+                        "content": _json.dumps(result, ensure_ascii=False, default=str),
+                    })
+
+                if findings is not None:
+                    break
+
+                if tool_call_blocks:
+                    assistant_block: dict = {"role": "assistant", "content": txt or None}
+                    assistant_block["tool_calls"] = tool_call_blocks
+                    messages.append(assistant_block)
+            elif txt:
+                messages.append({"role": "assistant", "content": txt})
+
+            # 展示输出 → 等用户回复
+            self._emit(EventType.AGENT_THINKING, {
+                "thought": txt[:220] if txt else "[工具调用]",
+            })
+            display = {
+                "message": txt or "[工具调用]",
+                "interaction_revision": round_idx,
+            }
+            user_reply = self._pause_and_wait("analyst", display)
+            if user_reply is None or user_reply == "__HAGOKU_CANCEL__":
+                continue
+            messages.append({"role": "user", "content": user_reply})
+
+            # ProjectContext 写入（每轮）
+            if project_ctx:
+                project_ctx.add_user_feedback(stage="analyst", revision=round_idx, raw_text=user_reply)
+                project_ctx.add_agent_response(
+                    stage="analyst", revision=round_idx,
+                    content=txt or "[工具调用]",
+                    snapshot=project_ctx._derive_snapshot(context),
                 )
 
-        # phase="preliminary"：只返回初步发现，不做增强诊断
-        if phase == "preliminary":
-            self._emit(EventType.AGENT_COMPLETED, {
-                "result_summary": f"初步发现 {len(results)} 个，待确认"
-            })
-            suggested = ""
-            if results:
-                top = results[0]
-                if top.get("significance") == SIGNIFICANCE_LABEL_SIG:
-                    suggested = f"初步发现「{top.get('question', '')}」具有统计显著性，建议重点分析"
-                else:
-                    suggested = "初步结果均不显著，建议扩大样本或调整分析维度"
-            return {  # type: ignore[return-value]
-                "status": "analyst_preliminary",
-                "power_warnings": power_warnings,
-                "business_metrics": business_metrics,
-                "preliminary_findings": results,
-                "suggested_focus": suggested,
-            }
+        if findings is None:
+            raise RuntimeError("Analyst: 30 轮未提交 submit_analysis，分析中断")
 
-        # 交叉验证
-        for result in results:
-            if result["analysis_type"] == "regression":
-                self._enhance_with_cv(df, result, target_col)
+        if findings:
+            context["findings"] = findings
 
-        # 多重比较校正
-        if len(results) > 1:
-            self._apply_multiple_comparison(results)
+        self._emit(EventType.AGENT_COMPLETED, {
+            "result_summary": findings.get("summary", ""),
+        })
+        return findings
 
-        # 统计护栏 + 结构化输出验证
-        for result in results:
-            guardrail_results = self.guardrails.check(result)
-            result["guardrail_results"] = [gr.model_dump() for gr in guardrail_results]
-
-            violations = self.guardrails.get_violations(guardrail_results)
-            if violations:
-                self._emit(EventType.QUALITY_CHECK, {
-                    "verdict": "fail" if violations.get("mandatory") else "warning",  # type: ignore[call-overload]
-                    "detail": f"{sum(len(v) for v in violations.values())} 个护栏问题",
-                })
-
-            # P1.2 接线：对结论文本做深度校验（解析器已接入，不再死代码）
-            conclusion_text = result.get("conclusion_plain", "")
-            if conclusion_text:
-                deep_result = deep_validate(conclusion_text)
-                if deep_result.get("hallucination_warnings"):
-                    logger.warning("Analyst 结论疑似幻觉: %s", deep_result["hallucination_warnings"])
-                    self._emit(EventType.QUALITY_CHECK, {
-                        "verdict": "warning",
-                        "detail": f"结论文本可疑: {'; '.join(deep_result['hallucination_warnings'][:3])}",
-                    })
-                result["_deep_validation"] = deep_result
-
-        # 更新记忆
-        self._update_own_memory(results, project_id)
-
-        # 学习：将分析场景和方法写入知识库
-        self._learn_from_results(results, focus, n, context, project_id)
-
-        if emit_completed:
-            self._emit(EventType.AGENT_COMPLETED, {"result_summary": f"完成 {len(results)} 项分析"})
-
-        return results, business_metrics
-
-    # ── 交互式接口 ────────────────────────────────────────
 
     def begin(  # type: ignore[override]
         self,

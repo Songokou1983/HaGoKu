@@ -132,12 +132,15 @@ class ProjectContext:
             if s.get("needs_user_input"):
                 pending.append(col)
 
-        return {
+        snapshot = {
             "fields": fields,
             "target": context.get("target"),
             "features": context.get("features") or [],
             "pending": pending,
         }
+        if context.get("findings"):
+            snapshot["findings"] = context["findings"]
+        return snapshot
 
     # ── 上下文拼装 ──
 

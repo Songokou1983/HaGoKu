@@ -2427,67 +2427,17 @@ class Orchestrator:
                     raise RuntimeError(
                         "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
                     )
-            results, business_metrics = analyst.run(
-                df_clean, context, plan, emit_completed=False
-            )
+            self.event_bus.emit(EventType.AGENT_STARTED, "analyst", {
+                "goal": "对话式数据分析",
+            })
+            findings = analyst.run(df_clean, context, emit_completed=False)
 
             if self._is_cancel_requested():
                 return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-            # ── 暂停：分析结果待用户确认后再记 Analyst 完成（多轮：仅显式放行才出子循环）──
-            analyst_revision = 0
-            while True:
-                analyst_pause = analyst_review_pause_payload(
-                    results if isinstance(results, list) else [],
-                )
-                analyst_pause["interaction_revision"] = analyst_revision
-                analyst_pause = self._attach_pause_dialogue_message("analyst", analyst_pause)
-                user_reply_analyst = self._pause_and_wait("analyst", analyst_pause)
-                if user_reply_analyst == HAGOKU_CANCEL_PAUSE_TOKEN:
-                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                cmd_result = self._handle_command_if_present(user_reply_analyst, "analyst", context)
-                analyst_confirmed = user_reply_analyst and user_reply_analyst.strip() in ("确认继续", "可以进入下一阶段了")
-                if user_reply_analyst:
-                    self.event_bus.emit(EventType.USER_INPUT_RECEIVED, "analyst", {
-                        "reply": user_reply_analyst,
-                        "interaction_revision": analyst_revision,
-                        "proceed_accepted": analyst_confirmed,
-                    })
-                    if not analyst_confirmed:
-                        # 命令结果注入 query，确保 LLM 在重跑时能理解命令意图
-                        if cmd_result:
-                            query = f"{query}\n{cmd_result}".strip()
-                        else:
-                            query = f"{query}\n[用户补充] {user_reply_analyst}".strip()
-                        # 重新运行 analyst agent 以响应用户修改
-                        self.event_bus.emit(EventType.AGENT_THINKING, "analyst", {
-                            "thought": f"🔄 根据用户反馈重新分析（第 {analyst_revision + 1} 轮修订）",
-                        })
-                        upstream_note_analyst = self._get_upstream_summary("analyst")
-                        if upstream_note_analyst:
-                            context["upstream_summary"] = upstream_note_analyst
-                        plan["query"] = query
-                        # 同步字段理解到结构化 context（用户可能在分析审查中纠正字段含义）
-                        if user_reply_analyst and not cmd_result:
-                            apply_scout_user_field_reply_to_context(
-                                context,
-                                user_reply_analyst,
-                                llm_client=self.llm_quick_raw,
-                                llm_model=self.config.llm.model_quick or self.config.llm.model,
-                            )
-                        results, business_metrics = analyst.run(
-                            df_clean, context, plan, emit_completed=False
-                        )
-                        if self._is_cancel_requested():
-                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                if analyst_confirmed:
-                    break
-                analyst_revision += 1
-            n_res = len(results) if isinstance(results, list) else 0
-            self.event_bus.emit(
-                EventType.AGENT_COMPLETED,
-                "analyst",
-                {"result_summary": f"完成 {n_res} 项分析（用户已确认）"},
+            n_findings = len(findings.get("findings", []))
+            self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst",
+                {"result_summary": f"发现 {n_findings} 条结论"},
             )
 
             # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策

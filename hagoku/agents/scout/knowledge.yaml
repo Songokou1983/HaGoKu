@@ -11876,3 +11876,360 @@ knowledge:
     confidence: 1.0
   created_at: '2026-06-02 09:57:59'
   use_count: 0
+- id: 534ae44a
+  content: 字段名：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；含义：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；数据特征：categorical
+    分析目标是"每个店铺的收入变动趋势"，核心是店铺（Code）维度的时间序列分析，BU是公司级别的分组标识，与店铺级收入趋势无直接关系，故不参与。；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0602
+    field: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    meaning: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    data_pattern: categorical 分析目标是"每个店铺的收入变动趋势"，核心是店铺（Code）维度的时间序列分析，BU是公司级别的分组标识，与店铺级收入趋势无直接关系，故不参与。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:16'
+  use_count: 0
+- id: e17efed8
+  content: 字段名：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；含义：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；数据特征：id
+    分析目标是"每个店铺"的收入趋势，Code是唯一标识店铺的编码（25个店铺），是按店铺维度分析收入趋势的主键，必须参与。；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0602
+    field: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    meaning: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    data_pattern: id 分析目标是"每个店铺"的收入趋势，Code是唯一标识店铺的编码（25个店铺），是按店铺维度分析收入趋势的主键，必须参与。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:17'
+  use_count: 0
+- id: 9725fda0
+  content: 字段名：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；含义：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；数据特征：datetime
+    分析目标是"收入变动趋势"，趋势分析需要时间轴。Period按"YYYYWW"格式编码周度周期，范围从2025年40周到2026年12周，是构建收入随时间变化趋势的时间维度，必须参与。；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0602
+    field: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    meaning: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    data_pattern: datetime 分析目标是"收入变动趋势"，趋势分析需要时间轴。Period按"YYYYWW"格式编码周度周期，范围从2025年40周到2026年12周，是构建收入随时间变化趋势的时间维度，必须参与。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:19'
+  use_count: 0
+- id: ec787345
+  content: 字段名：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；含义：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；数据特征：numeric
+    分析目标直接指向"收入"，Inc1是店铺的收入金额，是本次收入变动趋势分析的核心目标变量，必须参与。；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0602
+    field: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    meaning: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    data_pattern: numeric 分析目标直接指向"收入"，Inc1是店铺的收入金额，是本次收入变动趋势分析的核心目标变量，必须参与。
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:20'
+  use_count: 0
+- id: 2513df45
+  content: 字段名：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；含义：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；数据特征：numeric Inc2是店铺积分值，与费用项（Bos1-3）挂钩关联，不直接是收入，分析目标是收入变动趋势而非积分趋势，故不参与。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    meaning: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    data_pattern: numeric Inc2是店铺积分值，与费用项（Bos1-3）挂钩关联，不直接是收入，分析目标是收入变动趋势而非积分趋势，故不参与。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:21'
+  use_count: 0
+- id: 4573f345
+  content: 字段名：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    Bos1是店铺费用类型1，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric Bos1是店铺费用类型1，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:22'
+  use_count: 0
+- id: d901756f
+  content: 字段名：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    Bos2是店铺费用类型2，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric Bos2是店铺费用类型2，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:24'
+  use_count: 0
+- id: e50fdab8
+  content: 字段名：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    Bos3是店铺费用类型3，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric Bos3是店铺费用类型3，与店铺积分挂钩计算的费用项，分析目标是收入变动趋势而非费用拆解，故不参与。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 10:09:25'
+  use_count: 0
+- id: 77e59325
+  content: 字段名：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；含义：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；数据特征：categorical
+    分析目标是"每个店铺的收入变动趋势"，主键是店铺编码(Code)与周度时间(Period)，BU仅标识公司归属，非分析必需的分组维度，不勾选参与分析；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0602
+    field: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    meaning: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    data_pattern: categorical 分析目标是"每个店铺的收入变动趋势"，主键是店铺编码(Code)与周度时间(Period)，BU仅标识公司归属，非分析必需的分组维度，不勾选参与分析
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:44'
+  use_count: 0
+- id: 5eaeff26
+  content: 字段名：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；含义：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；数据特征：id
+    "每个店铺"的分析主键，按Code聚合可拆分各店铺的收入时间序列，是趋势分析的核心分组维度；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0602
+    field: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    meaning: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    data_pattern: id "每个店铺"的分析主键，按Code聚合可拆分各店铺的收入时间序列，是趋势分析的核心分组维度
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:46'
+  use_count: 0
+- id: 2b53f4ff
+  content: 字段名：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；含义：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；数据特征：datetime
+    "变动趋势"需要时间轴，Period按YYYYWW格式编码周度，范围2025年40周到2026年12周，是构建收入随时间变化趋势轴的关键字段；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0602
+    field: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    meaning: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    data_pattern: datetime "变动趋势"需要时间轴，Period按YYYYWW格式编码周度，范围2025年40周到2026年12周，是构建收入随时间变化趋势轴的关键字段
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:47'
+  use_count: 0
+- id: 8a08beaf
+  content: 字段名：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；含义：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；数据特征：numeric
+    "收入变动趋势"分析的核心目标变量，数值范围0~397.6，每个店铺每周的金额，是回答分析目标的关键指标；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0602
+    field: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    meaning: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    data_pattern: numeric "收入变动趋势"分析的核心目标变量，数值范围0~397.6，每个店铺每周的金额，是回答分析目标的关键指标
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:48'
+  use_count: 0
+- id: f79e1d4f
+  content: 字段名：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；含义：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；数据特征：numeric 店铺积分值，与费用项Bos1-3挂钩计算，非"收入"本身，与本次收入变动趋势分析无关；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    meaning: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    data_pattern: numeric 店铺积分值，与费用项Bos1-3挂钩计算，非"收入"本身，与本次收入变动趋势分析无关
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:49'
+  use_count: 0
+- id: 4b91aace
+  content: 字段名：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    店铺费用类型1，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 店铺费用类型1，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:50'
+  use_count: 0
+- id: cc898776
+  content: 字段名：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    店铺费用类型2，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 店铺费用类型2，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:52'
+  use_count: 0
+- id: 131e5492
+  content: 字段名：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    店铺费用类型3，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 店铺费用类型3，挂钩Inc2计算，与"收入变动趋势"无直接关系，不参与分析
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 11:14:53'
+  use_count: 0
+- id: 8e69d556
+  content: 字段名：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；含义：公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据；数据特征：categorical
+    样本值为B01~B05共5个公司编号，分布不均(B01占225行最多)。虽然标识了店铺所属公司，可作为分组维度，但分析目标是"每个店铺的收入变动趋势"，核心维度是店铺本身(BU非必需)，故设为ignore。；推断角色：unknown
+  tags:
+  - categorical
+  - unknown
+  metadata:
+    project: test0602
+    field: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    meaning: 公司编号，标识数据所属的公司，可用于区分不同公司的店铺数据
+    data_pattern: categorical 样本值为B01~B05共5个公司编号，分布不均(B01占225行最多)。虽然标识了店铺所属公司，可作为分组维度，但分析目标是"每个店铺的收入变动趋势"，核心维度是店铺本身(BU非必需)，故设为ignore。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:15'
+  use_count: 0
+- id: 23f5e966
+  content: 字段名：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；含义：店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键；数据特征：id
+    共25个唯一店铺编码(A0000001~A0000025)，每个店铺恰好出现25次(对应25个周期)，是按"每个店铺"分析的主键，核心参与字段。；推断角色：feature
+  tags:
+  - id
+  - feature
+  metadata:
+    project: test0602
+    field: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    meaning: 店铺编码，唯一标识一家店铺，是分析店铺维度收入趋势的主键
+    data_pattern: id 共25个唯一店铺编码(A0000001~A0000025)，每个店铺恰好出现25次(对应25个周期)，是按"每个店铺"分析的主键，核心参与字段。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:16'
+  use_count: 0
+- id: 00900313
+  content: 字段名：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；含义：按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。；数据特征：datetime
+    按"YYYYWW"格式编码的周度时间周期(202540~202612)，共25个周期，是构建收入随时间变化趋势的时间轴字段，核心参与字段。；推断角色：feature
+  tags:
+  - datetime
+  - feature
+  metadata:
+    project: test0602
+    field: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    meaning: 按"YYYYWW"格式编码的周度时间周期，2025年40周到2026年12周，用于构建收入随时间变化的趋势轴。
+    data_pattern: datetime 按"YYYYWW"格式编码的周度时间周期(202540~202612)，共25个周期，是构建收入随时间变化趋势的时间轴字段，核心参与字段。
+    inferred_role: feature
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:17'
+  use_count: 0
+- id: fd45de89
+  content: 字段名：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；含义：店铺的收入金额，是本次收入变动趋势分析的核心目标变量；数据特征：numeric
+    为浮点型收入金额，620行中几乎每行都不同(619个唯一值)，范围0~397.6，是本次"收入变动趋势"分析的核心目标变量。；推断角色：target
+  tags:
+  - numeric
+  - target
+  metadata:
+    project: test0602
+    field: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    meaning: 店铺的收入金额，是本次收入变动趋势分析的核心目标变量
+    data_pattern: numeric 为浮点型收入金额，620行中几乎每行都不同(619个唯一值)，范围0~397.6，是本次"收入变动趋势"分析的核心目标变量。
+    inferred_role: target
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:19'
+  use_count: 0
+- id: 04d4c2e7
+  content: 字段名：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；含义：店铺的积分值，与店铺费用（Bos1-3）挂钩关联；数据特征：numeric 为店铺积分值，与费用项(Bos1-3)挂钩关联，并非收入指标，与"收入变动趋势"分析目标无直接关系，设为ignore。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    meaning: 店铺的积分值，与店铺费用（Bos1-3）挂钩关联
+    data_pattern: numeric 为店铺积分值，与费用项(Bos1-3)挂钩关联，并非收入指标，与"收入变动趋势"分析目标无直接关系，设为ignore。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:20'
+  use_count: 0
+- id: 44d3688a
+  content: 字段名：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    为店铺费用类型1(范围0~175)，与积分挂钩计算的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型1，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 为店铺费用类型1(范围0~175)，与积分挂钩计算的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:21'
+  use_count: 0
+- id: 4cfdf21f
+  content: 字段名：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    为店铺费用类型2(范围0~5.46)，与积分挂钩的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型2，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 为店铺费用类型2(范围0~5.46)，与积分挂钩的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:23'
+  use_count: 0
+- id: 93a477f4
+  content: 字段名：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；含义：店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项；数据特征：numeric
+    为店铺费用类型3(范围0~6.69)，与积分挂钩的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。；推断角色：unknown
+  tags:
+  - numeric
+  - unknown
+  metadata:
+    project: test0602
+    field: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    meaning: 店铺费用类型3，与店铺积分（Inc2）挂钩计算的费用项
+    data_pattern: numeric 为店铺费用类型3(范围0~6.69)，与积分挂钩的费用项，属于成本类指标，不直接参与"收入变动趋势"分析，设为ignore。
+    inferred_role: unknown
+    confidence: 1.0
+  created_at: '2026-06-02 12:19:24'
+  use_count: 0

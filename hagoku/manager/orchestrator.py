@@ -2132,7 +2132,7 @@ class Orchestrator:
 
                 cleaning_revision = 0
                 assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
-                while True:
+                while cleaning_revision < 10:  # 最多 10 轮交互，防止无限循环
                     context["_cleaner_assessment"] = assessment
                     cleaner_msg = {
                         "message": "",
@@ -2145,12 +2145,20 @@ class Orchestrator:
                     # 用户确认进下一阶段
                     if user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了"):
                         break
+                    # 超时无回复 → 自动继续（避免永久阻塞）
+                    if not user_reply_cleaner.strip():
+                        break
                     # 用户修改意见 → 通过 LLM function calling 更新评估
                     context["_user_feedback"] = user_reply_cleaner
                     assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
                     if not assessment.get("columns"):
                         assessment = context.get("_cleaner_assessment", assessment)
                     cleaning_revision += 1
+                else:
+                    # 10 轮上限 → 强制继续
+                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+                        "thought": "⚠️ 清洗评估已达 10 轮上限，自动进入下一阶段",
+                    })
 
                 df_clean = _raw_df_for_cleaner
                 df_raw = _raw_df_for_cleaner

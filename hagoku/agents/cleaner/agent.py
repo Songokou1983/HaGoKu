@@ -642,10 +642,41 @@ class CleanerAgent(InteractionMixin):
 
             if txt.strip():
                 messages.append({"role": "assistant", "content": txt})
-                # 纯文本响应已追加到 messages
+                # 纯文本响应已追加到 messages，追加提示引导 LLM 调 submit_assessment
+                messages.append({
+                    "role": "user",
+                    "content": "请总结你的评估结果，调用 submit_assessment 提交。"
+                })
                 continue
 
-        return {"summary": "评估未完成", "columns": []}
+        # 5 轮后仍未提交 → 最后尝试：显式要求 LLM 提交
+        messages.append({
+            "role": "user",
+            "content": "你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。"
+        })
+        try:
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=messages, temperature=0.0, max_tokens=2048,
+                tools=_tools, tool_choice="auto",
+            )
+            msg = response.choices[0].message
+            tc = getattr(msg, "tool_calls", None)
+            if tc:
+                for t in tc:
+                    fn = t.function
+                    try:
+                        args = json.loads(fn.arguments) if fn.arguments else {}
+                    except json.JSONDecodeError:
+                        continue
+                    if fn.name == "submit_assessment":
+                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
+        except Exception:
+            pass
+
+        raise RuntimeError(
+            "Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。"
+        )
 
     def _parse_assessment(self, raw: str) -> dict[str, Any]:
         """解析 LLM 评估输出，只提取 action 做路由，assessment 原样保留。"""

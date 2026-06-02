@@ -68,36 +68,59 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-02 持续
-- **审计阶段**：Phase 0 完成 / Phase 1 sessions 1-11 完成（**Python 后端 + 前端全部读完**）/ Phase 1+R 部分验证
-- **Finding 数**：0 正式 / 52 草稿
-- **状态分布**：50 DRAFT / 0 OPEN / 0 RESOLVED / **1 RETRACTED (F-007)** / 0 DISPUTED / 0 DEFERRED
-- **上次更新**：2026-06-02
+- **当前评估周期**：2026-06-01 → 2026-06-02 完成 + **Phase 3.5 复验轮** 完成
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5（复验）全部完成**
+- **Finding 数**：0 正式 / 67 草稿（含 +1 Phase 3.5 新发现）/ **1 RESOLVED**（F-001 用户晨间已修）
+- **状态分布**：65 DRAFT / 0 OPEN / **1 RESOLVED (F-001)** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
+- **上次更新**：2026-06-02（Phase 3.5 复验轮）
 
 **试错总假设数**：52（51 DRAFT + 1 RETRACTED）。
 
-**试错总假设数**：37（全部 DRAFT）。
+**试错总假设数**：67（65 DRAFT + 1 RESOLVED + 1 RETRACTED）。
 
-### 0.2 Phase 1 session 7 关键发现
+### 0.2 Phase 2 + Phase 3 + Phase 3.5 关键发现（2026-06-02）
 
-读完 `hagoku/tools/analysis.py` 全 1195 行后：
-- **重大反推**：Phase 0 推论"tools/analysis.py 最可能含硬编码语义规则"——**错的**
-- 实际：全文件无业务关键词（grep 0 命中），只有标准统计方法名
-- **F-036 NEW**（**修正 Phase 0 推论**）：analysis.py 41K 行没有"硬编码业务关键词"
-- **F-037 NEW**：`check_test_assumptions` 5 个 recommendation 是方法选择硬编码——LLM 决定的边界
-- **教训**：Phase 0 推论"最可能含 X"常错——**Phase 1 验证后才能下结论**
-- **已确认 P0 数量**：F-001, F-003, F-004, F-019, F-020 = 5 个（不变）
-- **已读行数 / 总代码行数**：12108 / ~30K = 40%
+**Phase 2 session 1（4 切入点）**：
+- **2A silent fail 跨文件总盘**：AST 扫描全仓共 **50 处真正 silent except**（块内无 logger / raise / 标记降级），其中 30+ 处未被现有 finding 覆盖 → **F-058 [P3]**
+- **2B doctrine 守门 vs 实际代码**：
+  - `_DOCTRINE_SUBDIRS` 只声明 5 个目录（"memory" 还配错指向不存在路径），实际 14 个子目录里 8 个完全不扫，**含已确认 P0/P1 的发生地** → **F-057 [P1]**
+  - 守门 5 检测正则 4 类盲区（pass / 赋兜底字符串 / RuntimeError 字面量误判合法 / 非空字面量 dict）+ orchestrator.py 4 处真实漏检 → **F-056 [P2]**
+- **2C 律 5 SSoT 声明 vs 实施**：`types.py:122-124` 声明 column_semantics 是唯一权威 + 提供 5 个 `derive_*` 派生函数，但 **4/5 函数零调用率**，`column_descriptions[col]=` 直写仍 8 处。`orchestrator._apply_field_corrections:2993` 是典型违规源头 → **F-053 [P0]**（F-003 全景视图）
+- **2D orchestrator ↔ analyst 契约**：`analyst.run` 的 `plan` / `phase` 是死参数（函数体 0 处使用），调用方 `orchestrator.py:1946` 4 个 `dict.get` 用错 key — UI "初步发现 N 个" 永远显示 0 → **F-054 [P0]**
+- **bonus**：META-001（报告自身 7.1 状态过期）/ F-055（铁律 2 失守）/ F-059（`hagoku/prompts/` 空目录）
+
+**Phase 2 session 2（3 切入点 — 收尾）**：
+- **2E 律 10 跨文件**：律 10 双字段 `confirmed_by_user` / `last_confirmed_at_run` 写入 6 处但读侧 0 处真做"本 run 优先"判断；`scout._apply_project_memory` 不检查本 run 用户纠正直接覆盖 → **F-060 [P1]**
+- **2F 契约验证**：`cleaner.run` 4 个 return 全部 4 元组，`orchestrator:1937/1939` 的 3 元组解构是死代码 → **F-061 [P2]**；`reporter.run` 返回 `ReportData` 但 orchestrator 调用方完全不接 → **F-062 [P3]**
+- **2G 守门 1/3/6 用例化**：守门 1 不扫 `ast.Dict.values`/`keys`（机制盲区，当前 0 命中但未来风险）→ **F-063 [P2]**；守门 3 阈值 `≥ 3` 漏 2-chain（`analyst/agent.py:381` 实例）→ **F-064 [P3]**；守门 6 `_PROMPT_RULE_PATTERNS` 只 3 个正则（"设为 / 默认 / 应该"等动词全漏检）→ **F-065 [P2]**
+
+**Phase 3 终态评估**（9.7 节产出）：
+- **推荐升级 OPEN**：15 条（11 个 P0/P1 + 4 个跨文件强证据）
+- **推荐 DEFERRED**：15 条 P3-OBS（机制层 / 设计选择 / 长期警示）
+- **维持 DRAFT 等 R 等级**：36 条
+- **无新增 RETRACTED**
+
+**最终累计**（Phase 3.5 复验后）：
+- **F-001 → RESOLVED**（用户晨间修 commits `9d826f2..61a35d2`，详 3.Z 节）
+- **P0 = 6**（F-002/F-003/F-004/F-019/F-020/F-053/F-054 — 等等 F-002 待技术 AI 验证算 P0 候选，硬剩 6 个仍在）
+- **P1 = 4**（F-038/F-055/F-057/F-060 — 全部仍在）
+- **P2 ≈ 8** / **P3 ≈ 47**
+- **Phase 3.5 新发现**：F-066 [P2]（commit `61a35d2` 清理死代码漏删 `_llm_understand_field_update`）
+
+**已读行数 / 总代码行数**：26 246 / 26 246（Python 后端 **100%**）+ 8 476 / 8 476（TS/TSX **100%**）
 
 ### 0.3 报告自身健康
 
 | 指标 | 当前 | 健康阈值 |
 |------|------|---------|
-| 审计阶段完成度 | Phase 1 1/N session | Phase 1 全 session 完成 |
-| 正式 finding 占比 | 0/22 = 0% | 100%（Phase 1 完成后）|
+| 审计阶段完成度 | **Phase 0 / 1 / 2 / 3 / 3.5 全部完成** | 全部完成 ✅ |
+| 正式 finding 占比 | 0/67 — 待用户反馈循环激活 | 升级到 OPEN 后 % 走起 |
+| **反馈循环首次激活** | ✅ F-001 → RESOLVED（晨间修复证实病理学家诊断准确） | 持续验证 |
 | 距上次用户验证 | 0 天 | ≤ 30 天 |
-| 反馈率 | 0%（草稿不收反馈） | n/a（Phase 1 才开始） |
-| **已读行数 / 总代码行数** | 3457 / ~30K = 11% | 100% |
+| 反馈率 | 1/67 ≈ 1.5%（F-001 一条已闭环 RESOLVED） | 持续提升 |
+| **已读行数 / 总代码行数** | 100%（Python + TS/TSX） | 100% ✅ |
+| **META-finding 自评** | META-001（7.1 状态过期）已记录 | 报告内部状态一致 |
+| **状态机适配** | 推荐升级 / 撤回 / 延期 分类（9.7）+ 复验轮（3.Z） | Phase 3.5 完成 ✅ |
 
 ---
 
@@ -213,7 +236,7 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ---
 
-### F-2026-06-01-001 [DRAFT-Phase 1+R][P0-CRITICAL] orchestrator.py 4 处 `if False: # TODO` 是真 bug——R 等级已验证
+### F-2026-06-01-001 [RESOLVED][P0-CRITICAL] orchestrator.py 4 处 `if False: # TODO` 是真 bug——已修复
 
 - **结果影响**：Cleaner / Analyst 闸门确认机制被删后，循环中 `cleaner_confirmed = False` / `analyst_confirmed = False` 永远为 False → **多轮对齐可能失控或死循环**。用户在 Cleaner / Analyst 阶段无法正常推进到 Reporter。
 - **doctrine 关联（参考）**：律 7（语义不确定可见）+ 律 8（控制通道）的混合失守
@@ -240,7 +263,21 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 - **状态**：DRAFT-Phase 1+R
 - **提出日期**：2026-06-01
 - **验证日期**：2026-06-02
+- **修复确认日期**：2026-06-02（用户晨间修复，Phase 3.5 验证轮）
 - **最后更新**：2026-06-02
+
+**Phase 3.5 修复确认（2026-06-02）**：
+
+- ✅ `grep -nE 'TODO.*_is_user_confirm' hagoku/manager/orchestrator.py` → **0 命中**
+- ✅ `grep -nE 'if False:' hagoku/manager/orchestrator.py` → **0 命中**
+- ✅ `cleaner_confirmed` 改成文本匹配 break（commits `50a52c1` / `10dc583`）：
+  ```python
+  cleaner_confirmed = user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了")
+  ```
+- ✅ `analyst_confirmed` 全文 0 命中 — 因 Analyst 改对话式（commit `c9a1efb feat(O+P+Q+T)`），原 闸门变量整体消失
+- ✅ orchestrator.py 行数：**3457 → 3241**（-216）
+- 状态变更：DRAFT-Phase 1+R → **RESOLVED**
+- 备注：F-001 是 Phase 0/1 唯一已确认 P0 → RESOLVED 的样本，反馈循环首次激活成功
 
 **Phase 1 验证更新（2026-06-01，读完 orchestrator.py 全 3457 行）**：
 
@@ -1256,6 +1293,593 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 - **状态**：DRAFT（Phase 1 已确认）
 - **提出日期**：2026-06-01
 
+---
+
+## 3.X Phase 2 新 finding（跨文件交叉验证 / 2026-06-02 接续）
+
+> 本节为接续病理学家在 Phase 2（跨文件交叉验证）轮中追加的 finding。
+> 命名前缀 `F-2026-06-02-` 区分轮次。证据来源全部为 grep/AST + 代码 line citation，未跑端到端复现。
+
+---
+
+### META-2026-06-02-001 [DRAFT-Phase 2][P3-OBSERVATION] 报告 7.1 节"已读/未读"状态过期，与 9.x 全局视角矛盾
+
+- **结果影响**：跨 session 阅读本报告的下一位 AI / 用户会看到自相矛盾的进度数据：
+  - 第 0.2 节：`已读行数 / 总代码行数：12108 / ~30K = 40%`
+  - 第 7.1 节："仍未读的关键文件" 表列 `api/server.py` / `cleaning.py` / `visualization.py` / `power_analysis.py` 全部 "未读"，末尾写 `47%`
+  - 第 9 / 9.5 节："**Phase 1 完成**"、"**~26K / ~30K = ~87%**"
+- **证据**（2026-06-02 验证）：
+  - `git log --oneline -- docs/DOCTRINE_PATHOLOGY_REPORT.md`：
+    - `6984d17 Phase 1 session 9 - cleaning+visualization 全读 +4 新 (P3)`
+    - `2a8e0dd Phase 1 session 10 - power_analysis+api/server 全读 +4 新 (P3)`
+    - `572a698 Phase 1 session 11 - 前端 skim +3 新 (P3)`
+    - `624d44b Phase 1 终态报告 — 填全局视角 + 给用户具体行动建议`
+  - 即 session 9 / 10 / 11 已经读完 7.1 列为"未读"的文件，但 7.1 节本身没更新
+  - 实际行数（2026-06-02 重新核对）：
+    - Python 后端：26 246 行（排除 `UI_CHANGELOG_backup_*`）/ 28 680 行（含 backup）— 报告写 ~30K 偏大
+    - TS/TSX：8 476 行 — 报告写 9K 偏大
+- **doctrine 关联**：本报告自身的"反馈循环"健康度（参考 §1.3 / §1.4）
+- **复现方式**：同时读第 0.2 节 + 第 7.1 节 + 第 9 节 → 三处行数 / 进度互不一致
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **建议**：下次 session 一并更新 7.1 节，或在 0 节标注"7.1 节为各 session 增量记录，最新汇总以 9 节为准"
+
+---
+
+### F-2026-06-02-053 [DRAFT-Phase 2][P0-CRITICAL] 律 5 SSoT 声明被自身代码集体绕过 — F-003 全景视图
+
+- **结果影响**：`types.py:122-124` 明确声明 `column_semantics` 是 SSoT 且"禁止平行存储"，并提供 5 个 `derive_*` 派生函数；但**实际代码继续平行存储 + 派生函数零使用率**。下游 (Reporter / Cleaner / Memory) 读到的 `description` / `display_name` 取决于"读了哪个 dict"，多个写侧不同步 → 用户纠正字段后下游用旧值 → 错列清洗 / 错字段统计。
+- **F-003 给出的 5 处平行存储**已被 Phase 1 验证；Phase 2 进一步用 grep 跨文件证实**承诺与实施的全景反差**：
+
+  | derive_* 函数（types.py 第 127-183 行） | 全仓调用数 |
+  |----|----|
+  | `derive_display_names` | **0** |
+  | `derive_descriptions` | **0** |
+  | `derive_variable_roles` | **0** |
+  | `derive_analysis_columns` | **0** |
+  | `column_semantics_lookup` | **0** |
+  | `derive_target_features` | 2 |
+
+  即声明的"SSoT 派生接口" 5/6 完全没人用，唯一活的 `derive_target_features` 也只 2 处。
+
+- **同时 `column_descriptions[col] = ...` 直写仍有 8 处** (`grep -rEn 'column_descriptions\['`)：
+  - `hagoku/storage/memory.py:533`
+  - `hagoku/agents/scout/agent.py:417, 764, 774, 873, 917, 1060`
+  - `hagoku/manager/orchestrator.py:2993`
+- **`column_display_names[col] = ...` 直写 2 处**（`hagoku/agents/scout/agent.py:877, 931`）
+- **典型违规源头**：`orchestrator.py:2984-2999 _apply_field_corrections`
+  ```python
+  for col, info in updates.items():
+      corrections[col] = info
+      context["column_descriptions"][col] = f"{info['chinese_name']}（{info['business_meaning']}）"  # line 2993
+      for s in context["column_semantics"]:
+          if s["column_name"] == col:
+              s["evidence"] = info["business_meaning"]
+              s["needs_user_input"] = False     # ← 没写 s["description"]
+              break                              # ← 没写 s["display_name"]
+  ```
+  用户在 CLI 路径纠正字段后，**只写 column_descriptions，不同步 column_semantics 的 description / display_name** —
+  下次 Reporter 走 `column_semantics` 读到空 description，最终 evidence 字段错位。
+- **doctrine 关联**：律 5（状态层单一权威）失守 + types.py 自我声明被违反 + F-003 / F-004 的代码层根源
+- **复现方式**：
+  1. CLI 路径走 `_apply_field_corrections`，纠正某字段中文名
+  2. grep `column_semantics` 中该字段的 `description` / `display_name` → 没更新
+  3. Reporter 走 `column_semantics` 路径渲染报告 → evidence 标签错
+- **状态**：DRAFT-Phase 2（grep 证据完备，未端到端复现）
+- **提出日期**：2026-06-02
+- **修复方向**（参考性，由代码 AI 决定）：把 `_apply_field_corrections` + `_apply_project_memory` + `learn_from_run` 全改成**只写 column_semantics**，所有下游读侧改用 `derive_descriptions()` 派生 — 这正是 types.py 已经提供但 0 调用的接口
+
+---
+
+### F-2026-06-02-054 [DRAFT-Phase 2][P0-CRITICAL] orchestrator.run preliminary 分支：4 个 dict.get 总返默认值 — Analyst 阶段消息永远空
+
+- **结果影响**：用户走完整 pipeline 时，UI 阶段消息 "📊 初步分析，发现数据中的规律..." 的下一条 message 中：
+  - "初步发现 N 个" 的 **N 永远是 0**
+  - power_warnings 永远空数组
+  - business_metrics 永远空数组
+  - suggested_focus 永远空字符串
+- **doctrine 关联**：orchestrator ↔ analyst 契约破裂 + 律 7（语义不确定可见）— 用户看到的是空 UI，以为分析没出结果
+- **证据**（Phase 2D 跨文件契约验证）：
+  - **analyst.run 签名**（`hagoku/agents/analyst/agent.py:200-215`）：
+    ```python
+    def run(self, df, context, plan=None, project_id=None, phase="full", *, emit_completed=True) -> dict:
+    ```
+    含 `plan` / `phase` 两个参数
+  - **analyst.run 函数体内对这两个参数的使用次数**：grep `phase\s*==` / `plan\b` → **0 处**。两个参数都是死参（旧契约残留）
+  - **analyst.run 实际返回值**（line 321）：`return findings` — `findings` 来自 LLM `submit_analysis` 工具调用产物
+  - **`submit_analysis` 工具 handler**（`agent_tool_defs.py:364-369`）实际返回的 dict 只含：
+    - `findings`、`method_used`、`summary`、`columns`
+  - **调用方 `orchestrator.py:1946`**：
+    ```python
+    analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
+    if isinstance(analyst_result, dict):
+        ...
+        findings        = analyst_result.get("preliminary_findings", [])  # ← KEY 不存在 → []
+        suggested       = analyst_result.get("suggested_focus", "")       # ← KEY 不存在 → ""
+        power_warnings  = analyst_result.get("power_warnings", [])[:2]    # ← KEY 不存在 → []
+        ...
+        return {
+            "status": "analyst_preliminary",
+            "preliminary_findings": findings,            # 空
+            "power_warnings": power_warnings,            # 空
+            "business_metrics": analyst_result.get("business_metrics", []),  # ← KEY 不存在 → []
+            "suggested_focus": suggested,                # 空
+            ...
+        }
+    ```
+- **死代码确认**（line 1970）：`results, business_metrics = analyst_result` — analyst.run 必返 dict，永远走 `isinstance(analyst_result, dict)` True 分支，1970 行的 tuple 解构是死代码
+- **上游驱动**：前端 `AnalyzePanel.tsx:1195` 始终发 `phase: "full"` → `ws_handler.py:96 → orchestrator.run(phase="full")` → 1941 `analyst_phase = "full"` → 1946 调 `analyst.run(..., phase="full")` → 全空返回
+- **复现方式**：
+  1. 跑 `_shared_orchestrator.run(data_path, query, phase="full")`
+  2. 在 1969 行 return 处打 print → 看到 `preliminary_findings=[]`、`power_warnings=[]`、`suggested_focus=""`
+  3. 前端弹的 analyst_preliminary 消息内 "初步发现 0 个" + 无 power_warnings
+- **状态**：DRAFT-Phase 2（line citation 100% 准确，未跑端到端）
+- **提出日期**：2026-06-02
+- **关联**：扩展 F-006 在 orchestrator 侧的具体落点 / 与 F-022（`_llm_understand_field_update` 死代码）同源
+
+---
+
+### F-2026-06-02-055 [DRAFT-Phase 2][P1-HIGH] 铁律 2 失守：`_generate_phase_message` 三层兜底走"确定性兜底"路径
+
+- **结果影响**：当 LLM 主模型 + 快速模型都不可达时，**代码自己拼装中文阶段消息**给用户（`_build_fallback_phase_message` line 2779-2811），用户不知道 LLM 失败了 — 这违反铁律 2（"LLM 失败的唯一合法路径"中没有"代码拼装兜底"这条）+ 律 7（语义不确定可见）。
+- **证据**（line citation）：
+  - `hagoku/manager/orchestrator.py:2686-2717`：
+    ```python
+    # 一层：LLM 主模型生成消息
+    try:
+        msg = self._try_generate_phase_llm(...)
+        if msg is not None:
+            return msg
+    except RuntimeError:
+        pass  # LLM 不可达，尝试下一层      ← line 2697
+
+    # 二层：LLM 快速模型重试
+    try:
+        msg = self._try_generate_phase_llm(..., retry=True)
+        if msg is not None:
+            return msg
+    except RuntimeError:
+        pass  # LLM 仍不可达，走确定性兜底  ← line 2711
+
+    # 三层：LLM 完全不可达时的纯数据兜底（零语义归因）
+    return self._build_fallback_phase_message(...)  # ← line 2714
+    ```
+  - 注释自陈"走确定性兜底"（line 2711 行内注释）— 不在铁律 2 的 4 条合法路径任一种
+  - `_build_fallback_phase_message`（line 2779-2811）包含中文文案 dict：
+    ```python
+    quality_labels = {
+        "good":   "数据质量良好",
+        "medium": "数据质量一般",
+        "poor":   "数据质量问题较多",
+    }
+    ```
+    及"请确认是否按此方案清洗"、"初步分析没有发现明显的统计规律。你想从哪个维度再看一下？"等代码生成的"用户消息"
+- **辩护点**：`_build_fallback_phase_message` 内部不做语义分类（quality 等级是 LLM 早已分类好的），仅做 i18n 映射 + 数据列表。**形式上合规**。
+- **真正违规点**：line 2696 / 2710 的 `except RuntimeError: pass` — LLM 不可达时应 `raise RuntimeError`（铁律 2-A）让用户看见，而不是退到代码生成的中文。
+- **守门盲区**：守门 5 检测 `return [空值]` 模式，但 `except RuntimeError: pass`：
+  1. body 不是 `return [空值]` → 正则不匹配
+  2. `except RuntimeError` 块文本含 "RuntimeError" 字符串 → `legal = True` → 直接 continue
+  ∴ 守门 5 看不到这种"pass 兜底"模式
+- **doctrine 关联**：铁律 2 + 律 7 + 守门 5 结构性盲区（与 F-010 同模式）
+- **复现方式**：mock `chat.completions.create` 抛 ConnectionError → 跑 cleaning_strategy 阶段 → 用户看到中文阶段消息但不知道 LLM 已挂
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **关联**：F-006（剩 3 处 LLM 失败兜底） / F-010（守门 1-4 假守）
+
+---
+
+### F-2026-06-02-056 [DRAFT-Phase 2][P2-MEDIUM] 守门 5 四类结构性盲区 — 用例化 F-010
+
+- **结果影响**：F-010 已记录"守门 1-4 假守"但未给具体例子。Phase 2 将"守门 5"（`test_doctrine_LLM调用except块不得静默吞`）扫描代码 AST 后，找到 **4 类盲区** + 在 orchestrator.py 命中 4 个真实 case：
+  - **盲区 1**：守门 5 用正则 `r"return\s+(?:\[\]|\{\}|None|''|\"\")"`，**只检测 `return` 后接 5 种空字面量**。
+    - 漏掉 `pass`、`continue`、`return False`、`return True`、`return 0`、`return ""` 在变体（如 `return  ""`）
+  - **盲区 2**：如果 `except` 块**给变量赋兜底字符串**而不是 return，守门 5 看不到。
+    - 例：`_handle_mandatory_violations:1597-1603`
+      ```python
+      except Exception as e:
+          logger.warning(...)
+          risk_analysis = "无法生成风险分析（LLM 调用失败）。请人工审核..."
+      ```
+      LLM 不可达时用代码字符串替代 LLM 的 risk 分析输出 — 但守门 5 漏检
+  - **盲区 3**：`except RuntimeError: pass`（含 "RuntimeError" 字面量）被 `legal` 判定逻辑误判合法
+    - 例：`_generate_phase_message:2696, 2710`（详见 F-055）
+  - **盲区 4**：`return {"type": "correction", ...}` 这种**非空字面量 dict**返回，模式不匹配 `\{\}`
+    - 例：`_llm_classify_confirmation:3037`（已是 F-021 的根源）
+- **守门 5 当前漏检的 LLM 调用函数清单**（orchestrator.py，AST 扫描 + 人工分类）：
+  | 函数 | 行 | 漏检原因 |
+  |---|---|---|
+  | `_apply_scout_reply_with_llm` | 785 | `except: pass`（盲区 1） |
+  | `_handle_mandatory_violations` | 1597 | 赋兜底字符串（盲区 2） |
+  | `_generate_phase_message` | 2696, 2710 | `RuntimeError: pass`（盲区 3） |
+  | `_llm_classify_confirmation` | 3037 | 非空字面量 dict 返回（盲区 4） |
+- **doctrine 关联**：守门 5 设计边界过窄 → "假绿"风险 — 与 F-010 同模式但有具体证据
+- **复现方式**：`.venv/bin/python -m pytest tests/test_doctrine_compliance.py::test_doctrine_LLM调用except块不得静默吞 -v` → **PASS** 但实际有 4 处漏检
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：扩展守门 5 检测模式：`pass` / `continue` / 变量赋值含中文 / 非空 dict/list 字面量返回
+
+---
+
+### F-2026-06-02-057 [DRAFT-Phase 2][P1-HIGH] doctrine 守门扫描范围缺失 8 个核心子目录 — 律 5 / 律 8 失守位置正好不被扫
+
+- **结果影响**：`tests/test_doctrine_compliance.py:32`：
+  ```python
+  _DOCTRINE_SUBDIRS = ("agents", "manager", "api", "memory", "guardrails")
+  ```
+  实际 `hagoku/` 下有 **14 个子目录 + 4 个顶层 .py 文件**，守门只扫 4 个真实存在的目录（"memory" 字符串配错：实际是 `storage/memory.py`，子目录 `hagoku/memory/` 不存在，**5 个声明 → 4 个真扫**）
+- **未扫的关键位置**（含已确认 P0/P1 finding 的发生地）：
+
+  | 子目录 / 文件 | 行数 | 含已知问题 |
+  |---|---|---|
+  | `hagoku/storage/` | 2 949 | **F-003 / F-004 P0 在 `storage/memory.py`**；F-034 在 `storage/project_manager.py` |
+  | `hagoku/tools/` | 7 822 | **F-038 P1 业务阈值在 `tools/business.py`**；F-037 / F-041 / F-042 / F-043 / F-046 / F-047 |
+  | `hagoku/cli.py` | 1 129 | 1 129 行重要入口，含多处 `except Exception: pass` |
+  | `hagoku/context/` | 328 | `project_context.py`（F-032 SSoT 派生正面参考） |
+  | `hagoku/llm/` | — | LLM client 工厂 |
+  | `hagoku/prompts/` | — | **目录为空**（`find hagoku/prompts -type f` 0 结果） |
+  | `hagoku/config.py` | — | — |
+  | `hagoku/observability/` | — | — |
+- **直观影响**：
+  - F-038（业务阈值硬编码 P1）的位置 `tools/business.py` 不在扫描范围 → 守门 1（业务关键词）/ 守门 6（prompt 中不得写结论）**都不会触发**。即使作者把 `LTV/CAC > 3 是健康标准` 这种 if-elif 链写进 prompt，守门也看不到
+  - F-003 / F-004（律 5 失守）的根源在 `storage/memory.py:533, 535, 593, 659` 全部不扫
+  - F-019 / F-020（orchestrator P0）的代码 **被扫**（manager/ 在扫描里），但守门内容（业务关键词 / 中文正则）跟这俩 P0 是 NameError / 死分支 — 这俩在守门设计范围之外
+- **`prompts/` 目录为空但被注释期待**：`PROJECT.md` / `CLAUDE.md` 隐含 prompt 应该有专门管理，但 `hagoku/prompts/` 是空目录 — 实际 prompt 散在各 agent 的 system_prompt 字符串里。守门 6 扫描 prompt 拼接逻辑是合理的，但**真正的 prompt 文本来源不在 prompts/ 子目录**
+- **`_DOCTRINE_SUBDIRS` 含 "memory" 但目录不存在**：是配置 bug。`hagoku/memory/` 在仓库中不存在（实际是 `storage/memory.py`），所以这条配置实际是死扫描。F-003 / F-004 的代码因此完全不在守门视野内
+- **doctrine 关联**：守门设计原则 vs 实际覆盖率严重偏差。Phase 0 推论"代码不扫 tools/" 的依据是注释 `工具实现层（hagoku/tools/）多为统计计算与 IO，不在此范围` — 但 F-038 已证明 `tools/business.py` 含业务关键词阈值（非纯计算）
+- **复现方式**：
+  ```bash
+  # 验证 storage/ 不扫
+  echo 'BUSINESS = ["收入", "营收"]' >> hagoku/storage/memory.py
+  .venv/bin/python -m pytest tests/test_doctrine_compliance.py -v
+  # 期待: PASS（守门 1 不扫 storage/ → 漏检）
+  ```
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：把 `_DOCTRINE_SUBDIRS` 改为：扫描整个 `hagoku/` 但用 `_EXEMPT_FILES` 白名单显式豁免（如纯统计 IO 文件）。同时修配置 bug："memory" → "storage"。
+
+---
+
+### F-2026-06-02-058 [DRAFT-Phase 2][P3-LOW] Silent fail 跨文件总盘 — F-021/025/034/048/051 之外还有 30+ 处
+
+- **结果影响**：F-021 / F-025 / F-034 / F-048 / F-051 已散点列了部分 silent fail。Phase 2 用 AST 扫描出**全仓共 50 处真正 silent except**（块内无 logger / log / raise / print / warnings.warn / `_last_understanding_failure` / `_scribe_fallback` / `degraded`）。
+- **按文件分桶**（除 F-021/025/034/048 已记录的之外，**新发现**）：
+
+  | 文件 | silent except 数 | 已被现有 finding 覆盖? |
+  |---|---|---|
+  | `hagoku/manager/orchestrator.py` | 9 | ⏳ 部分（F-021） |
+  | `hagoku/agents/_scribe/agent.py` | 5 | ⏳ 部分 |
+  | `hagoku/api/server.py` | 5 | ✅ F-048 |
+  | `hagoku/storage/project_manager.py` | 3 | ✅ F-034 |
+  | `hagoku/cli.py` | 4 | ❌ **新** |
+  | `hagoku/agents/reporter/agent.py` | 4 | ❌ **新**（除 F-025 外又 3 处 JSON decode silent） |
+  | `hagoku/storage/database.py` | 2 | ❌ **新**（与 F-035 "教科书级" 反差） |
+  | `hagoku/agents/analyst/agent.py` | 1 | ✅ F-025 |
+  | `hagoku/agents/cleaner/agent.py` | 2 | ✅ F-025 |
+  | `hagoku/tools/cleaning.py` | 1 | ❌ **新** |
+  | `hagoku/tools/diagnostics.py` | 1 | ❌ **新** |
+  | `hagoku/tools/analysis_registry.py` | 1 | ❌ **新**（"静默跳过加载失败的插件"自陈） |
+  | `hagoku/storage/output.py` | 1 | ❌ **新** |
+  | `hagoku/storage/memory_backends.py` | 1 | ❌ **新** |
+  | `hagoku/storage/knowledge_vector.py` | 1 | ❌ **新** |
+  | `hagoku/storage/memory.py` | 1 | ❌ **新** |
+  | `hagoku/guardrails/parsers.py` | 1 | ❌ **新** |
+  | **总计** | **50** | 约 30 处未被现有 finding 覆盖 |
+
+- **几条重要 silent fail**（line 编号 + 行为）：
+  - `cli.py:58` `except Exception: pass` — 启动期某操作失败完全静默
+  - `storage/database.py:575, 653` `except (json.JSONDecodeError, TypeError): pass` — DB JSON 字段损坏静默（与 F-035 评价 "database.py 教科书级"矛盾）
+  - `analysis_registry.py:559` `except Exception: pass  # 静默跳过加载失败的插件` — 自陈静默（插件加载失败用户不知道）
+  - `storage/knowledge_vector.py:57` `except Exception: return None` — 知识库向量化失败 silent
+  - `orchestrator.py:2643` `_parse_user_query except Exception: return None` — 用户 query 解析失败时 `_describe_intent(None)` 走到 "探索一下这份数据有什么规律" 默认消息（line 2820）
+- **doctrine 关联**：律 7（语义不确定可见）的系统性失守 — 不是单点 bug，是**全仓 30+ 处叠加**
+- **复现方式**：
+  ```bash
+  # 用 AST 扫描器：
+  python3 -c "$(cat ...)" # （Phase 2 已跑过，见对话历史）
+  ```
+- **状态**：DRAFT-Phase 2（AST 验证）
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：
+  - 在每个 silent except 内**至少**调 `logger.warning(...)`（最低门槛）
+  - 关键路径用 `_scribe_fallback: True` / `degraded: True` 标记降级（F-035 / Scribe 的正面模式）
+  - 守门 5 扩展模式（见 F-056）
+
+---
+
+### F-2026-06-02-059 [DRAFT-Phase 2][P3-OBSERVATION] `hagoku/prompts/` 是空目录但被 doctrine 文档隐式期待
+
+- **结果影响**：`find hagoku/prompts -type f` 返回 0 个文件 — 子目录是空的。但 PROJECT.md / CLAUDE.md 在多处提及"prompt"（守门 6 也专门检测 prompt 构造），表面上像有 prompt 资源管理；实际**所有 prompt 都散在各 agent 的 Python 字符串字面量**里（scout/cleaner/analyst/reporter agent.py 的 system_prompt = "..."）。
+- **影响**：
+  - 新 AI 看到 `hagoku/prompts/` 子目录会**误以为有集中 prompt 资源**，去那里读 → 空
+  - prompt 散点修改难追踪，且**散在 Python 字符串里的中文 prompt** 不被 doctrine 守门 1 / 2 扫（守门排除"整段中文 prompt"，因为是 LLM 教学材料）— 但守门排除标准在自身代码里没明确
+- **doctrine 关联**：本报告 §1.4 报告健康度 + Karpathy 原则 2（Simplicity First）— 空目录是"未来要做但没做"的脚手架
+- **位置**：`hagoku/prompts/`
+- **证据**：`ls hagoku/prompts/` → 空；`find hagoku/prompts -name "*"` 只列目录自身
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+
+---
+
+## 3.Y Phase 2 session 2 新 finding（律 10 + 契约 + 守门用例化 / 2026-06-02 同日接续）
+
+> 本 session 完成 Phase 2 三个剩余切入点：律 10 跨文件 / scout-cleaner-reporter 契约 / 守门 1-4-6 具体漏检案例。
+
+---
+
+### F-2026-06-02-060 [DRAFT-Phase 2][P1-HIGH] 律 10 双字段 `confirmed_by_user` / `last_confirmed_at_run` 写而不读 — 律 10 是装饰
+
+- **结果影响**：律 10（当前 run 优先于历史记忆）的两个核心字段被定义、被声明、被写入，但**从来没人读它们做"本 run 优先" 判断** — 律 10 在代码层实际上不起作用，只是装饰。用户每次在某 run 纠正字段后，下个 run 的 scout 仍会用历史记忆覆盖（与 F-004 同模式但范围更大）。
+- **doctrine 关联**：律 10（当前优先律）的二阶失守
+- **证据**（AST + grep 跨文件）：
+
+  **`last_confirmed_at_run`** — 全仓 6 处提及：
+  | 位置 | 行为 |
+  |---|---|
+  | `types.py:210, 235` | 定义 + 字段规范文档 |
+  | `types.py:261` | dataclass `to_dict` 输出 |
+  | `memory.py:538` | 1 处赋值（apply_to_context 内） |
+  | `scout/agent.py:733, 752` | 2 处初始化为 `None`（每次重新推断字段都重置） |
+  | **读侧** | **0 处读取做判断** |
+
+  **`confirmed_by_user`** — 全仓 8 处提及：
+  | 位置 | 行为 |
+  |---|---|
+  | `types.py:209, 234` + `memory.py:58` | 定义 |
+  | `memory.py:537, 609, 617, 667` | 4 处赋值 |
+  | `scout/agent.py:422` | 用户确认后写入 context |
+  | `scout/agent.py:732, 751` | 2 处初始化为 `False` |
+  | **唯一"读"** | `memory.py:661 confirmed = bool(_get(sem, "confirmed_by_user", False))` — 仅用于"是否写入持久化"，**不是律 10 的"本 run 压住历史"判断** |
+
+- **scout `_apply_project_memory` (line 862-878)** 是律 10 失守的具体路径：
+  ```python
+  def _apply_project_memory(self, context: dict, memory_project: dict) -> None:
+      fields = memory_project.get("fields", {})
+      display_names = memory_project.get("display_names", {})
+      for sem in context["column_semantics"]:
+          col = sem["column_name"]
+          if col in fields:
+              context["column_descriptions"][col] = fields[col]   # ← 直接覆盖
+              sem["confidence"] = 1.0
+          if col in display_names:
+              context["column_display_names"][col] = display_names[col]
+              sem["needs_user_input"] = False
+  ```
+  **完全不检查 `sem.confirmed_by_user`** — 如果用户当前 run 已经把字段名改了，但 memory_project 里有旧值，**仍直接覆盖**
+
+- **`build_memory_project` (memory.py:559-577)** 同步只传 `{"fields": ..., "display_names": ...}` 给 scout，不传 `confirmed_by_user` / `last_confirmed_at_run` → scout 即使想检查也拿不到这俩字段（F-023 的扩展）
+
+- **scout 创建新 column_semantics 时**（line 720-734, 740-753）：每次都把 `confirmed_by_user: False` / `last_confirmed_at_run: None` 写为初始值 — `apply_to_context` 之前同步写入的值被**完整覆盖**
+
+- **doctrine 关联补充**：与 F-004 / F-023 形成 3 条同主线 — F-004（learn_from_run 抹 description）/ F-023（build_memory_project 丢字段）/ F-060（律 10 双字段写而不读）。这条 finding 给出律 10 在代码层"完全无效"的全景证据。
+
+- **复现方式**：
+  1. run 1：用户改 "Inc1" 为 "销售额"（`confirmed_by_user=True` 被写入 column_semantics）
+  2. run 2：scout 跑 `_infer_all_semantics` → 创建新 dict（`confirmed_by_user=False`）→ 调 `_apply_project_memory` → 从 fields 读历史值 → 覆盖
+  3. 用户看到："Inc1" 又变回旧描述
+
+- **状态**：DRAFT-Phase 2（grep + AST 证据完备，未端到端复现）
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：
+  - `build_memory_project` 增加 `confirmed_by_user_at_run: dict` 字段（每列 → run_id）
+  - `_apply_project_memory` 检查："当前 run 是否已有 `confirmed_by_user=True`？如是，跳过 memory 覆盖"
+  - 或更激进：先扫 column_semantics 已有 `confirmed_by_user=True` 的列名进入豁免集合，apply 时跳过
+
+---
+
+### F-2026-06-02-061 [DRAFT-Phase 2][P2-MEDIUM] orchestrator.py:1937-1939 `cleaner.run` 3 元组解构是死代码
+
+- **结果影响**：编排层在 `cleaner.run` 返回值不是 4 元组时用 3 元组解构 — 但 `cleaner.run` AST 扫描所有 4 个 `return` **全部是 4 元组**。这段代码永远到不了，但**保留它会让未来 AI 误以为 cleaner.run 有 3 元组返回路径**，可能基于错误前提写新代码。
+- **doctrine 关联**：Karpathy 原则 2（Simplicity First）— 死分支占阅读预算
+- **证据**：
+  - `cleaner.run` 全部 return（AST）：
+    - line 169: `return pd.DataFrame(), pd.DataFrame(), report, {}` (4 元组)
+    - line 234: `return df, df, strategy_report, {"operations": operations}` (4 元组)
+    - line 283: `return df, df_clean, report, summary` (4 元组)
+    - line 298: `return df, df, report, {}` (4 元组)
+  - 函数签名声明 `-> tuple[pd.DataFrame, pd.DataFrame, CleaningReport, dict]`
+  - **`orchestrator.py:1933-1939`** 调用代码：
+    ```python
+    if isinstance(cleaner_result, tuple) and len(cleaner_result) >= 4:  # ← 4 元组分支
+        _, _, _, strategy_dict = cleaner_result
+        if isinstance(strategy_dict, dict):
+            ...
+        else:
+            df_clean, cleaning_report, _ = cleaner_result  # ← 死代码 line 1937 (3 元组解构 4 元组)
+    else:
+        df_clean, cleaning_report, _ = cleaner_result  # ← 死代码 line 1939 (cleaner.run 必返 tuple len≥4)
+    ```
+    line 1937 是 4 元组用 3 个变量解构 → 必抛 ValueError；line 1939 触达条件是 `len < 4` 或非 tuple → 永远不发生
+- **复现方式**：
+  ```python
+  # cleaner.run 必返 4 元组 → 1937 与 1939 永远到不了
+  result = cleaner.run(...)
+  assert isinstance(result, tuple) and len(result) == 4
+  ```
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+
+---
+
+### F-2026-06-02-062 [DRAFT-Phase 2][P3-OBSERVATION] `reporter.run` 返回 `ReportData` 但 `orchestrator.py:2395` 调用方完全不接 — 副作用契约不显式
+
+- **结果影响**：reporter.run 的契约**靠副作用**（写文件 + 写 _update_own_memory），返回值 ReportData 被丢弃。这意味着：
+  - 编排层无法基于 report 内容做决策（如 "如果 report.headline 为空则告诉用户"）
+  - reporter.run 异常分支返回 "failed report"（line 213-214 的 ReportData）— 调用方拿不到，**只能靠 events.jsonl 间接得知失败**
+- **doctrine 关联**：律 7（语义不确定可见）的边界 + Karpathy 原则 4（Goal-Driven Execution）— 返回值未被用 = 隐式契约
+- **证据**：
+  - `reporter.run` 签名（line 130-144）`-> ReportData`
+  - `reporter.run` 4 个 return 全部返回 `ReportData` 或类 ReportData（line 210, 214, 489）
+  - **`orchestrator.py:2395`** 调用：
+    ```python
+    reporter.run(
+        results=_analyst_results,
+        ...
+    )
+    ```
+    无变量赋值，返回值丢弃
+- **影响**：
+  - 当 reporter 内部异常时 line 213-214 返回 `ReportData(error=...)`，但 orchestrator **拿不到** error 信息
+  - reporter 异常时通过 `_emit(EventType.AGENT_FAILED, ...)` 通知 EventBus → 用户在 UI 看到 "AGENT_FAILED"，但 orchestrator 仍 happy-path 继续到 line 2412 "save run_meta"
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：接住返回值 → 检查 `.error` 字段 → 决定是否继续 happy-path
+
+---
+
+### F-2026-06-02-063 [DRAFT-Phase 2][P2-MEDIUM] 守门 1 不扫 `ast.Dict.values` / `ast.Dict.keys` — 字典形式业务关键词集合可绕过
+
+- **结果影响**：守门 1（业务关键词字面量集合）只扫 `ast.List / Tuple / Set`，**漏掉 `ast.Dict`**。当前全仓 0 命中 → 没有 false negative，但**机制层有盲区**：
+  ```python
+  # 守门 1 不拦下面这种：
+  KEYWORD_MAP = {"收入": True, "营收": True, "销售额": True}    # Dict.keys 集合
+  LABELS = {"a": "收入", "b": "营收", "c": "销售额"}            # Dict.values 集合
+  ```
+  任何 future PR 想绕过守门 1 → 把 list 改成 dict → **直接通过**
+- **doctrine 关联**：守门 1 的"边界"，与 F-010 / F-056 同模式（守门设计 vs 实际覆盖率反差）
+- **证据**（tests/test_doctrine_compliance.py:92-94）：
+  ```python
+  for node in ast.walk(tree):
+      # 只看 List / Tuple / Set 字面量
+      if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+          continue
+  ```
+  注释自陈"只看 List / Tuple / Set"
+- **Phase 2 全仓验证**（AST 扫所有 9 个子目录的 Dict.values + Dict.keys 包含 ≥2 业务关键词）：**0 命中** → 当前无 false negative，但盲区客观存在
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：扩展守门 1 同时扫 `ast.Dict` 的 keys / values
+
+---
+
+### F-2026-06-02-064 [DRAFT-Phase 2][P3-LOW] 守门 3 阈值 `chain_count >= 3` 漏检 2-chain — `analyst/agent.py:381` 真实命中
+
+- **结果影响**：守门 3 要求 `if-elif` 链含 ≥ 3 个中文字符串比较才算违规。2-chain 漏检 → **业务意图分类用 2-chain 写法可逃过守门**。已在 `analyst/agent.py:381` 命中一例：
+  ```python
+  if action == "生成报告":      # ← 中文字符串语义分类 1
+      ...
+  elif action == "继续分析":    # ← 中文字符串语义分类 2
+      ...
+  ```
+  这是**用户行为意图分类**，本应由 LLM 通过 tool_call 表达。chain_count = 2 → 守门 3 漏。
+- **doctrine 关联**：守门 3 阈值设计问题 + 律 8（控制通道律）的边界
+- **证据**：
+  - `tests/test_doctrine_compliance.py:225` `if chain_count >= 3:` → 2 不报
+  - AST 扫全仓后 2-chain 中文比较仅命中 1 处（`analyst/agent.py:381`）
+- **辩护点**：2 个分支可能是合理路径分发（不一定都是"业务分类"）— 阈值 ≥ 3 是有道理的（多分支才像分类）。但 `analyst/agent.py:381` 是真实的"用户动作命名"硬编码，**应该改成 LLM 走 next_step 工具**
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：
+  - 选项 A：守门 3 阈值降到 ≥ 2 — 简单但可能误报
+  - 选项 B：守门 3 保持 ≥ 3，但加 grep 警告 line：`if .* == "[中文]"` 输出 INFO 不 fail
+  - 选项 C：把 `analyst/agent.py:381` 改成 LLM 行为分类
+
+---
+
+### F-2026-06-02-065 [DRAFT-Phase 2][P2-MEDIUM] 守门 6 `_PROMPT_RULE_PATTERNS` 只 3 个模式 — prompt 结论式规则漏检面广
+
+- **结果影响**：守门 6 检测 prompt 中的"结论式规则"，但 `_PROMPT_RULE_PATTERNS` 只列了 3 个正则：
+  1. `role → value` 映射（如 `identifier → false`）
+  2. `必须判为 X` 强制
+  3. `硬性规则` / `判断规则` / `映射规则` 关键字
+  其余结论式表达**全部漏检**，包括：
+  - "**设为** ignore"（不是"必须设为"）
+  - "**默认** 当作 feature"
+  - "**应该** 判为 target"
+  - "**优先** 使用 Mann-Whitney 不要用 t-test"（方法选择指令）
+  - "如果 X 是数字就当作 feature"（指令式条件 — 业务分类）
+  - 直接列规则的句式：`"针对该字段：1) ... 2) ... 3) ..."`
+- **doctrine 关联**：与 F-010 / F-056 同模式 — 守门设计 vs 实际覆盖率
+- **复合盲区**：
+  - 真正的 prompt **散在各 agent 的 system_prompt = "..."** Python 字符串字面量里（不在 `hagoku/prompts/` 目录 — 该目录是空的，F-059）
+  - 守门 6 扫"函数体内的字符串常量"，但**触发条件是函数 src 含 `system_prompt|user_prompt|messages|prompt` 关键字**
+    （`tests/test_doctrine_compliance.py:456-462`）— 函数若用其他变量名（如 `instruction` / `directive` / `system_role`）则**不进入扫描** → prompt 完全逃过守门 6
+- **证据**：
+  - `tests/test_doctrine_compliance.py:417-425` `_PROMPT_RULE_PATTERNS` 共 3 条正则
+  - `tests/test_doctrine_compliance.py:456-462` 函数触发关键字 4 个
+- **状态**：DRAFT-Phase 2
+- **提出日期**：2026-06-02
+- **改进方向**（参考性）：
+  - 扩展 `_PROMPT_RULE_PATTERNS` 覆盖"设为 / 默认 / 应该 / 优先" 等动词
+  - 扩展函数触发关键字（增加 `instruction|directive|system_role|prompt_text`）
+  - 真正的修复是**把 prompt 集中到 `hagoku/prompts/`**（F-059）—— 然后改成扫描该目录的 `.md` / `.txt` 而不是 Python 字符串
+
+---
+
+## 3.Z Phase 3.5 复验轮（用户晨间修复后 / 2026-06-02 接续）
+
+> 用户晨间已对 orchestrator / analyst / cleaner 做过修复（commits `9d826f2..61a35d2`，共 ~15 次提交，涉及 `manager/orchestrator.py` / `agents/{scout,cleaner,analyst}/agent.py` / `tools/agent_tool_defs.py` / `context/project_context.py`）。本节是病理学家**对所有 P0/P1/关键 P2 finding 的逐条复验**，目的是把已修部分标 RESOLVED、未修部分锁定新 line 号、新发现的 doctrine 失守添加为新 finding。
+
+### 3.Z.1 复验方法
+
+- 切换到当前 `master` HEAD（`61a35d2`）的 working tree
+- 对每条 P0/P1/关键 P2 finding 跑 grep / AST / 行号定位
+- 记录：状态变更（RESOLVED / 保持 DRAFT / RETRACTED）+ 新 line 号 + 修复证据
+
+### 3.Z.2 一表看完（P0 + P1 + 关键 P2）
+
+| ID | 等级 | 旧位置 | 复验结果 | 新位置 / 状态 |
+|---|---|---|---|---|
+| **F-001** | P0 | orch 2255/2312/2357/2489 | ✅ **RESOLVED** | 4 处 TODO + `if False:` 全消失；`cleaner_confirmed` 改文本匹配，`analyst_confirmed` 因 Analyst 改对话式整体消失 |
+| **F-002** | P0 | `tests/test_field_llm_e2e.py` 收集挂掉 | ❌ 仍存在 | `pytest --co` 仍 78s/0 collected（2026-06-02 复验） |
+| **F-003** | P0 | 多侧平行存储 | ❌ 仍存在 | `column_descriptions[col]=` 直写仍 8 处（与旧报告一致） |
+| **F-004** | P0 | `memory.py:662` learn_from_run | ❌ 仍存在 | `ColumnSemanticDef(...)` 构造仍不传 `description` / `display_name`（memory.py:662-668） |
+| **F-019** | P0 | orch 2323/2338 死分支 | ❌ 仍存在 | **新 line**：`orch.py:2155 cleaning_report = None` + `orch.py:2170 if not skip_cleaning and cleaning_report is not None:` |
+| **F-020** | P0 | orch 2537-2595 NameError | ❌ 仍存在 | **新 line**：`if violations:` block 起点 `orch.py:2321`；block 内引用 `output_path` (line 2366, 2376) / `duration_ms` (line 2360, 2378)；run() 内首次赋值 `output_path = orch.py:2394` / `duration_ms = orch.py:2421` — block 触发时仍 NameError |
+| **F-053** | P0 | types.py SSoT 集体绕过 | ❌ 仍存在 | derive_* 5 个 4 个仍 0 调用；`_apply_field_corrections:2993` 仍只写 `s["evidence"]` / `s["needs_user_input"]`，不写 `s["description"]` / `s["display_name"]` |
+| **F-054** | P0 | analyst.run 死参 + key 错 | ❌ 仍存在 | `analyst.run` 签名（`agents/analyst/agent.py:195-204`）`plan`/`phase` 仍是死参；`orch.py:1946-1968` 4 个 `dict.get` key 错（preliminary_findings/suggested_focus/power_warnings/business_metrics 全部不在 submit_analysis 返回 dict 中） |
+| **F-038** | P1 | business.py ROI/ROAS/LTV 阈值 | ❌ 仍存在 | `_interpret_roi` (line 914-923) / `_interpret_roas` (line 926-934) / `calc_ltv_cac_ratio` (line 290+) 阈值原样 |
+| **F-055** | P1 | orch 2696/2710 RuntimeError pass | ❌ 仍存在 | line 2696 / 2710 `except RuntimeError: pass` 原样，注释"LLM 不可达，尝试下一层 / 走确定性兜底"原样 |
+| **F-057** | P1 | 守门 `_DOCTRINE_SUBDIRS` 不扫 storage/tools | ❌ 仍存在 | `tests/test_doctrine_compliance.py:32` `_DOCTRINE_SUBDIRS = ("agents", "manager", "api", "memory", "guardrails")` 原样；"memory" 死指向未修 |
+| **F-060** | P1 | 律 10 双字段写不读 | ❌ 仍存在 | `scout._apply_project_memory` (scout/agent.py:862-878) 仍不检查 `confirmed_by_user`；`last_confirmed_at_run` 全仓写侧 1 处 / 读侧仍 0 处 |
+| **F-021** | P2 | orch:3253 _llm_classify_confirmation 兜底 | ❌ 仍存在 | **新 line**：`orch.py:3040 return {"type": "correction", "updates": {}}` 原模式 |
+| **F-022** | P2 | _llm_understand_field_update 死代码 | ❌ 仍存在 | **新 line**：定义 `orch.py:3042`；全仓调用方仍 0 处 |
+| **F-056** | P2 | 守门 5 四类盲区 | ❌ 仍存在 | 守门 5 检测正则 `r"return\s+(?:\[\]|\{\}|None|''|\"\")"` 原样 |
+| **F-061** | P2 | cleaner.run 1937/1939 3 元组解构死代码 | ❌ 仍存在 | line 1937/1939 3 元组解构原样；cleaner.run AST 扫描 4 个 return 全部 4 元组 |
+| **F-062** | P3 | reporter.run 返回值丢弃 | ❌ 仍存在 | `orch.py:2395 reporter.run(...)` 无变量赋值 |
+| **F-063** | P2 | 守门 1 不扫 Dict | ❌ 仍存在 | `tests/test_doctrine_compliance.py:93` 仍 `isinstance(node, (ast.List, ast.Tuple, ast.Set))` |
+| **F-064** | P3 | 守门 3 阈值 ≥ 3 漏 2-chain | ❌ 仍存在 | `tests/test_doctrine_compliance.py:219` `if chain_count >= 3:` 原样；`analyst/agent.py:381` 2-chain 中文 if-elif 原样 |
+| **F-065** | P2 | 守门 6 模式覆盖不全 | ❌ 仍存在 | `_PROMPT_RULE_PATTERNS` 仍 3 个正则 |
+
+### 3.Z.3 数字校准
+
+- **silent except 总数**（F-058 重算）：50 → **50**（用户晨间修复未涉及 silent fail）
+- **column_descriptions 直写**（F-053 重算）：8 → **8**（位置：memory.py:533、scout/agent.py:417/764/774/873/917/1060、orch.py:2993）
+- **derive_* 函数调用率**（F-053 重算）：未变（`derive_display_names`/`derive_descriptions`/`derive_variable_roles`/`derive_analysis_columns`/`column_semantics_lookup` 0 调用，`derive_target_features` 2 调用）
+- **orchestrator.py 行数**：3457 → **3241**（-216，主因：清理 4 个未调用函数 + 12 个旧 Analyst 方法，commit `61a35d2`）
+
+### 3.Z.4 关键变化与新发现
+
+**晨间修复的实际范围**（按 commit 内容）：
+- ✅ F-001 全 4 处闸门 — 修
+- ✅ Cleaner 多处死循环（`09e14b9` / `10dc583` / `50a52c1`）— 修
+- ✅ Cleaner 容错 JSON 截断（`9e3a33a`）— 修
+- ✅ Scout AGENT_COMPLETED 事件（`bc598fe`）— 修
+- ✅ Analyst 改对话式 Tier 1（`c9a1efb`）— 重构
+
+**晨间修复未触达**（保持 DRAFT）：
+- ❌ F-002 / F-003 / F-004 / F-019 / F-020 / F-053 / F-054（6 个 P0）
+- ❌ F-038 / F-055 / F-057 / F-060（4 个 P1）
+- ❌ F-021 / F-022 / F-056 / F-061 / F-063 / F-065（6 个 P2）
+
+**反讽**：F-019（cleaning_report = None 死分支）和 F-001（4 处闸门死循环）在 commit `09e14b9 fix: Cleaner 死循环修复` 的同一类故障域，但晨间只修了控制闸门（F-001），**没注意到 F-019 是同一文件同一阶段的另一个独立死分支** — 这条提示用户：F-019 是 F-001 的"邻居 bug"，下次修 F-001 时应顺手验。
+
+**新发现（Phase 3.5 复验时挖到 1 条新风险）**：
+
+### F-2026-06-02-066 [DRAFT-Phase 3.5][P2-MEDIUM] commit `61a35d2 清理死代码` 删了 4 个未调用函数 + 12 个旧 Analyst 方法 — 但 F-022 的 `_llm_understand_field_update` 漏删
+
+- **结果影响**：今早 commit `61a35d2 refactor: 清理死代码——删 4 个未调用函数 + 12 个旧 Analyst 方法` 明显是听了类似 F-022 的建议清理死代码，**但 F-022 报告的 `_llm_understand_field_update`（45 行死代码）仍在**（`orch.py:3042-3088`）。
+- **doctrine 关联**：与 F-022 同主线 — 清理工作部分但不全面。
+- **位置**：`hagoku/manager/orchestrator.py:3042` 仍是定义、全仓调用方 0 处
+- **证据**：
+  - `git log --name-only 61a35d2` 显示删了 4+12 函数
+  - `grep -rn "_llm_understand_field_update" hagoku/ --include="*.py"` 仍只有定义那一行
+- **复现方式**：`grep -rn "_llm_understand_field_update" hagoku/` — 0 调用，但 45 行函数体仍在
+- **状态**：DRAFT-Phase 3.5
+- **提出日期**：2026-06-02
+- **改进方向**：下次清理批次顺手把它删掉。F-022 应升级"已上议程但漏删"。
+
+---
+
 ## 4. 正式 Findings
 
 > **等待 Phase 1 完成后从 DRAFT 升级或新发现后写入。**
@@ -1365,6 +1989,93 @@ _（暂无）_
 
 ---
 
+### 7.5 Phase 2 session 1（跨文件交叉验证 / 2026-06-02 接续）
+
+**本 session 目的**：Phase 1 完成后，进入跨文件交叉验证。不重读单文件，而是用 grep / AST / 全仓扫描验证"声明 vs 实施"、"读侧 vs 写侧"、"守门覆盖 vs 实际代码分布"。
+
+**核对结果**：
+- Phase 1 实际**已**完成（不是 7.1 节写的 47%）— git log 显示 session 9/10/11 已读 cleaning.py / visualization.py / power_analysis.py / api/server.py / 前端
+- 实际代码行数：Python 26 246 行（不含 backup）/ 28 680 行（含），TS/TSX 8 476 行（不是报告写的 9K）
+
+**Phase 2A（silent fail 跨文件总盘）** — AST 扫描全仓 50 处真正 silent except，按文件分桶，30+ 处未被现有 finding 覆盖 → **F-058 NEW**。
+
+**Phase 2B（doctrine 守门 vs 实际代码对照）** — 守门 `_DOCTRINE_SUBDIRS` 仅扫 4 个真实子目录，**漏掉** storage/ / tools/ / cli.py / context/ / llm/ / prompts/（空目录但被隐式期待）8 类位置 → **F-057 NEW（P1）+ F-059 NEW**。守门 5 检测正则有 4 类盲区，4 处真实 LLM 调用 except 漏检 → **F-056 NEW（P2）+ F-055 NEW（P1，铁律 2 失守的 line 2696/2710 pass 模式）**。
+
+**Phase 2C（律 5 SSoT 声明 vs 实施）** — `types.py:122-124` 声明 column_semantics SSoT 且禁止平行存储，但 5 个 `derive_*` 函数 4 个 0 调用，`column_descriptions[col] =` 直写仍有 8 处 + `column_display_names[col] =` 2 处。`orchestrator.py:2984-2999 _apply_field_corrections` 是典型违规源头（写 column_descriptions 不同步 column_semantics 的 description / display_name）→ **F-053 NEW（P0，F-003 全景视图扩展）**。
+
+**Phase 2D（orchestrator ↔ agent 契约）** — `analyst.run` 签名含 `plan` / `phase` 两参，函数体 0 处使用（死参）；调用方 `orchestrator.py:1946` 4 个 dict.get 用错 key（`preliminary_findings` / `suggested_focus` / `power_warnings` / `business_metrics` 全是 submit_analysis 工具不返回的 key），导致 UI "analyst_preliminary" 阶段消息中"初步发现 N 个"的 N 永远是 0。前端 `AnalyzePanel.tsx:1195` 始终发 `phase: "full"` → 该死分支必然触达 → **F-054 NEW（P0）**。
+
+**本 session 新增**：
+- META-001 NEW [P3]：报告 7.1 节状态过期与 9.x 全局视角矛盾
+- F-053 NEW [P0]：律 5 SSoT 集体绕过（F-003 全景视图）
+- F-054 NEW [P0]：orchestrator preliminary 分支 4 个 get 总返默认值
+- F-055 NEW [P1]：铁律 2 失守 — `_generate_phase_message` "确定性兜底"
+- F-056 NEW [P2]：守门 5 四类结构性盲区（F-010 用例化）
+- F-057 NEW [P1]：doctrine 守门扫描范围缺失 8 个核心子目录
+- F-058 NEW [P3]：silent fail 跨文件总盘 50 处 / 30+ 处未覆盖
+- F-059 NEW [P3]：`hagoku/prompts/` 空目录但被 doctrine 隐式期待
+
+**Phase 2 已确认 P0 / P1 计数**：
+- 新 P0：F-053 / F-054 → 累计 P0 从 5 升到 **7**
+- 新 P1：F-055 / F-057 → 累计 P1 从 1 升到 **3**
+
+**Phase 2 完成度**：3 个切入点（守门覆盖 / 律 5 SSoT 反差 / orchestrator-agent 契约）做完。剩余 Phase 2 候选切入点：
+- ⏳ 律 10 跨文件验证（除 `learn_from_run` 外还有别处覆盖吗？）
+- ⏳ orchestrator 调 scout / cleaner / reporter 的契约（本轮只验了 analyst）
+- ⏳ 守门 1-4 / 守门 6 的具体漏检案例（F-010 / F-056 模式扩展）
+
+**Phase 2 总 DRAFT 计数**：52 (Phase 0-1) + 1 META + 7 (Phase 2 session 1) = **60 DRAFT findings**
+
+---
+
+### 7.6 Phase 2 session 2（剩余切入点 / 2026-06-02 同日接续）
+
+**本 session 目的**：完成 Phase 2 三个剩余切入点（律 10 跨文件 / scout-cleaner-reporter 契约 / 守门 1-4-6 具体漏检），不再有未盖切入点。
+
+**Phase 2E（律 10 跨文件）** — 跨文件 grep + AST 验证两个律 10 核心字段 `confirmed_by_user` / `last_confirmed_at_run`：写入路径 6 处，**读侧 0 处用做"本 run 优先"判断**（唯一的"读"在 learn_from_run 是判断"是否持久化"，与律 10 语义无关）。scout 每次重新推断字段时把两个字段初始化为 `False/None`，**覆盖 apply_to_context 之前的写入**。`build_memory_project` 也不把这两个字段传给 scout — scout 即使想检查也拿不到 → **F-060 NEW [P1]**
+
+**Phase 2F（scout / cleaner / reporter 契约）** — 验证三个 agent 的 `.run()` 签名 vs orchestrator 调用方：
+- **scout.run** 契约一致 ✅
+- **cleaner.run** 4 个 return 全部 4 元组 + orchestrator 4 处调用一致 ✅，但 `orchestrator:1937, 1939` 的 3 元组解构是**死代码**（条件永远不达）→ **F-061 NEW [P2]**
+- **reporter.run** 返回 `ReportData` 但 `orchestrator:2395` 调用方**完全不接返回值** — 异常分支 `ReportData(error=...)` 拿不到，调用方仍 happy-path 继续 → **F-062 NEW [P3]**
+
+**Phase 2G（守门 1-4 / 6 具体漏检）** — 用 AST 全仓扫描验证 F-010 / F-056 推论：
+- **守门 1** 不扫 `ast.Dict.values` / `ast.Dict.keys` — 当前全仓 0 命中（无 false negative），但**机制层盲区**未来可被绕过 → **F-063 NEW [P2]**
+- **守门 3** 阈值 `chain_count >= 3` 漏检 2-chain — `analyst/agent.py:381` 真实命中一例（`if action == "生成报告" elif action == "继续分析"` 是用户行为意图分类，应由 LLM 走 tool_call）→ **F-064 NEW [P3]**
+- **守门 6** `_PROMPT_RULE_PATTERNS` 只 3 个正则 + 函数触发关键字仅 4 个 — prompt 中"设为 / 默认 / 应该 / 优先" 等动词的结论式表达全部漏检 → **F-065 NEW [P2]**
+
+**本 session 新增**：
+- F-060 NEW [P1]：律 10 双字段写而不读（裸字段是装饰）
+- F-061 NEW [P2]：cleaner.run 3 元组解构死代码
+- F-062 NEW [P3]：reporter.run 返回值丢弃
+- F-063 NEW [P2]：守门 1 不扫 Dict
+- F-064 NEW [P3]：守门 3 漏检 2-chain
+- F-065 NEW [P2]：守门 6 prompt 模式覆盖不全
+
+**累计 Phase 2 P0 / P1 计数**（含 session 1 + 2）：
+- 新 P0：F-053 / F-054 → 累计 P0 **7 个**
+- 新 P1：F-055 / F-057 / F-060 → 累计 P1 **4 个**
+
+**Phase 2 完成度**：3 个 session 1 切入点 + 3 个 session 2 切入点 = **6/6 完成**。无剩余 Phase 2 候选切入点。
+
+**Phase 2 总 DRAFT 计数**：60 (Phase 0-1+session 1) + 6 (session 2) = **66 DRAFT findings**
+
+---
+
+### 7.7 Phase 3：终态评估（2026-06-02 接续）
+
+**本节目的**：Phase 2 完成后，把 66 条 DRAFT 全面评估，整理推荐升级 / 撤回 / 延期清单。**病理学家不能单方面升级 finding 为正式状态**（这是用户 / 审核 AI 的事），所以本节只产出"推荐"，第 4 节"正式 Findings"保持空状态等待反馈循环激活。
+
+**评估维度**：
+- **真实性**：line citation 是否准确？是否有 R 等级验证？
+- **影响等级**：用户能否观察到结果？P0 = 必直接看到 / P1 = 架构层失守 / P2-P3 = 局部 / 观察
+- **可操作性**：修复方向是否清晰？是否 < 1 小时 / 1 周 / 长期？
+- **状态机适配**：升级 OPEN / 撤回 RETRACTED / 延期 DEFERRED / 维持 DRAFT
+
+详见第 9.7 节"Phase 3 推荐分类清单"。
+
+---
+
 ## 8. 元声明
 
 - **修改范围**：本文件 100%，其他文件 0%
@@ -1399,19 +2110,33 @@ _（暂无）_
 3. **F-003（律 5 失守）**——需要架构调整（参考 project_context.py `_derive_snapshot` 模式）
 4. **F-038（业务阈值 P1）**——把阈值移到 config 或让 LLM 决定
 
+### 9.1.X Phase 2 session 1 新增 P0 / P1（2026-06-02）
+
+**新 P0（用户能观察到的坏结果）**：
+6. **F-053** 律 5 SSoT 声明被集体绕过 — `types.py` 提供的 5 个 `derive_*` 派生函数 4 个 0 调用率；`column_descriptions[col]=` 直写仍 8 处；`orchestrator._apply_field_corrections` 写 column_descriptions 不同步 column_semantics 的 description / display_name → 用户 CLI 路径纠正字段后下游用旧值
+7. **F-054** orchestrator preliminary 分支 4 个 `dict.get` 用错 key — 用户走完整 pipeline 时 UI "初步发现 N 个" 的 **N 永远是 0**，power_warnings / business_metrics / suggested_focus 全空。前端 `phase: "full"` 必然触达该死分支
+
+**新 P1（架构层失守）**：
+- **F-055** 铁律 2 失守 — `_generate_phase_message:2696/2710` `except RuntimeError: pass` 走"确定性兜底"，注释自陈，违反铁律 2 唯一合法 4 路径
+- **F-057** doctrine 守门扫描范围 `_DOCTRINE_SUBDIRS = ("agents", "manager", "api", "memory", "guardrails")`，漏 `storage/` `tools/` `cli.py` `context/` `llm/` `prompts/`（空目录但被隐式期待）— 已确认 P0/P1 finding 大半发生地不在守门视野（F-003/F-004 在 storage/，F-038 在 tools/）；配置字面量 "memory" 还指向不存在的目录
+
+**新 P2**：
+- **F-056** 守门 5 四类结构性盲区（pass / 赋兜底字符串 / RuntimeError 字面量误判合法 / 非空字面量 dict）— F-010 的具体用例化，含 orchestrator.py 4 处真实漏检 case
+
 ### 9.2 模式（Patterns Across Findings）
 
 **最严重的问题模式**（重复出现 4+ 次）：
-- **静默失败（silent fail）**：F-021（CLI 兜底）/ F-025（analyst _do_*）/ F-034（project_manager 3 处）/ F-048（api 5+ 处）/ F-051（前端 5+ 处）——共 **20+ 处 `.catch(() => {})` / `except: return []` 静默吞**
+- **静默失败（silent fail）**：F-021（CLI 兜底）/ F-025（analyst _do_*）/ F-034（project_manager 3 处）/ F-048（api 5+ 处）/ F-051（前端 5+ 处）/ **F-058（全仓 50 处总盘，30+ 处未覆盖）**——共 **50+ 处 `.catch(() => {})` / `except: pass / return []` 静默吞**
 - **代码层策略选择硬编码**：F-037（analysis recommendation）/ F-038（business 阈值 P1）/ F-042（cleaning 阈值）/ F-043（cleaning sig_rate）/ F-046（power verdict）/ F-050（前端 status icon）——LLM 应该是决策者，但代码已经替 LLM 决定
 - **方法选择硬编码 if-elif 链**：F-022（orchestrator 死代码）/ F-045（cleaning 14 个 strategy 链）——应该用 dispatch dict 注册表模式
+- **声明 vs 实施反差（Phase 2 新模式）**：F-053（types.py SSoT 声明 vs 8 处直写）/ F-054（analyst.run 死参 vs 调用方期望）/ F-057（守门声明 vs 实际扫描盲区）—— **代码自陈契约被自身违反**
 
 **最积极的发现**（5+ 处正面参考）：
 - **project_context.py `_derive_snapshot`**（F-032）——只从 column_semantics 派生，零 dict 平行读取
 - **analyst/agent.py** ——所有 LLM 失败 raise RuntimeError 或 NeedUserClarification
 - **reporter/agent.py** ——`_parse_llm_json` 用 `degraded=True` 标记降级（比静默 None 好）
 - **scribe/agent.py `recover_field_descriptions`** ——`_scribe_fallback: True` 标记降级
-- **database.py** ——SQL 字段白名单 + 事务上下文 + 线程锁 + WAL + 外键约束 = 教科书级
+- **database.py** ——SQL 字段白名单 + 事务上下文 + 线程锁 + WAL + 外键约束 = 教科书级（但 F-058 又找到 2 处 silent JSON decode）
 
 **Phase 0 推论的反思**：
 - "tools/analysis.py 最可能含硬编码业务关键词" → **错的**（F-036）。analysis.py 41K 行无业务关键词
@@ -1423,13 +2148,15 @@ _（暂无）_
 | 风险 | 概率 | 影响 | 当前守门 | 关键 finding |
 |------|------|------|---------|-----------|
 | 用户走完整 pipeline 卡死 | **高** | **高** | 0 | F-001 + F-019 + F-020（orchestrator 三连）|
-| 用户纠正失效（每次重输） | **高** | **高** | 0 | F-004（律 10）|
-| 字段语义不一致 | **高** | **高** | 0 | F-003（律 5）|
-| 业务结论偏差（ROI/ROAS/LTV） | **中** | **中** | 0 | F-038（P1 业务阈值）|
-| 真实 regression 漏检 | **中** | **高** | 0（CI 假绿）| F-002（待技术 AI 验证）+ F-007 |
-| 工具覆盖不完整 | **中** | **中** | 0 | F-008（律 4）|
-| 静默失败累积 | **极高** | **低-中** | 0 | F-021/025/034/048/051（20+ 处）|
-| 守门盲区 | **低** | **中** | 4 道守门 | F-010 / F-024 / F-027 |
+| 用户纠正失效（每次重输） | **高** | **高** | 0 | F-004（律 10）/ **F-053（律 5 SSoT 绕过）** |
+| 字段语义不一致 | **高** | **高** | 0 | F-003 / **F-053** |
+| UI "初步发现" 永远为空 | **极高** | **中** | 0 | **F-054 NEW** |
+| LLM 不可达时静默用代码消息 | **中** | **中-高** | 守门 5 漏检 | **F-055 NEW** |
+| 业务结论偏差（ROI/ROAS/LTV） | **中** | **中** | 0 | F-038 |
+| 真实 regression 漏检 | **中** | **高** | 0（CI 假绿）| F-002 / F-007 |
+| 工具覆盖不完整 | **中** | **中** | 0 | F-008 |
+| 静默失败累积 | **极高** | **低-中** | 守门 5 漏检 | F-021/025/034/048/051 / **F-058（50 处总盘）** |
+| 守门盲区 | **高** | **中** | 4 道守门 | F-010 / F-024 / F-027 / **F-056 / F-057** |
 | 死代码 | **中** | **低** | 0 | F-012 / F-022 / F-052（3,500+ 行） |
 
 ### 9.4 1 个月警示（1-Month Watch List）
@@ -1437,40 +2164,145 @@ _（暂无）_
 - **orchestrator.py 3457 行不拆分** → bug 累积 + 新 AI 写入越界风险持续上升（F-015）
 - **白名单机制扩** → 守门 5 失守的 2 阶风险（F-005 / F-017 / F-024）
 - **doctrine tests 通过率被"假绿"拖累** → 真实 regression 漏检（F-002 / F-007）
-- **守门 1-4 的结构性盲区被利用** → 新增伪装硬编码漏检（F-010）
+- **守门 1-4 的结构性盲区被利用** → 新增伪装硬编码漏检（F-010 / **F-056 / F-057**）
 - **业务阈值 P1 升级为"自动用"** → 当前 LLM 是决策者，未来升级可能绕过 LLM（F-038 / F-046）
+- **types.py SSoT 声明继续被忽视** → 新加的 column_* 平行 dict 越积越多，没人调 derive_*（**F-053**）
+- **storage/ / tools/ / cli.py 长期不进守门视野** → 律 5 / 律 8 失守在守门盲区蔓延（**F-057**）
 
 ### 9.5 试错价值（Trial-Error Value）
 
 本周期试错统计：
-- **52 个假设被提出**（18 Phase 0 + 34 Phase 1）
-- **5 个 P0 已确认**（F-001 / F-003 / F-004 / F-019 / F-020）
-- **1 个 P1 已确认**（F-038）
-- **~46 个 P3**（observation / observation-level findings）
+- **60 个假设被提出**（18 Phase 0 + 34 Phase 1 + 1 META + 7 Phase 2 session 1）
+- **7 个 P0 已确认**（F-001 / F-003 / F-004 / F-019 / F-020 / **F-053 / F-054**）
+- **3 个 P1 已确认**（F-038 / **F-055 / F-057**）
+- **1 个 P2 新**（**F-056**）
+- **~48 个 P3**（observation / observation-level findings）
+- **1 个 RETRACTED**（F-007）
 
-即使 50% 假设被否定，本次审计产生了 52 次"被提出"的学习价值——下次类似问题可对照。
+即使 50% 假设被否定，本次审计产生了 60 次"被提出"的学习价值——下次类似问题可对照。
 
 ### 9.6 给用户的具体行动建议
 
 **今天就能修的（< 1 小时工作量）**：
 - F-019 + F-020 + F-001（orchestrator 3 个 P0 集中修复）
 - F-004（`learn_from_run` 加 1 行 description 参数）
+- **F-054**（orchestrator.py:1946 调用方 4 个 get 改成正确 key — `findings.get("findings")` 而不是 `preliminary_findings`；或者把 `_handle_submit_analysis` 改成额外 emit `preliminary_findings` 别名）
+- **F-053 一半**（`orchestrator.py:2993-2998` `_apply_field_corrections` 加 2 行：`s["description"] = ...` + `s["display_name"] = ...`）
+- META-001（更新报告 7.1 节状态 / 数行数 / 删"未读"清单）
 
 **本周能做的（1-2 天工作量）**：
-- F-003 律 5 修复（参考 `_derive_snapshot` 模式改 `apply_to_context` 和 `_apply_project_memory`）
+- F-003 / **F-053 完整**（参考 `_derive_snapshot` 模式 + 调 `derive_*` — 把 column_descriptions / column_display_names 全部改为派生）
 - F-038 业务阈值移到 config 或 LLM 决定
+- **F-055** orchestrator.py:2696 / 2710 改成 `raise RuntimeError`（不要 pass + 兜底）
+- **F-056 / F-057** 守门扩展（扫描 `_DOCTRINE_SUBDIRS` 加 storage/tools/cli.py + 检测 pass/continue/赋兜底字符串）
 
 **长期架构改进（1 周+）**：
-- 拆分 orchestrator.py（3457 → < 1000 行的 3-4 个模块）
+- 拆分 orchestrator.py（3241 → < 1000 行的 3-4 个模块）
 - 加 silent-fail detection 守门
 - 静默错误标记化（Scribe / Reporter 的 `degraded` 模式扩展到其他模块）
+- 把 `types.py` 的 `derive_*` 接口推广为强制 — 删掉 `column_descriptions` / `column_display_names` 字段，所有读侧从 column_semantics 派生
 
 ---
 
-> **当前阶段**：Phase 0 + Phase 1 完成 / Phase 2-3 pending
-> **总 DRAFT finding**：52
-> **已确认 P0**：5 个（orchestrator 三连 + 律 5 + 律 10）
-> **已确认 P1**：1 个（business.py 业务分类阈值）
-> **总已读行数 / 总代码行数**：~26K / ~30K = ~87%
-> **下一动作**：用户验收 + 启动 Phase 2（跨文件交叉验证）
-> 期望产出：正式 finding 升级 + 已确认 P0 修复方向 + Phase 2 准备
+### 9.7 Phase 3 推荐分类清单（病理学家最终建议）
+
+**本节是 Phase 3 终态评估**。66 条 DRAFT 按真实性 / 影响 / 可操作性评估，分为 4 类。**本节仅是病理学家"推荐"，第 4 节"正式 Findings"仍保持空状态等待反馈循环激活**（用户 / 审核 AI 标 RESOLVED / DISPUTED / 用户驳回则 RETRACTED）。
+
+#### 推荐立即升级到 OPEN（11 条）— 用户能观察到坏结果 + 已 R 等级 / 强 Phase 1 证据 + 修复路径清晰
+
+| Finding | 等级 | 推荐升级理由 |
+|---|---|---|
+| **F-001** | P0 | R 等级已验证（4 处 TODO 死循环精确命中）+ Cleaner/Analyst 闸门确认必然失败 |
+| **F-019** | P0 | R 等级已验证（cleaning_report=None 死分支）+ 用户看不到清洗结果审核 |
+| **F-020** | P0 | line citation 100% 准确（NameError 路径）+ 违规一旦护栏触发就崩 |
+| **F-003** | P0 | Phase 1 多 session 多文件验证（5 处平行存储 + 写侧不同步）+ F-053 给出全景 |
+| **F-004** | P0 | Phase 1 完整机制（learn_from_run 抹 description）+ 1 行修复 |
+| **F-053** | P0 | Phase 2 SSoT 反差证据（5 个 derive_* 4 个零调用 + 8 处直写）+ `_apply_field_corrections:2993` 是源头 |
+| **F-054** | P0 | Phase 2 契约破裂（4 个 dict.get 用错 key + 前端 phase=full 必触达）+ UI 永远显示"初步发现 0 个" |
+| **F-038** | P1 | Phase 1 完整 grep（ROI/ROAS/LTV/CAC 阈值在 business.py）+ 业务结论偏差 |
+| **F-055** | P1 | Phase 2 line citation（2696/2710 `pass` + 注释自陈）+ 铁律 2 失守 |
+| **F-057** | P1 | Phase 2 配置分析（5 个声明 / 4 个实存 + 已确认 P0/P1 大半发生地不扫）+ 配置 bug（"memory" 死指向） |
+| **F-060** | P1 | Phase 2 跨文件证据（律 10 双字段写而不读 + 6 处写入 / 0 处真读）+ 与 F-004/F-023 形成全景 |
+
+#### 推荐升级到 OPEN（更广风险，但单一修复点不明）— P2 / P3 但已 R 等级 / 跨文件证据（4 条）
+
+| Finding | 等级 | 推荐升级理由 |
+|---|---|---|
+| **F-021** | P1 | CLI 路径死循环（`_llm_classify_confirmation` except → "correction" 默认）。建议升级 |
+| **F-002** | P0 | R 等级已验证（pytest --co 78 秒挂掉 + 其他 351 个测试 OK）。CI 假绿，应升级 |
+| **F-022** | P2 | `_llm_understand_field_update` 死代码 45 行（grep 调用 0 处）— 简单可删 |
+| **F-058** | P3 | Phase 2 AST 全仓扫 50 处 silent except / 30+ 处未覆盖 — 系统性问题 |
+
+#### 推荐 RETRACTED（保留 F-007 状态，无新增撤回）
+
+- F-007 已 RETRACTED（Phase 1+R 全仓 grep xfail 0 命中）
+- **其他无 RETRACTED 候选**：Phase 1 + Phase 2 验证未发现 finding 是误报
+
+#### 推荐 DEFERRED（暂不行动 / 长期观察 — 15 条 P3-OBSERVATION）
+
+观察类 finding（不构成立即风险，但记录到机制 / 设计层面）：
+- F-005 / F-017（守门 5 白名单机制可扩 — 当前为空，二阶风险）
+- F-018（doctrine schema 元 observation）
+- F-024（learn_from_run 用 evidence 字符串子串匹配 — 守门 1 盲区）
+- F-026（scout/analyst 自动写知识库 — 用户无审核）
+- F-027（scout `_TYPE_ECHO_PATTERN_RE` 中文正则但用法合规）
+- F-030（scribe 硬编码中文 phase 标签）
+- F-033（project_manager add_data 注释 vs 代码不符）
+- F-035（database.py 教科书级 — 正面参考但 F-058 又找到 2 处 silent）
+- F-036（Phase 0 推论错的反思）
+- F-039 / F-040 / F-044（业务工具内部硬编码 — 当前合规）
+- F-047 / F-049 / F-050 / F-059 / F-062 / F-064（UI 文案 / 配置 / 死代码 / 装饰类）
+
+#### 推荐维持 DRAFT 等待 R 等级验证（剩下 36 条 P2/P3）
+
+剩余 finding 多为 P2-P3，已有 Phase 1 line citation 但**未端到端复现**。建议技术 AI 选 3-5 条做 R 等级验证后再决定升级：
+- 高优先 R 候选：F-006（剩 3 处 LLM 兜底）/ F-008（律 4 工具覆盖单点）/ F-025（analyst _do_* 5 处静默）
+
+#### Phase 3 元结论
+
+**66 条 DRAFT 假设产出的"价值密度"**：
+- **直接修复价值（P0+P1）**：11 + 4 = **15 条**值得立即修
+- **机制改进价值（P2 守门盲区）**：4 条（F-056 / F-063 / F-065 + F-058 + F-010）— 修守门 doctrine 自身
+- **观察价值（P3-OBS）**：15 条 — 记录设计选择 / 长期警示
+- **死代码清理**（P2-3 死分支）：F-022 / F-061 + F-012 / F-052（前端 backup 4 个 + scout backup 3 个）
+
+**核对覆盖率**：60+ DRAFT 数 vs 实际 30K 代码 = 约 **2 条/K 行** finding 密度 — 这与同类型多 agent 系统 README + 后端代码审计的经验值匹配（每 K 行 1-3 条值得记录的隐患）。**报告产物对得起读它所需的时间**（用户 5-10 分钟读 9.7 节即可决定升级哪 15 条）。
+
+---
+
+### 9.8 给用户的最简版决策清单（如果只看一节）
+
+**如果只能修 1 件事**（最大杠杆 / < 1 小时）：
+- **F-001** orchestrator 4 处 `if False: # TODO` → `if True:` 或恢复 `_is_user_confirm` 替代品
+
+**如果有半天**（4 个 P0 集中修）：
+- F-001 + F-019 + F-020（orchestrator 三连）+ F-054（line 1946 的 `get('preliminary_findings')` 改成 `get('findings')`）
+
+**如果有 1 天**（解决律 5 失守的全部根源）：
+- 加 F-053（`_apply_field_corrections:2993` 双写 column_semantics 字段）
+- 加 F-004（`learn_from_run` 加 description 参数）
+- 加 F-060（`_apply_project_memory` 检查 `confirmed_by_user`）
+
+**如果有 1 周**（机制层 + 大头清理）：
+- F-055（删 `except RuntimeError: pass`，改 raise）
+- F-057 + F-056 + F-063 + F-065（扩展守门扫描范围 + 检测模式）
+- F-038（业务阈值移到 config 或 LLM）
+
+**长期（1 月+）**：
+- 拆 orchestrator.py（3241 行 → 模块化）
+- 强制使用 types.py 的 `derive_*` 接口，删 column_descriptions / column_display_names 字段
+- 把 prompt 集中到 `hagoku/prompts/`（F-059 + F-065 联动）
+
+---
+
+> **当前阶段**：Phase 0 / 1 / 2 / 3 / **3.5（复验）全部完成**
+> **总 DRAFT finding**：67（18 Phase 0 + 34 Phase 1 + 1 META + 13 Phase 2 + 1 Phase 3.5）
+> **已 RESOLVED**：1（**F-001** 用户晨间修复，反馈循环首次激活）
+> **已确认 P0（仍存在）**：6 个（F-002/F-003/F-004/F-019/F-020/F-053/F-054 — F-001 已 RESOLVED 从 P0 名单移出）
+> **已确认 P1（仍存在）**：4 个（F-038 业务阈值 + F-055 铁律 2 失守 + F-057 守门盲区 + F-060 律 10 装饰字段）
+> **推荐升级 OPEN**：14 条（去掉 F-001 — 已 RESOLVED；10 个 P0/P1 仍待修 + 4 个跨文件证据）
+> **推荐 DEFERRED**：15 条 P3-OBS
+> **维持 DRAFT 等 R 等级**：36 条 + Phase 3.5 新 F-066
+> **总已读行数 / 总代码行数**：26 246 / 26 246 (Python 后端 100%) + 8 476 / 8 476 (TS/TSX 100%)
+> **下一动作**：用户继续修复（推荐先 F-019 + F-020 — F-001 的"邻居 bug" / 同模式）+ 反馈循环已激活，每修一条标 RESOLVED
+> 期望产出：剩 14 条推荐升级清单逐条转 RESOLVED → 反馈率从 1.5% 持续提升 → 第 4 节"正式 Findings"实质化

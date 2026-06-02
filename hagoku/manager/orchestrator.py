@@ -2240,61 +2240,7 @@ class Orchestrator:
 
                     break  # Scout 完成，退出外层循环
 
-# ── 分析目的确认暂停点（用户已确认则跳过，直接进 Cleaner）──
-                analysis_purpose = self._build_analysis_purpose(context)
-                context["analysis_purpose"] = analysis_purpose
-
-                if analysis_purpose.get("target") or analysis_purpose.get("features"):
-                    ap_payload = analysis_purpose_pause_payload(context)
-                    ap_payload["interaction_revision"] = interaction_revision
-                    ap_payload = self._attach_pause_dialogue_message("scout", ap_payload)
-                    ap_reply = self._pause_and_wait("scout", ap_payload)
-                    if ap_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
-                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    cmd_result = self._handle_command_if_present(ap_reply, "scout", context)
-                    if cmd_result:
-                        context.setdefault("_pending_command_text", "")
-                        if context["_pending_command_text"]:
-                            context["_pending_command_text"] += "\n"
-                        context["_pending_command_text"] += cmd_result
-
-                    # 用户可能在此修正 target/features：用 LLM tool calling 解析
-                    if ap_reply:  # TODO: _is_user_confirm 已删
-                        ap_applied = apply_scout_user_field_reply_to_context(
-                            context,
-                            ap_reply,
-                            llm_client=self.llm_quick_raw,
-                            llm_model=self.config.llm.model_quick or self.config.llm.model,
-                        )
-                        if ap_reply:
-                            self.event_bus.emit(
-                                EventType.USER_INPUT_RECEIVED,
-                                "scout",
-                                scout_user_input_received_payload(
-                                    context,
-                                    ap_reply,
-                                    ap_applied,
-                                    interaction_revision,
-                                ),
-                            )
-                        # 重新构建 analysis_purpose（可能因用户修正而改变）
-                        context["analysis_purpose"] = self._build_analysis_purpose(context)
-                    interaction_revision += 1
-
-                n_sem = len(context.get("column_semantics", []))
-                self.event_bus.emit(
-                    EventType.AGENT_COMPLETED,
-                    "scout",
-                    {"result_summary": f"理解 {n_sem} 个字段（用户已确认）"},
-                )
-
-                # 注入上游摘要（Scout → Cleaner）
-                upstream_note = self._get_upstream_summary("cleaner")
-                if upstream_note:
-                    context["upstream_summary"] = upstream_note
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": f"📋 已注入 Scout 上游摘要给 Cleaner",
-                    })
+                context["analysis_purpose"] = self._build_analysis_purpose(context)
 
                 # 4. Cleaner: 评估 → 确认/修改（多轮对齐，同 Scout 模式）
                 self.event_bus.emit(EventType.AGENT_STARTED, "cleaner", {

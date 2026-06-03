@@ -2388,14 +2388,15 @@ class Orchestrator:
             duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
             self.db.complete_run(run_id, duration_ms=duration_ms, output_path=output_path)
 
-            # 保存 findings
-            for result in _analyst_results:
+            # 保存 findings（兼容新旧 Analyst 格式）
+            for i, result in enumerate(_analyst_results):
+                finding_id = result.get("result_id") or result.get("id") or f"finding_{run_id}_{i}"
                 self.db.save_finding({
-                    "id": result["result_id"],
+                    "id": finding_id,
                     "run_id": run_id,
-                    "analysis_type": result["analysis_type"],
-                    "question": result["question"],
-                    "conclusion_plain": result.get("conclusion_plain", ""),
+                    "analysis_type": result.get("analysis_type", ""),
+                    "question": result.get("question") or result.get("title", ""),
+                    "conclusion_plain": result.get("conclusion_plain") or result.get("detail", ""),
                     "conclusion_statistical": result.get("conclusion_statistical", ""),
                     "p_value": result.get("p_value"),
                     "effect_size": result.get("effect_size"),

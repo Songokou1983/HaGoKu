@@ -2255,7 +2255,11 @@ class Orchestrator:
             self.event_bus.emit(EventType.AGENT_STARTED, "analyst", {
                 "goal": "对话式数据分析",
             })
-            findings = analyst.run(df_clean, context, emit_completed=False)
+            # 将 orchestrator 的暂停机制注入 Analyst，实现 LLM 主导的开放式对话
+            def _analyst_pause(display: dict) -> str:
+                return self._pause_and_wait("analyst", display)
+
+            findings = analyst.run(df_clean, context, emit_completed=False, pause_callback=_analyst_pause)
 
             if self._is_cancel_requested():
                 return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
@@ -2264,17 +2268,6 @@ class Orchestrator:
             self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst",
                 {"result_summary": f"发现 {n_findings} 条结论"},
             )
-
-            # ── 暂停：分析结果待用户确认 ───────────────────────────────
-            findings_summary = findings.get("summary", "") if isinstance(findings, dict) else ""
-            analyst_msg = {
-                "message": findings_summary or f"发现 {n_findings} 条结论",
-                "analyst_findings": findings if isinstance(findings, dict) else {"findings": []},
-                "interaction_revision": 0,
-            }
-            user_reply = self._pause_and_wait("analyst", analyst_msg)
-            if user_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
-                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
             # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
             # findings→results 兼容：旧代码期望 list，新 findings 是 dict

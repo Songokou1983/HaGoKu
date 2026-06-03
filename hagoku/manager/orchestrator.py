@@ -3069,6 +3069,9 @@ class Orchestrator:
                 # 重新派生 target/features
                 scout_tmp = ScoutAgent.__new__(ScoutAgent)
                 scout_tmp._derive_roles(context)
+                self.event_bus.emit(EventType.AGENT_THINKING, "analyst", {
+                    "thought": "分析范围已更新",
+                })
                 context.pop("_pending_scope_update", None)
                 # 写入 ProjectContext snapshot
                 project_ctx = context.get("_project_context")

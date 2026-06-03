@@ -638,12 +638,13 @@ function ClearHistoryButton({ currentProject }: { currentProject: string | null 
 
   const handleClear = async () => {
     setClearing(true);
+    setShowConfirm(false);
+    // 先重置分析页面（取消当前分析 + 清 UI），再后台清数据
+    handleReset();
     try {
       await fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" });
-      handleReset();
     } finally {
       setClearing(false);
-      setShowConfirm(false);
     }
   };
 

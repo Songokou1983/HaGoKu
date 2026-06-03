@@ -165,8 +165,18 @@ class HaGoKuDB:
             cls._instance = None
 
     def _init_tables(self) -> None:
-        """建表"""
+        """建表 + 增量迁移旧数据库缺失的列"""
         self.conn.executescript(_SCHEMA_SQL)
+        # 增量迁移：CREATE TABLE IF NOT EXISTS 不会给已存在的表加新列，
+        # 这里补 ALTER TABLE（列已存在时静默忽略）
+        _migrations = [
+            "ALTER TABLE project_state ADD COLUMN raw_path TEXT DEFAULT ''",
+        ]
+        for sql in _migrations:
+            try:
+                self.conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass  # 列已存在
         self.conn.commit()
 
     def close(self) -> None:

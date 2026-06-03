@@ -226,6 +226,14 @@ class AnalystAgent(InteractionMixin):
             "confidence 取 high/medium/low 三选一。\n"
         )
 
+        system += (
+            "\n\n"
+            "【分析范围解锁】\n"
+            "分析开始时已设定核心关注字段。如果用户要求纳入新字段，先调 get_column_stats 检查数据质量。\n"
+            "数据干净（空值率 < 20%、类型匹配）→ 调 update_analysis_scope 直接纳入。\n"
+            "数据需清洗 → 告知用户：「[列名] 数据质量问题（空值率 X%），建议重置分析从字段理解阶段重跑。若坚持纳入，回复「不管，直接加」。」\n"
+        )
+
         if project_ctx:
             ctx_block = project_ctx.build_prompt("analyst", context)
             system += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]

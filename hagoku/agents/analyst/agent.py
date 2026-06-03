@@ -240,7 +240,14 @@ class AnalystAgent(InteractionMixin):
 
         messages: list[dict] = [{"role": "system", "content": system}]
         if project_ctx:
-            messages.extend(ctx_block.get("messages_history", []))  # 律 3
+            # 过滤 role=tool 和含 tool_calls 的 assistant——旧 session 的 ID 在新 session invalid
+            for m in ctx_block.get("messages_history", []):
+                role = m.get("role", "")
+                if role == "tool":
+                    continue
+                if role == "assistant" and m.get("tool_calls"):
+                    continue
+                messages.append(m)
 
         intro = f"分析目标：{query}\n可用列：{', '.join(df.columns)}\n数据行数：{len(df)}"
         messages.append({"role": "user", "content": intro})

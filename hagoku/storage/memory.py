@@ -738,3 +738,7 @@ class MemoryManager:
         if context and hasattr(context, "to_dict"):
             kwargs["context_json"] = context.to_dict()
         self._db.update_project_state(project_id, **kwargs)
+
+    def clear_resume_state(self, project_id: str) -> None:
+        """清除恢复状态（重置分析时调用，避免新分析误触发 auto-resume）。"""
+        self._db.update_project_state(project_id, stage="created", cleaned_path="", raw_path="", context_json="")

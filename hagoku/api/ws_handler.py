@@ -256,6 +256,10 @@ async def ws_handler(ws: WebSocket) -> None:
                 else:
                     try:
                         orch.request_cancel()
+                        # 清除 resume 状态——重置后的新分析不应自动 resume
+                        project_name = msg.get("payload", {}).get("project_name", "")
+                        if project_name and orch.memory:
+                            orch.memory.clear_resume_state(project_name)
                         await ws.send_json({
                             "type": "ack",
                             "cmd": "cancel_analysis",

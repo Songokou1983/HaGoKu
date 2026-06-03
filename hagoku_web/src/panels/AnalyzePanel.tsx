@@ -1261,7 +1261,7 @@ export default function AnalyzePanel() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => send("analyze", { data_path: dataPath, query: queryText, project_name: currentProject, phase: "full" })}
+              onClick={() => send("analyze", { data_path: dataPath, query: queryText, project_name: currentProject, phase: "full", resume: true })}
               className="flex items-center gap-1 px-2 py-0.5 border border-app-border rounded text-ui-xs normal-case tracking-normal font-medium text-app-text
                 hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
             >

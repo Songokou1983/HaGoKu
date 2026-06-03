@@ -1758,11 +1758,6 @@ class Orchestrator:
         cleaning_report = None
         cleaned_path_str = ""
 
-        # 自动检测 resume：如果已有分析状态（非首次 run），跳过已完成阶段
-        if not resume:
-            state_auto = self.memory.get_resume_state(project_name) if self.memory else None
-            if state_auto and state_auto.get("stage") in ("cleaned", "analyzed", "reported"):
-                resume = True
         if resume:
             state = self.memory.get_resume_state(project_name)
             if state and state["stage"] in ("cleaned", "analyzed", "reported"):

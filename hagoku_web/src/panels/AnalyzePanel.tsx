@@ -632,20 +632,13 @@ function ConvoFeed({
 // ── Main component ────────────────────────────────────────────
 function ClearHistoryButton({ currentProject }: { currentProject: string | null }) {
   const [showConfirm, setShowConfirm] = useState(false);
-  const [clearing, setClearing] = useState(false);
-
   if (!currentProject) return null;
 
-  const handleClear = async () => {
-    setClearing(true);
+  const handleClear = () => {
     setShowConfirm(false);
-    // 先重置分析页面（取消当前分析 + 清 UI），再后台清数据
     handleReset();
-    try {
-      await fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" });
-    } finally {
-      setClearing(false);
-    }
+    // 后台清数据，不阻塞 UI
+    fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" }).catch(() => {});
   };
 
   return (
@@ -666,13 +659,13 @@ function ClearHistoryButton({ currentProject }: { currentProject: string | null 
               将清除该项目所有历史分析记录（运行记录、看板、记忆）。数据文件保留。此操作不可撤销，确认清除？
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowConfirm(false)} disabled={clearing}
-                className="px-4 py-1.5 border border-app-border rounded text-ui-sm text-app-text hover:bg-app-bg-secondary cursor-pointer disabled:opacity-50">
+              <button onClick={() => setShowConfirm(false)}
+                className="px-4 py-1.5 border border-app-border rounded text-ui-sm text-app-text hover:bg-app-bg-secondary cursor-pointer">
                 否
               </button>
-              <button onClick={handleClear} disabled={clearing}
-                className="px-4 py-1.5 bg-app-error text-white rounded text-ui-sm hover:bg-red-700 cursor-pointer disabled:opacity-50">
-                {clearing ? "清除中…" : "是，确认清除"}
+              <button onClick={handleClear}
+                className="px-4 py-1.5 bg-app-error text-white rounded text-ui-sm hover:bg-red-700 cursor-pointer">
+                是，确认清除
               </button>
             </div>
           </div>

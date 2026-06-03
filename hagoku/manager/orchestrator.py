@@ -3062,6 +3062,28 @@ class Orchestrator:
                 "message": "未知的操作",
             }
 
+        elif agent_name == "analyst":
+            # 处理 scope 更新信号
+            context = user_input.get("context") or {}
+            if context.get("_pending_scope_update"):
+                # 重新派生 target/features
+                scout_tmp = ScoutAgent.__new__(ScoutAgent)
+                scout_tmp._derive_roles(context)
+                context.pop("_pending_scope_update", None)
+                # 写入 ProjectContext snapshot
+                project_ctx = context.get("_project_context")
+                if project_ctx:
+                    project_ctx.add_agent_response(
+                        stage="analyst",
+                        revision=0,
+                        content="分析范围已更新",
+                        snapshot=project_ctx._derive_snapshot(context),
+                    )
+            return {
+                "status": "analyst_done",
+                "message": "分析范围已更新",
+            }
+
         # 未知 agent/phase
         return {
             "status": "error",

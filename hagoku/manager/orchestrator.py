@@ -2086,7 +2086,7 @@ class Orchestrator:
                                 str(s.get("column_name", "")): s.get("used_in_analysis")
                                 for s in context.get("column_semantics", [])
                             }
-                            scout_reinfer._infer_all_semantics(context, df_reinfer)
+                            scout_reinfer._infer_all_semantics(df_reinfer, context.get("query", ""))
                             # 恢复用户已确认的 used_in_analysis（LLM 重推断可能覆盖）
                             for s in context.get("column_semantics", []):
                                 col = str(s.get("column_name", ""))
@@ -2109,8 +2109,7 @@ class Orchestrator:
                             import logging
                             _rlog = logging.getLogger("hagoku.orchestrator")
                             _rlog.warning("律 9 重推断失败，沿用原字段理解: %s", e)
-                        # 展示更新后的字段表，回到 Scout 内层循环让用户确认
-                        continue
+                        # 重推断完成（无论成败），用户已明确要进入下一阶段，直接放行
 
                     break  # Scout 完成，退出外层循环
 

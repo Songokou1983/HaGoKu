@@ -2562,6 +2562,12 @@ class Orchestrator:
         new_descs: dict[str, str] = {}
         new_dnames: dict[str, str] = {}
 
+        # 只持久化用户显式确认过的字段（律 10）
+        confirmed_cols: set[str] = set()
+        for sem in context.get("column_semantics", []):
+            if sem.get("confirmed_by_user"):
+                confirmed_cols.add(str(sem.get("column_name", "")))
+
         for a in applied_scout:
             if not a or "←" not in a:
                 continue
@@ -2576,11 +2582,15 @@ class Orchestrator:
             if ':[used_in_analysis]' in col or ':[role]' in col:
                 continue
 
+            # 提取纯列名
+            pure_col = col.replace(":[display]", "").strip() if col.endswith(":[display]") else col
+            if pure_col not in confirmed_cols:
+                continue  # 非用户确认的字段不持久化
+
             if col.endswith(":[display]"):
-                col = col.replace(":[display]", "").strip()
-                new_dnames[col] = val
+                new_dnames[pure_col] = val
             else:
-                new_descs[col] = val
+                new_descs[pure_col] = val
 
         # 补充 context 中已有的 column_descriptions（不上覆盖的应用字段）
         full_descs: dict[str, str] = {}

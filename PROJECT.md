@@ -285,9 +285,23 @@ pytest tests/test_product/test_information_arrival.py -q
 |-------|------|---------|
 | 🔍 **Scout** | 数据画像 + 字段语义推断 | LLM 做语义分析 |
 | 🧹 **Cleaner** | 数据清洗 + 缺失机制检验 | LLM 决策清洗策略 |
-| 📊 **Analyst** | 假设检验 + 回归分析 + 模型诊断 | LLM 选方法，代码做计算 |
+| 📊 **Analyst** | 假设检验 + 回归分析 + 模型诊断 | **对话式分析**（LLM 自由探索数据，多轮对话，调 `submit_analysis` 结束） |
 | 📝 **Reporter** | 双轨 HTML 报告渲染 | LLM 生成叙述 |
 | 📋 **Scribe** | 记录 + 知识调度 + 看板维护 | 确定性引擎；仅字段描述不完整时用 LLM 补全遗漏列 |
+
+### Analyst 对话式分析（2026-06-02 重构）
+
+**旧设计**：Manager 生成分析计划（JSON）→ Analyst 按计划执行 → 返回结果。计划生成和执行的职责分裂，Analyst 被动执行。
+
+**新设计**：Analyst 以对话方式自由探索数据。不再依赖外部计划——LLM 自己看数据、调统计工具、向用户提问、提议分析方法。准备好后调 `submit_analysis` 提交发现。
+
+核心变化：
+- **对话循环**：最多 30 轮自由对话，LLM 自主决定何时调工具、何时提问、何时结束
+- **4 个工具**：`propose_method`（提议方法）、`ask_user`（向用户提问）、`run_statistical_test`（跑统计）、`submit_analysis`（提交发现结束）
+- **护栏后移**：`guardrails.check` 从 Analyst 内部移到 orchestrator（`_check_mandatory_guardrails`），编排层统一负责
+- **plan/phase 参数废弃**：`analyst.run()` 签名保留兼容但不再使用（病理 F-054）
+
+返回结构：`{findings: [...], method_used: [...], summary: "..."}`，orchestrator 从此读取。
 
 ### Scribe 4 通道架构
 

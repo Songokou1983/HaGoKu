@@ -2569,6 +2569,13 @@ class Orchestrator:
         new_descs: dict[str, str] = {}
         new_dnames: dict[str, str] = {}
 
+        # 只持久化用户确认过的字段（律 10）：跳过 LLM 初始推断的
+        confirmed_cols = {
+            str(s.get("column_name", ""))
+            for s in context.get("column_semantics", [])
+            if s.get("confirmed_by_user")
+        }
+
         for a in applied_scout:
             if not a or "←" not in a:
                 continue
@@ -2581,6 +2588,11 @@ class Orchestrator:
 
             # 不持久化 used_in_analysis 和 role（当次分析特有，非字段描述）
             if ':[used_in_analysis]' in col or ':[role]' in col:
+                continue
+
+            # 跳过非用户确认的字段（律 10）
+            pure_col = col.replace(":[display]", "").strip() if ":[display]" in col else col
+            if pure_col not in confirmed_cols:
                 continue
 
             if col.endswith(":[display]"):

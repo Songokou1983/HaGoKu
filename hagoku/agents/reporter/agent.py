@@ -432,8 +432,9 @@ class ReporterAgent(InteractionMixin):
 
     def _parse_llm_json(self, response: str) -> dict:
         """从 LLM 响应中提取 JSON"""
+        # 去掉 <think>...</think> 标签（部分模型会输出思考内容）
+        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
         # 尝试直接解析
-        response = response.strip()
         try:
             return json.loads(response)
         except json.JSONDecodeError:

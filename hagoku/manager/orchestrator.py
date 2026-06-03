@@ -1006,6 +1006,7 @@ def _apply_scout_reply_with_llm(
                         for s in semantics:
                             if str(s.get("column_name", "")) == c:
                                 s["needs_user_input"] = False
+                                s["confirmed_by_user"] = True  # 用户自由文本纠正的字段标记为已确认
 
             # 成功时清除上次的未理解信号
             context.pop("_last_understanding_failure", None)

@@ -822,7 +822,7 @@ def _apply_scout_reply_with_llm(
         "根据分析目标和字段中文名，判断每个字段是否参与（used_in_analysis）。\n"
         "与目标直接相关的保留 true，无关的设为 false。\n"
         "例如：分析「收入趋势」→ 收入类=true，费用类=false，与收入和变动无关的其他字段=false。\n"
-        "用户说「只用X、Y、Z」→ 调 update_field_role，target/features/ignored 三组全给。\n"
+        "用户限定分析范围（如「只用X、Y」「本次只看」「其他都不参与」「限定为」）→ 必须调 update_field_role，target/features/ignored 三组全给。不要只用文字回复，工具调用是唯一有效操作。\n"
         f"{ap_summary}"
         f"{command_context}"
         "当前字段表格（参与分析列已由初始分析判断）：\n"
@@ -842,6 +842,7 @@ def _apply_scout_reply_with_llm(
             "含义扩展说明（完整语句）→ description。两者不能相同。\n"
             "每次只更新一个字段，分多次调用 update_field_understanding。\n"
             "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
+            "用户限定分析范围（如「只用X、Y」「其他都不参与」）→ 必须调 update_field_role，不可只用文字回复。\n"
             "💡 参与分析列的打勾状态是初始分析根据分析目标判断的，纠正中文名时对照分析目标判断是否直接相关，不因字段间有关联就推断参与。\n"
         )
         ctx_block = project_ctx.build_prompt("scout", context)

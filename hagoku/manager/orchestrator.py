@@ -2371,7 +2371,7 @@ class Orchestrator:
                 "project": project_name,
                 "query": query,
                 "plan": plan,
-                "n_results": len(results),
+                "n_results": len(_analyst_results),
                 "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
                 "output_path": output_path,
             }

@@ -39,7 +39,8 @@ class ReporterAgent(InteractionMixin):
         scribe: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        # 兼容旧签名的第一个位置参数 llm_config（忽略）
+        # 兼容旧签名的第一个位置参数 llm_config
+        self.llm_config = args[0] if args and hasattr(args[0], 'model') else None
         self.role = "reporter"
         self.event_bus = event_bus or args[1] if len(args) > 1 else event_bus  # type: ignore[assignment]
         self.scribe = scribe

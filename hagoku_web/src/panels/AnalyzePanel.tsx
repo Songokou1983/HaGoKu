@@ -630,14 +630,13 @@ function ConvoFeed({
 }
 
 // ── Main component ────────────────────────────────────────────
-function ClearHistoryButton({ currentProject }: { currentProject: string | null }) {
+function ClearHistoryButton({ currentProject, onClear }: { currentProject: string | null; onClear: () => void }) {
   const [showConfirm, setShowConfirm] = useState(false);
   if (!currentProject) return null;
 
   const handleClear = () => {
     setShowConfirm(false);
-    handleReset();
-    // 后台清数据，不阻塞 UI
+    onClear();
     fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" }).catch(() => {});
   };
 
@@ -1269,7 +1268,7 @@ export default function AnalyzePanel() {
               <RotateCcw size={12} />
               重置分析
             </button>
-            <ClearHistoryButton currentProject={currentProject} />
+            <ClearHistoryButton currentProject={currentProject} onClear={handleReset} />
           </div>
         )}
       </PanelHeader>

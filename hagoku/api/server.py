@@ -389,7 +389,7 @@ async def clear_project_history(project_name: str):
             ("project_state", "project_id"),
             ("runs", "project_id"),
             ("data_sources", "project_id"),
-            ("projects", "id"),
+            # 不删 projects 表——删了会导致 create_run FK 约束失败
         ]:
             db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))
         db.conn.commit()

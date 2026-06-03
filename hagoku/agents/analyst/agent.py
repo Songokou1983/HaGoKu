@@ -295,22 +295,13 @@ class AnalystAgent(InteractionMixin):
             elif txt:
                 messages.append({"role": "assistant", "content": txt})
 
-            # 展示输出 → 等用户回复
+            # 非交互模式：展示输出，继续循环。用户交互由 orchestrator 的 _pause_and_wait 统一管理。
             self._emit(EventType.AGENT_THINKING, {
                 "thought": txt[:220] if txt else "[工具调用]",
             })
-            display = {
-                "message": txt or "[工具调用]",
-                "interaction_revision": round_idx,
-            }
-            user_reply = self._pause_and_wait("analyst", display)
-            if user_reply is None or user_reply == "__HAGOKU_CANCEL__":
-                continue
-            messages.append({"role": "user", "content": user_reply})
 
             # ProjectContext 写入（每轮）
             if project_ctx:
-                project_ctx.add_user_feedback(stage="analyst", revision=round_idx, raw_text=user_reply)
                 project_ctx.add_agent_response(
                     stage="analyst", revision=round_idx,
                     content=txt or "[工具调用]",

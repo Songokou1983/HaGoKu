@@ -551,7 +551,7 @@ class ScoutAgent(InteractionMixin):
                 matched_cols = [c for c in df.columns if c in fields]
                 if matched_cols:
                     proj_parts: list[str] = []
-                    proj_parts.append("【本项目记忆 — 以下字段已在过往分析中确认，请直接沿用：】")
+                    proj_parts.append("【本项目记忆 — 以下字段来自过往分析，供参考。用户当前输入优先于记忆：】")
                     for col in matched_cols:
                         desc = fields[col]
                         dn = display_names.get(col, "")

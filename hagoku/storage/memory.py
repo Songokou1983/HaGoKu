@@ -569,9 +569,10 @@ class MemoryManager:
         display_names: dict[str, str] = {}
         confirmed = self.get_column_semantics(project_id)
         for col_name, sem_def in confirmed.items():
-            if sem_def.description:
+            # 只注入用户确认过的字段，避免未确认的旧推断覆盖用户输入
+            if sem_def.confirmed_by_user and sem_def.description:
                 fields[col_name] = sem_def.description
-            if sem_def.display_name:
+            if sem_def.confirmed_by_user and sem_def.display_name:
                 display_names[col_name] = sem_def.display_name
         return {"fields": fields, "display_names": display_names}
 

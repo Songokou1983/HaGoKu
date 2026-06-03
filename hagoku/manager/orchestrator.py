@@ -814,6 +814,7 @@ def _apply_scout_reply_with_llm(
         f"{analysis_purpose_text}\n"
         "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
         "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
+        "⚠️ 用户当前输入的字段理解绝对优先于已有状态中的中文名。即使已有名称看起来合理，用户说的必须覆盖。\n"
         "用户说的简称/标签（≤6字，如「公司」「店铺积分」「费用」）→ display_name。\n"
         "含义扩展说明（完整语句）→ description。两者不能相同。\n"
         "每次只更新一个字段，分多次调用 update_field_understanding。\n"
@@ -836,6 +837,7 @@ def _apply_scout_reply_with_llm(
         system_msg_for_llm = (
             "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
             "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
+            "⚠️ 用户当前输入的字段理解绝对优先于已有状态中的中文名。即使已有名称看起来合理，用户说的必须覆盖。\n"
             "用户说的简称/标签（≤6字）→ display_name。\n"
             "含义扩展说明（完整语句）→ description。两者不能相同。\n"
             "每次只更新一个字段，分多次调用 update_field_understanding。\n"

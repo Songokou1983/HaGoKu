@@ -2343,6 +2343,13 @@ class Orchestrator:
                     "duration_ms": duration_ms,
                 }
 
+            # 保存 resume 状态（Analyst 完成后，Reporter 之前）
+            self.memory.save_resume_state(
+                project_name, "analyzed",
+                cleaned_path=cleaned_path_str,
+                context=context, run_id=run_id,
+            )
+
             # 注入上游摘要（Analyst → Reporter）
             upstream_note_reporter = self._get_upstream_summary("reporter")
             if upstream_note_reporter:

@@ -1268,6 +1268,17 @@ export default function AnalyzePanel() {
               <RotateCcw size={12} />
               重置分析
             </button>
+            {Object.values(agentStates).some(s => s === "error") && (
+              <button
+                type="button"
+                onClick={() => send("analyze", { data_path: dataPath, query: queryText, project_name: currentProject, phase: "full" })}
+                className="flex items-center gap-1 px-2 py-0.5 border border-app-accent rounded text-ui-xs normal-case tracking-normal font-medium text-app-accent
+                  hover:bg-app-accent hover:text-white transition-colors cursor-pointer"
+              >
+                <RotateCcw size={12} />
+                重试
+              </button>
+            )}
             <ClearHistoryButton currentProject={currentProject} onClear={handleReset} />
           </div>
         )}

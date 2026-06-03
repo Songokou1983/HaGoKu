@@ -304,11 +304,6 @@ class AnalystAgent(InteractionMixin):
             elif txt:
                 messages.append({"role": "assistant", "content": txt})
 
-            # 非交互模式：展示输出，继续循环。用户交互由 orchestrator 的 _pause_and_wait 统一管理。
-            self._emit(EventType.AGENT_THINKING, {
-                "thought": txt[:220] if txt else "[工具调用]",
-            })
-
             # ProjectContext 写入（每轮）
             if project_ctx:
                 project_ctx.add_agent_response(

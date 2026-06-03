@@ -508,41 +508,12 @@ class ScoutAgent(InteractionMixin):
             "columns": column_list,
         }
 
-        # ── 跨项目知识检索（增强版：向量检索 + 项目记忆聚合 + 可观测性）──
+        # 项目记忆聚合：仅使用当前项目的确认字段。
+        # 字段语义是项目级信息，不检索跨项目知识库。
+        # LLM 看列名+样本值+数据类型就够了，知识库只会污染（BU在项目A=公司、项目B=业务单元）。
         knowledge_notes_parts: list[str] = []
-        seen_field_refs: set[str] = set()  # 去重：不同列可能匹配到同一条知识
-        total_recalled = 0
-        total_accepted = 0
 
-        for col_info in column_list:
-            col_name = col_info["name"]
-            # 1) 向量检索：列名 + 样本值
-            search_query = f"{col_name} {col_info.get('sample_values', '')}"
-            matches = scout_knowledge.recall(search_query, top_k=3)
-            total_recalled += len(matches)
-
-            for match in matches:
-                sim = match.get("similarity", 0)
-                if sim < _kconfig.similarity_threshold:
-                    continue
-                meta = match.get("metadata") or {}
-                ref_key = meta.get("field", match.get("id", ""))
-                if ref_key in seen_field_refs:
-                    continue
-                seen_field_refs.add(ref_key)
-                total_accepted += 1
-                parts: list[str] = []
-                parts.append(f"    历史字段「{meta.get('field', '?')}」")
-                parts.append(f"含义: {meta.get('meaning', '?')}")
-                parts.append(f"数据特征: {meta.get('data_pattern', '?')}")
-                parts.append(f"推断角色: {meta.get('inferred_role', '?')}")
-                if meta.get("project"):
-                    parts.append(f"来源项目: {meta['project']}")
-                if meta.get("confidence") is not None:
-                    parts.append(f"历史置信度: {meta['confidence']:.0%}")
-                knowledge_notes_parts.append("\n".join(parts))
-
-        # 2) 项目记忆聚合：将 memory_project 中的字段也注入知识区
+        # 项目记忆聚合：将 memory_project 中的字段也注入知识区
         if memory_project:
             fields = memory_project.get("fields", {})
             display_names = memory_project.get("display_names", {})
@@ -566,24 +537,6 @@ class ScoutAgent(InteractionMixin):
                         "thought": f"复用项目记忆：{len(matched_cols)} 个字段来自过往分析"
                     })
 
-        # 3) 可观测性：记录跨项目知识检索效果
-        if total_recalled > 0:
-            self._emit(EventType.AGENT_THINKING, {
-                "thought": (
-                    f"跨项目知识检索：从 {total_recalled} 条候选中采纳 {total_accepted} 条"
-                    f"（复用率 {total_accepted / total_recalled:.0%}）"
-                )
-            })
-
-        knowledge_section = ""
-        if knowledge_notes_parts:
-            knowledge_section = (
-                "\n\n"
-                "【跨项目知识库参考 — 以下是历史分析中类似字段的经验，供参考而非决定：】\n"
-                "这些字段在数据特征和列名上与当前数据集的某些列相似。"
-                "你可以参考这些历史经验来辅助推断，但最终判断需要基于当前数据集的实际情况。\n\n"
-                + "\n\n".join(knowledge_notes_parts)
-            )
 
         # 拼接记忆上下文到 system_prompt
         memory_notes = ""
@@ -622,7 +575,6 @@ class ScoutAgent(InteractionMixin):
             "1. 给每个字段一个中文名（display_name）\n"
             "2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段；与目标无关的设 suggested_role 为 ignore 且 used_in_analysis 为 false。勾选原因写在 evidence 里。used_in_analysis 和 evidence 必须一致，不可 evidence 说 ignore 但 used_in_analysis=true\n"
             "现在调用 submit_field_inference。\n"
-            f"{knowledge_section}"
             f"{memory_notes}"
         )
         import json as _json
@@ -1063,19 +1015,7 @@ class ScoutAgent(InteractionMixin):
             if not desc or not isinstance(desc, str) or not desc.strip():
                 continue
             desc = desc.strip()
-            # 检查是否已存在相似条目（通过 recall 确认）
-            existing = scout_knowledge.recall(f"{col_name} {desc}", top_k=1)
-            if existing and existing[0]["similarity"] > SCOUT_DEDUP_SIMILARITY:
-                continue  # 已有相似条目，跳过
-            scout_knowledge.learn(
-                field=desc,
-                meaning=desc,
-                data_pattern=f"{sem['inferred_type']} {sem['evidence']}",
-                inferred_role=sem.get("suggested_role", "feature"),
-                confidence=sem.get("confidence", SCOUT_LEARN_CONFIDENCE_MIN),
-                tags=[sem["inferred_type"], sem.get("suggested_role", "feature")],
-                metadata={"project": project_id},
-            )
+            # 字段名/描述是项目级信息，不写入跨项目知识库
 
     def _update_own_memory(self, context: dict, project_id: str | None) -> None:
         """更新自身记忆中的字段定义"""

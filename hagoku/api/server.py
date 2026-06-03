@@ -393,17 +393,6 @@ async def clear_project_history(project_name: str):
         ]:
             db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))
         db.conn.commit()
-        # 清除知识库（Scout + Cleaner），防止旧项目的字段理解污染新分析
-        _kb_root = Path(__file__).resolve().parent.parent / "agents"
-        _kb_files = [
-            _kb_root / "scout" / "knowledge.yaml",
-            _kb_root / "scout" / "knowledge.db",
-            _kb_root / "cleaner" / "knowledge.db",
-            _kb_root / "cleaner" / "knowledge.yaml",
-        ]
-        for _kf in _kb_files:
-            if _kf.exists():
-                _kf.unlink()
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return {"project": project_name, "cleared": True}

@@ -2265,6 +2265,17 @@ class Orchestrator:
                 {"result_summary": f"发现 {n_findings} 条结论"},
             )
 
+            # ── 暂停：分析结果待用户确认 ───────────────────────────────
+            findings_summary = findings.get("summary", "") if isinstance(findings, dict) else ""
+            analyst_msg = {
+                "message": findings_summary or f"发现 {n_findings} 条结论",
+                "analyst_findings": findings if isinstance(findings, dict) else {"findings": []},
+                "interaction_revision": 0,
+            }
+            user_reply = self._pause_and_wait("analyst", analyst_msg)
+            if user_reply == HAGOKU_CANCEL_PAUSE_TOKEN:
+                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
             # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
             # findings→results 兼容：旧代码期望 list，新 findings 是 dict
             _analyst_results = findings.get("findings", []) if isinstance(findings, dict) else []

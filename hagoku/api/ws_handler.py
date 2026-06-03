@@ -68,7 +68,7 @@ def _event_to_message(event: Event) -> dict[str, Any]:
 
 # ── Analysis runner ─────────────────────────────────────────────
 
-def _run_analysis(data_path: str, query: str, project_name: str, phase: str, resume: bool = False) -> None:
+def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> None:
     """
     在后台线程运行 Orchestrator.run()。
     Orchestrator 会自动通过其 event_bus → WSBridge → WebSocket 推送事件到前端。
@@ -94,15 +94,14 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str, res
         query=query,
         project_name=project_name,
         phase=phase,
-        resume=resume,
     )
 
 
-def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str, resume: bool = False) -> None:
+def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str) -> None:
     """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
     global _analysis_in_progress
     try:
-        _run_analysis(data_path, query, project_name, phase, resume)
+        _run_analysis(data_path, query, project_name, phase)
     finally:
         with _analysis_busy_lock:
             _analysis_in_progress = False
@@ -200,7 +199,6 @@ async def ws_handler(ws: WebSocket) -> None:
                 query = payload.get("query", "").strip()
                 project_name = payload.get("project_name", "default")
                 phase = payload.get("phase", "full")
-                resume = payload.get("resume", False)
                 import logging
                 logging.getLogger("hagoku.ws").warning(
                     "WS analyze 收到: query=%r project=%s phase=%s payload_keys=%s",
@@ -243,7 +241,6 @@ async def ws_handler(ws: WebSocket) -> None:
                         query,
                         project_name,
                         phase,
-                        resume,
                     )
                 except RuntimeError:
                     with _analysis_busy_lock:
@@ -259,10 +256,6 @@ async def ws_handler(ws: WebSocket) -> None:
                 else:
                     try:
                         orch.request_cancel()
-                        # 清除 resume 状态——重置后的新分析不应自动 resume
-                        project_name = msg.get("payload", {}).get("project_name", "")
-                        if project_name and orch.memory:
-                            orch.memory.clear_resume_state(project_name)
                         await ws.send_json({
                             "type": "ack",
                             "cmd": "cancel_analysis",

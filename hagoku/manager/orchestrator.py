@@ -1751,7 +1751,7 @@ class Orchestrator:
                            channel_logger=self._channel_logger)
         cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
         analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep, scribe=self.scribe)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
+        reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick_raw, scribe=self.scribe)
 
         # Resume 支持
         df_clean = None
@@ -2337,13 +2337,6 @@ class Orchestrator:
                     "n_results": len(results),
                     "duration_ms": duration_ms,
                 }
-
-            # 保存 resume 状态（Analyst 完成后，Reporter 之前）
-            self.memory.save_resume_state(
-                project_name, "analyzed",
-                cleaned_path=cleaned_path_str,
-                context=context, run_id=run_id,
-            )
 
             # 注入上游摘要（Analyst → Reporter）
             upstream_note_reporter = self._get_upstream_summary("reporter")

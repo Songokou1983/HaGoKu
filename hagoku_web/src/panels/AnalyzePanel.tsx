@@ -1190,7 +1190,7 @@ export default function AnalyzePanel() {
   }, [send, dataPath, currentProject, queryText]);
 
   const handleReset = useCallback(() => {
-    send("cancel_analysis", { project_name: currentProject });
+    send("cancel_analysis", {});
     resetRunUiState();
     setPhase("setup");
     setMessages([]);

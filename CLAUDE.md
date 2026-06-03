@@ -14,6 +14,11 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 **收到用户报错或描述异常行为后，第一个 tool call 必须是查 dump 目录。**
 
+### 铁律 -1（禁用回滚，只做正向修复）
+
+**绝对禁止 `git revert`、`git reset`、删除已实现功能、或任何形式的代码回退。**
+修复只能前向——定位问题行，改那一行，不改其他地方。删错了才允许回滚，且必须用户明确许可。
+
 ```
 ls -lt ~/.hagoku/llm_dumps/ | head -5
 ```

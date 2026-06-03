@@ -101,16 +101,16 @@ class ReporterAgent(InteractionMixin):
 
     # ── LLM 调用 ────────────────────────────────────────────
 
-    def _call_llm(
+    def _call_llm_with_tools(
         self, system: str, user: str,
         messages_history: list[dict[str, str]] | None = None,
-    ) -> str:
-        """调用 LLM，返回文本响应"""
+    ) -> dict:
+        """调用 LLM（function calling），返回 submit_report 工具调用的参数 dict。"""
         if self._llm_client is None:
             raise RuntimeError("ReporterAgent 没有 LLM 客户端")
         _messages: list[dict] = [{"role": "system", "content": system}]
         if messages_history:
-            _messages.extend(messages_history)  # 律 3
+            _messages.extend(messages_history)
         _messages.append({"role": "user", "content": user})
         try:
             response = self._llm_client.chat.completions.create(
@@ -118,10 +118,44 @@ class ReporterAgent(InteractionMixin):
                 messages=_messages,
                 temperature=0.3,
                 max_tokens=4096,
+                tools=self._report_tools(),
+                tool_choice={"type": "function", "function": {"name": "submit_report"}},
             )
-            return response.choices[0].message.content or ""
         except Exception as e:
             raise RuntimeError(f"Reporter LLM 调用失败: {e}")
+        msg = response.choices[0].message
+        tc = getattr(msg, "tool_calls", None)
+        if tc and len(tc) > 0:
+            import json as _json
+            args_str = tc[0].function.arguments if hasattr(tc[0], "function") else "{}"
+            try:
+                return _json.loads(args_str)
+            except _json.JSONDecodeError:
+                pass
+        raise RuntimeError("Reporter: LLM 未调用 submit_report 工具")
+
+    @staticmethod
+    def _report_tools() -> list[dict]:
+        return [{
+            "type": "function",
+            "function": {
+                "name": "submit_report",
+                "description": "提交报告内容的 JSON 结构。调用此工具完成报告生成。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "headline": {"type": "string"},
+                        "executive_summary": {"type": "string"},
+                        "metric_cards": {"type": "array"},
+                        "sections": {"type": "array"},
+                        "findings": {"type": "array"},
+                        "disclaimers": {"type": "array"},
+                    },
+                    "required": ["title", "headline", "executive_summary"],
+                },
+            },
+        }]
 
     def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
@@ -425,47 +459,9 @@ class ReporterAgent(InteractionMixin):
 
         self._emit(EventType.AGENT_THINKING, {"thought": "正在通过 LLM 生成报告内容..."})
 
-        response = self._call_llm(system=system, user=user_prompt, messages_history=rpt_history)
+        return self._call_llm_with_tools(system=system, user=user_prompt, messages_history=rpt_history)
 
-        # 解析 LLM 返回的 JSON
-        return self._parse_llm_json(response)
 
-    def _parse_llm_json(self, response: str) -> dict:
-        """从 LLM 响应中提取 JSON"""
-        # 去掉 <think>...</think> 标签（部分模型会输出思考内容）
-        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
-        # 尝试直接解析
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            pass
-
-        # 尝试提取 ```json ... ``` 块
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                pass
-
-        # 尝试提取 { ... } 最外层
-        match = re.search(r"\{.*\}", response, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
-
-        # ==== CHANNEL ZONE: LLM JSON 解析失败，保留原始文本，禁止代码生成语义内容 ====
-        # LLM 已产出文本但格式损坏——代码不编造任何面向用户的内容。
-        # 将 LLM 原始输出完整传递，标记 degraded=true，由调用方决定如何处理。
-        self._emit(EventType.AGENT_THINKING, {
-            "thought": f"⚠️ 无法解析 LLM 输出为 JSON，保留原始文本。原始输出前 200 字：{response[:200]}"
-        })
-        return {
-            "degraded": True,
-            "raw_text": response or "",
-        }
 
     def _build_report_data(
         self,

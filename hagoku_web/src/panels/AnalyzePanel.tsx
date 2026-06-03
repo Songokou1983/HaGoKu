@@ -1259,17 +1259,15 @@ export default function AnalyzePanel() {
       <PanelHeader title="分析">
         {(
           <div className="flex items-center gap-2">
-            {Object.values(agentStates).some(s => s === "error") && (
-              <button
-                type="button"
-                onClick={() => send("analyze", { data_path: dataPath, query: queryText, project_name: currentProject, phase: "full" })}
-                className="flex items-center gap-1 px-2 py-0.5 border border-app-border rounded text-ui-xs normal-case tracking-normal font-medium text-app-text
-                  hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
-              >
-                <RotateCcw size={12} />
-                重试
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => send("analyze", { data_path: dataPath, query: queryText, project_name: currentProject, phase: "full" })}
+              className="flex items-center gap-1 px-2 py-0.5 border border-app-border rounded text-ui-xs normal-case tracking-normal font-medium text-app-text
+                hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
+            >
+              <RotateCcw size={12} />
+              重试
+            </button>
             <button
               type="button"
               onClick={handleReset}

@@ -2334,7 +2334,7 @@ class Orchestrator:
                     "run_id": run_id,
                     "project": project_name,
                     "output_path": output_path,
-                    "n_results": len(results),
+                    "n_results": len(_analyst_results),
                     "duration_ms": duration_ms,
                 }
 
@@ -2448,11 +2448,11 @@ class Orchestrator:
 
             return {
                 "status": "completed",
-                "message": f"✅ 分析完成！共生成 {len(results)} 项发现，报告已保存。",
+                "message": f"✅ 分析完成！共生成 {len(_analyst_results)} 项发现，报告已保存。",
                 "run_id": run_id,
                 "project": project_name,
                 "output_path": output_path,
-                "n_results": len(results),
+                "n_results": len(_analyst_results),
                 "duration_ms": duration_ms,
             }
 

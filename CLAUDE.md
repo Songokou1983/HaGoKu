@@ -10,6 +10,18 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 
 ## 铁律（PR 级硬约束 — 违反任何一条 PR 直接拒）
 
+### 铁律 0（查 dump 再开口）
+
+**收到用户报错或描述异常行为后，第一个 tool call 必须是查 dump 目录。**
+
+```
+ls -lt ~/.hagoku/llm_dumps/ | head -5
+```
+
+看完 dump 内容才能做任何代码改动。不先查 dump 就改代码 = 违反铁律 0。
+
+### 其他铁律
+
 开始任何代码动作前，请先做这两件事：
 
 1. 读完 [PROJECT.md](PROJECT.md) 的三个章节：

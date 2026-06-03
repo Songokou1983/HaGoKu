@@ -2362,7 +2362,7 @@ class Orchestrator:
                 formats=formats or self.config.output.formats,
                 template=template,
                 df=df_clean,
-                business_metrics=business_metrics,
+                business_metrics=[],
             )
 
             # 8. 保存运行元数据

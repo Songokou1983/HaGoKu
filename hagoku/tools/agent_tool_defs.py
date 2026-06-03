@@ -196,6 +196,34 @@ def _handle_restrict_analysis_to(args: dict, ctx: dict, _df: pd.DataFrame | None
     }
 
 
+def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """更新分析范围——纳入或排除字段。"""
+    add_columns = args.get("add_columns", []) or []
+    remove_columns = args.get("remove_columns", []) or []
+    reason = args.get("reason", "")
+
+    semantics = ctx.get("column_semantics", [])
+    updated_add: list[str] = []
+    updated_remove: list[str] = []
+
+    for sem in semantics:
+        col = str(sem.get("column_name", ""))
+        if col in add_columns:
+            sem["used_in_analysis"] = True
+            updated_add.append(col)
+        if col in remove_columns:
+            sem["used_in_analysis"] = False
+            updated_remove.append(col)
+
+    ctx["_pending_scope_update"] = True
+
+    return {
+        "added": updated_add,
+        "removed": updated_remove,
+        "reason": reason,
+    }
+
+
 agent_tools.register(Tool(
     name="update_field_understanding",
     description="更新字段的中文名（display_name）或业务含义（description）。列名和业务名均可",
@@ -475,5 +503,36 @@ agent_tools.register(Tool(
         "required": ["test_type", "columns"],
     },
     handler=_handle_run_statistical_test,
+    agents=["analyst"],
+))
+
+
+agent_tools.register(Tool(
+    name="update_analysis_scope",
+    description=(
+        "调整分析范围——纳入或排除字段。调用前先检查字段数据质量（调 get_column_stats）。"
+        "若空值率 < 20% 且无类型异常，可直接纳入。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "add_columns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "纳入分析的列名列表",
+            },
+            "remove_columns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "移出分析的列名列表",
+            },
+            "reason": {
+                "type": "string",
+                "description": "调整原因",
+            },
+        },
+        "required": [],
+    },
+    handler=_handle_update_analysis_scope,
     agents=["analyst"],
 ))

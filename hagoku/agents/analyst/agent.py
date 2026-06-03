@@ -270,6 +270,7 @@ class AnalystAgent(InteractionMixin):
 
             if tc_list:
                 tool_call_blocks = []
+                tool_results: list[dict] = []
                 for tc in tc_list:
                     fn = tc.function
                     try:
@@ -287,7 +288,7 @@ class AnalystAgent(InteractionMixin):
                         "id": tc_id, "type": "function",
                         "function": {"name": fn.name, "arguments": fn.arguments},
                     })
-                    messages.append({
+                    tool_results.append({
                         "role": "tool", "tool_call_id": tc_id,
                         "content": _json.dumps(result, ensure_ascii=False, default=str),
                     })
@@ -299,6 +300,7 @@ class AnalystAgent(InteractionMixin):
                     assistant_block: dict = {"role": "assistant", "content": txt or None}
                     assistant_block["tool_calls"] = tool_call_blocks
                     messages.append(assistant_block)
+                    messages.extend(tool_results)
             elif txt:
                 messages.append({"role": "assistant", "content": txt})
 

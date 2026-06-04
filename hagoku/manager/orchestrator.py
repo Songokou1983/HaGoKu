@@ -1341,6 +1341,13 @@ class Orchestrator:
         self._analyst_agent: Any = None
         self._error: Exception | None = None
 
+    _STAGE_HANDLERS: dict[str, str] = {
+        "scout": "_handle_scout_reply",
+        "cleaner": "_handle_cleaner_reply",
+        "analyst": "_handle_analyst_reply",
+        "reporter": "_handle_reporter_reply",
+    }
+
     def _reset_run_state(self) -> None:
         """新一轮分析前清理上次残留。"""
         self._stage = ""
@@ -2636,6 +2643,17 @@ class Orchestrator:
         """
         agent_name = user_input.get("agent", "")
         phase = user_input.get("phase", "")
+
+        # 事件驱动路由：根据 self._stage 分发到对应 handler
+        text = user_input.get("text", "").strip()
+        if self._error:
+            return {"status": "error", "message": str(self._error)}
+
+        if self._stage and text:
+            handler_name = self._STAGE_HANDLERS.get(self._stage)
+            if handler_name:
+                handler = getattr(self, handler_name)
+                return handler(text, self._context)
 
         # 通道日志：用户输入
         if hasattr(self, '_channel_logger') and self._channel_logger:

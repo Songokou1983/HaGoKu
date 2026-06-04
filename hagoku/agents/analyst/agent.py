@@ -255,6 +255,8 @@ class AnalystAgent(InteractionMixin):
         *,
         emit_completed: bool = True,
     ) -> dict:
+        # F-083/F-084: 旧对话式入口（30 轮循环）。事件驱动架构使用 run_step()。
+        # 仅保留供 begin() → respond() 旧交互路径使用，长期应迁移到 run_step()。
         """对话式分析循环。LLM 自由探索，submit_analysis 工具退出。
 
         将 plan 参数改为可选（兼容旧调用方）。分析不再走 JSON 计划路径，
@@ -283,8 +285,9 @@ class AnalystAgent(InteractionMixin):
             "\n\n"
             "【分析范围解锁】\n"
             "分析开始时已设定核心关注字段。如果用户要求纳入新字段，先调 get_column_stats 检查数据质量。\n"
-            "数据干净（空值率 < 20%、类型匹配）→ 调 update_analysis_scope 直接纳入。\n"
-            "数据需清洗 → 告知用户：「[列名] 数据质量问题（空值率 X%），建议重置分析从字段理解阶段重跑。若坚持纳入，回复「不管，直接加」。」\n"
+            "根据 get_column_stats 返回的空值率和数据类型，自行判断数据质量是否满足分析要求。\n"
+            "数据可用 → 调 update_analysis_scope 纳入。\n"
+            "数据质量问题严重 → 告知用户具体问题（空值率、类型不匹配等），建议重置分析从字段理解阶段重跑。若用户坚持纳入，回复「不管，直接加」。」\n"
         )
 
         if project_ctx:

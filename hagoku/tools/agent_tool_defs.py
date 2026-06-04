@@ -202,16 +202,27 @@ def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | Non
     remove_columns = args.get("remove_columns", []) or []
     reason = args.get("reason", "")
 
+    # F-067 修复：检测 add/remove 交集。同一列同时出现在两侧说明 LLM
+    # 给出了矛盾指令 —— 拒绝写入而非静默选一边（铁律 2 路径 A）。
+    add_set = set(add_columns)
+    remove_set = set(remove_columns)
+    conflict = add_set & remove_set
+    if conflict:
+        raise ValueError(
+            f"update_analysis_scope: 列 {sorted(conflict)} 同时出现在 "
+            f"add_columns 和 remove_columns 中。请 LLM 明确该列是纳入还是排除。"
+        )
+
     semantics = ctx.get("column_semantics", [])
     updated_add: list[str] = []
     updated_remove: list[str] = []
 
     for sem in semantics:
         col = str(sem.get("column_name", ""))
-        if col in add_columns:
+        if col in add_set:
             sem["used_in_analysis"] = True
             updated_add.append(col)
-        if col in remove_columns:
+        if col in remove_set:
             sem["used_in_analysis"] = False
             updated_remove.append(col)
 
@@ -511,8 +522,8 @@ agent_tools.register(Tool(
 agent_tools.register(Tool(
     name="update_analysis_scope",
     description=(
-        "调整分析范围——纳入或排除字段。调用前先检查字段数据质量（调 get_column_stats）。"
-        "若空值率 < 20% 且无类型异常，可直接纳入。"
+        "调整分析范围——纳入或排除字段。调用前先检查字段数据质量（调 get_column_stats），"
+        "根据实际数据自行判断是否满足分析要求。"
     ),
     parameters={
         "type": "object",

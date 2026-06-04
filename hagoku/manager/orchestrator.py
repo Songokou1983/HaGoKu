@@ -2582,6 +2582,39 @@ class Orchestrator:
                 f"_llm_classify_confirmation: LLM 不可达。原始错误: {e}"
             ) from e
 
+    def _handle_scout_reply(self, user_input: str, context: dict) -> dict:
+        """处理 Scout 字段对齐阶段的用户回复。"""
+        from hagoku.manager.orchestrator import apply_scout_user_field_reply_to_context
+        applied = apply_scout_user_field_reply_to_context(
+            context, user_input,
+            llm_client=self.llm_quick_raw,
+            llm_model=self.config.llm.model_quick or self.config.llm.model,
+        )
+        if applied and self.memory:
+            self._persist_scout_field_updates(self._project_name, applied, context)
+
+        # 重新展示字段表
+        from hagoku.manager.orchestrator import scout_field_review_pause_payload
+        scout_msg = scout_field_review_pause_payload(context)
+        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+        return {
+            "status": "scout_review",
+            "message": "",
+            "field_review": scout_msg.get("field_review"),
+        }
+
+    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict:
+        """处理 Cleaner 评估阶段的用户回复。"""
+        return {"status": "cleaner_review", "message": "cleaner handler placeholder"}
+
+    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict:
+        """处理 Analyst 对话阶段的用户回复。"""
+        return {"status": "analyst_review", "message": "analyst handler placeholder"}
+
+    def _handle_reporter_reply(self, user_input: str, context: dict) -> dict:
+        """Reporter 阶段不互动，直接返回。"""
+        return {"status": "reporter_done"}
+
     def respond(
         self,
         user_input: dict,

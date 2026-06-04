@@ -30,8 +30,6 @@ from .command_parser import parse as parse_command, ParsedCommand
 # ── 规则引擎 ──────────────────────────────────────────────────
 
 # WebSocket「重置 / 取消」暂停时使用的哨兵（用户正常回复不会使用此串）
-HAGOKU_CANCEL_PAUSE_TOKEN = "__HAGOKU_CANCEL__"
-
 # 律 3：多轮对话历史窗口 — 注入轮数 vs 持久化轮数（1 轮 = user + assistant 两条消息）
 _CONV_HISTORY_INJECT_TURNS = 3   # 注入到 LLM prompt 的最近轮数
 _CONV_HISTORY_KEEP_TURNS = 10    # context 中保留的最近轮数
@@ -1326,9 +1324,6 @@ class Orchestrator:
         set_cleaning_config(self.config.cleaning)
 
         # 交互式暂停机制（分析线程用 Event 等待用户回复）
-        self._pause_event: threading.Event = threading.Event()
-        self._user_response: str | None = None
-        self._is_paused: bool = False
         # 用户请求中止本轮分析（WebSocket cancel_analysis）
         self._cancel_lock = threading.Lock()
         self._cancel_requested_flag = False
@@ -1361,17 +1356,6 @@ class Orchestrator:
         if self._llm_quick_raw is None:
             self._llm_quick_raw = create_raw_client(self.config)
         return self._llm_quick_raw
-
-    # ── 交互式暂停 / 恢复 ─────────────────────────────────────
-
-    def unblock(self, user_response: str) -> None:
-        """前端用户发送回复后，ws_handler 调用此方法解除线程阻塞。"""
-        if hasattr(self, '_channel_logger') and self._channel_logger:
-            self._channel_logger.log("orchestrator", "user_input",
-                raw_text=user_response, phase="field_correction")
-        self._user_response = user_response
-        self._is_paused = False
-        self._pause_event.set()
 
     def _handle_command_if_present(
         self, raw: str, agent: str, context: dict | None = None
@@ -1437,33 +1421,10 @@ class Orchestrator:
         self._analyst_agent = None
         self._error = None
 
-    def _pause_and_wait(self, agent: str, payload: str | dict[str, Any], timeout: float = 300.0) -> str:
-        """
-        发射 user_input_requested 事件，然后阻塞当前线程直到用户回复。
-        payload 可为 str（仅 message）或 dict（可含 message、field_review 等，由前端渲染）。
-        timeout: 秒，超时后自动用空字符串恢复（防止永久阻塞）。
-        """
-        self._pause_event.clear()
-        self._user_response = None
-        self._is_paused = True
-        if isinstance(payload, str):
-            data: dict[str, Any] = {"message": payload, "agent": agent}
-        else:
-            data = dict(payload)
-            data["agent"] = agent
-            if "message" not in data:
-                data["message"] = ""
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, agent, data)
-        self._pause_event.wait(timeout=timeout)
-        self._is_paused = False
-        return self._user_response or ""
-
     def request_cancel(self) -> None:
-        """前端「重置分析」：在暂停点打断；非暂停时长任务结束后在检查点退出。"""
+        """前端「重置分析」：设置取消标志。"""
         with self._cancel_lock:
             self._cancel_requested_flag = True
-        if self._is_paused:
-            self.unblock(HAGOKU_CANCEL_PAUSE_TOKEN)
 
     def _is_cancel_requested(self) -> bool:
         with self._cancel_lock:
@@ -2657,6 +2618,9 @@ class Orchestrator:
             与 run() 返回格式相同的 dict
         """
         text = user_input.get("text", "").strip()
+        if self._is_cancel_requested():
+            return {"status": "cancelled", "message": "分析已中止"}
+
         if self._error:
             return {"status": "error", "message": str(self._error)}
 

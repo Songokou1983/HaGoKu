@@ -2165,6 +2165,10 @@ class Orchestrator:
                 # 保存状态后返回——后续阶段由 respond() handler 驱动
                 self._stage = "scout"
                 self._context = context
+                from hagoku.tools.data_io import load_data as _load
+                _df = _load(data_path)
+                self._df_clean = _df
+                self._df_raw = _df
                 return {
                     "status": "scout_review",
                     "message": "字段理解完成",

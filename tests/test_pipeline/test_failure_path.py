@@ -94,13 +94,11 @@ class TestMandatoryGuardrailsBlockReport:
 
 
 class TestOrchestratorRunGuardrailGate:
-    """run() 在 Reporter 前接入护栏"""
+    """护栏检查已移至 _handle_analyst_reply handler（事件驱动重构）"""
 
     def test_run_source_contains_mandatory_gate(self):
-        source = inspect.getsource(Orchestrator.run)
-        assert "_handle_mandatory_violations" in source
-        assert "guardrails_blocked" in source
-        assert "GUARDRAILS_BLOCKED.md" in source
+        source = inspect.getsource(Orchestrator._handle_analyst_reply)
+        assert "_check_mandatory_guardrails" in source
 
     def test_orchestrator_has_guardrails_instance(self):
         from hagoku.config import HaGoKuConfig
@@ -112,9 +110,9 @@ class TestOrchestratorRunGuardrailGate:
 
 class TestAnalystGuardrailsIntegration:
     def test_analyst_calls_guardrails_check_on_results(self):
-        """护栏检查在编排层 orchestrator.run() 中通过 _check_mandatory_guardrails 调用。
-        Analyst 对话式重构（commit c9a1efb）后不再直接调 guardrails.check。"""
-        source = inspect.getsource(Orchestrator.run)
+        """护栏检查在 _handle_analyst_reply handler 中。
+        事件驱动重构（commit 4028575）后移至 handler。"""
+        source = inspect.getsource(Orchestrator._handle_analyst_reply)
         assert "_check_mandatory_guardrails" in source
 
 

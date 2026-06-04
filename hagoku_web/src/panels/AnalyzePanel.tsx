@@ -698,6 +698,7 @@ export default function AnalyzePanel() {
   const [waitingAgent, setWaitingAgent] = useState<AgentKey | null>(null);
   const [replyText, setReplyText] = useState("");
   const [queryText, setQueryText] = useState("");
+  const queryRef = useRef("");  // 保存原始分析目标，不受 UI 状态变化影响
   const [resultReportUrl, setResultReportUrl] = useState<string | null>(null);
   const [guardrailsBlocked, setGuardrailsBlocked] = useState(false);
   const [blockedRunId, setBlockedRunId] = useState<string | null>(null);
@@ -758,7 +759,7 @@ export default function AnalyzePanel() {
       .then((r) => r.json())
       .then((d: { data_path?: string; last_query?: string }) => {
         if (d.data_path) setDataPath(d.data_path);
-        if (d.last_query) setQueryText(d.last_query);
+        if (d.last_query && phase === "setup") setQueryText(d.last_query);
       })
       .catch(() => {});
   }, [currentProject, loadFiles]);
@@ -1148,7 +1149,7 @@ export default function AnalyzePanel() {
         },
       ]);
       setReplyText("");
-    // query 不清空——重试时需要复用
+    setQueryText("");
       setWaitingAgent(null);
       setGateOpen(false);
       // 多轮对齐：不清 activeFieldReviewId / activeCleaningReviewId / activeAnalystReviewId；
@@ -1181,9 +1182,11 @@ export default function AnalyzePanel() {
     setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
     setPhase("running");
+    const q = queryText.trim();
+    queryRef.current = q;  // 锁定原始 query，后续不会变
     send("analyze", {
       data_path: dataPath,
-      query: queryText.trim() || "",
+      query: q || "",
       project_name: currentProject ?? "default",
       phase: "full",
     });

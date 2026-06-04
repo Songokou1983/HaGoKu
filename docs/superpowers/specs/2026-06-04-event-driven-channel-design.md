@@ -45,6 +45,8 @@ parameters:
 
 **为什么不是代码判断"确认继续"**：LLM 比代码更懂当前对话意图。用户说"好"可能真的是确认，也可能是"好但是我还要改 Inc2"。代码不该替 LLM 做这个判断。
 
+**哪个 LLM 调 `route_to`**：各阶段 Agent 自己的 LLM。Scout 字段对齐时由 Scout 的 LLM 调，Analyst 对话时由 Analyst 的 LLM 调。**不是 orchestrator 层调。** 代码只负责收到 tool_call 后执行路由。
+
 ### 3. 状态存储（跨 respond() 调用）
 
 `run()` 拆成多段独立函数，每次返回。状态不在线程栈上，需要显式存储。
@@ -59,7 +61,8 @@ parameters:
 | Analyst messages | `self._analyst_messages: list` | Analyst 阶段 |
 | 项目/run 元数据 | `self._run_meta: dict` | 整个分析生命周期 |
 
-**为何放 self 不重建**：每次都 `load_data` + `assess` 浪费 LLM token。DataFrame 在内存中的开销（620 行 × 8 列 ≈ 40KB）可接受。
+**为何放 self 不重建**：每次都 `load_data` + `assess` 浪费 LLM token。DataFrame 在内存中的开销可接受。
+**释放策略**：`run()` 入口检查 `self._df_clean is not None` → 先 `del self._df_clean` 再加载新数据。`self._context` 同理。Orchestrator 是全局单例，不释放 = 内存累积泄漏。
 
 ### 4. 路由表定义
 
@@ -138,7 +141,16 @@ LLM 下一轮对话时，ProjectContext 的 `messages_history` 自动包含上�
 | G5 | handler 异常 → `_error` 设置 + `RUN_FAILED` emit |
 | G6 | raw_text 跨两次 `respond()` 调用 → ProjectContext entries 递增 |
 
-### 改动清单
+### 已知遗留（实现过程中补）
+
+| # | 隐患 | 处理时机 |
+|---|------|---------|
+| 3 | phase 废弃模式 → 前端传 `analyst_first` 的行为 | 实现过程中 ws_handler 加 400 或自动转 full |
+| 4 | 守门测试覆盖律 1/3/6/7 | 提测前补 G7（raw_text 录回）、G8（跨 respond messages 累积） |
+| 5 | 错误恢复路径（`self._error` + 重置 `self.*`） | `run()` 入口补重置逻辑 |
+| 6 | dump 验收（LLM 调用次数 = 阶段数 + 纠正次数） | 实现完成后跑完整流程验证 |
+
+## 改动清单
 
 | 文件 | 改什么 |
 |------|--------|

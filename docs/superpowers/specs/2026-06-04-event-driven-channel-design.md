@@ -145,9 +145,9 @@ LLM 下一轮对话时，ProjectContext 的 `messages_history` 自动包含上�
 
 | # | 隐患 | 处理时机 |
 |---|------|---------|
-| 3 | phase 废弃模式 → 前端传 `analyst_first` 的行为 | 实现过程中 ws_handler 加 400 或自动转 full |
-| 4 | 守门测试覆盖律 1/3/6/7 | 提测前补 G7（raw_text 录回）、G8（跨 respond messages 累积） |
-| 5 | 错误恢复路径（`self._error` + 重置 `self.*`） | `run()` 入口补重置逻辑 |
+| 3 | phase 废弃模式 → 前端传 `analyst_first` 的行为 | 方案 B：ws_handler 收到废弃 phase 自动转 `full`（不动前端） |
+| 4 | 守门测试覆盖律 1/3/6/7 | 提测前补：<br>**G7** mock LLM 录回，断言 raw_text 出现在 LLM 调用 messages 中（律 2/6 复合）<br>**G8** Analyst 跨 3 次 respond，messages 累积条数 = 1 system + 3×(user+assistant) = 7 |
+| 5 | 错误恢复路径（`self._error` + 重置 `self.*`） | `run()` 入口：`if self._error: self._reset()` 清 `_stage`/`_df_clean`/`_context`/`_analyst_messages`/`_error` |
 | 6 | dump 验收（LLM 调用次数 = 阶段数 + 纠正次数） | 实现完成后跑完整流程验证 |
 
 ## 改动清单
@@ -167,4 +167,4 @@ LLM 下一轮对话时，ProjectContext 的 `messages_history` 自动包含上�
 
 - Scout/Cleaner/Analyst/Reporter 内部 LLM 调用逻辑
 - WebSocket 协议
-- 前端
+- 前端（废弃 phase `analyst_first`/`cleaning_first` 由 ws_handler 自动转 `full`，前端无感知）

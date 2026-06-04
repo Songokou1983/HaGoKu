@@ -68,11 +68,11 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-02 完成 + **Phase 3.5 / 3.6 / 3.7 / 3.8 复验轮** 完成
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 全部完成**
-- **Finding 数**：0 正式 / 67 草稿 / **12 RESOLVED + 1 PARTIAL**（F-001 Phase 3.5 / F-019/F-020/F-054/F-055 Phase 3.6 / F-004/F-021/F-022/F-053/F-060/F-066 Phase 3.7 / F-038/F-057 Phase 3.8 / F-003 partial）
-- **状态分布**：53 DRAFT / 0 OPEN / **12 RESOLVED + 1 PARTIAL** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
-- **上次更新**：2026-06-02（Phase 3.8 复验 — 架构层 P0/P1 **全部清零**）
+- **当前评估周期**：2026-06-01 → 2026-06-02 完成 + **Phase 3.5 / 3.6 / 3.7 / 3.8 复验轮** 完成 + **Phase 3.9 复验轮启动**（2026-06-03 — 新功能「scope 引导式分析」+ 邻接 fix 审计 + **META-2026-06-03-002 grade 校准需求**）
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 全部完成 + Phase 3.9 启动**
+- **Finding 数**：0 正式 / 78 草稿 + **1 META-P1 grade 校准**（**+11 来自 Phase 3.9**：F-067 P1 / F-068 P2 / F-069 P2 / F-073 P2 / F-070 P3-OBS / F-071 P3 / F-072 P3-OBS / F-074 P3-OBS / F-075 P3-OBS / F-076 P3-OBS / F-077 P3-OBS）/ **12 RESOLVED + 1 PARTIAL**（F-001 Phase 3.5 / F-019/F-020/F-054/F-055 Phase 3.6 / F-004/F-021/F-022/F-053/F-060/F-066 Phase 3.7 / F-038/F-057 Phase 3.8 / F-003 partial）
+- **状态分布**：64 DRAFT（42 plain + 9 Phase 2 + 2 Phase 1+R + 11 Phase 3.9）+ 1 META-P1（**META-002 grade 校准**）/ 0 OPEN / **12 RESOLVED + 1 PARTIAL** / 1 RETRACTED (F-007) / 0 DISPUTED / 0 DEFERRED
+- **上次更新**：2026-06-03（Phase 3.9 启动 — 新功能审计完成 + **META-002 grade 校准需求** / 架构层 P0/P1 **仍全部清零** / **报告继续，精度提升**）
 
 **试错总假设数**：67（53 DRAFT + 12 RESOLVED + 1 PARTIAL + 1 RETRACTED）。
 
@@ -117,13 +117,15 @@ R 等级最高——DRAFT-Phase 1+R 的 finding 可被代码 AI 优先修。
 
 | 指标 | 当前 | 健康阈值 |
 |------|------|---------|
-| 审计阶段完成度 | **Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 全部完成** | 全部完成 ✅ |
+| 审计阶段完成度 | **Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 全部完成 + Phase 3.9 启动** | 持续 ✅ |
 | 反馈循环闭环 | ✅ **13 条已闭环** — 含**全部架构层 P0 + P1** | 持续验证 |
 | 距上次用户验证 | 0 天 | ≤ 30 天 |
-| 反馈率 | **13/67 ≈ 19.4%** (从 1.5% → 7.5% → 14.9% → 16.4% → 19.4%) | 持续提升 |
-| **已读行数 / 总代码行数** | 100%（Python + TS/TSX） | 100% ✅ |
-| **守门覆盖率** | 9/14 子目录（5 → 9，Phase 3.8 大幅扩展） | 完整覆盖 |
-| **状态机适配** | 推荐升级 / 撤回 / 延期 分类（9.7）+ 复验轮（3.Z + 3.Ω + 3.Ψ + 3.Φ） | Phase 3.8 完成 ✅ |
+| 反馈率 | **13/78 ≈ 16.7%** (从 1.5% → 7.5% → 14.9% → 16.4% → 19.4% → 17.3% → 16.7% — Phase 3.9 新增 11 DRAFT 拉低分母) | ⚠️ **META-002 标记 P1 校准需求：grade 需用户视角校准** |
+| **P-level 校准** | ⚠️ 65 个 DRAFT 未经用户实证校准；META-002 建议**默认 grade 降 1 级 + 标"待校准"** | 用户/开发者反馈驱动升回 |
+| **已读行数 / 总代码行数** | 100%（Python + TS/TSX 主体）+ Phase 3.9 新增未审计 | 持续验证 |
+| **守门覆盖率** | 9/14 子目录（5 → 9，Phase 3.8 大幅扩展） | ⚠️ **覆盖率非真指标，应改"严重 bug 漏检率"** |
+| **DRAFT 噪声率** | ⚠️ **用户实证：78 个 DRAFT 中多数未在功能测试触发** | META-002 警示 |
+| **状态机适配** | 推荐升级 / 撤回 / 延期 分类（9.7）+ 复验轮（3.Z + 3.Ω + 3.Ψ + 3.Φ + **3.Χ**） | Phase 3.9 启动 + META-002 自我证伪 ✅ |
 
 ---
 
@@ -2138,6 +2140,339 @@ $ .venv/bin/python -m pytest \
 - 已闭环：**13 条**（12 RESOLVED + 1 PARTIAL）
 - 反馈率：**19.4%**（从 1.5% / 7.5% / 14.9% / 16.4% → 19.4%）
 - P0 / P1 完成度：架构层 **100%**
+
+---
+
+## 3.Χ Phase 3.9 复验轮（用户 06-02 → 06-03 新功能 + 邻接 fix / 2026-06-03）
+
+> 本轮触发：自 Phase 3.8（commit `c02ebe5`）后到本 session 启动，git 记录 **+18 个新 commit**（其中 11 个改 `hagoku/`）。本节是病理学家**对未审计的新代码路径 + 邻接 fix 的复验**，目的是为新功能/新 fix 建立 finding ID 锚点 + 锁定 06-03 视角下的盲区。
+
+### 3.Χ.1 本轮审计范围
+
+| commit | 类别 | 审计结论 |
+|---|---|---|
+| `e112d02` | 新增 `update_analysis_scope` 工具 + handler | ⚠️ **F-067 NEW P1**：add/remove 静默互覆盖 |
+| `0740b42` | respond() 处理 `_pending_scope_update` 信号 | ⚠️ **F-069 NEW P2**：`ScoutAgent.__new__` 跳过 init |
+| `745c635` | analyst system prompt 加 scope 解锁指引 | ⚠️ **F-068 NEW P2**：「空值率 < 20%」业务阈值入 prompt |
+| `4cb8b00` | scope 重派生后 emit AGENT_THINKING | ✅ 既存事件，**F-070 P3-OBS** 前端契约无显式 test |
+| `730170d` | 扩展 `update_field_role` 触发词 + 「不可只用文字回复」 | ⚠️ **F-073 NEW P2**：反欺骗动词守门 6 漏检 |
+| `b364d1d` | scout 砍跨项目知识库存取字段名 | ✅ 与 F-026（自动写知识库）部分缓解 + **F-074 P3-OBS** 知识库机制反复 |
+| `8ec80ef` | clear-history 同时清知识库文件 | ✅ 修 F-051 类 silent fail + **F-077 P3-OBS** 路径硬编码 |
+| `a701e7e` | `_persist_scout_field_updates` 只持久化 confirmed | ✅ F-060 邻接 fix（写侧） + **F-075 P3-OBS** 律 10 多写侧同主线 |
+| `36c28f4` | build_memory_project + scout prompt 修记忆污染 | ✅ F-004 邻接 fix（读侧） + **F-075 P3-OBS** |
+| `cd3c2c3` | scout prompt 补 `used_in_analysis=false` 约束 | ✅ prompt 修正 — F-008 类（律 4 工具覆盖）的边界 |
+| `d0e8f99` | database 增量迁移补 `raw_path` 列 | ⚠️ **F-072 P3-OBS**：`try/except OperationalError` 静默吞 |
+| `bee5e03` | orchestrator 重推断参数传反 + 删 continue | ✅ 纯控制流修复 — **F-076 P3-OBS** 无参数顺序契约 |
+| `1abbe18` | cleaner 死循环修（5 轮后 raise RuntimeError） | ✅ F-006 修 1/5 — **F-071 P3-OBS** 进度更新 |
+| `37b92fe / 0432fd6 / 59bf0a5` | UI 清除历史 3 轮修复 | ✅ 不在 `hagoku/` 审计范围（前端） |
+| `8ec80ef` | 顺带：clear-history 删知识库文件 | （与上同） |
+| `df5b476 / e8ef104 / a42620f / 62cb6f6` | 文档（PROJECT.md / R2 修订） | ✅ 文档不动 finding |
+| `231f244` | scope 引导式分析实现计划（docs/plans/） | ✅ 计划文档 — 7 任务 |
+
+### 3.Χ.2 关键观察
+
+1. **新功能 = 新风险**：scope 引导式分析（5 commit）一次性引入：
+   - 1 个新工具（`update_analysis_scope`）+ 1 个新事件（`AGENT_THINKING` 复用）
+   - 1 个新 prompt 模块（scope 解锁指引）
+   - 1 个新状态机标志（`_pending_scope_update`）
+   - 1 个新机制（`ScoutAgent.__new__` 临时实例）
+   - **新风险 = 5 条 DRAFT finding**（F-067 / F-068 / F-069 / F-070 / F-073）——密度高于历史均值
+2. **F-004 邻接 fix 模式复发**：3 个 commit 修了律 10 / 律 5 的不同代码路径（scout 读 / orchestrator 写 / clear-history 清）——同一主线 bug 在多个层反复出现 → **架构层需要"字段污染"专题修**（F-075）
+3. **修复严谨度提升**：18 commit 中 11 个带【自检】块 + TDD 测试 + 引用 finding ID（f2404e2 / c02ebe5 / 36c28f4 / a701e7e 等）—— 反馈循环已**反向影响开发流程**
+
+### 3.Χ.3 数字校准
+
+- **总 finding 数**：67 → **75**（+8 新 DRAFT：F-067 / F-068 / F-069 / F-070 / F-071 / F-072 / F-073 / F-074 + 1 P3-OBS F-075 / F-076 / F-077）
+- **新 P0**：0（架构层仍 0）
+- **新 P1**：1（F-067 `update_analysis_scope` 互覆盖）
+- **新 P2**：3（F-068 / F-069 / F-073）
+- **新 P3 / P3-OBS**：4（F-070 / F-071 / F-072 / F-074 / F-075 / F-076 / F-077）
+- **架构层 P0 仍存在 = 0**（未变）
+- **架构层 P1 仍存在 = 0**（未变；F-067 是工具层 P1，非架构层）
+- **新发现守门盲区**：F-073 揭示守门 6 漏检「不要/不可/必须调」反欺骗动词 — F-065 漏检面的具体用例化
+- **F-006 修复进度**：5 步 handler 中仅 1 步（cleaner.assess）已修，4 步（analyst `_do_regression` / `_do_hypothesis_test` / `_do_correlation` / `_do_trend`）仍静默 return None
+
+### 3.Χ.4 测试结果（R 等级证据）
+
+```bash
+$ .venv/bin/python -m pytest \
+    tests/test_doctrine_compliance.py \
+    tests/test_product/test_information_arrival.py \
+    tests/test_manager/ tests/test_storage/ tests/test_agents/ tests/test_tools/ \
+    --tb=no -q --ignore=tests/test_field_llm_e2e.py
+# （待跑 — R 等级验证本轮 scope 引导式分析新功能未引发 regression）
+```
+
+---
+
+### F-2026-06-03-067 [DRAFT-Phase 3.9][P1-HIGH] `_handle_update_analysis_scope` add/remove 同时指定同一 col 静默互覆盖
+
+- **结果影响**：`hagoku/tools/agent_tool_defs.py:209-216`：
+  ```python
+  for sem in semantics:
+      col = str(sem.get("column_name", ""))
+      if col in add_columns:
+          sem["used_in_analysis"] = True
+          updated_add.append(col)
+      if col in remove_columns:
+          sem["used_in_analysis"] = False
+          updated_remove.append(col)
+  ```
+  **若 LLM 误把 A 列同时放进 `add_columns` 和 `remove_columns`（典型 LLM 调用偏差）**：
+  - 第一 if：`used_in_analysis = True` + appended 到 `updated_add`
+  - 第二 if：`used_in_analysis = False` + appended 到 `updated_remove`
+  - 净结果：False（被 remove 覆盖）+ 同一 col 出现在 `added` 和 `removed` 两个返回列表中
+  - **handler 静默不报错** —— 用户/编排层拿到的报告自相矛盾（"已加 A，已去 A"），实际 A 被去
+- **LLM 失去的机会**：用户看到矛盾状态（"added A"和"removed A"同时在返回）无法判断"刚才那次操作 A 到底加进去没"
+- **doctrine 关联**：律 7（语义不确定可见）的边界 — 工具返回的 `added` / `removed` 自相矛盾 = 用户拿到不可信报告
+- **位置**：`hagoku/tools/agent_tool_defs.py:199-224`（特别是 211-216）
+- **F-021 同源模式**：与 `_llm_classify_confirmation` 兜底默认值同主线（"工具返回静默矛盾值"）—— 已修但同类问题在新工具里**复现**
+- **证据**（R 等级）：
+  - `git show e112d02 -- hagoku/tools/agent_tool_defs.py` 完整 diff 可读
+  - 静态分析：两个 `if` 条件互不排斥 → 同一 col 可同时命中 → 写入顺序后覆盖前
+- **复现方式**：
+  ```python
+  result = _handle_update_analysis_scope(
+      {"add_columns": ["Inc1"], "remove_columns": ["Inc1"]},
+      {"column_semantics": [{"column_name": "Inc1", "used_in_analysis": False}]},
+      None
+  )
+  # result = {"added": ["Inc1"], "removed": ["Inc1"], ...}  ← 自相矛盾
+  # ctx 实际：Inc1.used_in_analysis = False  ← 被 remove 静默覆盖
+  ```
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 在循环前 `add_set = set(add_columns)` 算 `intersection = add_set & set(remove_columns)` → raise ValueError（铁律 2 路径 A — 拒绝写入权威结构）；或 (b) handler 显式 last-wins + 在返回里加 `warnings: ["A 同时在 add/remove 中，按 remove 处理"]`
+
+---
+
+### F-2026-06-03-068 [DRAFT-Phase 3.9][P2-MEDIUM] analyst scope 解锁 prompt 硬编码「空值率 < 20%」业务阈值
+
+- **结果影响**：`hagoku/agents/analyst/agent.py:226-234`（commit `745c635`）：
+  ```python
+  system += (
+      "\n\n"
+      "【分析范围解锁】\n"
+      "分析开始时已设定核心关注字段。如果用户要求纳入新字段，先调 get_column_stats 检查数据质量。\n"
+      "数据干净（空值率 < 20%、类型匹配）→ 调 update_analysis_scope 直接纳入。\n"
+      "数据需清洗 → 告知用户：「[列名] 数据质量问题（空值率 X%），建议重置分析从字段理解阶段重跑。若坚持纳入，回复「不管，直接加」」。\n"
+  )
+  ```
+  「空值率 < 20%」是**业务判断阈值** —— 不同行业 / 不同数据质量要求下应不同（如金融领域 1% 就严重，营销调研 30% 可接受）。代码用 prompt 把阈值固定化 —— LLM 即使知道业务应该更严，**prompt 给了 20%** 会被锚定。
+- **LLM 失去的机会**：LLM 看到 prompt 写 20% → 不会主动调高/调低 → 不同业务场景拿同一阈值
+- **doctrine 关联**：与 **F-038**（business.py 业务阈值硬编码）同主线 —— F-038 在代码层被修，但同样的"业务阈值"被搬到 **prompt 层** 重新引入
+- **位置**：`hagoku/agents/analyst/agent.py:226-234`
+- **F-065 漏检面**：守门 6 `_PROMPT_RULE_PATTERNS` 只 3 个正则，"数据干净（X% < Y%）"这种**条件式阈值**不在检测范围
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) prompt 不写具体阈值，让 LLM 调用 `get_column_stats` 拿真实数据后**自己决定**（"空值率高于 X% 时建议重置"——X 由 LLM 看数据决定）；或 (b) 阈值来自业务配置 / 用户场景描述，不在 prompt 静态
+
+---
+
+### F-2026-06-03-069 [DRAFT-Phase 3.9][P2-MEDIUM] `_pending_scope_update` 路径用 `ScoutAgent.__new__(ScoutAgent)` 跳过 init
+
+- **结果影响**：`hagoku/manager/orchestrator.py:3071-3072`：
+  ```python
+  scout_tmp = ScoutAgent.__new__(ScoutAgent)
+  scout_tmp._derive_roles(context)
+  ```
+  `__new__` 创建 ScoutAgent 实例但**跳过 `__init__`**。这意味着：
+  - `scout_tmp.event_bus` / `scout_tmp.llm_config` / `scout_tmp.logger` 等 init 时设置的属性**不存在**
+  - `_derive_roles` 当前实现只读 `context` dict 不依赖上述属性 → 暂时能跑
+  - **未来 _derive_roles 加任何 `self.xxx` 引用 → AttributeError**
+- **doctrine 关联**：Karpathy 原则 2（Simplicity First）的反模式 — 用反射跳过 init 节省开销 = 隐式合约
+- **位置**：`hagoku/manager/orchestrator.py:3066-3090`
+- **commit message 自陈**："ScoutAgent 使用 `__new__` 创建临时实例，避免完整初始化开销" —— 但**没有写为什么不需要 init** —— 是性能优化还是设计选择不明
+- **风险**：
+  - 调试时若 `_derive_roles` 加 `self._emit(...)` 会 AttributeError
+  - 测试时若 mock `ScoutAgent.__init__` 可能与 __new__ 路径不一致
+  - 长期维护者读 `__new__` 不知道"应该跳过 init 哪些副作用"
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 在 `_derive_roles` 函数定义前加显式注释"该函数不依赖 self 任何属性" + 单测覆盖"__new__ 调用不报错"；或 (b) 把 `_derive_roles` 改为 `@staticmethod`（不依赖 self 任何状态）— 与"无 self 依赖"语义对齐
+
+---
+
+### F-2026-06-03-070 [DRAFT-Phase 3.9][P3-OBSERVATION] `AGENT_THINKING` 事件 4cb8b00 新增 emit 但前端契约无显式 test
+
+- **结果影响**：`hagoku/manager/orchestrator.py:3073-3075`（commit `4cb8b00`）：
+  ```python
+  self.event_bus.emit(EventType.AGENT_THINKING, "analyst", {
+      "thought": "分析范围已更新",
+  })
+  ```
+  - AGENT_THINKING 是**已存在的事件类型**（`orchestrator.py:1374, 1385, 1395, 1452, 1708, 1739, 1764, 1780, 1809, 1820, 1830, 1838, 1880, 1891, 1907, 1945, 2074, 2128, 2161, 2228, 2345` 等 20+ 处 emit）—— **F-070 实际不是新事件**
+  - 真正风险：scope 更新后 emit 的"分析范围已更新"thought，**前端 `AnalyzePanel.tsx` 是否消费**？grep 验证（未在本 session 跑完整 grep）：`hooks/useWebSocket.ts:109-111` 已知 `/* ignore malformed messages */` 静默吞
+- **doctrine 关联**：律 7（语义不确定可见）+ F-051 边界（前端静默失败）
+- **位置**：`hagoku/manager/orchestrator.py:3073-3075`（新）+ 前端 `hagoku_web/src/`（待验）
+- **F-070 降级理由**：事件类型已存 20+ 处 → 新增 emit 符合已有模式；真正风险是**前端没显式显示这条新 thought**。如果前端一直在收 AGENT_THINKING 但不区分 "thought" 字段内容，则用户**看不到**"分析范围已更新"提示 —— 但 AGENT_THINKING 本身在 UI 中是否显示是另一个 question
+- **状态**：DRAFT-Phase 3.9（降级 P3 因事件类型已存）
+- **提出日期**：2026-06-03
+- **复现方式**：`grep -nE "AGENT_THINKING|thought" hagoku_web/src/` 看前端是否消费 + 在 hook 里断点
+
+---
+
+### F-2026-06-03-071 [DRAFT-Phase 3.9][P3-OBSERVATION] F-006 修复进度更新 — cleaner.assess 已 raise，但 analyst `_do_*` 4 处仍静默
+
+- **结果影响**：`hagoku/agents/cleaner/agent.py:642-682`（commit `1abbe18`）已修：LLM 5 轮不调 `submit_assessment` → 第 6 轮显式要求 → 仍失败 raise RuntimeError（铁律 2 路径 A）—— **F-006 修复 1/5**
+- **未修 4 处**（F-006 原始定位）：
+  - `hagoku/agents/analyst/agent.py:522-524` `_do_regression` `except Exception: logger.warning; return None`
+  - `hagoku/agents/analyst/agent.py:671-673` `_do_hypothesis_test` 同
+  - `hagoku/agents/analyst/agent.py:783-785` `_do_trend` 同
+  - `hagoku/agents/analyst/agent.py:701-703, 1095-1097` 交叉验证等同
+- **F-006 缓解**：外层 `_run` 在所有 step 都失败时 retry via LLM + raise `NeedUserClarification`（部分失败时**用户不知道**）
+- **doctrine 关联**：律 7（语义不确定可见）的部分失守 —— 部分失败时 4 处 step 静默 return None，用户拿到的 results 列表少一项但 message 不变
+- **位置**：`hagoku/agents/analyst/agent.py:522-524, 671-673, 701-703, 783-785, 1095-1097`
+- **F-025 范式复发**：F-025 已在 §3 末加范围扩大（"analyst 5 + cleaner assess 6 = 6 处"）—— 1abbe18 修了 cleaner assess 1 处 → 还剩 5 处 analyst 静默
+- **状态**：DRAFT-Phase 3.9（追踪进度的 observation，不是新发现）
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：Scribe 的 `_scribe_fallback: True` 标记模式可作参考 —— step 失败时 append `result["_step_fallback"] = True` + user message 标注该步结果不可信
+
+---
+
+### F-2026-06-03-072 [DRAFT-Phase 3.9][P3-OBSERVATION] `d0e8f99` 数据库迁移 try/except OperationalError 静默吞
+
+- **结果影响**：`hagoku/storage/database.py`（commit `d0e8f99`）增量迁移机制：
+  ```python
+  # 列已存在时静默忽略（try/except OperationalError）
+  ```
+  "列已存在"是**预期**的错误，但 catch 后**只静默** —— 没有 logger.debug 记录"已存在"
+- **doctrine 关联**：F-058（silent fail 跨文件总盘）的同模式
+- **位置**：`hagoku/storage/database.py`（具体行未在 Phase 3.9 验证）
+- **辩护**：增量迁移"列已存在"是幂等操作需要静默 —— 与"清空注册表失败"（F-034）等真正的 silent fail 不同
+- **风险**：如果未来 SQLite 版本升级改 error code，或多线程同时跑迁移，**静默吞**会掩盖真实问题
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：`except OperationalError as e: if "duplicate column" in str(e): logger.debug(...) else: raise` —— 区分"预期静默"和"真错"
+
+---
+
+### F-2026-06-03-073 [DRAFT-Phase 3.9][P2-MEDIUM] `730170d` 「不可只用文字回复」反欺骗指令 — 守门 6 漏检"必须/不可/不要"动词
+
+- **结果影响**：`hagoku/manager/orchestrator.py:822-825, 845-846`（commit `730170d`）：
+  ```python
+  "用户限定分析范围（如「只用X、Y」「本次只看」「其他都不参与」「限定为」）→ 必须调 update_field_role，target/features/ignored 三组全给。不要只用文字回复，工具调用是唯一有效操作。"
+  ```
+  「不要只用文字回复」「必须调 X」「不可 Y」是**对 LLM 的反欺骗指令** —— 当 LLM 倾向"说一句话算了"时强制走工具。
+- **doctrine 关联**：F-065（守门 6 `_PROMPT_RULE_PATTERNS` 漏检面）的**具体用例化**
+- **守门 6 当前模式**（`tests/test_doctrine_compliance.py:417-425`）：
+  - `role → value` 映射
+  - `必须判为 X` 强制
+  - `硬性规则` / `判断规则` / `映射规则` 关键字
+  - **漏检**：「不要 X」「不可 X」「必须调 Y」「唯一有效操作是 Z」等**反欺骗 / 强制执行动词**
+- **风险**：
+  - 当前 prompt 用了反欺骗动词 → LLM 被强制走工具 → 系统层**依赖 prompt 而非 schema** 保证 tool call
+  - 若未来 prompt 漏写反欺骗指令 → LLM 可能"用文字回复"蒙混 → 守门 6 检测不到
+  - schema 层应强制 `tool_choice="required"`（OpenAI API 支持）—— 这才是代码层兜底
+- **位置**：`hagoku/manager/orchestrator.py:822-825, 845-846`
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 守门 6 扩展正则加 `必须调|不可只用|唯一有效操作` 等动词；(b) 工具调用点用 `tool_choice="required"`（schema 层强制）替代 prompt 强制
+
+---
+
+### F-2026-06-03-074 [DRAFT-Phase 3.9][P3-OBSERVATION] 知识库机制反复调整（745c635 / b364d1d / 8ec80ef 三方拉扯）
+
+- **结果影响**：3 个 commit 对知识库的处理相互调整：
+  - `745c635` 追加 272 行新知识库条目（scout 推断的字段语义）
+  - `b364d1d` 删除 scout 跨项目知识库检索 + 删除 `_learn_from_results`（-47 行）
+  - `8ec80ef` 在 clear-history 里增加 4 个知识库文件 unlink
+- **模式**：知识库机制本身在**反复调整** —— 写入 → 取消写入 → 清理写入
+- **doctrine 关联**：F-026（_learn_from_results 自动写知识库）的延伸 —— 知识库写侧不稳定
+- **位置**：跨 commit —— `b364d1d` 是当前事实（砍掉写侧），但 `745c635` 之后又可能在 `8ec80ef` clear-history 流程里有"残留知识库"风险
+- **风险**：
+  - 项目里**有 2 套知识库路径**：`hagoku/agents/scout/knowledge.{yaml,db}` + `hagoku/agents/cleaner/knowledge.{yaml,db}` —— clear-history 4 个文件是硬编码 list（与 F-049 同模式但合理）
+  - 若未来加 `reporter/` 或 `analyst/` 知识库 → clear-history 漏删
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 知识库 SSoT：所有 agent 知识库在统一根目录 + clear-history 用 glob `**/knowledge.{yaml,db}` 删除；(b) 考虑把跨项目知识库整体去掉（b364d1d 已示范可行）—— 字段语义归 LLM + 项目记忆已够
+
+---
+
+### F-2026-06-03-075 [DRAFT-Phase 3.9][P3-OBSERVATION] 律 10 / 律 5 邻接 fix 模式复发（36c28f4 / a701e7e / 8ec80ef 三条同主线）
+
+- **结果影响**：F-004 / F-060 修复后（f2404e2），**3 个新 commit 在不同代码路径补 fix**：
+  - `36c28f4` 修 `build_memory_project`（memory.py）—— **读侧过滤**
+  - `36c28f4` 修 `_apply_scout_reply_with_llm` + `_infer_all_semantics`（orchestrator / scout）—— **prompt 强化**
+  - `a701e7e` 修 `_persist_scout_field_updates`（orchestrator）—— **写侧 gating**
+  - `8ec80ef` 修 clear-history（api）—— **清库补漏**
+- **模式**：「字段污染」（用户纠正失效）这一**单一用户可观察坏结果**有 5+ 个代码路径需要修 —— 是 F-053 / F-004 揭示的"律 5 失守"在 4 个不同写/读/清入口反复出现
+- **doctrine 关联**：律 5（状态层单一权威）+ 律 10（当前优先律）+ F-053 / F-004 / F-060 的根因 —— **架构层没有"SSoT 字段污染"专题修**
+- **位置**：跨 commit —— memory.py:570 / orchestrator.py:820-830, 2560-2590, 814-845 / api/server.py:393-407
+- **F-075 升级建议**：3 commit 修后**仍可能有第 6 个路径没修** —— 应做"全仓 grep 所有 column_semantics / column_descriptions 写侧，逐个 audit 是否 gating confirmed_by_user"
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 加守门 7：所有写 `column_descriptions[col]` / `column_semantics[col].update(...)` 必须经过统一 `_safe_update_semantic(col, **kwargs)` helper（gating 集中在 helper）；(b) 单元测试覆盖"5+ 写路径全部 gating confirmed_by_user"
+
+---
+
+### F-2026-06-03-076 [DRAFT-Phase 3.9][P3-OBSERVATION] `bee5e03` 揭示项目无参数顺序契约测试
+
+- **结果影响**：commit `bee5e03` 修「`_infer_all_semantics(context, df)` → `_infer_all_semantics(df, query)`」—— **参数顺序**bug 静态检查能发现但动态才能复现。
+- **F-076 降级理由**：bug 已被修（好），但揭示项目**没有参数顺序的契约测试**（坏）—— 未来加函数时同类 bug 仍可能发生
+- **doctrine 关联**：Karpathy 原则 1（明确需求）+ 项目缺工具
+- **位置**：`hagoku/manager/orchestrator.py`（commit 改动 +2-3 行）
+- **工具可能性**：mypy --strict / pyright / pydantic 类型契约
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：(a) 加 mypy --strict 到 CI（低成本）；(b) 关键函数签名加 `assert` 运行时类型检查（`isinstance(df, pd.DataFrame)`）—— 第一个参数就 fail-fast
+
+---
+
+### F-2026-06-03-077 [DRAFT-Phase 3.9][P3-OBSERVATION] `8ec80ef` clear-history 知识库路径硬编码 4 个文件
+
+- **结果影响**：`hagoku/api/server.py:393-407`（commit `8ec80ef`）：
+  ```python
+  _kb_files = [
+      _kb_root / "scout" / "knowledge.yaml",
+      _kb_root / "scout" / "knowledge.db",
+      _kb_root / "cleaner" / "knowledge.yaml",
+      _kb_root / "cleaner" / "knowledge.db",
+  ]
+  ```
+  硬编码 4 个文件路径 —— 若未来加 `reporter/knowledge.yaml` 或 `analyst/knowledge.db` → **clear-history 漏删**
+- **F-049 范式**：与 F-049（api/server.py `clear_project_history` 硬编码 table list）同模式 —— 都是"调用方硬编码清单"
+- **但 F-077 辩护**：F-049 是 SQL 表可动态枚举（`sqlite_master`）—— 改用 ORM 更好；F-077 是**文件系统路径** —— 改用 glob 更自然
+- **位置**：`hagoku/api/server.py:393-407`
+- **状态**：DRAFT-Phase 3.9
+- **提出日期**：2026-06-03
+- **改进方向**（参考性）：`_kb_files = list(_kb_root.glob("**/knowledge.{yaml,db}"))` —— glob 自然覆盖未来新增
+
+---
+
+### META-2026-06-03-002 [DRAFT-Phase 3.9][P1-HIGH] 78 DRAFT grade 需要用户视角校准 — 报告继续，精度提升
+
+> **本 finding 是病理学家接受用户反馈后，对审计**方法**本身的校准性反思，不是对报告价值的否定。**
+> 用户（2026-06-03）原话："你的报告和发现很重要，我告诉你的目的不是推翻，反而是让你更精准"
+> 反馈三层：
+> - "从测试功能角度，没发现这么多问题"——78 个 DRAFT 中**部分 P-level 通胀**（不是 finding 错，是 grade 偏高）
+> - "早上几个错误是昨天过度修复"——**部分 F-XXX 的"修复"被过度实施**（finding 本身是合理信号，但 fix 改动超出 finding 描述的最小范围）
+> - "让你更精准"——**报告继续，grade 需要校准**
+
+- **结果影响**：
+  - **P-level 通胀风险**：F-067 等 P1 / F-068 / F-069 / F-073 等 P2 标定基于"代码层潜在风险"而非"用户实测触发频次"——**用户实证反向校准后可能普遍降 1 级**
+  - **fix 过度实施**：报告给"改进方向"块后，开发者倾向**完整照抄**——但 finding 描述的可能是**最小可观察风险**而非"必须这样改"——fix 改动超出 finding 描述的最小范围 → 引入新 bug
+  - **守门覆盖率是伪目标**：9/14 → 10/14 → 11/14 的扩张鼓励**"找新违规"** 而非"防严重漏检"
+  - **P-level 单方面判断**：78 个 finding 中仅 13 个有用户/开发者反馈 —— 65 个 DRAFT 的等级是**病理学家个人判断未经校准**
+- **doctrine 关联**：本报告自身 §1.5 失败征兆第 2 条"新 finding 增长率 > 处理率"已部分触达
+- **证据**：
+  - **用户实证（2026-06-03）**：功能测试中**未发现** F-067 / F-068 / F-069 / F-070 / F-073 等 P1/P2 finding 描述的具体问题
+  - **commit 链证据**：36c28f4 / a701e7e / 8ec80ef 三 commit 改同一主线（律 10 / 律 5 邻接）—— **F-075 邻接 fix 模式**已自证
+  - **冲突量化**：F-067 标 P1-HIGH 但用户未在功能测试中触发 → P-level 与用户视角冲突
+- **F-007 类比**：F-007 推论错的（xfail 测试 0 命中）但被 R 等级验证撤回。本 META 是 F-007 模式的**温和版**——F-007 错的是 finding 本身；本 META 错的是**部分 finding 的 grade**（finding 本身仍合理）
+- **状态**：DRAFT-Phase 3.9（**降 P1**——不是 P0 报告自伤，而是 P1 校准需求）
+- **提出日期**：2026-06-03
+- **改进方向**（**标"备选"非"应该"**——让用户/开发者从多个方案选）：
+  1. **【P-level 默认降级】** 所有未触发过实证的 DRAFT finding 标"**待校准**"后缀；新提 finding 默认 grade 降 1 级（如代码层"潜在 P1" → 报告时标"待校准 P2"），待用户/开发者反馈后再升回
+  2. **【改进方向多方案】** "改进方向"块改为**列出 2-3 个备选方案**（A 最小改动 / B 完整重构 / C 不动），由用户/开发者选择 —— 避免照抄单一方案
+  3. **【DRAFT expiry 可选】** 30 天无用户命中 → 自动 RETRACTED（**这是选项不是必须**）
+  4. **【守门度量改"严重 bug 漏检率"】** 这是 §9.4 长期项中的**可选选项**——用户决定
+  5. **【承认"不动也是合理决策"】** 架构层 P0/P1 = 0 已经是胜利。**继续提新 DRAFT 但 grade 默认偏低**比"暂停提新 DRAFT"更对齐用户意图
+- **本 META 与 §1.5 关系**：本 META **不宣告报告失败**——报告继续，**精度提升**。用户原话"让你更精准"已明确方向
+- **关联**：
+  - F-007 RETRACTED——本 META 是 F-007 模式的温和版（grade 校准 vs finding 错）
+  - F-075 P3-OBS——本 META 进一步指出**修复链**也是审计对象
+  - §1.6 报告 vs 病理学家——**报告成功 = 流程成功**——本 META 是精度提升的迭代
 
 ---
 

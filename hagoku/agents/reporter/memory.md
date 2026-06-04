@@ -6,6 +6,11 @@
 
 ```yaml
 reports:
+  test0603:
+  - date: '2026-06-03'
+    headline: ''
+    n_results: 5
+    significant: false
   test_01:
   - date: '2026-05-12'
     headline: Inc1 与 Inc2 呈强正相关 (r=0.999, p=0.0000)

@@ -254,7 +254,6 @@ class AnalystAgent(InteractionMixin):
         phase: str = "full",
         *,
         emit_completed: bool = True,
-        pause_callback: callable | None = None,
     ) -> dict:
         """对话式分析循环。LLM 自由探索，submit_analysis 工具退出。
 
@@ -357,26 +356,6 @@ class AnalystAgent(InteractionMixin):
                     messages.extend(tool_results)
             elif txt:
                 messages.append({"role": "assistant", "content": txt})
-
-            # LLM 输出后暂停等用户交互（开放式对话）
-            if pause_callback:
-                import re as _re2
-                clean_txt = _re2.sub(r"<think>.*?</think>", "", txt or "", flags=_re2.DOTALL).strip()
-                self._emit(EventType.AGENT_THINKING, {
-                    "thought": clean_txt[:220] if clean_txt else "[工具调用]",
-                })
-                display = {
-                    "message": clean_txt or "[工具调用]",
-                    "interaction_revision": round_idx,
-                }
-                user_reply = pause_callback(display)
-                if user_reply == "__HAGOKU_CANCEL__":
-                    break
-                if user_reply and user_reply.strip():
-                    messages.append({"role": "user", "content": user_reply})
-                    # ProjectContext 写入用户反馈
-                    if project_ctx:
-                        project_ctx.add_user_feedback(stage="analyst", revision=round_idx, raw_text=user_reply)
 
             # ProjectContext 写入（每轮）
             if project_ctx:

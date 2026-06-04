@@ -2631,6 +2631,16 @@ class Orchestrator:
         handler = getattr(self, handler_name)
         result = handler(text, self._context)
 
+        # 律 2：raw_text 写入 ProjectContext，保留用户原话
+        project_ctx = self._context.get("_project_context") if self._context else None
+        if project_ctx and text:
+            project_ctx.add_user_feedback(
+                stage=self._stage,
+                revision=getattr(self, '_respond_revision', 0),
+                raw_text=text,
+            )
+            setattr(self, '_respond_revision', getattr(self, '_respond_revision', 0) + 1)
+
         # handler 返回 ("switch", "X") → 切换阶段并递归
         if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":
             self._stage = result[1]

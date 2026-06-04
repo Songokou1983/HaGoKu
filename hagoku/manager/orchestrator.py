@@ -2057,24 +2057,31 @@ class Orchestrator:
                 })
                 context["analysis_purpose"] = self._build_analysis_purpose(context)
 
-                # 保存状态到 self，清理后返回
+                # 保存状态到 self
                 self._stage = "scout"
                 self._context = context
                 self._run_id = run_id
                 self._project_name = project_name
                 self._run_start = run_start
                 self._run_dir = run_dir
-                # 保留后续阶段需要的变量
                 self._cleaning_report = cleaning_report
                 self._cleaned_path_str = cleaned_path_str
                 self._formats = formats
                 self._template = template
-                self._df_clean = df_clean
-                self._df_raw = df_raw
 
+                # 暂停等用户——后续交互由 respond() 的 handler 处理
+                scout_msg = scout_field_review_pause_payload(context)
+                scout_msg["interaction_revision"] = interaction_revision
+                scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+                user_reply_scout = self._pause_and_wait("scout", scout_msg)
+                if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
+
+                # 处理用户回复（纠正或确认），后续由 respond() 接管
+                self._handle_scout_reply(user_reply_scout, context)
                 return {
                     "status": "scout_review",
-                    "message": "字段理解完成，请确认或纠正",
+                    "message": "字段理解完成",
                     "phase": "scout",
                 }
 

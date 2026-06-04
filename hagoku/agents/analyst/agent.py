@@ -307,11 +307,13 @@ class AnalystAgent(InteractionMixin):
 
             # LLM 输出后暂停等用户交互（开放式对话）
             if pause_callback:
+                import re as _re2
+                clean_txt = _re2.sub(r"<think>.*?</think>", "", txt or "", flags=_re2.DOTALL).strip()
                 self._emit(EventType.AGENT_THINKING, {
-                    "thought": txt[:220] if txt else "[工具调用]",
+                    "thought": clean_txt[:220] if clean_txt else "[工具调用]",
                 })
                 display = {
-                    "message": txt or "[工具调用]",
+                    "message": clean_txt or "[工具调用]",
                     "interaction_revision": round_idx,
                 }
                 user_reply = pause_callback(display)

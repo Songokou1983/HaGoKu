@@ -134,6 +134,8 @@ class ReporterAgent(InteractionMixin):
                 pass
         raise RuntimeError("Reporter: LLM 未调用 submit_report 工具")
 
+    _call_llm = _call_llm_with_tools  # 兼容旧调用方
+
     @staticmethod
     def _report_tools() -> list[dict]:
         return [{

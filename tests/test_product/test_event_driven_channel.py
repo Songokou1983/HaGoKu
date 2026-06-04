@@ -207,3 +207,34 @@ def test_G11_律6_raw_text_抵达_LLM(orch):
         assert "Inc1" in captured.get("text", ""), f"handler 收到的 text 应为用户 raw_text，实际: {captured}"
     finally:
         orch._handle_analyst_reply = saved
+
+
+def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
+    """G12：真端到端——_handle_cleaner_reply 调 cleaner.assess(df, ...) 不应抛 ValueError。
+
+    回归保护：line 2582 之前写 `self._df_raw or self._df_clean`，DataFrame 求
+    值抛 ambiguous truth value。修复后改三元表达式，pytest 必须能真调 cleaner
+    handler 一遍（不走 mock），确认 bug 不复发。
+    """
+    import pandas as pd
+    from unittest.mock import patch, MagicMock
+
+    # 写最小 CSV 走真 run() 触发 _df_raw 加载
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("A,B\n1,3\n2,4\n3,5\n", encoding="utf-8")
+
+    result = orch.run(data_path=str(csv_path), query="分析", phase="full")
+    assert result.get("status") == "scout_review"
+    assert isinstance(orch._df_raw, pd.DataFrame)
+    assert isinstance(orch._df_clean, pd.DataFrame)
+
+    # 真调 _handle_cleaner_reply——之前会 ValueError，现在应正常返回
+    try:
+        resp = orch._handle_cleaner_reply("确认清洗策略", orch._context)
+    except ValueError as e:
+        if "ambiguous" in str(e):
+            pytest.fail(f"回归：DataFrame truth value ambiguous 复发: {e}")
+        raise
+
+    assert resp["status"] == "cleaner_review"
+    assert "cleaning_assessment" in resp

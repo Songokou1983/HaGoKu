@@ -2579,7 +2579,8 @@ class Orchestrator:
         cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
         cleaning_rules = cleaner._load_cleaning_rules()
         context["_user_feedback"] = user_input
-        assessment = cleaner.assess(self._df_raw or self._df_clean, context, cleaning_rules)
+        df = self._df_raw if self._df_raw is not None else self._df_clean
+        assessment = cleaner.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 

@@ -2051,124 +2051,22 @@ class Orchestrator:
                 interaction_revision = 0
                 # ── 注入 ProjectContext 到 context ──
                 context["_project_context"] = getattr(self, '_project_context', None)
-                while True:
-                    # 内层：Scout 字段对齐循环
-                    while True:
-                        scout_msg = scout_field_review_pause_payload(context)
-                        scout_msg["interaction_revision"] = interaction_revision
-                        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-                        user_reply_scout = self._pause_and_wait("scout", scout_msg)
-                        if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
-                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                        cmd_result = self._handle_command_if_present(user_reply_scout, "scout", context)
-                        applied_scout = apply_scout_user_field_reply_to_context(
-                            context,
-                            user_reply_scout or "",
-                            llm_client=self.llm_quick_raw,
-                            llm_model=self.config.llm.model_quick or self.config.llm.model,
-                            channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None,
-                        )
-                        # LLM 未产出任何字段更新时记日志（纯可观测性，不做兜底判断）
-                        if user_reply_scout and not applied_scout:
-                            import logging as _logging
 
-                            _log = _logging.getLogger("hagoku.orchestrator")
-                            _log.warning(
-                                "Scout 字段对齐：LLM 未对用户输入产生任何字段更新 | user_input=%.200s",
-                                user_reply_scout,
-                            )
-                        # 用户字段回复：持久化到项目记忆，避免下次重复询问
-                        if applied_scout and self.memory:
-                            self._persist_scout_field_updates(project_name, applied_scout, context)
-                        if user_reply_scout:
-                            self.event_bus.emit(
-                                EventType.USER_INPUT_RECEIVED,
-                                "scout",
-                                scout_user_input_received_payload(
-                                    context,
-                                    user_reply_scout,
-                                    applied_scout,
-                                    interaction_revision,
-                                ),
-                            )
-                        # ── 时序修复（G1）：agent_response 必须在 user_feedback 之后写入 ──
-                        project_ctx = context.get("_project_context")
-                        if project_ctx is not None:
-                            applied_summary = ", ".join(applied_scout) if applied_scout else "无字段更新"
-                            project_ctx.add_agent_response(
-                                stage="scout",
-                                revision=interaction_revision,
-                                content=applied_summary,
-                                snapshot=project_ctx._derive_snapshot(context),
-                            )
-                        # 命令文本注入到上下文，供下一轮 Scout LLM 理解
-                        if cmd_result:
-                            context.setdefault("_pending_command_text", "")
-                            if context["_pending_command_text"]:
-                                context["_pending_command_text"] += "\n"
-                            context["_pending_command_text"] += cmd_result
-                        # 用户决定进入下一阶段
-                        if user_reply_scout and user_reply_scout.strip() == "可以进入下一阶段了":
-                            break
-                        interaction_revision += 1
-
-                    # ── 律 9 重推断触发：结构性变更后重新让 Scout 做语义推断 ──
-                    if context.pop("_pending_reinference", None):
-                        self.event_bus.emit(EventType.AGENT_THINKING, "scout", {
-                            "thought": "字段参与范围已变更，正在重新分析字段关系…",
-                        })
-                        try:
-                            # 重新加载数据以便重推断
-                            from hagoku.tools.data_io import load_data
-                            df_reinfer = load_data(data_path)
-                            scout_reinfer = ScoutAgent(
-                                llm_config=self.config.llm,
-                                event_bus=self.event_bus,
-                                scribe=self.scribe,
-                            )
-                            # 带累积修正重跑 Scout 语义推断（保留用户已确认的描述/显示名）
-                            # ── 保存用户已确认的 used_in_analysis，重推断后恢复 ──
-                            saved_uia = {
-                                str(s.get("column_name", "")): s.get("used_in_analysis")
-                                for s in context.get("column_semantics", [])
-                            }
-                            scout_reinfer._infer_all_semantics(df_reinfer, context.get("query", ""))
-                            # 恢复用户已确认的 used_in_analysis（LLM 重推断可能覆盖）
-                            for s in context.get("column_semantics", []):
-                                col = str(s.get("column_name", ""))
-                                if col in saved_uia and saved_uia[col] is not None:
-                                    s["used_in_analysis"] = saved_uia[col]
-                            scout_reinfer._generate_field_descriptions(context, df_reinfer)
-                            # 重推断后重新同步 target/features
-                            from hagoku.agents.types import derive_target_features
-                            new_targets, new_features = derive_target_features(
-                                context.get("column_semantics", [])
-                            )
-                            context["target"] = new_targets[0] if new_targets else None
-                            context["targets"] = new_targets
-                            context["features"] = new_features
-                            self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
-                                "message": "字段角色重新分析完成",
-                                "phase": "reinference",
-                            })
-                        except Exception as e:
-                            import logging
-                            _rlog = logging.getLogger("hagoku.orchestrator")
-                            _rlog.warning("律 9 重推断失败，沿用原字段理解: %s", e)
-                        # 重推断完成（无论成败），用户已明确要进入下一阶段，直接放行
-
-                    break  # Scout 完成，退出外层循环
-
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
-                    "result_summary": "字段理解完成",
-                })
-                # 保存状态后返回——后续阶段由 respond() handler 驱动
+                # 事件驱动：emit 字段表 + 保存状态 + 返回（不阻塞）
                 self._stage = "scout"
                 self._context = context
                 from hagoku.tools.data_io import load_data as _load
                 _df = _load(data_path)
                 self._df_clean = _df
                 self._df_raw = _df
+                scout_msg = scout_field_review_pause_payload(context)
+                scout_msg["interaction_revision"] = interaction_revision
+                scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+                self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
+                self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
+                    "result_summary": "字段理解完成",
+                })
+
                 return {
                     "status": "scout_review",
                     "message": "字段理解完成",
@@ -2688,7 +2586,15 @@ class Orchestrator:
             ) from e
 
     def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
-        """处理 Scout 字段对齐阶段的用户回复。"""
+        """处理 Scout 字段对齐阶段的用户回复。空输入=首次展示字段表。"""
+        if not user_input or not user_input.strip():
+            scout_msg = scout_field_review_pause_payload(context)
+            scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+            return {
+                "status": "scout_review",
+                "message": "",
+                "field_review": scout_msg.get("field_review"),
+            }
         applied = apply_scout_user_field_reply_to_context(
             context, user_input,
             llm_client=self.llm_quick_raw,
@@ -2696,7 +2602,6 @@ class Orchestrator:
         )
         if applied and self.memory:
             self._persist_scout_field_updates(self._project_name, applied, context)
-        # 无字段更新 → 用户确认 → 切换到 Cleaner
         if not applied:
             return ("switch", "cleaner")
         scout_msg = scout_field_review_pause_payload(context)

@@ -101,7 +101,13 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
     """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
     global _analysis_in_progress
     try:
-        _run_analysis(data_path, query, project_name, phase)
+        result = _shared_orchestrator.run(
+            data_path=data_path, query=query,
+            project_name=project_name, phase=phase,
+        )
+        # run() 截断在 Scout → 自动调一次 respond 启动事件循环
+        if isinstance(result, dict) and result.get("status") == "scout_review":
+            _shared_orchestrator.respond({"text": ""})
     finally:
         with _analysis_busy_lock:
             _analysis_in_progress = False

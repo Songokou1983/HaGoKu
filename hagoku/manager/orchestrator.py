@@ -2156,9 +2156,6 @@ class Orchestrator:
                     # 用户确认进下一阶段
                     if user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了"):
                         break
-                    # 超时无回复 → 自动继续（避免永久阻塞）
-                    if not user_reply_cleaner.strip():
-                        break
                     # 用户修改意见 → 通过 LLM function calling 更新评估
                     context["_user_feedback"] = user_reply_cleaner
                     assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)

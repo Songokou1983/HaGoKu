@@ -296,14 +296,33 @@ class AnalystAgent(InteractionMixin):
 
         messages: list[dict] = [{"role": "system", "content": system}]
         if project_ctx:
-            # 过滤 role=tool 和含 tool_calls 的 assistant——旧 session 的 ID 在新 session invalid
+            # F-085: 旧 session 的 tool_call_id 在新 session 无效（OpenAI 协议绑定），
+            # 但丢弃消息会让 LLM 丢失工具调用上下文。此处将 tool 消息和含 tool_calls
+            # 的 assistant 消息转为可读摘要，让 LLM 知道历史中发生了什么。
+            history_lines: list[str] = []
+            tool_results_log: list[str] = []
             for m in ctx_block.get("messages_history", []):
                 role = m.get("role", "")
                 if role == "tool":
+                    content = m.get("content", "")
+                    if content:
+                        # 截断长工具输出，保留关键信息
+                        short = content[:200].replace("\n", " ")
+                        tool_results_log.append(f"  → 结果: {short}")
                     continue
                 if role == "assistant" and m.get("tool_calls"):
+                    tool_names = [
+                        tc.get("function", {}).get("name", "?")
+                        for tc in m.get("tool_calls", [])
+                    ]
+                    tool_results_log.append(f"[调用了 {'、'.join(tool_names)}]")
                     continue
                 messages.append(m)
+            if tool_results_log:
+                summary = "【上轮分析工具调用摘要】\n" + "\n".join(tool_results_log[-20:])
+                history_lines.append(summary)
+            if history_lines:
+                messages.insert(1, {"role": "system", "content": "\n".join(history_lines)})
 
         intro = f"分析目标：{query}\n可用列：{', '.join(df.columns)}\n数据行数：{len(df)}"
         messages.append({"role": "user", "content": intro})
@@ -311,8 +330,12 @@ class AnalystAgent(InteractionMixin):
         from ...llm.client import create_raw_client
         client = create_raw_client(self.llm_config)
 
-        for round_idx in range(30):
-            if round_idx >= 25:
+        # F-086: 轮数上限依据——典型分析场景（探索→检验→结论）通常 8-15 轮，
+        # 30 轮提供 2x 安全余量。LLM 未在时限内调 submit_analysis 时硬中断。
+        max_rounds = int(getattr(self.llm_config, 'analyst_max_rounds', None) or 30)
+        warn_at = max_rounds - 5
+        for round_idx in range(max_rounds):
+            if round_idx >= warn_at:
                 messages.append({"role": "system", "content": "（已分析多轮，请准备 submit_analysis 提交发现）"})
 
             resp = client.chat.completions.create(
@@ -369,7 +392,7 @@ class AnalystAgent(InteractionMixin):
                 )
 
         if findings is None:
-            raise RuntimeError("Analyst: 30 轮未提交 submit_analysis，分析中断")
+            raise RuntimeError(f"Analyst: {max_rounds} 轮未提交 submit_analysis，分析中断")
 
         if findings:
             context["findings"] = findings

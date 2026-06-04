@@ -19,6 +19,11 @@ This repository contains **one primary project**: `hagoku/`（主项目）。其
 **绝对禁止 `git revert`、`git reset`、删除已实现功能、或任何形式的代码回退。**
 修复只能前向——定位问题行，改那一行，不改其他地方。删错了才允许回滚，且必须用户明确许可。
 
+### 铁律 -2（用户确认前禁止改代码）
+
+**发现任何问题后，先报告根因和方案，等用户说"修"或"改"才能动代码。**
+可以先读文件、查 dump、分析原因——但 `edit_file` / `write_file` / `multi_edit` 必须在用户明确许可后执行。
+
 ```
 ls -lt ~/.hagoku/llm_dumps/ | head -5
 ```

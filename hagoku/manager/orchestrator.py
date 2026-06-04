@@ -965,6 +965,7 @@ def _apply_scout_reply_with_llm(
                 dn_raw = str(args.get("display_name", "") or "").strip()
                 role_raw = str(args.get("suggested_role", "") or "").strip()
                 uia = args.get("used_in_analysis")
+                ev_raw = str(args.get("evidence", "") or "").strip()
 
                 # 对每个解析到的列应用相同的更新（支持范围展开如 Bos1-3）
                 for c in resolved:
@@ -1002,6 +1003,11 @@ def _apply_scout_reply_with_llm(
                                 s["used_in_analysis"] = bool(uia)
                                 applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
                                 updated = True
+                    if ev_raw:
+                        for s in semantics:
+                            if str(s.get("column_name", "")) == c:
+                                s["evidence"] = ev_raw
+                                break
                     if updated:
                         for s in semantics:
                             if str(s.get("column_name", "")) == c:

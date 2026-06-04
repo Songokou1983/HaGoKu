@@ -235,6 +235,7 @@ agent_tools.register(Tool(
             "description": {"type": "string", "description": "业务含义说明"},
             "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
             "used_in_analysis": {"type": "boolean"},
+            "evidence": {"type": "string", "description": "参与分析的理由，与 used_in_analysis 保持一致"},
         },
         "required": ["column_name"],
     },

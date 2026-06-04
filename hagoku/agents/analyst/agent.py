@@ -187,6 +187,59 @@ class AnalystAgent(InteractionMixin):
 
         path.write_text(content, encoding="utf-8")
 
+    def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
+        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, findings or None)"""
+        import json as _json
+        from hagoku.tools.registry import agent_tools as _agt
+        from ...llm.client import create_raw_client
+
+        if df is None:
+            df = getattr(self, '_df', None)
+        client = create_raw_client(self.llm_config)
+        _tools = _agt.to_openai("analyst")
+
+        resp = client.chat.completions.create(
+            model=self.llm_config.model, messages=messages,
+            temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
+        )
+        msg = resp.choices[0].message
+        txt = (msg.content or "").strip()
+        tc_list = getattr(msg, "tool_calls", None)
+        findings = None
+
+        if tc_list:
+            tool_results = []
+            for tc in tc_list:
+                fn = tc.function
+                args = _json.loads(fn.arguments) if fn.arguments else {}
+                result = _agt.dispatch(fn.name, args, context, df)
+                if fn.name == "submit_analysis":
+                    findings = result
+                    break
+                tc_id = getattr(tc, "id", "") or ""
+                tool_results.append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": _json.dumps(result, ensure_ascii=False, default=str),
+                })
+            if tool_results:
+                assistant_block = {"role": "assistant", "content": txt or None}
+                assistant_block["tool_calls"] = [
+                    {"id": getattr(tc, "id", ""), "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tc_list if getattr(tc, "function", None)
+                ]
+                messages.append(assistant_block)
+                messages.extend(tool_results)
+        elif txt:
+            messages.append({"role": "assistant", "content": txt})
+
+        return {
+            "messages": messages,
+            "text": txt,
+            "submit_analysis": findings is not None,
+            "findings": findings,
+        }
+
     def _emit(self, event_type: EventType, data: dict | None = None) -> None:
         self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 

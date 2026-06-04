@@ -199,6 +199,8 @@ async def ws_handler(ws: WebSocket) -> None:
                 query = payload.get("query", "").strip()
                 project_name = payload.get("project_name", "default")
                 phase = payload.get("phase", "full")
+                if phase in ("analyst_first", "cleaning_first"):
+                    phase = "full"
                 import logging
                 logging.getLogger("hagoku.ws").warning(
                     "WS analyze 收到: query=%r project=%s phase=%s payload_keys=%s",
@@ -264,25 +266,17 @@ async def ws_handler(ws: WebSocket) -> None:
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})
             elif cmd == "respond":
-                # 用户回复 Agent 的暂停消息，解除分析线程阻塞
                 payload = msg.get("payload", {})
-                payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
-                user_text = payload.get("text", payload.get("user_input", "")).strip()
-                import logging
-                logging.getLogger("hagoku.ws").warning(
-                    "WS respond 收到: text=%r payload_keys=%s full_payload=%s",
-                    user_text, list(payload.keys()),
-                    str(payload),
-                )
+                user_text = payload.get("text", "").strip()
+                if not user_text:
+                    continue
                 orch = _shared_orchestrator
                 if orch is None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})
-                elif not orch._is_paused:
-                    await ws.send_json({"type": "error", "message": "No agent is waiting for input"})
                 else:
                     try:
-                        orch.unblock(str(user_text))
-                        await ws.send_json({"type": "ack", "cmd": "respond", "message": "已收到回复，继续分析…"})
+                        result = orch.respond({"text": user_text, "stage": getattr(orch, '_stage', '')})
+                        await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})
             else:

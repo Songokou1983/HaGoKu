@@ -4,8 +4,12 @@
 
 ## 核心理念
 
-通道是事件驱动的对话。`_pause_and_wait` 卡线程 = 代码在替 LLM 等用户。
-通道应该是：LLM 产出 → 事件通知 → 函数返回 → 用户输入到达 → 下一段函数执行。
+通道是事件驱动的对话。`_pause_and_wait` 卡线程应在非必要阶段消除。
+
+**Scout 是唯一例外**：前端渲染字段表需要 `USER_INPUT_REQUESTED` 暂停 payload，
+`run()` 返回时 ws_handler 无法拿到 user_reply → 此处保留 `_pause_and_wait` 是前端契约约束，不是通道缺陷。
+
+其余阶段（Cleaner/Analyst/Reporter）走事件驱动：`respond()` → handler → LLM → route_to 切换阶段。
 
 ## 当前问题（重写：敌是编排层串行阻塞，不是内层循环）
 
@@ -20,8 +24,10 @@ Scout 多轮对齐已拆到 `scout.respond()`，Analyst 用了 `pause_callback` 
 ### 1. 架构
 
 ```
-analyze → run() → Scout 推断 → emit 字段表 → 返回（线程释放）
-respond(用户输入) → 根据当前阶段 + LLM 的 route_to tool_call 决定下一步
+# Scout: 保留 _pause_and_wait（前端契约需要 USER_INPUT_REQUESTED 暂停 payload）
+analyze → run() → Scout 推断 → _pause_and_wait("scout") → 处理回复 → 返回
+# 其余阶段: 事件驱动
+respond(用户输入) → handler → LLM → route_to 切换阶段
 ```
 
 阶段切换由 **LLM 自己决定**：`route_to(stage="cleaner")` / `route_to(stage="scout")` / 不调 tool 留在当前阶段。

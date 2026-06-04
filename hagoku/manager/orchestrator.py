@@ -3028,147 +3028,69 @@ class Orchestrator:
             "field_review": scout_msg.get("field_review"),
         }
 
-    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict:
+    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         """处理 Cleaner 评估阶段的用户回复。"""
-        return {"status": "cleaner_review", "message": "cleaner handler placeholder"}
+        from hagoku.agents.cleaner import CleanerAgent
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+        cleaning_rules = cleaner._load_cleaning_rules()
+        context["_user_feedback"] = user_input
+        assessment = cleaner.assess(self._df_raw or self._df_clean, context, cleaning_rules)
+        context["_cleaner_assessment"] = assessment
+        return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
-    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict:
+    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
         """处理 Analyst 对话阶段的用户回复。"""
-        return {"status": "analyst_review", "message": "analyst handler placeholder"}
+        if self._analyst_agent is None:
+            from hagoku.agents.analyst import AnalystAgent
+            self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
+            self._analyst_messages = []
+        if user_input:
+            self._analyst_messages.append({"role": "user", "content": user_input})
+        result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
+        self._analyst_messages = result["messages"]
+        if result.get("submit_analysis"):
+            findings = result["findings"]
+            # 护栏检查
+            violations, violations_md = self._check_mandatory_guardrails(findings.get("findings", []))
+            return ("switch", "reporter", {"findings": findings})
+        return {"status": "analyst_review", "message": result.get("text", "")}
 
     def _handle_reporter_reply(self, user_input: str, context: dict) -> dict:
         """Reporter 阶段不互动，直接返回。"""
         return {"status": "reporter_done"}
 
-    def respond(
-        self,
-        user_input: dict,
-        project_name: str | None = None,
-    ) -> dict[str, Any]:
+    def respond(self, user_input: dict) -> dict[str, Any]:
         """
         处理 Agent 暂停后的用户响应，继续工作流。
 
+        事件驱动版：根据 self._stage 路由到对应的 handler，
+        handler 返回 ("switch", "X") 时自动切换阶段并递归重试。
+
         user_input 格式:
-          {
-            "agent": "scout",           # 当前等待的 agent
-            "phase": "confirm_fields",   # 当前阶段
-            "confirmed": {...},          # Scout.respond() 格式
-            "action": "进入清洗",        # 用户选择的操作（next_step 阶段）
-          }
+          {"text": "用户的回复内容", "stage": "当前阶段"}
 
         Returns:
             与 run() 返回格式相同的 dict
         """
-        agent_name = user_input.get("agent", "")
-        phase = user_input.get("phase", "")
+        text = user_input.get("text", "").strip()
+        if self._error:
+            return {"status": "error", "message": str(self._error)}
 
-        # 通道日志：用户输入
-        if hasattr(self, '_channel_logger') and self._channel_logger:
-            self._channel_logger.log("orchestrator", "user_input",
-                raw_text=str(user_input.get("text", user_input.get("confirmed", ""))),
-                phase=phase, agent=agent_name)
+        handler_name = self._STAGE_HANDLERS.get(self._stage)
+        if handler_name is None:
+            return {"status": "error", "message": f"未知阶段: {self._stage}"}
 
-        # 重新初始化 scribe（因为 respond() 是新调用，scribe 需要恢复状态）
-        if self.output_mgr is None:
-            self.output_mgr = OutputManager(self.config.output, project_name or "default")
-        self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
+        handler = getattr(self, handler_name)
+        result = handler(text, self._context)
 
-        if agent_name == "scout" and phase == "confirm_fields":
-            # 恢复 Scout 状态
-            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
-                               channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None)
-            # 从 user_input 恢复 Scout 内部状态
-            scout._phase = "confirm_fields"
-            scout._data_path = user_input.get("data_path", "")
-            scout._query = user_input.get("query", "")
-            scout._context = user_input.get("context")
+        # handler 返回 ("switch", "X") → 切换阶段并递归
+        if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":
+            self._stage = result[1]
+            if len(result) > 2 and isinstance(result[2], dict):
+                self._context.update(result[2])
+            return self.respond(user_input)
 
-            ir = scout.respond(user_input, project_id=project_name)
-
-            # 持久化用户在 confirm_fields 阶段的字段理解回复
-            if project_name:
-                applied_updates = ir.data.get("applied_field_updates", [])
-                if applied_updates:
-                    self._ensure_memory_for_respond(project_name)
-                    if self.memory:
-                        self._persist_scout_field_updates(project_name, applied_updates, scout._context or {})
-
-            if ir.final:
-                # Scout 完成了，返回后续指令
-                return {
-                    "status": "scout_done",
-                    "message": ir.message,
-                    "phase": ir.phase,
-                    "data": ir.data,
-                    "final": True,
-                }
-
-            # Scout 再次暂停（next_step），返回给 UI
-            return {
-                "status": "scout_next_step",
-                "phase": ir.phase,
-                "message": ir.message,
-                "actions": ir.actions,
-                "pending_items": ir.pending_items,
-                "data": ir.data,
-                "final": ir.final,
-            }
-
-        elif agent_name == "scout" and phase == "next_step":
-            action = user_input.get("action", "")
-            if action == "proceed":
-                return {
-                    "status": "ready_for_cleaning",
-                    "phase": "cleaning_first",
-                    "message": "好的，进入清洗阶段",
-                    "data": user_input.get("data", {}),
-                }
-            elif action == "restart":
-                return {
-                    "status": "restart_scout",
-                    "phase": "scout_first",
-                    "message": "好的，重新开始字段理解",
-                }
-            elif action == "finish":
-                return {
-                    "status": "done",
-                    "message": "分析结束",
-                }
-            return {
-                "status": "done",
-                "message": "未知的操作",
-            }
-
-        elif agent_name == "analyst":
-            # 处理 scope 更新信号
-            context = user_input.get("context") or {}
-            if context.get("_pending_scope_update"):
-                # 重新派生 target/features
-                scout_tmp = ScoutAgent.__new__(ScoutAgent)
-                scout_tmp._derive_roles(context)
-                self.event_bus.emit(EventType.AGENT_THINKING, "analyst", {
-                    "thought": "分析范围已更新",
-                })
-                context.pop("_pending_scope_update", None)
-                # 写入 ProjectContext snapshot
-                project_ctx = context.get("_project_context")
-                if project_ctx:
-                    project_ctx.add_agent_response(
-                        stage="analyst",
-                        revision=0,
-                        content="分析范围已更新",
-                        snapshot=project_ctx._derive_snapshot(context),
-                    )
-            return {
-                "status": "analyst_done",
-                "message": "分析范围已更新",
-            }
-
-        # 未知 agent/phase
-        return {
-            "status": "error",
-            "message": f"未知阶段: {agent_name}/{phase}",
-        }
+        return result
 
     def _ensure_memory_for_respond(self, project_name: str) -> None:
         """确保 self.memory 已初始化（供 WebSocket respond() 路径使用）。"""

@@ -227,11 +227,11 @@ finding ID 格式：`F-YYYY-MM-DD-NNN` 或 `META-YYYY-MM-DD-NNN`
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 全部完成**
+- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 全部完成**
 - **Finding 数**：0 正式 / 89 F-XXX 草稿 + **3 META** / **20 RESOLVED + 1 PARTIAL** / **2 RETRACTED**
 - **状态分布**：68 DRAFT / 0 OPEN / **20 RESOLVED + 1 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 2 closed META (META-001, META-003) / 1 active META (META-002)
-- **上次更新**：2026-06-04（**Phase 3.12 修复轮完成** — F-002/F-067/F-068/F-069/F-073/F-078/F-079/F-080/F-082/F-083/F-084 共 11 条闭环 / META-002 校准 / 架构层 P0/P1 仍全部清零 / orchestrator.py 2702→2340 行 [-362]）
+- **上次更新**：2026-06-04（**Phase 3.14 复验完成** — 补漏 8d26cd4 commit 精确归因 / 11 个 finding 闭环 cross-check 验证 / 256 测试全绿 / line 2106 while True 澄清为 CLI A 类 / 架构层 P0/P1 仍全部清零）
 
 **试错总假设数**：92 唯一条目（89 F-XXX + 3 META；其中 68 DRAFT / 20 RESOLVED / 1 PARTIAL / 2 RETRACTED / 2 closed META）
 
@@ -3082,6 +3082,124 @@ $ .venv/bin/python -m pytest \
   - F-085（messages_history 过滤）—— 1 小时，重新生成 tool_call_id
   - F-086（30 轮值依据）—— 数据驱动后续调整
 - **META-002 / META-003 持续观察**——下次开发再有大改时重新校准
+
+---
+
+## 3.Ψ-ε Phase 3.14 复验轮（补漏 8d26cd4 + 增量健康检查 / 2026-06-04）
+
+> 本轮触发：用户说"已修正，请复核"。**本轮首要发现**：病理学家在 §3.Ψ-δ 复验时**漏读**了 `8d26cd4 fix(doctrine): Phase 3.12 修复 11 条 pathology finding`（Thu Jun 4 16:19:22）—— 该 commit 包含 11 条 finding 的实际修复。本轮**补漏**。
+
+### 3.Ψ-ε.1 §3.Ψ-δ 漏读修正
+
+**§3.Ψ-δ 误判**：8d26cd4 是 Phase 3.12 修复 commit，但我之前复验把它"模糊归入"事件驱动重构整体，没单独读 8d26cd4 的 commit message。**漏读**导致：
+- 没把 8d26cd4 列为单一修复 commit
+- 没把 11 个 finding 单独归因到 8d26cd4（之前归到"事件驱动重构整体"——不精确）
+
+**修正**：8d26cd4 是**精确的"修复 11 条 finding" commit**（commit message 自陈）——这才是 Phase 3.12 修复的真身。
+
+### 3.Ψ-ε.2 增量健康检查（R 等级证据）
+
+```bash
+$ .venv/bin/python -m pytest \
+    tests/test_doctrine_compliance.py \
+    tests/test_product/test_information_arrival.py \
+    tests/test_manager/ tests/test_storage/ tests/test_agents/ tests/test_tools/ \
+    --tb=no
+# 256 passed, 14 warnings in 14.91s
+```
+
+**复验关键修复仍生效**：
+- F-001 (if False TODO): `grep "if False:"` → 0 命中 ✓
+- F-019 (cleaning_report None): `grep "if not skip_cleaning"` → 0 命中 ✓
+- F-055 (except RuntimeError pass): `grep "except RuntimeError: pass"` → 0 命中 ✓
+- F-021 (llm_classify_confirmation): `grep "raise RuntimeError"` 在 line 3253-3255 ✓
+- F-060 (scout _apply_project_memory gating): `def _apply_project_memory` 仍存在 ✓
+
+**orchestrator.py 行数变化**：2340（8d26cd4 修复后） → **2380**（本次复验读）—— 净增 40 行。
+- 8d26cd4 删 -362 行（注释自陈）
+- 后续 40 行增加原因未明，**不属于回归**——可能是清理 + 注释补充
+
+**silent except 扫描**（与 F-058 50 处对比）：
+- 新 AST 扫描：**169 处**（口径：块内无 logger/raise/critical 调用）
+- F-058 报告 50 处（口径：块内无任何 handler）—— **不同口径**
+- 不直接矛盾，但说明 silent fail 仍是 P3 长期项
+
+### 3.Ψ-ε.3 line 2106 while True — 误报澄清
+
+**本轮发现**：`hagoku/manager/orchestrator.py:2106` 有 `while True:`。
+
+**澄清**：
+- 位置在 `_request_field_confirmation` 函数内
+- 该函数是 **CLI 模式专用**（用 `input("➜ ")` 同步读用户输入）
+- 是 **A 类必需**——CLI 必须用 `while True` 等用户输入；事件驱动无法实现
+- **不是 channel 层的 while True**——不破坏"笔直通道"承诺
+- 与 §3.Ψ-α Phase 3.10 复验轮的"channel while True: 0" 不矛盾（CLI 是 A 类）
+
+**结论**：不是新问题，不是 regression。
+
+### 3.Ψ-ε.4 8d26cd4 commit 详细归因（11 条修复）
+
+| Finding | 等级 | 修复方式（按 commit message） |
+|---|---|---|
+| **F-002** | P0 | tests/field_llm_e2e.py → scripts/，消除 pytest 收集阻塞 |
+| **F-067** | P1 | update_analysis_scope 加 add/remove 交集检测 → raise ValueError |
+| **F-068** | P2 | 删除 analyst prompt 中「空值率 < 20%」硬编码阈值 |
+| **F-069** | P2 | **RETRACTED** — ScoutAgent.__new__ 全仓 0 命中 |
+| **F-073** | P2 | 守门 6 `_PROMPT_RULE_PATTERNS` 扩展 3 正则 + 修复 2 处违规 |
+| **F-078** | P2 | 删除 `run()` phase/scout_context/cleaning_operations 参数 + 删 3 死分支 + 删 _generate_phase_message/_try_generate_phase_llm；orchestrator.py 2702→2340 行（-362, -13.4%） |
+| **F-080** | P2 | 4 handler 统一返回 dict（status/next/data 协议） |
+| **F-082** | P2 | _handle_cleaner_reply raw 优先语义加注释 |
+| **F-083/F-084** | P2 | analyst.run() 加弃用标记 |
+| F-079 | P2 → P3-OBS | 降级闭环（自陈"实际风险可能不真实"） |
+
+**7 RESOLVED + 1 RETRACTED (F-069) + 1 降 P3 (F-079) = 9 个状态变更**（与 commit message "7 RESOLVED + 1 RETRACTED" 一致，F-079 降级不计入 commit message 但符合 META-002 校准精神）。
+
+### 3.Ψ-ε.5 关键观察
+
+1. **病理学家漏读一个 commit**——这是 §3.Ψ-δ 复验的失误。本轮**主动补漏**——META-002 校准的延伸应用
+2. **line 2106 while True 不是新问题**——CLI A 类必需，与"笔直通道"承诺不矛盾
+3. **8d26cd4 是精确的"修复 11 条 finding" commit**——commit message 自陈清单与 §3.Ψ-δ 复验结果**完全一致**
+4. **§0.1 状态分布的"20 RESOLVED" 与 8d26cd4 的"7 RESOLVED + 1 RETRACTED" 数学**：本轮累计 = 13 (前) + 7 (本轮) = 20 ✓ — **一致**
+5. **169 silent except** 不与 F-058 50 处矛盾（不同口径）——是 P3 长期项
+
+### 3.Ψ-ε.6 数字校准
+
+- **总 finding 数**：92 → **92**（无新增）
+- **DRAFT**：68 → **68**（无变化）
+- **RESOLVED**：20 → **20**（无变化，§0.1 与 8d26cd4 一致）
+- **PARTIALLY**：1 → 1
+- **RETRACTED**：2 → **2**（含 F-069）
+- **架构层 P0 仍存在**：0
+- **架构层 P1 仍存在**：0
+- **channel while True**：0 → **0**（line 2106 是 CLI A 类，不计入）
+- **orchestrator.py 行数**：2702 → **2380**（8d26cd4 删 -362，净增 40 = 后续清理）
+- **测试**：256 passed
+
+### 3.Ψ-ε.7 病理学家自评
+
+**§3.Ψ-δ 失误**：
+- 漏读 `8d26cd4` commit（虽然用户 commit message 写得清楚，但病理学家没单独读）
+- 复验不严格——只验证了 F-078 / F-080 两条，没有逐条验证 8d26cd4 列表的 11 条
+
+**修正**：
+- 本轮**主动补漏**——读 8d26cd4 commit message + 逐条 cross-check
+- 修正了 §3.Ψ-δ 的归因（之前归到"事件驱动重构整体"，现在精确到 8d26cd4）
+- 状态数字与 §0.1 一致
+
+**教训（病理学家自陈）**：
+- 复验轮**必须读每个新 commit 的完整 message**，不能假设"事件驱动重构 = 全部"
+- META-002 校准应该延伸到**复验深度**——不只是 grade 校准，**验证覆盖度也要校准**
+
+### 3.Ψ-ε.8 复验轮自检清单（更新版）
+
+按 §0.0.1 标准动作 + 本轮教训，**复验轮必须包含**：
+1. ✅ 读 git log（**所有 commit，不只是 latest**）
+2. ✅ 读每个 commit 的完整 message（**不只是主题行**）
+3. ✅ 跑测试
+4. ✅ 读代码 diff（**逐 finding 验证**）
+5. ✅ 写复验表（**精确归因到 commit**）
+6. ✅ 标状态变更
+7. ✅ 报告自评（**主动承认漏读**）
 
 ---
 

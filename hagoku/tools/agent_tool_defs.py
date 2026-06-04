@@ -537,3 +537,30 @@ agent_tools.register(Tool(
     handler=_handle_update_analysis_scope,
     agents=["analyst"],
 ))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 流程路由工具（所有 Agent 可用）
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """LLM 表达流程意图。留在当前阶段或切换到下一阶段。"""
+    stage = args.get("stage")
+    reason = args.get("reason", "")
+    return {"stage": stage, "reason": reason}
+
+
+agent_tools.register(Tool(
+    name="route_to",
+    description="表达流程意图。不传 stage 留在当前阶段（继续对话）；传 stage 切换阶段（scout/cleaner/analyst/reporter）",
+    parameters={
+        "type": "object",
+        "properties": {
+            "stage": {"type": "string", "enum": ["scout", "cleaner", "analyst", "reporter"]},
+            "reason": {"type": "string", "description": "切换原因"},
+        },
+        "required": [],
+    },
+    handler=_handle_route_to,
+    agents=["scout", "cleaner", "analyst", "reporter"],
+))

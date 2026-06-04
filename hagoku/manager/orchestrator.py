@@ -1333,6 +1333,23 @@ class Orchestrator:
         self._cancel_lock = threading.Lock()
         self._cancel_requested_flag = False
 
+        # 事件驱动状态机字段
+        self._stage: str = ""
+        self._df_clean: pd.DataFrame | None = None
+        self._df_raw: pd.DataFrame | None = None
+        self._analyst_messages: list[dict] = []
+        self._analyst_agent: Any = None
+        self._error: Exception | None = None
+
+    def _reset_run_state(self) -> None:
+        """新一轮分析前清理上次残留。"""
+        self._stage = ""
+        self._df_clean = None
+        self._df_raw = None
+        self._analyst_messages = []
+        self._analyst_agent = None
+        self._error = None
+
     @property
     def llm_deep(self) -> Any:
         """深度推理客户端（懒初始化）"""
@@ -1749,6 +1766,9 @@ class Orchestrator:
             "thought": f"🔍 收到，启动分析，让我来{self._describe_intent(parsed_intent)}",
         })
 
+        if self._error:
+            self._reset_run_state()
+
         # 2. 创建分析计划
         plan = self._create_plan(query, parsed_intent=parsed_intent)
         # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
@@ -2017,454 +2037,39 @@ class Orchestrator:
                 interaction_revision = 0
                 # ── 注入 ProjectContext 到 context ──
                 context["_project_context"] = getattr(self, '_project_context', None)
-                while True:
-                    # 内层：Scout 字段对齐循环
-                    while True:
-                        scout_msg = scout_field_review_pause_payload(context)
-                        scout_msg["interaction_revision"] = interaction_revision
-                        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-                        user_reply_scout = self._pause_and_wait("scout", scout_msg)
-                        if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
-                            return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                        cmd_result = self._handle_command_if_present(user_reply_scout, "scout", context)
-                        applied_scout = apply_scout_user_field_reply_to_context(
-                            context,
-                            user_reply_scout or "",
-                            llm_client=self.llm_quick_raw,
-                            llm_model=self.config.llm.model_quick or self.config.llm.model,
-                            channel_logger=self._channel_logger if hasattr(self, '_channel_logger') else None,
-                        )
-                        # LLM 未产出任何字段更新时记日志（纯可观测性，不做兜底判断）
-                        if user_reply_scout and not applied_scout:
-                            import logging as _logging
 
-                            _log = _logging.getLogger("hagoku.orchestrator")
-                            _log.warning(
-                                "Scout 字段对齐：LLM 未对用户输入产生任何字段更新 | user_input=%.200s",
-                                user_reply_scout,
-                            )
-                        # 用户字段回复：持久化到项目记忆，避免下次重复询问
-                        if applied_scout and self.memory:
-                            self._persist_scout_field_updates(project_name, applied_scout, context)
-                        if user_reply_scout:
-                            self.event_bus.emit(
-                                EventType.USER_INPUT_RECEIVED,
-                                "scout",
-                                scout_user_input_received_payload(
-                                    context,
-                                    user_reply_scout,
-                                    applied_scout,
-                                    interaction_revision,
-                                ),
-                            )
-                        # ── 时序修复（G1）：agent_response 必须在 user_feedback 之后写入 ──
-                        project_ctx = context.get("_project_context")
-                        if project_ctx is not None:
-                            applied_summary = ", ".join(applied_scout) if applied_scout else "无字段更新"
-                            project_ctx.add_agent_response(
-                                stage="scout",
-                                revision=interaction_revision,
-                                content=applied_summary,
-                                snapshot=project_ctx._derive_snapshot(context),
-                            )
-                        # 命令文本注入到上下文，供下一轮 Scout LLM 理解
-                        if cmd_result:
-                            context.setdefault("_pending_command_text", "")
-                            if context["_pending_command_text"]:
-                                context["_pending_command_text"] += "\n"
-                            context["_pending_command_text"] += cmd_result
-                        # 用户决定进入下一阶段
-                        if user_reply_scout and user_reply_scout.strip() == "可以进入下一阶段了":
-                            break
-                        interaction_revision += 1
-
-                    # ── 律 9 重推断触发：结构性变更后重新让 Scout 做语义推断 ──
-                    if context.pop("_pending_reinference", None):
-                        self.event_bus.emit(EventType.AGENT_THINKING, "scout", {
-                            "thought": "字段参与范围已变更，正在重新分析字段关系…",
-                        })
-                        try:
-                            # 重新加载数据以便重推断
-                            from hagoku.tools.data_io import load_data
-                            df_reinfer = load_data(data_path)
-                            scout_reinfer = ScoutAgent(
-                                llm_config=self.config.llm,
-                                event_bus=self.event_bus,
-                                scribe=self.scribe,
-                            )
-                            # 带累积修正重跑 Scout 语义推断（保留用户已确认的描述/显示名）
-                            # ── 保存用户已确认的 used_in_analysis，重推断后恢复 ──
-                            saved_uia = {
-                                str(s.get("column_name", "")): s.get("used_in_analysis")
-                                for s in context.get("column_semantics", [])
-                            }
-                            scout_reinfer._infer_all_semantics(df_reinfer, context.get("query", ""))
-                            # 恢复用户已确认的 used_in_analysis（LLM 重推断可能覆盖）
-                            for s in context.get("column_semantics", []):
-                                col = str(s.get("column_name", ""))
-                                if col in saved_uia and saved_uia[col] is not None:
-                                    s["used_in_analysis"] = saved_uia[col]
-                            scout_reinfer._generate_field_descriptions(context, df_reinfer)
-                            # 重推断后重新同步 target/features
-                            from hagoku.agents.types import derive_target_features
-                            new_targets, new_features = derive_target_features(
-                                context.get("column_semantics", [])
-                            )
-                            context["target"] = new_targets[0] if new_targets else None
-                            context["targets"] = new_targets
-                            context["features"] = new_features
-                            self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
-                                "message": "字段角色重新分析完成",
-                                "phase": "reinference",
-                            })
-                        except Exception as e:
-                            import logging
-                            _rlog = logging.getLogger("hagoku.orchestrator")
-                            _rlog.warning("律 9 重推断失败，沿用原字段理解: %s", e)
-                        # 重推断完成（无论成败），用户已明确要进入下一阶段，直接放行
-
-                    break  # Scout 完成，退出外层循环
+                scout_msg = scout_field_review_pause_payload(context)
+                scout_msg["interaction_revision"] = interaction_revision
+                scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+                user_reply_scout = self._pause_and_wait("scout", scout_msg)
+                if user_reply_scout == HAGOKU_CANCEL_PAUSE_TOKEN:
+                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
                 self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
                     "result_summary": "字段理解完成",
                 })
                 context["analysis_purpose"] = self._build_analysis_purpose(context)
 
-                # 4. Cleaner: 评估 → 确认/修改（多轮对齐，同 Scout 模式）
-                self.event_bus.emit(EventType.AGENT_STARTED, "cleaner", {
-                    "goal": "评估数据清洗需求",
-                })
-                self.event_bus.emit(EventType.AGENT_THINKING, "cleaner", {
-                    "thought": "正在评估数据清洗需求…",
-                })
-                cleaning_rules = cleaner._load_cleaning_rules()
-                from hagoku.tools.data_io import load_data
-                _raw_df_for_cleaner = load_data(data_path)
+                # 保存状态到 self，清理后返回
+                self._stage = "scout"
+                self._context = context
+                self._run_id = run_id
+                self._project_name = project_name
+                self._run_start = run_start
+                self._run_dir = run_dir
+                # 保留后续阶段需要的变量
+                self._cleaning_report = cleaning_report
+                self._cleaned_path_str = cleaned_path_str
+                self._formats = formats
+                self._template = template
+                self._df_clean = df_clean
+                self._df_raw = df_raw
 
-                cleaning_revision = 0
-                assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
-                while cleaning_revision < 10:  # 最多 10 轮交互，防止无限循环
-                    context["_cleaner_assessment"] = assessment
-                    cleaner_msg = {
-                        "message": "",
-                        "cleaning_assessment": assessment,
-                        "interaction_revision": cleaning_revision,
-                    }
-                    user_reply_cleaner = self._pause_and_wait("cleaner", cleaner_msg)
-                    if user_reply_cleaner == HAGOKU_CANCEL_PAUSE_TOKEN:
-                        return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-                    # 用户确认进下一阶段
-                    if user_reply_cleaner and user_reply_cleaner.strip() in ("确认继续", "可以进入下一阶段了"):
-                        break
-                    # 用户修改意见 → 通过 LLM function calling 更新评估
-                    context["_user_feedback"] = user_reply_cleaner
-                    assessment = cleaner.assess(_raw_df_for_cleaner, context, cleaning_rules)
-                    if not assessment.get("columns"):
-                        assessment = context.get("_cleaner_assessment", assessment)
-                    cleaning_revision += 1
-                else:
-                    # 10 轮上限 → 强制继续
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": "⚠️ 清洗评估已达 10 轮上限，自动进入下一阶段",
-                    })
-
-                df_clean = _raw_df_for_cleaner
-                df_raw = _raw_df_for_cleaner
-                cleaning_report = None
-                cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-                save_data(df_clean, cleaned_path)
-                cleaned_path_str = str(cleaned_path)
-                raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
-                save_data(df_raw, raw_path)
-                raw_path_str = str(raw_path)
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
-                    "result_summary": f"评估完成，{len(assessment.get('columns',[]))} 列",
-                })
-
-                if self._is_cancel_requested():
-                    return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-
-                # F-019 修复：原 cleaning_report = None 使后续 review block 永远不可达。
-                # assess 循环已处理用户交互（确认/修改），此处无需重复清洗审核。
-                ir = cleaning_report.impact_rate if cleaning_report else 0.0
-                self.event_bus.emit(
-                    EventType.AGENT_COMPLETED,
-                    "cleaner",
-                    {"result_summary": f"影响率 {ir:.1%}（用户已确认）"},
-                )
-                if df_clean is not None:
-                    cleaned_path = self.output_mgr.data_dir / f"cleaned_{run_id}.parquet"
-                    save_data(df_clean, cleaned_path)
-                    cleaned_path_str = str(cleaned_path)
-
-                    # 同时保存原始数据副本，供 Analyst 按分析类型选用（P1-3）
-                    if df_raw is not None:
-                        raw_path = self.output_mgr.data_dir / f"raw_{run_id}.parquet"
-                        save_data(df_raw, raw_path)
-                        raw_path_str = str(raw_path)
-                    else:
-                        raw_path_str = cleaned_path_str
-                else:
-                    cleaned_path_str = ""
-                    raw_path_str = ""
-                    self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
-                        "verdict": "warning",
-                        "detail": "数据清洗未成功，尝试使用原始数据",
-                    })
-
-                # 保存 resume 状态（包含 raw 路径）
-                self.memory.save_resume_state(
-                    project_name, "cleaned",
-                    cleaned_path=cleaned_path_str,
-                    raw_path=raw_path_str if df_clean is not None else "",
-                    context=context, run_id=run_id,
-                )
-
-                # 5. 质量检查
-                if cleaning_report:
-                    self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
-                        "verdict": "pass" if cleaning_report.impact_rate < self.config.manager.cleaning_impact_warning else "warning",
-                        "detail": f"清洗影响率 {cleaning_report.impact_rate:.1%}",
-                    })
-
-            # 注入上游摘要（Cleaner → Analyst）
-            upstream_note_analyst = self._get_upstream_summary("analyst")
-            if upstream_note_analyst:
-                context["upstream_summary"] = upstream_note_analyst
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": "📋 已注入 Cleaner 上游摘要给 Analyst",
-                })
-
-            # 确保 analysis_purpose 仍然在 context 中
-            if "analysis_purpose" not in context:
-                context["analysis_purpose"] = self._build_analysis_purpose(context)
-
-            # 6. Analyst: 统计分析
-            if df_clean is None or context is None:
-                # 尝试加载原始数据继续
-                if context is not None and context.get("data_path"):
-                    try:
-                        from ..tools.data_io import load_data
-                        df_clean = load_data(context["data_path"])
-                        self.event_bus.emit(EventType.QUALITY_CHECK, "manager", {
-                            "verdict": "warning",
-                            "detail": "使用原始数据继续分析",
-                        })
-                    except Exception:
-                        raise RuntimeError(
-                            f"无法获取有效数据（context.data_path={context['data_path']}），分析无法继续"
-                        )
-                else:
-                    raise RuntimeError(
-                        "Pipeline error: 缺少有效数据和上下文，无法继续分析。"
-                    )
-            self.event_bus.emit(EventType.AGENT_STARTED, "analyst", {
-                "goal": "对话式数据分析",
-            })
-            # 将 orchestrator 的暂停机制注入 Analyst，实现 LLM 主导的开放式对话
-            def _analyst_pause(display: dict) -> str:
-                return self._pause_and_wait("analyst", display)
-
-            findings = analyst.run(df_clean, context, emit_completed=False, pause_callback=_analyst_pause)
-
-            if self._is_cancel_requested():
-                return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
-
-            n_findings = len(findings.get("findings", []))
-            self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst",
-                {"result_summary": f"发现 {n_findings} 条结论"},
-            )
-
-            # 7. 统计护栏（编排层）：违规时交 LLM 分析 + 用户决策
-            # findings→results 兼容：旧代码期望 list，新 findings 是 dict
-            _analyst_results = findings.get("findings", []) if isinstance(findings, dict) else []
-
-            # F-020 修复：output_path / duration_ms 在 violations block 内被引用，
-            # 但原代码在 block 之后才赋值（line 2337/2364），导致 NameError。
-            # 提前初始化，violations block 可直接使用。
-            output_path = str(run_dir / "output" / "report.html")
-            duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
-
-            violations, violations_md = self._check_mandatory_guardrails(
-                _analyst_results,
-            )
-            if violations:
-                # 护栏失败本质是统计问题 — 交给 LLM 解释风险并让用户决策
-                decision = self._handle_mandatory_violations(
-                    violations, _analyst_results,
-                    run_dir,
-                )
-                # 保存 findings（供审计）
-                for result in _analyst_results:
-                    self.db.save_finding({
-                        "id": result["result_id"],
-                        "run_id": run_id,
-                        "analysis_type": result["analysis_type"],
-                        "question": result["question"],
-                        "conclusion_plain": result.get("conclusion_plain", ""),
-                        "conclusion_statistical": result.get("conclusion_statistical", ""),
-                        "p_value": result.get("p_value"),
-                        "effect_size": result.get("effect_size"),
-                        "effect_type": result.get("effect_type", ""),
-                        "confidence_interval": result.get("confidence_interval"),
-                        "significance": result.get("significance", ""),
-                    })
-                # 把护栏违规信息注入 plan，让 Reporter 必要时在报告中标注
-                if isinstance(plan, dict):
-                    plan.setdefault("extra", {})
-                    plan["extra"]["guardrails_violations"] = {
-                        "decision_snapshot": decision,
-                        "violations_md": violations_md,
-                    }
-                self.memory.save_resume_state(
-                    project_name, "analyzed",
-                    cleaned_path=cleaned_path_str,
-                    context=context, run_id=run_id,
-                )
-                self.output_mgr.create_latest_symlink(run_dir)
-                if self.project_mgr.exists(project_name):
-                    self.project_mgr.record_run(project_name)
-                events_path = run_dir / "events.jsonl"
-                self.event_bus.save_to_file(events_path)
-                self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
-                    "duration": f"{duration_ms / 1000:.1f}s",
-                    "token_count": sum(
-                        e.data.get("token_count", 0)
-                        for e in self.event_bus.events
-                        if e.event_type == EventType.TOOL_RESULT and "token_count" in e.data
-                    ),
-                    "output_path": output_path,
-                    "guardrails_blocked": True,
-                    "run_id": run_id,
-                    "project": project_name,
-                })
                 return {
-                    "status": "guardrails_blocked",
-                    "message": "统计护栏强制级未通过，已跳过 Reporter。说明见 GUARDRAILS_BLOCKED.md",
-                    "run_id": run_id,
-                    "project": project_name,
-                    "output_path": output_path,
-                    "n_results": len(_analyst_results),
-                    "duration_ms": duration_ms,
+                    "status": "scout_review",
+                    "message": "字段理解完成，请确认或纠正",
+                    "phase": "scout",
                 }
-
-            # 注入上游摘要（Analyst → Reporter）
-            upstream_note_reporter = self._get_upstream_summary("reporter")
-            if upstream_note_reporter:
-                context["upstream_summary"] = upstream_note_reporter
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": "📋 已注入 Analyst 上游摘要给 Reporter",
-                })
-
-            # 确保 analysis_purpose 仍然在 context 中
-            if "analysis_purpose" not in context:
-                context["analysis_purpose"] = self._build_analysis_purpose(context)
-
-            # 7b. Reporter: 生成报告
-            output_path = str(run_dir / "output" / "report.html")
-            reporter.run(
-                results=_analyst_results,
-                context=context,
-                cleaning_summary=cleaning_report.to_dict() if cleaning_report else {},
-                project_name=project_name,
-                query=query,
-                output_path=output_path,
-                formats=formats or self.config.output.formats,
-                template=template,
-                df=df_clean,
-                business_metrics=[],
-            )
-
-            # 8. 保存运行元数据
-            run_meta = {
-                "run_id": run_id,
-                "project": project_name,
-                "query": query,
-                "plan": plan,
-                "n_results": len(_analyst_results),
-                "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
-                "output_path": output_path,
-            }
-            self.output_mgr.save_run_meta(run_dir, run_meta)
-
-            # 9. 更新数据库
-            duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
-            self.db.complete_run(run_id, duration_ms=duration_ms, output_path=output_path)
-
-            # 保存 findings（兼容新旧 Analyst 格式）
-            for i, result in enumerate(_analyst_results):
-                finding_id = result.get("result_id") or result.get("id") or f"finding_{run_id}_{i}"
-                self.db.save_finding({
-                    "id": finding_id,
-                    "run_id": run_id,
-                    "analysis_type": result.get("analysis_type", ""),
-                    "question": result.get("question") or result.get("title", ""),
-                    "conclusion_plain": result.get("conclusion_plain") or result.get("detail", ""),
-                    "conclusion_statistical": result.get("conclusion_statistical", ""),
-                    "p_value": result.get("p_value"),
-                    "effect_size": result.get("effect_size"),
-                    "effect_type": result.get("effect_type"),
-                    "confidence_interval": result.get("confidence_interval"),
-                    "significance": result.get("significance"),
-                })
-
-            # 10. 学习 + 导出 progress.yaml
-            learned = self.memory.learn_from_run(project_name, context, _analyst_results, cleaning_report)
-            if learned > 0:
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": f"🧠 学习了 {learned} 条记忆，下次分析将自动应用",
-                })
-
-            # 保存 resume 状态
-            self.memory.save_resume_state(
-                project_name, "reported",
-                cleaned_path=cleaned_path_str,
-                context=context, run_id=run_id,
-            )
-
-            # 11. 创建 latest 链接
-            self.output_mgr.create_latest_symlink(run_dir)
-
-            # 11.5 记录到项目管理器（更新运行计数等）
-            if self.project_mgr.exists(project_name):
-                self.project_mgr.record_run(project_name)
-
-            # 12. 事件日志
-            events_path = run_dir / "events.jsonl"
-            self.event_bus.save_to_file(events_path)
-
-            # 13. 发射完成事件
-            self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
-                "duration": f"{duration_ms / 1000:.1f}s",
-                "token_count": sum(
-                    e.data.get("token_count", 0)
-                    for e in self.event_bus.events
-                    if e.event_type == EventType.TOOL_RESULT and "token_count" in e.data
-                ),
-                "output_path": output_path,
-                "run_id": run_id,
-                "project": project_name,
-            })
-
-            # ── 通道日志：run 结束写摘要 ──
-            if hasattr(self, '_channel_logger') and self._channel_logger:
-                semantics = (context or {}).get("column_semantics", [])
-                true_n = sum(1 for s in semantics if s.get("used_in_analysis"))
-                false_n = sum(1 for s in semantics if s.get("used_in_analysis") is False)
-                self._channel_logger.summary(
-                    query_arrived=bool(query),
-                    uia_breakdown=f"{true_n} true / {false_n} false",
-                    warnings=[])
-
-            return {
-                "status": "completed",
-                "message": f"✅ 分析完成！共生成 {len(_analyst_results)} 项发现，报告已保存。",
-                "run_id": run_id,
-                "project": project_name,
-                "output_path": output_path,
-                "n_results": len(_analyst_results),
-                "duration_ms": duration_ms,
-            }
 
         except Exception as e:
             duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)

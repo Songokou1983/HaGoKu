@@ -1816,9 +1816,8 @@ class Orchestrator:
                 scout_msg["interaction_revision"] = interaction_revision
                 scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
                 self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
-                    "result_summary": "字段理解完成",
-                })
+                # AGENT_COMPLETED 不在此处发——Scout 在用户确认前不应标记"完成"
+                # 用户确认进入下一阶段时由 _handle_scout_reply 切 Cleaner 后发
 
                 return {
                     "status": "scout_review",
@@ -2233,6 +2232,9 @@ class Orchestrator:
             }
         # 纯确认（进入下一阶段）→ 不调 LLM，直接切 Cleaner
         if user_input.strip() in ("可以进入下一阶段了", "确认", "好的", "OK", "ok", "继续", "下一步", "进入下一阶段"):
+            self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
+                "result_summary": "字段理解完成",
+            })
             return ("switch", "cleaner")
 
         applied = apply_scout_user_field_reply_to_context(
@@ -2243,6 +2245,9 @@ class Orchestrator:
         if applied and self.memory:
             self._persist_scout_field_updates(self._project_name, applied, context)
         if not applied:
+            self.event_bus.emit(EventType.AGENT_COMPLETED, "scout", {
+                "result_summary": "字段理解完成",
+            })
             return ("switch", "cleaner")
         scout_msg = scout_field_review_pause_payload(context)
         scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)

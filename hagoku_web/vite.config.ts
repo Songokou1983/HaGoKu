@@ -9,6 +9,7 @@ const API_PROXY = {
   "/ws": {
     target: "ws://127.0.0.1:8000",
     ws: true,
+    timeout: 0,  // 禁用代理超时，LLM 调用可能耗时 2+ 分钟
   },
 } as const;
 

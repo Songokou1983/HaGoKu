@@ -132,6 +132,83 @@ if raw and not resp.choices[0].message.tool_calls:
 .venv/bin/python -m pytest --tb=short -q
 ```
 
+### 铁律 4（决策位置律）
+
+任何决策（行为、阈值、命名、状态、策略）必须只在**代码**或 **LLM** 中存在一次。代码里定义的决策 LLM 不可推翻；LLM 的决策代码不可预判。**绝不允许在两边各存一份。**
+
+**❌ 反例**：
+- `ctx["target"] = "revenue"`（LLM 写）+ `INTERNAL_TARGET_MAP = {"收入": "revenue"}`（代码同时存）— 两端各存
+- LLM 推字段语义 + 代码维护字段语义缓存 — 双权威
+
+**✅ 唯一合法写法**：
+- LLM 推字段语义 → 写入 `ctx["fields"]`，代码只读不存平行
+- 单一权威结构，所有派生视图从权威读
+
+**检验**：`grep -rn "INTERNAL_.*MAP\|.*_CACHE.*= {" hagoku/ tests/`
+
+### 铁律 5（通道洁净律）
+
+代码的预计算、默认值、兜底必须 **LLM 看得见**。LLM 看不见的"代码善意" = 剥夺 LLM 独立判断的可能。
+
+**❌ 反例**：
+- 代码预解析列类型**但不写入 prompt** — LLM 失去独立判断的可能
+- prompt 里有 `default_value: "revenue"` — LLM 看到默认就偷懒
+- except 兜底返回 `{intent: "未知"}` — LLM 答错时用"未知"填空
+
+**✅ 唯一合法写法**：
+- 预计算了 → prompt 里写"我已计算 X，置信度 Y"，LLM 选择信不信
+- 没默认 → prompt 里写"暂无"，让 LLM 决定怎么办
+
+**检验**：`grep -rn "default_value\|默认值\|fallback.*=" hagoku/agents/`
+
+### 铁律 6（行为中性律）
+
+必要**结构**收窄合法；非必要**语义**收窄非法。LLM 的结构输出必须能解析（Pydantic 合法），但不能对含义预分支、不能缓存 LLM 决策、不能为 LLM 的特定行为写降级路径。
+
+**❌ 反例**：
+- `if intent == "预测": method = "regression"` — 对 LLM 输出的**语义**分流
+- `@lru_cache` 装饰 `llm_call` — 缓存 LLM 决策，剥夺重新评估的可能
+- 为"LLM 答错 X"专门写降级分支 — 预判 LLM 行为
+
+**✅ 唯一合法写法**：
+- Pydantic schema 解析 LLM 输出的**结构** — 必要结构收窄合法
+- LLM 决策不缓存，每次重新评估
+- 解析逻辑只对**结构**分支，不对**含义**分支
+
+**检验**：`grep -rn "if.*intent\|if.*category\|@lru_cache.*llm\|@cache.*llm" hagoku/`
+
+### 铁律 7（失败在场律）
+
+LLM 失败必须**对用户可见**。代码不得自动重试到"看起来对了"。**用户看得见 AI 不会答 = 用户信任 AI 会的时刻。**
+
+**❌ 反例**：
+- `for attempt in range(3): try: return llm_call(); except: continue` — 静默重试
+- `except: return fallback_default` — 兜底返回默认值
+- LLM 失败时返回 cached 上次结果
+
+**✅ 唯一合法写法**：
+- `raise RuntimeError(f"AI 这次没答：{e}")` — 让用户看见
+- 写 `ctx["_last_understanding_failure"] = {"raw": ..., "stage": ...}` — 标记给下游看
+- UI 层展示失败状态
+
+**检验**：`grep -rn "except.*pass\|except.*continue\|except.*return.*default" hagoku/`
+
+### 铁律 8（状态显化律）
+
+影响 LLM 决策的状态必须在 prompt 中**显式**出现。LLM 看不见的状态 = 对 LLM 不存在的状态 = 代码偷影响。
+
+**❌ 反例**：
+- 全局变量影响 LLM 行为但不注入 prompt（`self.mode = "aggressive"` 注入 LLM 但不告诉它这个值）
+- 代码按某字段筛选后才传 LLM（`df = df[fields]`，没告诉 LLM 字段被筛过）
+- 缓存的"上次分析结论"作为 LLM 上下文但不标注
+
+**✅ 唯一合法写法**：
+- 影响决策的状态 → 显式写在 prompt（"已筛选字段：X"、"当前模式：Y"）
+- 不影响决策的纯技术状态（cache_key、lock_id、request_id）→ 不显式
+- 任何 LLM 决策路径上**没有**"代码偷偷影响"的状态
+
+**检验**：`grep -rn "self\.\(mode\|strategy\|state\|context\)" hagoku/agents/`，确认所有相关状态都已注入 prompt
+
 ### 常见错误模式（每次都会犯，请警惕）
 
 | 你的本能 | 正确做法 |

@@ -118,10 +118,10 @@ class RefinementParser:
     def _parse_via_llm(self, feedback: str, context: dict[str, Any] | None) -> RefinementIntent:
         """通过 LLM function calling 解析用户意图。"""
         from hagoku.agents.types import build_submit_refinement_schema
-        from hagoku.config import LLMConfig
+        from hagoku.config import HaGoKuConfig
         from hagoku.llm.client import create_raw_client
 
-        config = LLMConfig()
+        config = HaGoKuConfig.load().llm
         client = create_raw_client(config)
 
         schema = build_submit_refinement_schema()

@@ -66,10 +66,10 @@ def parse_query(query: str, context_hints: dict[str, Any] | None = None) -> Quer
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====
 def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[str, Any]:
     """调用 LLM 做意图识别，返回结构化 dict。"""
-    from hagoku.config import LLMConfig  # pragma: no cover
+    from hagoku.config import HaGoKuConfig
     from hagoku.llm.client import create_raw_client  # pragma: no cover
 
-    config = LLMConfig()
+    config = HaGoKuConfig.load().llm
     client = create_raw_client(config)
 
     system_prompt = """你是数据分析意图识别专家。根据用户问题，输出一个 JSON 对象：

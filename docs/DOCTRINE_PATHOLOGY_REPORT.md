@@ -227,11 +227,11 @@ finding ID 格式：`F-YYYY-MM-DD-NNN` 或 `META-YYYY-MM-DD-NNN`
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）+ **Phase 3.15 降级轮**（用户实证"功能混乱"——9 条降 PARTIALLY）+ **Phase 3.16 复验轮**（META-004 教训应用——R 等级逐行 grep 验证，5 条 RESOLVED 升级 + 架构层 P0 重新清零）
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 / 3.15 / 3.16 全部完成**
-- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **4 META**（META-004 降为 P3-OBS）/ **15 RESOLVED + 6 PARTIAL** / **2 RETRACTED**
-- **状态分布**：65 DRAFT / 0 OPEN / **15 RESOLVED + 6 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 3 closed META (META-001, META-003, META-004) / 1 active META (META-002) / **架构层 P0 = 0（清零——META-004 已闭环）**
-- **上次更新**：2026-06-04（**Phase 3.16 复验完成** — META-004 教训应用：R 等级 grep 5 条真修复 / F-078/F-082/F-084/F-085/F-086 升级 RESOLVED / F-080 仍 PARTIALLY（签名改但 body 没改——type-lying 是 P1）/ 架构层 P0 重新清零）
+- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮** + **Phase 3.14 复验轮**（补漏 8d26cd4）+ **Phase 3.15 降级轮**（用户实证 9 条降 PARTIALLY）+ **Phase 3.16 复验轮**（META-004 教训应用 5 条升级）+ **Phase 3.17 复验轮**（4 条 PARTIALLY 真修复——F-002/F-067/F-073/F-080 全闭环 + 架构层 P0/P1 全清零）
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 / 3.15 / 3.16 / 3.17 全部完成**
+- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **4 META**（META-004 降 P3-OBS）/ **19 RESOLVED + 2 PARTIAL** / **2 RETRACTED**
+- **状态分布**：65 DRAFT / 0 OPEN / **19 RESOLVED + 2 PARTIAL**（F-003 历史 / F-068 留待下次）/ 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 3 closed META (META-001, META-003, META-004) / 1 active META (META-002) / **架构层 P0 = 0 / P1 = 0（双清零）**
+- **上次更新**：2026-06-04（**Phase 3.17 复验完成** — 4 条 PARTIALLY 真修复 / F-080 降 P1 → P2（type-lying 消除）/ 260 测试全绿（+4 TDD）/ 架构层 P0/P1 双清零）
 
 **试错总假设数**：92 唯一条目（89 F-XXX + 3 META；其中 68 DRAFT / 20 RESOLVED / 1 PARTIAL / 2 RETRACTED / 2 closed META）
 
@@ -3391,6 +3391,122 @@ $ .venv/bin/python -m pytest \
 - **F-002 / F-067 / F-073** 仍需补完（如果还想闭环）
 - **F-083 自陈修复"加弃用标记"**——若要严格 R 等级通过，需真正加 `@deprecated`
 - **META-004 已闭环**——架构层 P0 重新清零
+
+---
+
+## 3.Ψ-η Phase 3.17 复验轮（用户"提交了"后 / 2026-06-04）
+
+> 本轮触发：用户说"提交了"（即开发者按上轮提示词补完 4 条 PARTIALLY 修复）。
+> **严格 META-004 教训应用**——第 1 个 tool call 是 R 等级 grep 验证，2 步才读 commit message。
+> **本轮核心结论**：4 条 PARTIALLY 全部真修复 + 4 个新 TDD 测试（256 → 260 passed）+ 1 P1 降回 P2（type-lying 消除）。
+
+### 3.Ψ-η.1 复验方法（R 等级逐行 grep）
+
+```bash
+# 第 1 步：grep 验证 4 条 PARTIALLY
+$ grep -nE "def _handle_(scout|cleaner|analyst|reporter)_reply" hagoku/manager/orchestrator.py
+# 2223: def _handle_scout_reply(...) -> dict | tuple:
+# 2262: def _handle_cleaner_reply(...) -> dict | tuple:
+# 2287: def _handle_analyst_reply(...) -> dict | tuple:
+# 2304: def _handle_reporter_reply(...) -> dict:    ← 唯一 dict（reporter 无 switch 需求）
+# ✓ F-080 签名恢复 dict | tuple 协议——type-lying 消除
+
+$ grep -cE "return \(\"switch\"" hagoku/manager/orchestrator.py
+# 4（保留——tuple 协议是 dev 选择的修复方式 B）
+# ✓ 与签名一致
+
+$ find . -name "field_llm_e2e.py"
+# ./scripts/field_llm_e2e.py
+# ✓ F-002 修复——从 tests/ 移到 scripts/
+
+$ grep -nE "conflict = add_set & remove_set|raise ValueError.*conflict" hagoku/tools/agent_tool_defs.py
+# 208: add_set = set(add_columns)
+# 209: remove_set = set(remove_columns)
+# 210: conflict = add_set & remove_set
+# 211-215: raise ValueError
+# ✓ F-067 修复——交集检测 + raise
+
+$ grep -cE "PROMPT_RULE_PATTERN" tests/test_doctrine_compliance.py
+# 2 (定义 + 引用)
+# 实际 patterns 6 个：原 3 + F-073 扩展 3（反欺骗动词 + 结论式动词 + 条件式阈值）
+# ✓ F-073 修复
+
+# 第 2 步：跑测试
+$ pytest ... --tb=no
+# 260 passed (从 256 → 260, +4 TDD 测试)
+```
+
+### 3.Ψ-η.2 一表看完（4 条 PARTIALLY 状态更新）
+
+| Finding | 状态变更 | R 等级证据 |
+|---|---|---|
+| **F-080** (P1 → **P2**) | PARTIALLY → ✅ **RESOLVED** | 3/4 handler 改回 `-> dict | tuple` 签名（reporter 仍 `-> dict` 因为无 switch 需求）；body 4 处 `return ("switch", ...)` tuple 保留；**签名与 body 一致**——type-lying 消除 |
+| **F-002** (P0) | PARTIALLY → ✅ **RESOLVED** | `field_llm_e2e.py` 从 `tests/` 移到 `scripts/`——pytest 收集不再阻塞 |
+| **F-067** (P1) | PARTIALLY → ✅ **RESOLVED** | `_handle_update_analysis_scope:207-215` add/remove 交集检测 + raise ValueError 真实现 |
+| **F-073** (P2) | PARTIALLY → ✅ **RESOLVED** | `_PROMPT_RULE_PATTERNS` 从 3 扩到 6（反欺骗动词 + 结论式动词 + 条件式阈值） |
+| F-068 (P2) | ⚠️ 仍 PARTIALLY | 无新 commit 触达（dev 这次只修了 4 条） |
+| F-003 (P0) | ⚠️ 仍 PARTIALLY | 历史 PARTIAL（Phase 3.7）未触达 |
+| F-079 / F-081 / F-085 / F-086 | P3-OBS / RESOLVED | 状态不变（已 RESOLVED 或 P3-OBS） |
+
+### 3.Ψ-η.3 关键观察
+
+1. **F-080 修复方式选 B 备选**——dev 选了"签名改回 `dict | tuple`"而非"body 改 dict 协议"。**这是合理选择**：
+   - tuple 协议已与 respond() line 2330 完整对接
+   - 改 body 协议要重写 respond() 处理逻辑，scope 更大
+   - 签名与 body 一致 = **代码自陈准确**（满足 CLAUDE.md 铁律 0）
+   - 因此 F-080 **降 P1 → P2**（type-lying 解决，回归 P2 中位水平）
+2. **F-067 修复方式精确**——add/remove 交集检测 `add_set & remove_set` + raise ValueError（铁律 2 路径 A）——F-067 自陈的改进方向被精确实现
+3. **F-073 守门 6 扩展 3 正则**——真在 `tests/test_doctrine_compliance.py:440-445` 实现了：
+   - 反欺骗强制动词（"不要只用文字""必须调 X"）
+   - 结论式动词（"设为 X""默认 X""应该 X""优先 X"）
+   - 条件式阈值（"空值率 < 20%""ratio > 3x"）
+4. **F-002 移动文件**——`field_llm_e2e.py` 从 `tests/` 移到 `scripts/`。**潜在副作用**：任何依赖这个文件作为测试的代码会失效（但 grep 没发现 import，应该是独立脚本）
+5. **测试 256 → 260（+4）**——4 个新 TDD 测试覆盖 4 条修复。**F-080 + F-067 + F-002 + F-073 各有 1 个新测试**
+6. **架构层 P1 = 0**（F-080 降 P1 → P2）——**架构层完全清白**（P0=0 / P1=0）
+7. **dev 没有重蹈 8d26cd4 覆辙**——commit message 写得短（"fix(F-002/F-067/F-073): R 等级验证完成，PARTIALLY → RESOLVED"）但实际代码 R 等级验证通过
+
+### 3.Ψ-η.4 数字校准
+
+- **总 finding 数**：92 → 92
+- **DRAFT**：65 → 65（不变）
+- **RESOLVED**：15 → 19（**+4**：F-002 / F-067 / F-073 / F-080）
+- **PARTIALLY**：6 → 2（**-4**：F-002 / F-067 / F-073 / F-080 升级；**仅剩 F-003 + F-068**）
+- **RETRACTED**：2 → 2
+- **架构层 P0**：0 → 0（META-004 已闭环）
+- **架构层 P1**：1 → **0**（F-080 降 P1 → P2）
+- **测试**：256 → **260**（+4 TDD）
+
+### 3.Ψ-η.5 测试结果
+
+```bash
+$ .venv/bin/python -m pytest \
+    tests/test_doctrine_compliance.py \
+    tests/test_product/test_information_arrival.py \
+    tests/test_manager/ tests/test_storage/ tests/test_agents/ tests/test_tools/ \
+    --tb=no
+# 260 passed, 14 warnings in 21.81s
+```
+
+**4 个新 TDD 测试** 来自 commit `36245ac`（F-002/F-067/F-073）+ commit `7fc698e`（F-080）—— 4 个新测试对应 4 条修复。
+
+### 3.Ψ-η.6 病理学家自评（META-004 教训应用持续）
+
+**本轮严格按 §3.Ψ-ζ 教训执行**：
+1. ✅ 第 1 个 tool call 是 R 等级 grep 验证
+2. ✅ 4 条 PARTIALLY 逐条验证（每条都列 line citation）
+3. ✅ 找到 4 个新 TDD 测试（260 vs 256）
+4. ✅ F-080 修复方式选 B 备选是**合理**——签名与 body 一致 = type-lying 消除
+5. ✅ 没有"信任 commit message 自陈"失误
+
+**META-004 教训**在本轮已**完全消化**——R 等级 grep 是默认动作。
+
+### 3.Ψ-η.7 给用户/开发者的下一步
+
+- **架构层 P0/P1 全清零**（再次）——**已无 P0/P1 架构失守**
+- **剩余 PARTIALLY 仅 2 条**（F-003 历史 + F-068 留待下次）
+- **DRAFT 65 条**——多数 P3-OBS / observation，按需选修
+- **若要 F-068 闭环**：删 analyst prompt 中"空值率 < 20%"硬编码（F-068 自陈修复方式）
+- **若要 F-003 闭环**：field semantics 5 处平行存储架构清理（长期项）
 
 ---
 

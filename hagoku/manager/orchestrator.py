@@ -2557,6 +2557,10 @@ class Orchestrator:
                 "message": "",
                 "field_review": scout_msg.get("field_review"),
             }
+        # 纯确认（进入下一阶段）→ 不调 LLM，直接切 Cleaner
+        if user_input.strip() in ("可以进入下一阶段了", "确认", "好的", "OK", "ok", "继续", "下一步", "进入下一阶段"):
+            return ("switch", "cleaner")
+
         applied = apply_scout_user_field_reply_to_context(
             context, user_input,
             llm_client=self.llm_quick_raw,
@@ -2568,6 +2572,8 @@ class Orchestrator:
             return ("switch", "cleaner")
         scout_msg = scout_field_review_pause_payload(context)
         scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+        # 通知前端字段已更新
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
         return {
             "status": "scout_review",
             "message": "",
@@ -2583,6 +2589,14 @@ class Orchestrator:
         df = self._df_raw if self._df_raw is not None else self._df_clean
         assessment = cleaner.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
+        # 通知前端展示清洗评估
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
+            "cleaning_assessment": assessment,
+            "message": "清洗评估完成",
+        })
+        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+            "result_summary": "清洗评估完成",
+        })
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
     def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:

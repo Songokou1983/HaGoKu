@@ -2588,6 +2588,8 @@ class Orchestrator:
             cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
             cleaning_rules = cleaner._load_cleaning_rules()
             context["_user_feedback"] = user_input
+            # F-082: Cleaner 评估优先用原始数据 _df_raw（用户原始数据特征
+            # 是清洗决策的依据）；若不可用（如 resume 跳过了原始加载），回退 _df_clean
             df = self._df_raw if self._df_raw is not None else self._df_clean
             assessment = cleaner.assess(df, context, cleaning_rules)
             context["_cleaner_assessment"] = assessment

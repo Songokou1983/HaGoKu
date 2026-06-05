@@ -2547,7 +2547,7 @@ class Orchestrator:
                 f"_llm_classify_confirmation: LLM 不可达。原始错误: {e}"
             ) from e
 
-    def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_scout_reply(self, user_input: str, context: dict) -> dict:
         """处理 Scout 字段对齐阶段的用户回复。空输入=首次展示字段表。"""
         if not user_input or not user_input.strip():
             scout_msg = scout_field_review_pause_payload(context)
@@ -2580,7 +2580,7 @@ class Orchestrator:
             "field_review": scout_msg.get("field_review"),
         }
 
-    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict:
         """处理 Cleaner 评估阶段的用户回复。首次调用运行评估，后续直接进入下一阶段。"""
         assessment = context.get("_cleaner_assessment")
         if assessment is None:
@@ -2603,7 +2603,7 @@ class Orchestrator:
         # 用户确认 → 进入下一阶段
         return ("switch", "analyst")
 
-    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict:
         """处理 Analyst 对话阶段的用户回复。"""
         if self._analyst_agent is None:
             from hagoku.agents.analyst import AnalystAgent

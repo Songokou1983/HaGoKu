@@ -659,6 +659,12 @@ class ScoutAgent(InteractionMixin):
         else:
             raise ValueError("Scout LLM 既未调用工具，也未返回文本内容")
 
+        import logging as _logging_scout2
+        _log2 = _logging_scout2.getLogger("hagoku")
+        if isinstance(result, dict):
+            _log2.warning("Scout LLM result keys=%s columns_type=%s", list(result.keys()), type(result.get("columns")).__name__)
+        else:
+            _log2.warning("Scout LLM result is NOT dict: type=%s value=%r", type(result).__name__, result)
         columns_out = result.get("columns") or result.get("column_semantics") or []
         if not columns_out:
             raise ValueError("Scout LLM 未返回任何列推断结果（`columns` 字段为空）")
@@ -666,6 +672,10 @@ class ScoutAgent(InteractionMixin):
         # 标准化输出到 Scout 代码库期望的格式（律 5：display_name/description/role 入 column_semantics）
         semantics: list[dict] = []
         for item in columns_out:
+            if not isinstance(item, dict):
+                import logging as _logging_scout
+                _logging_scout.getLogger("hagoku").warning("Scout LLM 返回非 dict 列条目: %r (type=%s)", item, type(item).__name__)
+                continue
             col_name = item.get("name", "")
             if not col_name or col_name not in set(df.columns):
                 continue

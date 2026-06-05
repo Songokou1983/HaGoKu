@@ -223,7 +223,7 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("A,B\n1,3\n2,4\n3,5\n", encoding="utf-8")
 
-    result = orch.run(data_path=str(csv_path), query="分析", phase="full")
+    result = orch.run(data_path=str(csv_path), query="分析")
     assert result.get("status") == "scout_review"
     assert isinstance(orch._df_raw, pd.DataFrame)
     assert isinstance(orch._df_clean, pd.DataFrame)

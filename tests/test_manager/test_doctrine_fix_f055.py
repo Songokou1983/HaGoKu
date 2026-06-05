@@ -1,30 +1,18 @@
-"""F-055 验证：_generate_phase_message 在 LLM 不可达时必须 raise RuntimeError，
-不得 silently pass（违反铁律 2 路径 A）。
+"""F-055 验证（已 RESOLVED）：_generate_phase_message / _try_generate_phase_llm
+已在事件驱动重构（F-078）中随旧 phase 分支一同删除。
+
+F-055 原问题：LLM 不可达时 `except RuntimeError: pass` 静默吞错误。
+修复方向：删整个方法——事件驱动架构下 phase-based message generation 不再需要。
 """
 
 import pytest
-from unittest.mock import patch
 
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import Orchestrator
 
 
-def test_f055_phase_message_raises_on_llm_unreachable_tier1():
-    """F-055 红灯：第一层 LLM 不可达时，RuntimeError 必须传播，不能 pass 吞掉。
-
-    当前代码在 orch.py:2695-2696 有 `except RuntimeError: pass`，
-    此测试验证修复后 RuntimeError 正确传播。
-    """
+def test_f055_methods_removed():
+    """F-055：_generate_phase_message 和 _try_generate_phase_llm 已被删除。"""
     orch = Orchestrator(HaGoKuConfig())
-
-    with patch.object(
-        orch, "_try_generate_phase_llm",
-        side_effect=RuntimeError("LLM不可达（retry=False）。原始错误: ConnectionError"),
-    ):
-        with pytest.raises(RuntimeError, match="LLM不可达"):
-            orch._generate_phase_message(
-                phase="analyst_preliminary",
-                findings=[{"question": "测试", "p_value": 0.05, "significance": "significant"}],
-                power_warnings=[],
-                suggested_focus="测试方向",
-            )
+    assert not hasattr(orch, "_generate_phase_message")
+    assert not hasattr(orch, "_try_generate_phase_llm")

@@ -103,7 +103,7 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
     try:
         result = _shared_orchestrator.run(
             data_path=data_path, query=query,
-            project_name=project_name, phase=phase,
+            project_name=project_name,
         )
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":

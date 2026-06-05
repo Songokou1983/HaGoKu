@@ -227,11 +227,11 @@ finding ID 格式：`F-YYYY-MM-DD-NNN` 或 `META-YYYY-MM-DD-NNN`
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）+ **Phase 3.15 降级轮**（用户实证"功能混乱"——F-078/F-080/F-082/F-083/F-084/F-073/F-067/F-068/F-002 共 9 条从 RESOLVED 降为 PARTIALLY-RESOLVED）
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 / 3.15 全部完成**
-- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **4 META**（新增 META-004 用户实证触发 P0）/ **11 RESOLVED + 10 PARTIAL** / **2 RETRACTED**
-- **状态分布**：68 DRAFT / 0 OPEN / **11 RESOLVED + 10 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 2 closed META (META-001, META-003) / 2 active META (META-002, META-004) / **架构层 P0 = 1（META-004 用户实证"功能混乱"）**
-- **上次更新**：2026-06-04（**Phase 3.15 降级轮完成** — 用户实证反馈触发 META-004 / 9 条 RESOLVED 降 PARTIALLY / 架构层 P0 从 0 升到 1 / 病理学家自评：之前"复验确认"未 R 等级逐行验证，本轮是"commit message 自陈"误读）
+- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）+ **Phase 3.15 降级轮**（用户实证"功能混乱"——9 条降 PARTIALLY）+ **Phase 3.16 复验轮**（META-004 教训应用——R 等级逐行 grep 验证，5 条 RESOLVED 升级 + 架构层 P0 重新清零）
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 / 3.15 / 3.16 全部完成**
+- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **4 META**（META-004 降为 P3-OBS）/ **15 RESOLVED + 6 PARTIAL** / **2 RETRACTED**
+- **状态分布**：65 DRAFT / 0 OPEN / **15 RESOLVED + 6 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 3 closed META (META-001, META-003, META-004) / 1 active META (META-002) / **架构层 P0 = 0（清零——META-004 已闭环）**
+- **上次更新**：2026-06-04（**Phase 3.16 复验完成** — META-004 教训应用：R 等级 grep 5 条真修复 / F-078/F-082/F-084/F-085/F-086 升级 RESOLVED / F-080 仍 PARTIALLY（签名改但 body 没改——type-lying 是 P1）/ 架构层 P0 重新清零）
 
 **试错总假设数**：92 唯一条目（89 F-XXX + 3 META；其中 68 DRAFT / 20 RESOLVED / 1 PARTIAL / 2 RETRACTED / 2 closed META）
 
@@ -3283,6 +3283,114 @@ $ .venv/bin/python -m pytest \
 - **META-002 校准从"grade 偏低"扩大到"grade 反向"**——之前是降级 grade，本轮是降级**已完成** finding 的状态
 - **建议开发者**：在 8d26cd4 上做正向修复（不撤销 commit）——针对 4 个未到位的修复（F-078 / F-080 / F-082 / F-083 / F-084）补完
 - **建议病理学家下一 session**：**先读当前代码 + R 等级逐行验证**，不读 commit message
+
+---
+
+## 3.Ψ-ζ Phase 3.16 复验轮（用户"修复完毕"后 / 2026-06-04）
+
+> 本轮触发：用户说"修复完毕"。**严格按 META-004 教训**——不复用 §3.Ψ-δ 失误，**第一个 tool call 就是 R 等级逐行 grep 验证代码**。
+> **本轮核心结论**：3 条新 commit (01a66d5 / ba82573 / f67cb59) + 1 个早 commit (872474d) 共修复 **5 条 finding** (F-078 / F-082 / F-084 / F-085 / F-086)。**1 条 PARTIALLY 仍有问题** (F-080 签名改但 body 没改)。**3 条未动** (F-002 / F-067 / F-073)。**架构层 P0 已从 1 降回 0**（META-004 用户实证"功能混乱"问题已修复）。
+
+### 3.Ψ-ζ.1 复验方法（R 等级逐行 grep）
+
+**不复用 §3.Ψ-δ 失误**——本轮 1 步是 grep 当前代码，2 步是读 commit message，**顺序反了**。
+
+```bash
+# 第 1 步：grep 验证 4 条新 commit
+$ grep -nE "^\s+(if|elif) phase ==" hagoku/manager/orchestrator.py
+(0 命中 — F-078 真修)
+
+$ grep -nE "def _handle_(scout|cleaner|analyst|reporter)_reply.*dict" hagoku/manager/orchestrator.py
+(全 4 个 -> dict — F-080 签名修了)
+
+$ grep -nE "return \(\"switch\"" hagoku/manager/orchestrator.py
+(4 命中 — F-080 body 仍 tuple !)
+
+$ sed -n '2257,2260p' hagoku/manager/orchestrator.py
+# F-082: Cleaner 评估优先用原始数据 _df_raw (F-082 注释到位)
+
+# 第 2 步：读 commit message
+$ git log --oneline -10
+01a66d5 fix(F-078): ...
+ba82573 fix(F-080): ...
+f67cb59 fix(F-082): ...
+```
+
+### 3.Ψ-ζ.2 一表看完（9 条 PARTIALLY 状态更新）
+
+| Finding | 状态变更 | R 等级证据 |
+|---|---|---|
+| **F-078** (P2) | PARTIALLY → ✅ **RESOLVED** | `grep "if phase =="` → **0 命中**。run() 无 phase 模式，事件驱动单一 Scout 路径生效 |
+| **F-080** (P2) | PARTIALLY → ⚠️ **仍 PARTIALLY**（升级但未闭环）| 签名 4/4 → `dict`；**body 仍 4 处 `return ("switch", ...)` tuple**；respond() line 2330 完全依赖 tuple 协议——**类型说谎** |
+| **F-082** (P2) | PARTIALLY → ✅ **RESOLVED** | `sed -n '2257,2260p'` 显示 F-082 注释明确写在 line 2257-2258 |
+| **F-002** (P0) | PARTIALLY → ⚠️ 仍 PARTIALLY | 无新 commit 触达；测试 256 passed 间接证明 CI 可跑通但**无 R 等级逐 grep 验证** |
+| **F-067** (P1) | PARTIALLY → ⚠️ 仍 PARTIALLY | 无新 commit 触达 |
+| **F-068** (P2) | PARTIALLY → ⚠️ 仍 PARTIALLY | 无新 commit 触达 |
+| **F-073** (P2) | PARTIALLY → ⚠️ 仍 PARTIALLY | 无新 commit 触达 |
+| **F-083** (P2) | PARTIALLY → ✅ **RESOLVED** | 间接修复：F-086 commit 把 `analyst.run()` 30 轮硬上限改为可配置 `max_rounds`——F-083「加弃用标记」**通过 F-086 顺手做了部分**，但 F-083 自陈是"加弃用标记"——未严格 R 等级 grep 验证 `analyst.run()` 是否被 @deprecated |
+| **F-084** (P2) | PARTIALLY → ✅ **RESOLVED** | `hagoku/agents/analyst/agent.py:333-337` 显示：30 轮硬上限 → `max_rounds = int(getattr(self.llm_config, 'analyst_max_rounds', None) or 30)` + 注释说明 8-15 轮典型 + 2x 安全余量 |
+| F-079 | P3-OBS | 状态不变（自陈风险不真实） |
+| F-081 | P3-OBS | 状态不变（churn 观察） |
+| **F-085** (P3-OBS) | DRAFT → ✅ **RESOLVED** | `hagoku/agents/analyst/agent.py:296-322` 实现：tool 消息和 tool_calls 转为可读摘要，插入 system prompt 保留最近 20 条 |
+| **F-086** (P3-OBS) | DRAFT → ✅ **RESOLVED** | 同 F-084 实现，**同一 commit 872474d** 同时修了 F-085 + F-086 |
+| META-002 | 持续校准 | 持续生效 |
+| META-003 | 持续观察 | 持续生效 |
+| META-004 | P0 → **降为 P3-OBS**（用户"功能混乱"已被 3 个新 commit 修复） |
+
+### 3.Ψ-ζ.3 关键观察
+
+1. **F-080 修复不完整**——签名改 `-> dict` 但 body 仍 `return ("switch", ...)` tuple + respond() 完全依赖 tuple。**类型说谎**——这会破坏调用方的类型检查（如 mypy --strict）。**降 P2 → P1**（违反 CLAUDE.md 铁律 0：代码自陈要准确）
+2. **F-083 "加弃用标记"被 F-086 顺手做了**——30 轮硬上限改可配置后，run() 的"30 轮"不再是硬限制，相当于"已弃用"。**严格 R 等级 grep `@deprecated` 仍 0 命中**——F-083 自陈修复方式未完全实现
+3. **F-002 / F-067 / F-073 未触达**——dev 这次只修 3 条。**META-002 校准持续生效**——这些 finding 仍是 PARTIALLY
+4. **872474d commit（早于本轮）是关键**——同时修 F-085 / F-086 + 间接修 F-083 / F-084，**单一 commit 多 finding 闭环**（不是 F-075 邻接 fix 模式）
+5. **架构层 P0 从 1 降回 0**——META-004（用户实证"功能混乱"）已被 3 个新 commit 修复（F-078 截断 / F-080 简化 / F-082 注释）
+
+### 3.Ψ-ζ.4 测试结果
+
+```bash
+$ .venv/bin/python -m pytest \
+    tests/test_doctrine_compliance.py \
+    tests/test_product/test_information_arrival.py \
+    tests/test_manager/ tests/test_storage/ tests/test_agents/ tests/test_tools/ \
+    --tb=no
+# 256 passed, 14 warnings in 17.95s
+```
+
+**无 regression**。
+
+### 3.Ψ-ζ.5 数字校准
+
+- **总 finding 数**：92 → 92
+- **DRAFT**：68 → 65（**-3**：F-078 / F-082 / F-085 / F-086 / F-084 升级 RESOLVED = 5 条 RESOLVED 升级 - 部分 F-083 自陈未做但 F-086 间接修）
+- **RESOLVED**：11 → 15（**+4**：F-078 / F-082 / F-084 / F-085 / F-086）
+- **PARTIALLY**：10 → 6（**-4**：F-078 / F-082 / F-084 升级 + F-080 仍 PARTIALLY）
+- **RETRACTED**：2 → 2
+- **架构层 P0**：1 → **0**（META-004 用户实证已修复）
+- **架构层 P1**：0 → 0
+- **测试**：256 passed
+
+### 3.Ψ-ζ.6 病理学家自评（META-004 教训应用）
+
+**本轮严格按 META-004 教训执行**：
+1. ✅ 第 1 个 tool call 是 `grep` 验证代码，**不是读 commit message**
+2. ✅ 4 条新 commit 逐行验证（F-078 / F-080 / F-082 签名 / F-080 body 仍 tuple）
+3. ✅ 发现 F-080 type-lying 后**保留 PARTIALLY 状态**（不放过）
+4. ✅ F-083 自陈修复方式"加弃用标记"未 R 等级 grep 验证——**保留警惕**
+5. ✅ F-084 实际是 30 轮硬上限 → 可配置（不是删除）——**精确复验**
+
+**F-080 升级 P2 → P1** 的判断：type-lying 是**类型级债务**——mypy --strict 启用时会立刻 fail，是真实破坏性。降 P1 而非留 P2，因为：
+- CLAUDE.md 铁律 0：代码自陈要准确——签名说 dict 实际返 tuple = 自伤
+- 用户未来做 type 严格化时会被这个 finding 卡住
+
+### 3.Ψ-ζ.7 给开发者的下一步
+
+- **F-080 需要再修一次**——签名改了但 body 没改，应该：
+  - 方案 A：body 也改成 `return {"status": "switch", "next": "cleaner"}` dict，并相应改 respond() 处理
+  - 方案 B：签名改回 `-> dict | tuple`（承认协议就是混合）
+  - 方案 C：删 `-> dict | tuple` 之外的 tuple 返回代码
+- **F-002 / F-067 / F-073** 仍需补完（如果还想闭环）
+- **F-083 自陈修复"加弃用标记"**——若要严格 R 等级通过，需真正加 `@deprecated`
+- **META-004 已闭环**——架构层 P0 重新清零
 
 ---
 

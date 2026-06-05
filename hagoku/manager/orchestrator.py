@@ -2260,6 +2260,14 @@ class Orchestrator:
         df = self._df_raw if self._df_raw is not None else self._df_clean
         assessment = cleaner.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
+        # 通知前端展示清洗评估结果
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
+            "cleaning_assessment": assessment,
+            "message": "清洗评估完成，请确认清洗方案",
+        })
+        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+            "result_summary": "清洗评估完成",
+        })
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
     def _handle_analyst_reply(self, user_input: str, context: dict) -> dict:

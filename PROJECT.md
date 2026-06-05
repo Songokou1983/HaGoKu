@@ -1,5 +1,7 @@
 # HaGoKu Studio — 项目规范（The Single Source of Truth）
 
+> **核心信条**：LLM 在语义判断上比代码更可靠。Code 的活是构建通道让 LLM 自由发挥，不是替 LLM 干活。
+
 ## 灵魂
 
 > **让每个小模型，都能做专业级商业分析。**

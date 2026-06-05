@@ -889,13 +889,6 @@ def _apply_scout_reply_with_llm(
         msg = resp.choices[0].message
         tool_calls = getattr(msg, "tool_calls", None)
         _raw_text = (msg.content or "").strip()
-        import logging as _log_llm
-        _log = _log_llm.getLogger("hagoku.orchestrator")
-        if tool_calls:
-            names = [tc.function.name if hasattr(tc, "function") else "?" for tc in tool_calls]
-            _log.warning("Scout reply LLM tool_calls: %s", names)
-        else:
-            _log.warning("Scout reply LLM no tool_calls, text=%r", _raw_text[:200])
 
         if channel_logger and tool_calls:
             for tc in (tool_calls or []):
@@ -1822,7 +1815,8 @@ class Orchestrator:
                 scout_msg = scout_field_review_pause_payload(context)
                 scout_msg["interaction_revision"] = interaction_revision
                 scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-                self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
+                # USER_INPUT_REQUESTED 由 _handle_scout_reply 空输入分支统一 emit，
+                # 避免此处与 respond() 重复发送导致前端双倍渲染
                 # AGENT_COMPLETED 不在此处发——Scout 在用户确认前不应标记"完成"
                 # 用户确认进入下一阶段时由 _handle_scout_reply 切 Cleaner 后发
 
@@ -2232,6 +2226,8 @@ class Orchestrator:
         if not user_input or not user_input.strip():
             scout_msg = scout_field_review_pause_payload(context)
             scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+            # 空输入 = 首次展示或重连后补发：emit 事件确保前端收到
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
             return {
                 "status": "scout_review",
                 "message": "",

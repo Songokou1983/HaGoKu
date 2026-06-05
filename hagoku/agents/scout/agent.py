@@ -589,6 +589,9 @@ class ScoutAgent(InteractionMixin):
         client = create_raw_client(self.llm_config)
         _call_start = datetime.now(timezone.utc)
 
+        # 发心跳——LLM 调用可能耗时 1-2 分钟，期间无事件会导致 WS 超时
+        self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
+
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages
         dump_messages(
@@ -659,12 +662,6 @@ class ScoutAgent(InteractionMixin):
         else:
             raise ValueError("Scout LLM 既未调用工具，也未返回文本内容")
 
-        import logging as _logging_scout2
-        _log2 = _logging_scout2.getLogger("hagoku")
-        if isinstance(result, dict):
-            _log2.warning("Scout LLM result keys=%s columns_type=%s", list(result.keys()), type(result.get("columns")).__name__)
-        else:
-            _log2.warning("Scout LLM result is NOT dict: type=%s value=%r", type(result).__name__, result)
         columns_out = result.get("columns") or result.get("column_semantics") or []
         if not columns_out:
             raise ValueError("Scout LLM 未返回任何列推断结果（`columns` 字段为空）")

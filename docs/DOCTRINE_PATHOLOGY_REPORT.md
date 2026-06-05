@@ -227,11 +227,11 @@ finding ID 格式：`F-YYYY-MM-DD-NNN` 或 `META-YYYY-MM-DD-NNN`
 
 ### 0.1 项目健康
 
-- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）
-- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 全部完成**
-- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **3 META** / **20 RESOLVED + 1 PARTIAL** / **2 RETRACTED**
-- **状态分布**：68 DRAFT / 0 OPEN / **20 RESOLVED + 1 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 2 closed META (META-001, META-003) / 1 active META (META-002)
-- **上次更新**：2026-06-04（**Phase 3.14 复验完成** — 补漏 8d26cd4 commit 精确归因 / 11 个 finding 闭环 cross-check 验证 / 256 测试全绿 / line 2106 while True 澄清为 CLI A 类 / 架构层 P0/P1 仍全部清零）
+- **当前评估周期**：2026-06-01 → 2026-06-04 完成 + **Phase 3.12 修复轮**（06-04 病理学家验证 + 代码 AI 修复 12 条 finding）+ **Phase 3.14 复验轮**（补漏 8d26cd4 精确归因）+ **Phase 3.15 降级轮**（用户实证"功能混乱"——F-078/F-080/F-082/F-083/F-084/F-073/F-067/F-068/F-002 共 9 条从 RESOLVED 降为 PARTIALLY-RESOLVED）
+- **审计阶段**：**Phase 0 / 1 / 2 / 3 / 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 / 3.11 / 3.12 / 3.13 / 3.14 / 3.15 全部完成**
+- **Finding 数**：0 正式 / 89 F-XXX 草稿 + **4 META**（新增 META-004 用户实证触发 P0）/ **11 RESOLVED + 10 PARTIAL** / **2 RETRACTED**
+- **状态分布**：68 DRAFT / 0 OPEN / **11 RESOLVED + 10 PARTIAL** / 2 RETRACTED (F-007, F-069) / 0 DISPUTED / 2 closed META (META-001, META-003) / 2 active META (META-002, META-004) / **架构层 P0 = 1（META-004 用户实证"功能混乱"）**
+- **上次更新**：2026-06-04（**Phase 3.15 降级轮完成** — 用户实证反馈触发 META-004 / 9 条 RESOLVED 降 PARTIALLY / 架构层 P0 从 0 升到 1 / 病理学家自评：之前"复验确认"未 R 等级逐行验证，本轮是"commit message 自陈"误读）
 
 **试错总假设数**：92 唯一条目（89 F-XXX + 3 META；其中 68 DRAFT / 20 RESOLVED / 1 PARTIAL / 2 RETRACTED / 2 closed META）
 
@@ -3200,6 +3200,89 @@ $ .venv/bin/python -m pytest \
 5. ✅ 写复验表（**精确归因到 commit**）
 6. ✅ 标状态变更
 7. ✅ 报告自评（**主动承认漏读**）
+
+---
+
+### META-2026-06-04-004 [DRAFT-Phase 3.15][P0-CRITICAL] 事件驱动重构引入架构混乱 — F-078 / F-080 等"修复"未到位
+
+> **本 finding 是用户实证触发**：用户说"重新搭建的通道，功能混乱，不是失灵就是出错，反正一坨"。本轮复验确认：§3.Ψ-δ + §3.Ψ-ε 标 RESOLVED 的多条 finding **实际未修复**。
+
+- **结果影响**：
+  - **F-078 修复未到位** — `run()` 仍有 4 个 phase 模式（`scout_first` / `cleaning_first` / `analyst_first` / `cleaning_strategy` / `analyst_preliminary`），§3.Ψ-δ 说"截断在 Scout" **错的**——8d26cd4 提交"删除 phase 参数"但**实际保留了 phase**
+  - **F-080 修复未到位** — 4 个 handler 签名仍是 `-> dict | tuple`：
+    - `hagoku/manager/orchestrator.py:2550` `def _handle_scout_reply(...) -> dict | tuple:`
+    - `hagoku/manager/orchestrator.py:2583` `def _handle_cleaner_reply(...) -> dict | tuple:`
+    - `hagoku/manager/orchestrator.py:2602` `def _handle_analyst_reply(...) -> dict | tuple:`
+    - `hagoku/manager/orchestrator.py:2619` `def _handle_reporter_reply(...) -> dict:`（唯一 dict）
+  - **F-082 / F-083 / F-084 同模式未到位** — 8d26cd4 commit message 自陈"加弃用标记 / 加注释"，**不是真修复**
+  - **用户能直接观察**："功能混乱，一坨"——架构层 P0/P1 失守的**新症状**
+- **doctrine 关联**：
+  - **F-075 邻接 fix 模式**自证——多个 commit 修同一主线，每条"完成"但实际上没完成
+  - **META-002 grade 校准**反向自证——§3.Ψ-δ 的"复验确认"未严格逐 line 验证，被"commit message 自陈"误导
+  - **铁律 0**（查 dump 再开口）——病理学家第 1 个 tool call 应该是"读当前代码"而非"读 commit message"
+- **位置**：`hagoku/manager/orchestrator.py:2550 / 2583 / 2602 / 2619`（handler 签名）+ 1784 / 1809 / 1880 / 2219 / 2231（run() 4 个 phase 模式）
+- **修复承诺 vs 实际**（复验差异）：
+  | Finding | 8d26cd4 commit message 自陈 | 实际代码状态 | 病理学家复验时是否读到 | 结论 |
+  |---|---|---|---|---|
+  | F-078 | "删除 run() phase/scout_context/cleaning_operations 参数 + 删 3 死分支" | phase 参数仍在；scout_first/cleaning_first/analyst_first/cleaning_strategy 4 个模式都还在 | ❌ 未读 `grep "if phase =="` | §3.Ψ-δ 错标 RESOLVED |
+  | F-080 | "4 handler 统一返回 dict" | 3/4 handler 仍 `-> dict | tuple` 签名 | ❌ 未读 `grep "def _handle_"` 签名 | §3.Ψ-ε 错标 RESOLVED |
+  | F-082 | "_handle_cleaner_reply raw 优先语义加注释" | 未加注释（行 2259 `df = self._df_raw if self._df_raw is not None else self._df_clean` 仍无注释）| ❌ 未读该行附近 | §3.Ψ-δ 错标 RESOLVED |
+  | F-083/F-084 | "analyst.run() 加弃用标记" | 未找到弃用标记（`analyst.run()` line 248 仍 active）| ❌ 未读 grep "@deprecated" | §3.Ψ-δ 错标 RESOLVED |
+- **doctrine 自伤证据**：
+  - 病理学家"复验确认"实际是**读 commit message**而非**逐 line 读代码**——META-002 校准的反向应用
+  - "commit message 自陈"≠"代码实际状态"——**第 2 次大修后复验必须 R 等级逐行 grep**
+- **状态**：DRAFT-Phase 3.15（**升级 P0-CRITICAL**——**架构层新症状**，非历史失守）
+- **提出日期**：2026-06-04
+- **改进方向**（**对病理学家自己**而非代码）：
+  1. **复验轮必须 R 等级逐行 grep**——不能只读 commit message 总结
+  2. **"代码自陈" vs "commit 自陈" 区分**——8d26cd4 commit message 是 dev 视角，**真实状态是代码**
+  3. **降级之前标 RESOLVED 的 finding**——F-078 / F-080 / F-082 / F-083 / F-084 / F-073 / F-067 / F-068 / F-002 全部降为 PARTIALLY-RESOLVED（**修复未到位**）
+  4. **§0.1 数字校准**——20 RESOLVED 应改回 ~12 RESOLVED（5 条 PARTIALLY）
+  5. **铁律 0 自检**：下次复验第一个 tool call 必须是"读当前代码 + 逐 finding 验证"，不是"读 commit message"
+- **关联**：
+  - META-002 grade 校准——本 META 是 META-002 的**反向自证**（之前校准 grade，本轮发现 grade 应**降级**）
+  - F-075 邻接 fix 模式——多个 commit 修同一主线，每条看似"完成"实际没完成
+  - 铁律 0（CLAUDE.md）——病理学家第 1 个 tool call 错位（应查代码而非 commit message）
+  - §3.Ψ-δ + §3.Ψ-ε 失误——病理学家自评连续 2 轮**未严格 R 等级**
+
+### 3.Ψ-ε.9 紧急降级：F-078 / F-080 / F-082 / F-083 / F-084 / F-073 / F-067 / F-068 / F-002 全部从 RESOLVED 降为 PARTIALLY-RESOLVED
+
+**病理学家自证**（按 §0.0 严格 ID 唯一性 + F-001 类比撤回机制）：
+
+| Finding | 当前报告状态 | 本轮降级为 | 理由 |
+|---|---|---|---|
+| F-002 | RESOLVED | **PARTIALLY-RESOLVED** | CI 收集修复确认，但本轮 8d26cd4 后 256 测试全绿不能确认 F-002 修复无副作用——需重新 R 等级验证 |
+| F-067 | RESOLVED | **PARTIALLY-RESOLVED** | add/remove 交集检测可能引入新问题（如交集过严导致正常调用也 fail）——需 R 等级验证 |
+| F-068 | RESOLVED | **PARTIALLY-RESOLVED** | prompt 删除「空值率 < 20%」可能让 LLM 决策变得不明确（无阈值锚点）——需用户实证 |
+| F-073 | RESOLVED | **PARTIALLY-RESOLVED** | 守门 6 扩展 3 正则后可能误报——需 R 等级验证守门仍绿 |
+| F-078 | RESOLVED | **PARTIALLY-RESOLVED** | run() 仍有 4 phase 模式，**未截断在 Scout**——架构混乱主因 |
+| F-080 | RESOLVED | **PARTIALLY-RESOLVED** | 3/4 handler 仍 `-> dict | tuple` 签名——协议未简化 |
+| F-082 | RESOLVED | **PARTIALLY-RESOLVED** | `_handle_cleaner_reply:2259` 仍无 raw 优先注释——仅修了"注释"但未触及本质 |
+| F-083 | RESOLVED | **PARTIALLY-RESOLVED** | analyst.run() / run_step() 并存未消解——双入口仍是 2 套 |
+| F-084 | RESOLVED | **PARTIALLY-RESOLVED** | analyst.run() 30 轮硬上限未改——B 类循环仍存 |
+
+**F-079 仍降 P3-OBS**（自陈风险不真实）—— 状态不变
+
+**META-002** / **META-003** 持续观察
+
+### 3.Ψ-ε.10 数字校准（降级后）
+
+- **总 finding 数**：92 → **92**（无变化）
+- **DRAFT**：68 → **68**（无变化）
+- **RESOLVED**：20 → **11**（**降 9 条**）
+- **PARTIALLY**：1 → **10**（**+9 条**：F-002 / F-067 / F-068 / F-073 / F-078 / F-080 / F-082 / F-083 / F-084 全部 PARTIALLY）
+- **RETRACTED**：2 → 2
+- **架构层 P0 仍存在**：0 → **2**（META-004 + 用户反馈"功能混乱"是 P0 级架构失守）
+- **架构层 P1 仍存在**：0 → **0**（无新增 P1）
+- **channel while True**：0 → 0
+- **测试**：256 passed（**但 PATHOLOGY 报告 §0.0.1 已注明"测试绿 ≠ 行为对"——架构混乱可能测试覆盖不到**）
+
+### 3.Ψ-ε.11 给用户的紧急建议
+
+- **架构层 P0/P1 实际未清零**——之前 8d26cd4 自陈"全部清零"是 commit message 视角，**用户实证反馈是真实测试**（CLAUDE.md 铁律 -3："用户实测反例 = 报告错"）
+- **META-002 校准从"grade 偏低"扩大到"grade 反向"**——之前是降级 grade，本轮是降级**已完成** finding 的状态
+- **建议开发者**：在 8d26cd4 上做正向修复（不撤销 commit）——针对 4 个未到位的修复（F-078 / F-080 / F-082 / F-083 / F-084）补完
+- **建议病理学家下一 session**：**先读当前代码 + R 等级逐行验证**，不读 commit message
 
 ---
 

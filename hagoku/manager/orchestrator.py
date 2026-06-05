@@ -2581,23 +2581,27 @@ class Orchestrator:
         }
 
     def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
-        """处理 Cleaner 评估阶段的用户回复。"""
-        from hagoku.agents.cleaner import CleanerAgent
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
-        cleaning_rules = cleaner._load_cleaning_rules()
-        context["_user_feedback"] = user_input
-        df = self._df_raw if self._df_raw is not None else self._df_clean
-        assessment = cleaner.assess(df, context, cleaning_rules)
-        context["_cleaner_assessment"] = assessment
-        # 通知前端展示清洗评估
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
-            "cleaning_assessment": assessment,
-            "message": "清洗评估完成",
-        })
-        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
-            "result_summary": "清洗评估完成",
-        })
-        return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
+        """处理 Cleaner 评估阶段的用户回复。首次调用运行评估，后续直接进入下一阶段。"""
+        assessment = context.get("_cleaner_assessment")
+        if assessment is None:
+            from hagoku.agents.cleaner import CleanerAgent
+            cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+            cleaning_rules = cleaner._load_cleaning_rules()
+            context["_user_feedback"] = user_input
+            df = self._df_raw if self._df_raw is not None else self._df_clean
+            assessment = cleaner.assess(df, context, cleaning_rules)
+            context["_cleaner_assessment"] = assessment
+            # 通知前端展示清洗评估
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
+                "cleaning_assessment": assessment,
+                "message": "清洗评估完成",
+            })
+            self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+                "result_summary": "清洗评估完成",
+            })
+            return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
+        # 用户确认 → 进入下一阶段
+        return ("switch", "analyst")
 
     def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
         """处理 Analyst 对话阶段的用户回复。"""

@@ -1647,12 +1647,12 @@ class Orchestrator:
         template: str | None = None,
         resume: bool = False,
         progress_path: str | None = None,
-        phase: str = "full",
-        scout_context: dict | None = None,
-        cleaning_operations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
-        主入口：执行完整分析流程
+        主入口：Scout 字段理解阶段（事件驱动架构）
+
+        run() 只跑 Scout 字段推断，完成后返回 scout_review 状态。
+        后续 Cleaner / Analyst / Reporter 阶段通过 respond() 事件驱动路由。
 
         Args:
             data_path: 数据文件路径
@@ -1663,17 +1663,9 @@ class Orchestrator:
             template: 报告模板 (default/academic/brief/business_analysis/ab_test/executive_brief/data_audit)
             resume: 是否从上次断点继续
             progress_path: 外部 progress.yaml 路径
-            phase: 运行阶段
-                - "scout_first": 只跑 Scout，返回字段信息
-                - "cleaning_first": Scout（缓存）+ Cleaner（strategy_only），返回清洗策略
-                - "analyst_first": Scout（缓存）+ Cleaner（strategy_only，已确认）+ Analyst（preliminary）
-                - "full": 完整 pipeline
-            scout_context: Scout 的缓存上下文（用于避免重复跑 Scout）
-            cleaning_operations: 用户确认的清洗操作（Cleaner 直接执行，不重新规划）
 
         Returns:
-            运行结果摘要。`status` 可能为 `completed` / `guardrails_blocked`（强制级护栏未通过，已跳过 Reporter）/
-            `scout_confirm` / `cleaner_strategy` / `analyst_preliminary` 等阶段返回值。
+            运行结果摘要。事件驱动架构下始终返回 {"status": "scout_review", ...}
         """
         run_start = datetime.now()
 
@@ -1754,9 +1746,6 @@ class Orchestrator:
         # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
         scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
                            channel_logger=self._channel_logger)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
-        analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep, scribe=self.scribe)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick_raw, scribe=self.scribe)
 
         # Resume 支持
         df_clean = None
@@ -1779,206 +1768,9 @@ class Orchestrator:
                     if Path(cleaned_path_str).exists():
                         df_clean = pd.read_parquet(cleaned_path_str)
 
-        # ── Scout 交互确认阶段 ──────────────────────────────────
-        # phase="scout_first" 时只跑 Scout，返回 pending_items 供用户确认
-        if phase == "scout_first":
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": "🔍 正在识别数据字段，请稍候...",
-            })
-            # 加载项目历史记忆，避免用户重复回答字段含义
-            memory_project = self.memory.build_memory_project(project_name) if self.memory else None
-            scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
-                               memory_project=memory_project, channel_logger=self._channel_logger)
-            ir = scout.begin(data_path=data_path, query=query, project_id=project_name,
-                             memory_project=memory_project)
-            # begin() 已触发 AGENT_STARTED（由 Scribe claim 任务），并在需要确认时 block 了看板
-            # 返回 InteractionResult 给 UI 显示确认项
-            return {
-                "status": "scout_confirm",
-                "phase": ir.phase,
-                "message": ir.message,
-                "needs_confirmation": ir.needs_confirmation,
-                "pending_items": ir.pending_items,
-                "data": ir.data,
-                "final": ir.final,
-                "memory_loaded": bool(memory_project and memory_project.get("fields")),
-            }
-
-        # ── Cleaner 策略阶段 ────────────────────────────────────
-        # phase="cleaning_first"：跑 Scout（缓存）+ Cleaner（strategy_only），返回清洗策略供用户确认
-        if phase == "cleaning_first":
-            # Scout（使用缓存上下文或重新跑）
-            if scout_context is not None and scout_context.get("query") == query:
-                context.clear()
-                context.update(scout_context)
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
-                })
-                # ── 通道日志：缓存命中 ──
-                if hasattr(self, '_channel_logger') and self._channel_logger:
-                    self._channel_logger.log("orchestrator", "cache_check",
-                        result="hit",
-                        cached_query=scout_context.get("query") if scout_context else None,
-                        current_query=query)
-            else:
-                if scout_context is not None:
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": "🔍 分析目标已变更，重新识别字段...",
-                    })
-                    # ── 通道日志：缓存未命中（查询变更）──
-                    if hasattr(self, '_channel_logger') and self._channel_logger:
-                        self._channel_logger.log("orchestrator", "cache_check",
-                            result="miss_query_changed",
-                            cached_query=scout_context.get("query") if scout_context else None,
-                            current_query=query)
-                else:
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": "🔍 Scout 缓存未命中，重新识别字段...",
-                    })
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
-                                          channel_logger=self._channel_logger)
-                scout_result = scout_agent.run(data_path, query=query, project_id=project_name)
-                context.clear()
-                context.update(scout_result)
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": "🧹 检测数据质量，生成清洗策略...",
-            })
-            cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
-            strategy_result = cleaner.get_strategy_summary(data_path, context)
-            operations = strategy_result.get("operations", [])
-            quality = strategy_result.get("data_quality", "unknown")
-            llm_message = self._generate_phase_message(
-                "cleaning_strategy",
-                operations=operations,
-                data_quality=quality,
-            )
-            if isinstance(strategy_result, dict):
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
-                    "result_summary": f"检测完成：{len(operations)} 个计划操作",
-                })
-                return {
-                    "status": "cleaner_strategy",
-                    "message": llm_message,
-                    "scout_data": {
-                        "n_cols": context["n_cols"],
-                        "n_rows": context["n_rows"],
-                        "columns": [s["column_name"] for s in context["column_semantics"]],
-                        "uncertain_columns": [s["column_name"] for s in context["column_semantics"] if s.get("needs_user_input")],
-                        "column_descriptions": context["column_descriptions"],
-                    },
-                    "outliers": strategy_result.get("outliers", {}),
-                    "missing_mechanisms": strategy_result.get("missing_mechanisms", {}),
-                    "operations": operations,
-                    "data_quality": quality,
-                    "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
-                }
-            # 正常执行（用户已确认操作，直接清洗）
-            df_clean, cleaning_report = strategy_result
-
-        # ── Analyst 初步发现阶段 ─────────────────────────────────
-        # phase="analyst_first"：Scout（缓存）+ Cleaner（strategy_only，已确认）+ Analyst（preliminary）
-        if phase == "analyst_first":
-            # Scout
-            if scout_context is not None and scout_context.get("query") == query:
-                context.clear()
-                context.update(scout_context)
-                self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                    "thought": f"🔍 使用缓存的字段信息（{context['n_cols']} 个字段）",
-                })
-                # ── 通道日志：缓存命中 ──
-                if hasattr(self, '_channel_logger') and self._channel_logger:
-                    self._channel_logger.log("orchestrator", "cache_check",
-                        result="hit",
-                        cached_query=scout_context.get("query") if scout_context else None,
-                        current_query=query)
-            else:
-                if scout_context is not None:
-                    self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                        "thought": "🔍 分析目标已变更，重新识别字段...",
-                    })
-                    # ── 通道日志：缓存未命中（查询变更）──
-                    if hasattr(self, '_channel_logger') and self._channel_logger:
-                        self._channel_logger.log("orchestrator", "cache_check",
-                            result="miss_query_changed",
-                            cached_query=scout_context.get("query") if scout_context else None,
-                            current_query=query)
-                scout_agent = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick,
-                                          channel_logger=self._channel_logger)
-                scout_result = scout_agent.run(data_path, query=query, project_id=project_name)
-                context.clear()
-                context.update(scout_result)
-
-            # Cleaner
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": "🧹 数据清洗（已确认策略）...",
-            })
-            cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
-            if cleaning_operations is not None:
-                # 用户已确认策略 → 执行清洗
-                df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                    data_path, context,
-                    user_operations=cleaning_operations,
-                    impact_warning=self.config.manager.cleaning_impact_warning,
-                    phase="full",
-                )
-            else:
-                # 未确认 → 只返回策略供用户确认
-                cleaner_result = cleaner.run(
-                    data_path, context,
-                    user_operations=cleaning_operations,
-                    impact_warning=self.config.manager.cleaning_impact_warning,
-                    phase="strategy_only",
-                )
-                if isinstance(cleaner_result, tuple) and len(cleaner_result) >= 4:
-                    _, _, _, strategy_dict = cleaner_result
-                    if isinstance(strategy_dict, dict):
-                        # 用户未确认操作，用自动规划的执行
-                        auto_ops = strategy_dict.get("operations", [])
-                        df_raw, df_clean, cleaning_report, _ = cleaner.run(
-                            data_path, context,
-                            user_operations=auto_ops,
-                            impact_warning=self.config.manager.cleaning_impact_warning,
-                            phase="full",
-                        )
-                    else:
-                        df_clean, cleaning_report, _ = cleaner_result
-                else:
-                    df_clean, cleaning_report, _ = cleaner_result  # type: ignore[assignment]
-
-            # Analyst：初步发现或完整分析（取决于phase）
-            analyst_phase = "full" if phase == "full" else "preliminary"
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": "📊 初步分析，发现数据中的规律..." if analyst_phase == "preliminary" else "📊 完整分析中...",
-            })
-            analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
-            analyst_result = analyst.run(df_clean, context, plan, phase=analyst_phase)
-            if isinstance(analyst_result, dict):
-                # F-054 修复：submit_analysis handler 返回 {findings, method_used, summary}
-                # 旧代码使用不存在的 key（preliminary_findings/suggested_focus/…），
-                # 导致 UI 永久显示"初步发现 0 个"
-                raw_findings = analyst_result.get("findings", [])
-                suggested = analyst_result.get("summary", "")
-                self.event_bus.emit(EventType.AGENT_COMPLETED, "analyst", {
-                    "result_summary": f"初步发现 {len(raw_findings)} 个，待确认",
-                })
-                llm_message = self._generate_phase_message(
-                    "analyst_preliminary",
-                    findings=raw_findings,
-                    power_warnings=[],
-                    suggested_focus=suggested,
-                )
-                return {
-                    "status": "analyst_preliminary",
-                    "message": llm_message,
-                    "power_warnings": [],
-                    "business_metrics": [],
-                    "preliminary_findings": raw_findings,
-                    "suggested_focus": suggested,
-                    "cleaning_impact": cleaning_report.impact_rate if cleaning_report else 0,
-                    "duration_ms": int((datetime.now() - run_start).total_seconds() * 1000),
-                }
-            results, business_metrics = analyst_result
-
+        # F-078: 旧 phase 分支（scout_first/cleaning_first/analyst_first）已删除。
+        # F-078: 旧 phase 分支（scout_first/cleaning_first/analyst_first）已删除。
+        # F-078: cleaning_first / analyst_first 旧分支已随 phase 参数删除。
         try:
             # Scout + Cleaner（如果不是 resume）
             if not context:
@@ -2195,123 +1987,6 @@ class Orchestrator:
             return parse_query(query)
         except Exception:
             return None
-
-    def _generate_phase_message(
-        self,
-        phase: str,
-        *,
-        operations: list[dict[str, Any]] | None = None,
-        data_quality: str = "",
-        findings: list[dict[str, Any]] | None = None,
-        power_warnings: list[str] | None = None,
-        suggested_focus: str = "",
-    ) -> str:
-        """LLM 生成阶段用户消息（零硬编码文案）。LLM 不可达时直接 raise。"""
-
-        # 所有变量统一初始化，避免 phase 分支导致 UnboundLocalError
-        n_ops = 0
-        ops_desc = ""
-        n_findings = 0
-        findings_desc = ""
-        sf = ""
-        pw = ""
-
-        if phase == "cleaning_strategy":
-            n_ops = len(operations) if operations else 0
-            if n_ops == 0:
-                return f"数据质量：{data_quality}。未检测到需要清洗的问题，数据可以直接分析。"
-
-            ops_desc_lines: list[str] = []
-            for op in (operations or [])[:6]:
-                col = op.get("column", "")
-                reason = op.get("reason", "")
-                ops_desc_lines.append(f"  {col}: {reason[:80]}")
-            ops_desc = "\n".join(ops_desc_lines) if ops_desc_lines else "（无详情）"
-
-        elif phase == "analyst_preliminary":
-            n_findings = len(findings) if findings else 0
-            pw = power_warnings[0] if power_warnings else ""
-            finding_lines: list[str] = []
-            for f in (findings or [])[:5]:
-                sig = "显著" if f.get("significance") == "significant" else "不显著"
-                q = f.get("question", "")
-                p = f.get("p_value")
-                p_str = f"（p={p:.4f}）" if p is not None else ""
-                finding_lines.append(f"  [{sig}] {p_str}：{q}")
-            findings_desc = "\n".join(finding_lines) if finding_lines else "（无显著发现）"
-            sf = suggested_focus or "无"
-        else:
-            return ""
-
-        # F-055 修复：LLM 不可达时必须 raise RuntimeError（铁律 2 路径 A），不得 pass 吞掉
-        return self._try_generate_phase_llm(
-            phase=phase, data_quality=data_quality,
-            n_ops=n_ops, ops_desc=ops_desc,
-            n_findings=n_findings, findings_desc=findings_desc,
-            sf=sf, pw=pw,
-            retry=False,
-        )
-
-    def _try_generate_phase_llm(
-        self,
-        phase: str,
-        data_quality: str,
-        n_ops: int,
-        ops_desc: str,
-        n_findings: int,
-        findings_desc: str,
-        sf: str,
-        pw: str,
-        retry: bool,
-    ) -> str | None:
-        """尝试使用 LLM 生成阶段消息。retry=True 时使用快速模型作为二层回退。"""
-        try:
-            from hagoku.llm.client import create_raw_client
-
-            system_prompt = (
-                "你是数据分析助手 HaGoKu Studio。请用自然、亲切的中文为用户生成一段对话消息。"
-                "不要使用模板化的句式，用你自己的语言风格来表达。"
-                "保持简洁（3-5句话），像一个同事在群里说话的语气。"
-            )
-
-            if phase == "cleaning_strategy":
-                user_prompt = (
-                    f"你刚完成数据清洗策略检测。数据质量：{data_quality}。"
-                    f"计划执行 {n_ops} 个清洗操作：\n{ops_desc}\n"
-                    "请生成一条消息告知用户，并询问是否可以按此方案清洗（或者想调整）。"
-                )
-            elif phase == "analyst_preliminary":
-                pw_line = f"\n注意：{pw}" if pw else ""
-                user_prompt = (
-                    f"你刚完成初步数据分析。共 {n_findings} 个发现：\n{findings_desc}{pw_line}\n"
-                    f"建议关注方向：{sf}\n"
-                    "请生成一条消息告知用户，并询问用户想关注哪个方向。"
-                )
-            else:
-                return None
-
-            client = create_raw_client(self.config.llm)
-            model = (
-                (self.config.llm.model_quick or self.config.llm.model)
-                if retry
-                else self.config.llm.model
-            )
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.7,
-                max_tokens=300,
-            )
-            msg = response.choices[0].message.content or ""
-            return msg.strip()
-        except Exception as e:
-            raise RuntimeError(
-                f"_try_generate_phase_llm: LLM 不可达（retry={retry}）。原始错误: {e}"
-            ) from e
-
     def _describe_intent(self, parsed_intent: Any) -> str:
         """将解析后的意图译成接在「让我来」后的自然短句。
 
@@ -2547,7 +2222,7 @@ class Orchestrator:
                 f"_llm_classify_confirmation: LLM 不可达。原始错误: {e}"
             ) from e
 
-    def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_scout_reply(self, user_input: str, context: dict) -> dict:
         """处理 Scout 字段对齐阶段的用户回复。空输入=首次展示字段表。"""
         if not user_input or not user_input.strip():
             scout_msg = scout_field_review_pause_payload(context)
@@ -2565,7 +2240,7 @@ class Orchestrator:
         if applied and self.memory:
             self._persist_scout_field_updates(self._project_name, applied, context)
         if not applied:
-            return ("switch", "cleaner")
+            return {"status": "switch", "next": "cleaner"}
         scout_msg = scout_field_review_pause_payload(context)
         scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
         return {
@@ -2574,18 +2249,20 @@ class Orchestrator:
             "field_review": scout_msg.get("field_review"),
         }
 
-    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict:
         """处理 Cleaner 评估阶段的用户回复。"""
         from hagoku.agents.cleaner import CleanerAgent
         cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
         cleaning_rules = cleaner._load_cleaning_rules()
         context["_user_feedback"] = user_input
+        # F-082: Cleaner 评估时优先用原始数据（_df_raw）。用户原始数据特征
+        # 是清洗决策的依据；若原始数据不可用（如 resume 时跳过），回退到已清洗数据。
         df = self._df_raw if self._df_raw is not None else self._df_clean
         assessment = cleaner.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
-    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
+    def _handle_analyst_reply(self, user_input: str, context: dict) -> dict:
         """处理 Analyst 对话阶段的用户回复。"""
         if self._analyst_agent is None:
             from hagoku.agents.analyst import AnalystAgent
@@ -2599,7 +2276,7 @@ class Orchestrator:
             findings = result["findings"]
             # 护栏检查
             violations, violations_md = self._check_mandatory_guardrails(findings.get("findings", []))
-            return ("switch", "reporter", {"findings": findings})
+            return {"status": "switch", "next": "reporter", "data": {"findings": findings}}
         return {"status": "analyst_review", "message": result.get("text", "")}
 
     def _handle_reporter_reply(self, user_input: str, context: dict) -> dict:
@@ -2643,11 +2320,12 @@ class Orchestrator:
             )
             setattr(self, '_respond_revision', getattr(self, '_respond_revision', 0) + 1)
 
-        # handler 返回 ("switch", "X") → 切换阶段并递归
-        if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":
-            self._stage = result[1]
-            if len(result) > 2 and isinstance(result[2], dict):
-                self._context.update(result[2])
+        # handler 返回 {"status": "switch", ...} → 切换阶段并递归
+        if isinstance(result, dict) and result.get("status") == "switch":
+            self._stage = result["next"]
+            data = result.get("data")
+            if isinstance(data, dict):
+                self._context.update(data)
             return self.respond(user_input)
 
         return result

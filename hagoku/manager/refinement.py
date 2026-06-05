@@ -111,9 +111,8 @@ class RefinementParser:
         # LLM 语义理解（唯一通道：全部走 function calling）
         try:
             return self._parse_via_llm(f, context)
-        except Exception:
-            logger.warning("refinement: LLM 意图解析失败，使用兜底引导", exc_info=True)
-            return self._build_unknown_intent(f)
+        except Exception as e:
+            raise RuntimeError(f"refinement: LLM 反馈解析失败：{e}") from e
 
     def _parse_via_llm(self, feedback: str, context: dict[str, Any] | None) -> RefinementIntent:
         """通过 LLM function calling 解析用户意图。"""

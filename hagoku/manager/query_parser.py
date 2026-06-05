@@ -50,7 +50,7 @@ def parse_query(query: str, context_hints: dict[str, Any] | None = None) -> Quer
     """LLM 驱动：解析用户查询为结构化意图。
 
     零硬编码规则——所有意图识别、目标提取、时间解析交由 LLM 完成。
-    LLM 不可达时返回 exploration 兜底。
+    LLM 不可达时 raise RuntimeError（铁律 2 路径 A / 铁律 7），不兜底。
     """
     if not query or not query.strip():
         return QueryIntent(intent_type="exploration", confidence="high")
@@ -58,9 +58,8 @@ def parse_query(query: str, context_hints: dict[str, Any] | None = None) -> Quer
     try:
         intent_data = _llm_parse_intent(query.strip(), context_hints)
         return _build_intent(intent_data)
-    except Exception:
-        logger.warning("query_parser: LLM 意图解析失败，回退 exploration", exc_info=True)
-        return QueryIntent(intent_type="exploration", confidence="low")
+    except Exception as e:
+        raise RuntimeError(f"query_parser: LLM 意图解析失败：{e}") from e
 
 
 # ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====

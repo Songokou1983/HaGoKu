@@ -215,15 +215,23 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
     回归保护：line 2582 之前写 `self._df_raw or self._df_clean`，DataFrame 求
     值抛 ambiguous truth value。修复后改三元表达式，pytest 必须能真调 cleaner
     handler 一遍（不走 mock），确认 bug 不复发。
+
+    parse_query 在 LLM 不可达时直接 raise（铁律 7），这里 mock 掉让测试
+    专注于 DataFrame truthiness 回归，不依赖真实 LLM。
     """
     import pandas as pd
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
+    from hagoku.manager.query_parser import QueryIntent
 
     # 写最小 CSV 走真 run() 触发 _df_raw 加载
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("A,B\n1,3\n2,4\n3,5\n", encoding="utf-8")
 
-    result = orch.run(data_path=str(csv_path), query="分析")
+    # mock parse_query 在源头（query_parser 模块），因为 orchestrator 用 local import
+    with patch("hagoku.manager.query_parser.parse_query") as mock_parse:
+        mock_parse.return_value = QueryIntent(intent_type="exploration", confidence="high")
+        result = orch.run(data_path=str(csv_path), query="分析")
+
     assert result.get("status") == "scout_review"
     assert isinstance(orch._df_raw, pd.DataFrame)
     assert isinstance(orch._df_clean, pd.DataFrame)

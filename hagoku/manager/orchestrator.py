@@ -185,7 +185,8 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 # 用户意图判断统一入口：LLM 是唯一语义判断引擎。
 # 代码不做任何语义判断——不匹配正则、不检测关键词、不分类意图。
 # 代码只做通道：组装上下文 → 调 LLM → 解析结构化输出 → 返回结果。
-# LLM 不可用或出错时回退到「有补充」路径（安全默认值）。
+# LLM 不可用或出错时必须 raise RuntimeError（铁律 2 路径 A / 铁律 7），
+# 不得回退到"安全默认值"——用户必须看见 AI 没答。
 
 
 
@@ -1980,21 +1981,19 @@ class Orchestrator:
             )
 
     def _parse_user_query(self, query: str) -> Any:
-        """解析用户查询为结构化意图"""
-        try:
-            from .query_parser import parse_query
-            return parse_query(query)
-        except Exception:
-            return None
+        """解析用户查询为结构化意图。
+
+        parse_query 在 LLM 不可达时直接 raise（铁律 7），不兜底。
+        异常自然向上传播到调用方。
+        """
+        from .query_parser import parse_query
+        return parse_query(query)
     def _describe_intent(self, parsed_intent: Any) -> str:
         """将解析后的意图译成接在「让我来」后的自然短句。
 
         首选 LLM thinking 字段（Planning 阶段 LLM 产出），无 thinking 时回退为
         纯数据描述（不含硬编码 intent_type→短语映射），零语义归因。
         """
-        if parsed_intent is None:
-            return "探索一下这份数据有什么规律"
-
         # 优先使用 LLM 在意图解析时给出的 thinking
         thinking = getattr(parsed_intent, "thinking", "") or ""
         if thinking.strip():

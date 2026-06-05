@@ -209,6 +209,23 @@ LLM 失败必须**对用户可见**。代码不得自动重试到"看起来对�
 
 **检验**：`grep -rn "self\.\(mode\|strategy\|state\|context\)" hagoku/agents/`，确认所有相关状态都已注入 prompt
 
+### 触发词速查表（写代码时秒查）
+
+看到以下代码模式 / 写以下逻辑时，先查对应铁律：
+
+| 触发场景 | 应用铁律 |
+|---------|---------|
+| `if intent == "..."` / `if category == "..."` — 对 LLM 输出按含义分支 | 6 行为中性 |
+| `@lru_cache` / `@cache` 装饰 LLM 调用 | 6 行为中性 |
+| `default_value: "X"` / "默认值" 出现在 prompt 模板 | 5 通道洁净 |
+| `except: pass` / `except: continue` / `except: return default` | 7 失败在场 |
+| `for attempt in range(N): try: llm_call(); except: continue` | 7 失败在场 |
+| 全局/实例状态（`self.mode` / `self.strategy`）影响 LLM 但不注入 prompt | 8 状态显化 |
+| 代码按某字段筛选后才传 LLM，没标注字段被筛过 | 8 状态显化 |
+| `INTERNAL_.*MAP = {...}` / `.*_CACHE = {...}` 与 LLM 决策平行存在 | 4 决策位置 |
+| 缓存的"上次分析结论"作为 LLM 上下文但不标注 | 8 状态显化 |
+| LLM 失败时返回 cached 上次结果 | 7 失败在场 |
+
 ### 常见错误模式（每次都会犯，请警惕）
 
 | 你的本能 | 正确做法 |

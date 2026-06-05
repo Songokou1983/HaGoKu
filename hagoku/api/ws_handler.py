@@ -93,16 +93,17 @@ def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> 
         data_path=data_path,
         query=query,
         project_name=project_name,
+        phase=phase,
     )
 
 
-def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str | None = None) -> None:
+def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str) -> None:
     """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
     global _analysis_in_progress
     try:
         result = _shared_orchestrator.run(
             data_path=data_path, query=query,
-            project_name=project_name,
+            project_name=project_name, phase=phase,
         )
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":

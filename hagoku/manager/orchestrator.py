@@ -889,6 +889,13 @@ def _apply_scout_reply_with_llm(
         msg = resp.choices[0].message
         tool_calls = getattr(msg, "tool_calls", None)
         _raw_text = (msg.content or "").strip()
+        import logging as _log_llm
+        _log = _log_llm.getLogger("hagoku.orchestrator")
+        if tool_calls:
+            names = [tc.function.name if hasattr(tc, "function") else "?" for tc in tool_calls]
+            _log.warning("Scout reply LLM tool_calls: %s", names)
+        else:
+            _log.warning("Scout reply LLM no tool_calls, text=%r", _raw_text[:200])
 
         if channel_logger and tool_calls:
             for tc in (tool_calls or []):

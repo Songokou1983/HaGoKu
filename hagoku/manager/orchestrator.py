@@ -1719,6 +1719,7 @@ class Orchestrator:
         with self._cancel_lock:
             self._cancel_requested_flag = False
         # 事件驱动状态机字段
+        self._project_name = project_name
         self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None

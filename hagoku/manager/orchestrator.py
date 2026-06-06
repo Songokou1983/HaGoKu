@@ -1251,44 +1251,6 @@ def cleaning_review_pause_payload(
         },
     }
 
-def _fmt_pause_p_value(v: Any) -> str:
-    if v is None:
-        return "—"
-    try:
-        fv = float(v)
-    except (TypeError, ValueError):
-        s = str(v).strip()
-        return s[:20] + ("…" if len(s) > 20 else "") if s else "—"
-    if fv < 0.0001:
-        return "<0.0001"
-    if fv < 0.001:
-        return "<0.001"
-    return f"{fv:.4g}"
-
-def _fmt_pause_effect_summary(effect_type: str, effect_size: Any) -> str:
-    et = (effect_type or "").strip()
-    if effect_size is None:
-        return et if et else "—"
-    try:
-        ev = float(effect_size)
-    except (TypeError, ValueError):
-        return f"{et} {effect_size}".strip() if et else str(effect_size)[:32]
-    frag = f"{ev:.4g}"
-    if et:
-        return f"{et}={frag}"
-    return frag
-
-def _fmt_pause_ci(ci: Any, max_len: int = 56) -> str:
-    if ci is None:
-        return "—"
-    s = str(ci).strip()
-    if not s:
-        return "—"
-    if len(s) > max_len:
-        return s[: max_len - 1] + "…"
-    return s
-
-
 # ── 编排器 ────────────────────────────────────────────────────
 
 class Orchestrator:

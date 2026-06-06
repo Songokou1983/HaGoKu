@@ -371,7 +371,7 @@ HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策
 
 | 模型层级 | 配置变量 | 使用场景 | 默认 |
 |---------|---------|---------|------|
-| **默认模型** | `HAGOKYU_LLM_MODEL` | 所有 Agent 的基础模型 | `Qwen3.6-35B-A3B` |
+| **默认模型** | `HAGOKYU_LLM_MODEL` | 所有 Agent 的基础模型（用户运行时通过设置功能选择） | `<用户配置>` |
 | **深度推理** | `HAGOKYU_LLM_MODEL_DEEP` | Analyst（假设检验/回归诊断）、仲裁器 | 复用默认模型 |
 | **快速模型** | `HAGOKYU_LLM_MODEL_QUICK` | Scout（字段语义）、Reporter（叙述生成）、QueryParser（意图解析） | 复用默认模型 |
 
@@ -710,14 +710,14 @@ hagoku/
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `HAGOKYU_LLM_BASE_URL` | LLM 服务地址 | `http://localhost:8080/v1` |
+| `HAGOKYU_LLM_BASE_URL` | LLM 服务地址（OpenAI 兼容协议，用户运行时配置） | `<用户配置>` |
 | `HAGOKYU_LLM_API_KEY` | API 密钥 | `none` |
-| `HAGOKYU_LLM_MODEL` | 默认模型名 | `Qwen3.6-35B-A3B` |
+| `HAGOKYU_LLM_MODEL` | 默认模型名（用户运行时通过设置功能选择） | `<用户配置>` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理（Analyst/仲裁器） | 同 `MODEL` |
 | `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter） | 同 `MODEL` |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding 服务地址 | 空（须自行填写） |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | `none` |
-| `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
+| `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名（用户运行时通过设置功能选择） | `<用户配置>` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 | `HAGOKYU_PROJECT_DIR` | 项目根目录覆盖 | 同 `WORK_DIR/projects` |
 

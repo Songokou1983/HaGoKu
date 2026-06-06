@@ -53,3 +53,6 @@ UI_CHANGELOG_backup_*
 .codegraph/
 .reasonix/
 .vite/
+
+# AI 工具缓存：understand-anything 插件生成的知识图谱（同 .codegraph / .reasonix）
+.understand-anything/

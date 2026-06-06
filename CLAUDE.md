@@ -2,6 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 新人 30 秒入门（AI session 必读）
+
+**项目**：HaGoKu Studio 多 Agent 数据分析平台（Scout → Cleaner → Analyst → Reporter）
+**核心信条**：LLM 在语义判断上比代码更可靠。Code 的活是构建通道让 LLM 自由发挥，不替 LLM 干活。
+完整信条见 [`PROJECT.md`](PROJECT.md) 顶部。
+
+**绝对不能做**：
+- if-elif 中文分支判断意图 / 字段角色（铁律 1）
+- except 兜底默认值 / 静默重试（铁律 7）
+- 缓存 LLM 决策 / 隐藏 LLM 状态（铁律 6, 8）
+- 业务关键词列表 / 中文语义正则（铁律 1 配套）
+
+**绝对要做**：
+- LLM 走 `tool_calls` + Pydantic 收结构（铁律 4 通道）
+- LLM 失败 `raise RuntimeError`，让用户看见（铁律 7）
+- 状态显式注入 prompt，不偷影响 LLM（铁律 8）
+
+**5 分钟读这三处**（按顺序）：
+1. [`PROJECT.md`](PROJECT.md) 顶部核心信条
+2. 本文件「铁律」节（1-8 全部）
+3. `PROJECT.md` §「代码边界」+「通道完备性十律」
+
+**不确定时**：见下方「拿不准时问自己唯一的问题」节。
+
+---
+
 > **单源声明**：本文件是项目**唯一** AI 实现者手册（`AGENTS.md` 仅是指向本文件的指针）。所有 AI 助手（Claude / Codex / Cursor / Cascade 等）入仓库后均以本文件为操作手册。规则冲突时一律以 [`PROJECT.md`](PROJECT.md) 为权威源。
 
 ## Repository Context

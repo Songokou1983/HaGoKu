@@ -398,6 +398,146 @@ def test_doctrine_LLM调用except块不得静默吞() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 守门 5b：LLM 模块 except 块不得构造"假响应"对象
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 守门 5 只查 `return <空字面量>`（`[]` / `{}` / `None` / `''` / `""`），
+# 但 silent fallback 经常升级为"构造一个看起来合理的假响应"——
+# 例：`return QueryIntent(intent_type="exploration", confidence="low")`。
+# 这种"假响应"比空值更隐蔽：用户以为 AI 答了一个低置信度的 fallback，
+# 实际 AI 没答。
+#
+# 检测双条件：
+#   1. except handler 含 LLM-shaped 字段赋值（如 `intent_type=`, `confidence=`）
+#   2. except handler 出现构造调用（`return ClassName(...)` 或 `return self.method(...)`）
+# 只在 LLM 模块（模块内有任何 LLM 调用）检查。
+#
+# 合规例外（带 fallback 标记的）：
+#   - Scribe.recover_field_descriptions 用 `_scribe_fallback=True` 标记占位
+#   - Cleaner 顶层 except 用 `bias_risk="high" + bias_risk_reason=str(e)` 暴露
+#   - Agent 的 `_done()` / `ReportData(...)` 是 agent 自己的返回状态，不是 LLM 假响应
+#   - `Path(...)` / `OpenAI(...)` 是 stdlib/external 客户端对象，不是响应
+
+# LLM-shaped 字段名（出现这些 = 构造的是 LLM 响应形状的对象）
+_FAKE_RESPONSE_FIELDS = (
+    "intent_type", "confidence", "refine_type", "analysis_focus",
+    "guidance", "raw_text", "target", "operations", "strategy",
+    "verdict", "approach", "method",
+)
+_FAKE_FIELD_PATTERN = re.compile(
+    r"\b(?:" + "|".join(_FAKE_RESPONSE_FIELDS) + r")\s*="
+)
+_FAKE_CONSTRUCTOR_PATTERN = re.compile(
+    r"return\s+(?:[A-Z][A-Za-z0-9_]*\s*\(|self\._?\w+\s*\()"
+)
+
+
+def test_doctrine_LLM模块except块不得构造假响应() -> None:
+    """守门 5b：扫描所有 LLM 模块的 except handler，禁止构造 LLM-shaped 假响应。
+
+    双条件检测：
+      1. except handler 含 LLM-shaped 字段赋值（最隐蔽的 fake response 特征）
+      2. except handler 同时出现构造调用（`return ClassName(...)` 或 `self.method(...)`）
+
+    与守门 5 互补：5 查 `return <空字面量>`，本测试查"看起来像 LLM 响应"的构造。
+    """
+    violations: list[str] = []
+    for path in _scanned_files():
+        text = _read(path)
+        if not _LLM_CALL_HINT_LINES.search(text):
+            continue
+        try:
+            tree = ast.parse(text, filename=str(path))
+        except SyntaxError:
+            continue
+
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for handler in ast.walk(func):
+                if not isinstance(handler, ast.ExceptHandler):
+                    continue
+                try:
+                    h_src = ast.unparse(handler)
+                except Exception:
+                    continue
+
+                # 合法应对：raise RuntimeError 或写未理解信号
+                legal = (
+                    "raise" in h_src
+                    or "_last_understanding_failure" in h_src
+                    or "RuntimeError" in h_src
+                )
+                if legal:
+                    continue
+
+                # 条件 1：含 LLM-shaped 字段
+                if not _FAKE_FIELD_PATTERN.search(h_src):
+                    continue
+                # 条件 2：含构造调用
+                m = _FAKE_CONSTRUCTOR_PATTERN.search(h_src)
+                if not m:
+                    continue
+
+                rel = path.relative_to(HAGOKU_ROOT)
+                key = f"{rel}::{func.name}:{handler.lineno}"
+                if key in _KNOWN_LLM_EXCEPT_VIOLATIONS:
+                    continue
+                violations.append(
+                    f"{key}  except 块构造 LLM-shaped 假响应：{m.group(0).strip()}"
+                )
+
+    assert not violations, (
+        "\n违反【铁律 7 失败在场律】：LLM 模块 except 块构造假响应\n"
+        "如何修复：\n"
+        "  - LLM 不可达 → raise RuntimeError(...)（铁律 2 路径 A）\n"
+        "  - LLM 给出无效输出 → ctx['_last_understanding_failure'] = {...}（铁律 2 路径 B）\n"
+        "  - 不许构造'看起来合理'的假响应让 LLM 失败消失在数据里\n"
+        "若是带 fallback 标记的合规降级（如 _scribe_fallback=True），\n"
+        "请在 _KNOWN_LLM_EXCEPT_VIOLATIONS 加白名单并加注释说明。\n"
+        "  ----  违规位置  ----\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_meta_假响应探测器自检() -> None:
+    """元测试：确保双条件探测器不会误报也不会漏报。"""
+    # 应该被 flag（构造 + LLM-shaped 字段）
+    bad_cases = [
+        "return QueryIntent(intent_type='exploration', confidence='low')",
+        "return RefinementIntent(refine_type='unknown', confidence='low', guidance='...')",
+    ]
+    for bad in bad_cases:
+        assert _FAKE_FIELD_PATTERN.search(bad), (
+            f"字段探测器失效：连 {bad!r} 都不识别"
+        )
+        assert _FAKE_CONSTRUCTOR_PATTERN.search(bad), (
+            f"构造探测器失效：连 {bad!r} 都不识别"
+        )
+
+    # 不应该被 flag（合规模式）
+    ok_cases = [
+        # agent 自己的返回状态
+        "return self._done()",
+        "return ReportData(...)",
+        # stdlib / external 客户端对象
+        "return Path(os.path.expanduser('~/.hagoku'))",
+        "return OpenAI(base_url=..., api_key=...)",
+        # raise 不是 return
+        "raise RuntimeError(...)",
+        # 不含 LLM-shaped 字段的构造（即便有构造调用）
+        "return self._build_unknown_intent(feedback)",  # 内层调用，无字段
+    ]
+    for ok in ok_cases:
+        # 至少一个条件不满足即可（字段 OR 构造）
+        has_field = bool(_FAKE_FIELD_PATTERN.search(ok))
+        has_construct = bool(_FAKE_CONSTRUCTOR_PATTERN.search(ok))
+        assert not (has_field and has_construct), (
+            f"守门 5b 双条件误报：{ok!r} 不应同时满足两个条件"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 元测试：守门测试本身能正常工作
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -109,6 +109,7 @@ class ScoutAgent(InteractionMixin):
         llm_config: LLMConfig,
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
+        orchestrator: Any | None = None,
         llm_client: Any | None = None,
         *,
         channel_logger: Any | None = None,
@@ -116,7 +117,8 @@ class ScoutAgent(InteractionMixin):
         self.role = "scout"
         self.llm_config = llm_config
         self.event_bus = event_bus
-        self.scribe = scribe  # 可选，用于看板 block/unblock
+        self.scribe = scribe  # 保留向后兼容；看板 block/unblock 已切到 orchestrator
+        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
         self._channel_logger = channel_logger
 
@@ -346,8 +348,8 @@ class ScoutAgent(InteractionMixin):
             uncertain = [s for s in context["column_semantics"] if s.get("needs_user_input")]
             if uncertain:
                 # block 看板，等用户确认
-                if self.scribe:
-                    self.scribe.block_task("scout", "等用户确认字段含义")
+                if self.orchestrator:
+                    self.orchestrator.block_task("scout", "等用户确认字段含义")
                 self._emit(EventType.AGENT_THINKING, {"thought": f"识别 {len(uncertain)} 个字段需确认，正在生成确认消息..."})
 
                 # 用 LLM 生成完整确认消息（传入所有字段，不只是 uncertain）
@@ -427,8 +429,8 @@ class ScoutAgent(InteractionMixin):
             self._context["user_comments"] = comments
 
         # 解除 block，继续看板任务
-        if self.scribe:
-            self.scribe.unblock_task("scout")
+        if self.orchestrator:
+            self.orchestrator.unblock_task("scout")
 
         # 写记忆
         self._update_own_memory(self._context, project_id)
@@ -451,8 +453,8 @@ class ScoutAgent(InteractionMixin):
         )
 
         # block，等用户确认进入下一步
-        if self.scribe:
-            self.scribe.block_task("scout", "等用户确认进入清洗阶段")
+        if self.orchestrator:
+            self.orchestrator.block_task("scout", "等用户确认进入清洗阶段")
         self._emit(EventType.AGENT_COMPLETED, {"result_summary": summary})
 
         return self._pause(

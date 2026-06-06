@@ -1705,13 +1705,16 @@ class Orchestrator:
         # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
-        # 初始化 Agent（传入 scribe 用于看板 block/unblock）
+        # 初始化 Agent（Step 2：传 orchestrator 用于看板 block/unblock；scribe 保留以兼容 Step 3/4）
         # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
-        scout = ScoutAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe,
-                           channel_logger=self._channel_logger)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick, scribe=self.scribe)
-        analyst = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep, scribe=self.scribe)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick_raw, scribe=self.scribe)
+        scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+                           llm_client=self.llm_quick, channel_logger=self._channel_logger)
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+                               llm_client=self.llm_quick)
+        analyst = AnalystAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+                               llm_client=self.llm_deep)
+        reporter = ReporterAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+                                 llm_client=self.llm_quick_raw)
 
         # Resume 支持
         df_clean = None

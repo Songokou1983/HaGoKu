@@ -37,13 +37,15 @@ class ReporterAgent(InteractionMixin):
         event_bus: EventBus | None = None,
         llm_client: Any | None = None,
         scribe: Any | None = None,
+        orchestrator: Any | None = None,
         **kwargs: Any,
     ) -> None:
         # 兼容旧签名的第一个位置参数 llm_config
         self.llm_config = args[0] if args and hasattr(args[0], 'model') else None
         self.role = "reporter"
         self.event_bus = event_bus or args[1] if len(args) > 1 else event_bus  # type: ignore[assignment]
-        self.scribe = scribe
+        self.scribe = scribe  # 保留向后兼容
+        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client
         if not self.event_bus:
             raise ValueError("ReporterAgent 需要 event_bus 参数")
@@ -526,8 +528,8 @@ class ReporterAgent(InteractionMixin):
         # 先让 LLM 生成预览（headline + 摘要）
         n_sig = sum(1 for r in results if r.get("significance") == "significant")
 
-        if self.scribe:
-            self.scribe.block_task("reporter", "等用户确认生成报告")
+        if self.orchestrator:
+            self.orchestrator.block_task("reporter", "等用户确认生成报告")
 
         return self._pause(
             phase="confirm_report",
@@ -556,12 +558,12 @@ class ReporterAgent(InteractionMixin):
 
         confirmed = user_input.get("confirmed", True)
         if not confirmed:
-            if self.scribe:
-                self.scribe.unblock_task("reporter")
+            if self.orchestrator:
+                self.orchestrator.unblock_task("reporter")
             return self._done("done", "报告生成已取消", {})
 
-        if self.scribe:
-            self.scribe.unblock_task("reporter")
+        if self.orchestrator:
+            self.orchestrator.unblock_task("reporter")
 
         data = self._pending_data
 

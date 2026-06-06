@@ -46,12 +46,14 @@ class CleanerAgent(InteractionMixin):
         llm_config: LLMConfig,
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
+        orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
         self.role = "cleaner"
         self.llm_config = llm_config
         self.event_bus = event_bus
-        self.scribe = scribe
+        self.scribe = scribe  # 保留向后兼容
+        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
         self.prompt = self._load_prompt()
@@ -380,8 +382,8 @@ class CleanerAgent(InteractionMixin):
 
             if operations:
                 # block，等用户确认策略
-                if self.scribe:
-                    self.scribe.block_task("cleaner", "等用户确认清洗策略")
+                if self.orchestrator:
+                    self.orchestrator.block_task("cleaner", "等用户确认清洗策略")
                 return self._pause(
                     phase="confirm_strategy",
                     message=f"检测到 {len(operations)} 个潜在清洗操作，请确认：",
@@ -439,8 +441,8 @@ class CleanerAgent(InteractionMixin):
                 final_ops[col] = strategy
 
         # 解除 block
-        if self.scribe:
-            self.scribe.unblock_task("cleaner")
+        if self.orchestrator:
+            self.orchestrator.unblock_task("cleaner")
 
         df = self._df
         context = self._context or {}
@@ -491,8 +493,8 @@ class CleanerAgent(InteractionMixin):
         )
 
         # block，等用户确认进入下一步
-        if self.scribe:
-            self.scribe.block_task("cleaner", "等用户确认进入分析阶段")
+        if self.orchestrator:
+            self.orchestrator.block_task("cleaner", "等用户确认进入分析阶段")
         self._emit(EventType.AGENT_COMPLETED, {"result_summary": summary})
 
         return self._pause(

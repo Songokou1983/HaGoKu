@@ -120,12 +120,14 @@ class AnalystAgent(InteractionMixin):
         llm_config: LLMConfig,
         event_bus: EventBus,
         scribe: "ScribeAgent | None" = None,
+        orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
         self.role = "analyst"
         self.llm_config = llm_config
         self.event_bus = event_bus
-        self.scribe = scribe
+        self.scribe = scribe  # 保留向后兼容
+        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
         self.prompt = self._load_prompt()
@@ -429,8 +431,8 @@ class AnalystAgent(InteractionMixin):
             summary = f"完成 {len(results)} 项分析，{n_sig} 项显著发现"
 
             # block，等用户确认进入下一步
-            if self.scribe:
-                self.scribe.block_task("analyst", "等用户确认进入报告阶段")
+            if self.orchestrator:
+                self.orchestrator.block_task("analyst", "等用户确认进入报告阶段")
 
             return self._pause(
                 phase="next_step",
@@ -461,8 +463,8 @@ class AnalystAgent(InteractionMixin):
 
         action = user_input.get("action", "")
         if action == "生成报告":
-            if self.scribe:
-                self.scribe.unblock_task("analyst")
+            if self.orchestrator:
+                self.orchestrator.unblock_task("analyst")
             return self._pause(
                 phase="next_step",
                 message="正在进入报告阶段...",
@@ -471,12 +473,12 @@ class AnalystAgent(InteractionMixin):
                 data={"proceed_to": "reporter"},
             )
         elif action == "继续分析":
-            if self.scribe:
-                self.scribe.unblock_task("analyst")
+            if self.orchestrator:
+                self.orchestrator.unblock_task("analyst")
             # 重新执行分析
             return self.begin(self._df, self._context, self._plan)  # type: ignore[arg-type]
         else:
-            if self.scribe:
-                self.scribe.unblock_task("analyst")
+            if self.orchestrator:
+                self.orchestrator.unblock_task("analyst")
             return self._done("done", "分析已结束", {})
 

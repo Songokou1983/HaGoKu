@@ -20,6 +20,7 @@ from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
+from ..storage.kanban import KanbanDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
 from ..storage.project_manager import ProjectManager
@@ -1647,6 +1648,7 @@ class Orchestrator:
         context: dict[str, Any] = {}
 
         # 初始化 Scribe Agent（看板驱动）
+        self.kanban = KanbanDB.get_instance(self.output_mgr.project_dir)
         self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
         self.scribe.init_pipeline()
 
@@ -2009,6 +2011,28 @@ class Orchestrator:
         if self.scribe is None:
             return None
         return self.scribe.get_upstream_summary(agent_name)
+
+    def block_task(self, agent_name: str, reason: str) -> bool:
+        """Block 指定 Agent 的任务（等用户输入）。Step 1 内联：直接走 kanban。
+
+        与 self.scribe.block_task 行为等价（Scribe 与 Orchestrator 共享同一 KanbanDB 单例）。
+        在 Step 2 中 4 agent 将从 self.scribe.block_task 切到本方法。
+        """
+        if not hasattr(self, "kanban") or self.kanban is None:
+            return False
+        task = self.kanban.get_active_task(agent_name.lower())
+        if not task:
+            return False
+        return self.kanban.block_task(task["id"], reason)
+
+    def unblock_task(self, agent_name: str) -> bool:
+        """Unblock 指定 Agent 的任务。Step 1 内联：直接走 kanban。"""
+        if not hasattr(self, "kanban") or self.kanban is None:
+            return False
+        task = self.kanban.get_active_task(agent_name.lower())
+        if not task:
+            return False
+        return self.kanban.unblock_task(task["id"])
 
     def _build_intent_context(self, query: str, parsed_intent: Any) -> str:
         """将解析后的意图构建成 LLM 可用的上下文（无硬编码标签）。"""

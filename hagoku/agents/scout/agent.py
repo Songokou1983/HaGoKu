@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .._scribe.agent import ScribeAgent
+    pass
 
 import numpy as np
 import pandas as pd
@@ -108,7 +108,6 @@ class ScoutAgent(InteractionMixin):
         self,
         llm_config: LLMConfig,
         event_bus: EventBus,
-        scribe: "ScribeAgent | None" = None,
         orchestrator: Any | None = None,
         llm_client: Any | None = None,
         *,
@@ -117,8 +116,7 @@ class ScoutAgent(InteractionMixin):
         self.role = "scout"
         self.llm_config = llm_config
         self.event_bus = event_bus
-        self.scribe = scribe  # 保留向后兼容；看板 block/unblock 已切到 orchestrator
-        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
+        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
         self._channel_logger = channel_logger
 

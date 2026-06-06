@@ -90,7 +90,6 @@ def test_下游_agent_实际注入_messages_history(agent_key):
         agent.event_bus = _FakeEventBus()
         agent._llm_client = _ReporterFakeClient()
         agent.role = "reporter"
-        agent.scribe = None
 
         block = ctx_proj.build_prompt("reporter", context={})
         system_prompt = "报告员"

@@ -36,7 +36,6 @@ class ReporterAgent(InteractionMixin):
         *args: Any,
         event_bus: EventBus | None = None,
         llm_client: Any | None = None,
-        scribe: Any | None = None,
         orchestrator: Any | None = None,
         **kwargs: Any,
     ) -> None:
@@ -44,8 +43,7 @@ class ReporterAgent(InteractionMixin):
         self.llm_config = args[0] if args and hasattr(args[0], 'model') else None
         self.role = "reporter"
         self.event_bus = event_bus or args[1] if len(args) > 1 else event_bus  # type: ignore[assignment]
-        self.scribe = scribe  # 保留向后兼容
-        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
+        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client
         if not self.event_bus:
             raise ValueError("ReporterAgent 需要 event_bus 参数")

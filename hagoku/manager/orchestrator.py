@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..agents._scribe.agent import ScribeAgent
 from ..agents.analyst import AnalystAgent
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
@@ -1647,10 +1646,10 @@ class Orchestrator:
         # ── 持久 context 引用（必修 3）：Scribe 初始化前声明 ──
         context: dict[str, Any] = {}
 
-        # 初始化 Scribe Agent（看板驱动）
+        # 初始化 kanban 状态机（Step 4：从 Scribe 迁移到 Orchestrator 内部）
         self.kanban = KanbanDB.get_instance(self.output_mgr.project_dir)
-        self.scribe = ScribeAgent(self.config.llm, self.event_bus, self.output_mgr.project_dir)
-        self.scribe.init_pipeline()
+        self.event_bus.subscribe(self._on_event)
+        self._init_pipeline_tasks()
 
         # 处理 --progress 参数
         if progress_path:
@@ -1705,15 +1704,15 @@ class Orchestrator:
         # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
-        # 初始化 Agent（Step 2：传 orchestrator 用于看板 block/unblock；scribe 保留以兼容 Step 3/4）
+        # 初始化 Agent（Step 4：Scribe 类已删，agent 不再接收 scribe= 参数）
         # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
-        scout = ScoutAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+        scout = ScoutAgent(self.config.llm, self.event_bus, orchestrator=self,
                            llm_client=self.llm_quick, channel_logger=self._channel_logger)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, orchestrator=self,
                                llm_client=self.llm_quick)
-        analyst = AnalystAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+        analyst = AnalystAgent(self.config.llm, self.event_bus, orchestrator=self,
                                llm_client=self.llm_deep)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, scribe=self.scribe, orchestrator=self,
+        reporter = ReporterAgent(self.config.llm, self.event_bus, orchestrator=self,
                                  llm_client=self.llm_quick_raw)
 
         # Resume 支持
@@ -2006,19 +2005,135 @@ class Orchestrator:
         }
 
     def _get_upstream_summary(self, agent_name: str) -> str | None:
-        """获取指定 Agent 的上游交接笔记，供注入到下游 Agent 的上下文中。
+        """占位方法（Step 3 删 handover 通道后保留兼容）。
 
-        Step 3 变更：handover_notes.md 通道已删除。
-        上下游 Agent 的 ctx 传递由 orchestrator 直接管理（agent 输出 dict 注入下游 prompt），
-        本方法保留接口以兼容调用点（line 853），统一返回 None。
+        调用点（line 853）期望拿到上游 Agent 摘要注入下游 prompt。
+        Step 4 决定：handover 通道彻底删除后，本方法返回 None 即可。
+        下游 Agent 拿不到额外摘要，但其 ctx 仍包含上游的完整数据（self._analyst_messages 等）。
         """
         return None
 
-    def block_task(self, agent_name: str, reason: str) -> bool:
-        """Block 指定 Agent 的任务（等用户输入）。Step 1 内联：直接走 kanban。
+    # ── Kanban 状态机（Step 4：从 Scribe 内联到 Orchestrator） ──
 
-        与 self.scribe.block_task 行为等价（Scribe 与 Orchestrator 共享同一 KanbanDB 单例）。
-        在 Step 2 中 4 agent 将从 self.scribe.block_task 切到本方法。
+    def _init_pipeline_tasks(self) -> str:
+        """初始化分析 pipeline：创建 Scout → Cleaner → Analyst → Reporter 任务链。
+
+        Step 4 从 Scribe.init_pipeline 内联而来。Scout 直接设为 ready（第一个运行），
+        其余为 triage（等父任务完成自动 promote）。
+        返回 Scout 任务 ID。
+        """
+        scout_id = self.kanban.create_task(
+            agent="scout",
+            title="Scout: 理解数据字段",
+            description="加载数据，推断字段语义",
+        )
+        self.kanban.update_status(scout_id, "ready")
+
+        cleaner_id = self.kanban.create_task(
+            agent="cleaner",
+            title="Cleaner: 清洗数据",
+            description="检测异常并清洗数据",
+            parent_id=scout_id,
+        )
+
+        analyst_id = self.kanban.create_task(
+            agent="analyst",
+            title="Analyst: 跑统计分析",
+            description="执行统计分析",
+            parent_id=cleaner_id,
+        )
+
+        self.kanban.create_task(
+            agent="reporter",
+            title="Reporter: 生成报告",
+            description="生成分析报告",
+            parent_id=analyst_id,
+        )
+
+        return scout_id
+
+    def _on_event(self, event) -> None:
+        """统一事件处理器，Step 4 仅处理 3 个影响 kanban 状态的事件。"""
+        etype = event.event_type
+        if etype == EventType.AGENT_STARTED:
+            self._on_agent_started(event)
+        elif etype == EventType.AGENT_COMPLETED:
+            self._on_agent_completed(event)
+        elif etype == EventType.AGENT_FAILED:
+            self._on_agent_failed(event)
+
+    def _on_agent_started(self, event) -> None:
+        agent = event.agent
+        goal = event.data.get("goal", "")
+        # 优先复用 _init_pipeline_tasks 创建的任务（状态为 ready）
+        ready_task = self.kanban.get_ready_task(agent.lower())
+        if ready_task:
+            ok = self.kanban.claim_task(ready_task["id"], f"{agent.lower()}_agent")
+            if not ok:
+                pass  # claim failed, task already taken
+        else:
+            task = self.kanban.get_active_task(agent.lower())
+            if not task:
+                task_id = self.kanban.create_task(
+                    agent=agent.lower(),
+                    title=f"{agent}: {goal}",
+                    description=f"Started at {datetime.now().strftime('%H:%M:%S')}",
+                )
+                self.kanban.update_status(task_id, "todo")
+                self.kanban.update_status(task_id, "ready")
+
+    def _on_agent_completed(self, event) -> None:
+        agent = event.agent
+        result = event.data.get("result_summary", "")
+        lock_holder = f"{agent.lower()}_agent"
+        self.kanban.complete_agent_task_atomic(
+            agent=agent.lower(),
+            lock_holder=lock_holder,
+            result=result,
+        )
+        # 自动 promote 下游任务
+        self._auto_promote_next(agent)
+
+    def _on_agent_failed(self, event) -> None:
+        agent = event.agent
+        error = event.data.get("error", "")
+        task = self.kanban.get_active_task(agent.lower())
+        if task and task["status"] == "running":
+            self.kanban.update_status(task["id"], "blocked")
+            self.kanban.add_comment(task["id"], "system", f"Failed: {error}")
+
+    def _auto_promote_next(self, agent: str) -> None:
+        """上游 Agent 完成后，自动 promote 下游任务为 ready。
+
+        Scout done → Cleaner ready
+        Cleaner done → Analyst ready
+        Analyst done → Reporter ready
+        Reporter done → Pipeline 完成（所有任务 done）
+        """
+        pipeline = ["scout", "cleaner", "analyst", "reporter"]
+        try:
+            idx = pipeline.index(agent.lower())
+        except ValueError:
+            return
+
+        downstream = pipeline[idx + 1] if idx + 1 < len(pipeline) else None
+        if downstream is None:
+            # Reporter 完成 → 所有任务完成
+            for ag in pipeline:
+                task = self.kanban.get_any_task(ag)
+                if task and task["status"] != "done":
+                    self.kanban.update_status(task["id"], "done")
+            return
+
+        # Promote 下游任务
+        task = self.kanban.get_any_task(downstream)
+        if task and task["status"] in ("todo", "triage"):
+            self.kanban.update_status(task["id"], "ready")
+
+    def block_task(self, agent_name: str, reason: str) -> bool:
+        """Block 指定 Agent 的任务（等用户输入）。
+
+        Step 4 起：4 agent 直接调本方法（不再经 Scribe）。
         """
         if not hasattr(self, "kanban") or self.kanban is None:
             return False

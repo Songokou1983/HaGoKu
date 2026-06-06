@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .._scribe.agent import ScribeAgent
+    pass
 
 import pandas as pd
 import yaml
@@ -45,15 +45,13 @@ class CleanerAgent(InteractionMixin):
         self,
         llm_config: LLMConfig,
         event_bus: EventBus,
-        scribe: "ScribeAgent | None" = None,
         orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
         self.role = "cleaner"
         self.llm_config = llm_config
         self.event_bus = event_bus
-        self.scribe = scribe  # 保留向后兼容
-        self.orchestrator = orchestrator  # Step 2: 看板 block/unblock 通过 orchestrator 走
+        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
         self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
 
         self.prompt = self._load_prompt()

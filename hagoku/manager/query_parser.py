@@ -30,17 +30,6 @@ class QueryIntent:
     confidence: str = "medium"
     thinking: str = ""
     analysis_focus: list[str] = field(default_factory=list)
-    fallback_focus: list[str] = field(
-        default_factory=lambda: ["regression", "hypothesis_test", "correlation"]
-    )
-
-    def to_plan_focus(self) -> list[str]:
-        """返回 LLM 指定的分析焦点列表。
-
-        分析焦点由 LLM 在意图解析时直接输出，代码不做映射。
-        若 LLM 未指定，回退到默认探索焦点。
-        """
-        return self.analysis_focus or self.fallback_focus
 
 
 # ── 快捷函数（LLM 驱动，零硬编码）────────────────────────────

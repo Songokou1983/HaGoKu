@@ -995,12 +995,8 @@ class CleanerAgent(InteractionMixin):
         # 写入 context dict（供 Analyst 直接访问结构化清洗数据）
         context["_cleaning_impact"] = cleaning_data
 
-        # 写入 context.md（供 Scribe 维护项目记录）
-        if self.scribe and self.scribe.context_path.exists():
-            self.scribe.update_context("Cleaner", {
-                "data": cleaning_data,
-                "completed": True,
-            })
+        # Step 3 移除：context.md 通道已删除，update_context 不再调用
+        # 原代码：self.scribe.update_context("Cleaner", {"data": cleaning_data, "completed": True})
 
     def get_strategy_summary(self, data_path: str, context: dict) -> dict:
         """

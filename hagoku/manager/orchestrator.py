@@ -2008,12 +2008,11 @@ class Orchestrator:
     def _get_upstream_summary(self, agent_name: str) -> str | None:
         """获取指定 Agent 的上游交接笔记，供注入到下游 Agent 的上下文中。
 
-        在启动 Cleaner/Analyst/Reporter 前调用，拉取上游 Agent 的完整产出摘要和交接建议，
-        让 Agent 在启动时就能看到全貌，实现全过程理解。
+        Step 3 变更：handover_notes.md 通道已删除。
+        上下游 Agent 的 ctx 传递由 orchestrator 直接管理（agent 输出 dict 注入下游 prompt），
+        本方法保留接口以兼容调用点（line 853），统一返回 None。
         """
-        if self.scribe is None:
-            return None
-        return self.scribe.get_upstream_summary(agent_name)
+        return None
 
     def block_task(self, agent_name: str, reason: str) -> bool:
         """Block 指定 Agent 的任务（等用户输入）。Step 1 内联：直接走 kanban。

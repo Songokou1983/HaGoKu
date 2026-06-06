@@ -98,3 +98,42 @@ Scribe 名义上管 4 件大事：看板管理、记忆维护、知识库检索�
 > "你说 Scribe 能'画龙点睛'——上次做完一次分析、看到报告，那个时刻，**你作为用户，希望从哪儿感受到'系统是活的、记得我、懂我'？**"
 
 从这个具体体验出发，把"画龙点睛"落到一个能**被 1 句话说清**的位置。
+
+---
+
+## 结论（2026-06-06）
+
+本次讨论最终决定：**回归简单，把 Scribe 简化为 Orchestrator 内部的一部分**。不 LLM 化、不保留 agent 抽象。
+
+**4 步执行**（5 个 commit 含 1 个 initial）：
+
+| 步骤 | Commit | 内容 |
+|---|---|---|
+| Step 1 | `237310d` | Orchestrator 拿 `self.kanban` + `block_task` / `unblock_task` 方法 |
+| Step 2 | `2e3197d` | 4 agent 切到 `orchestrator.block_task` / `unblock_task`（13 调用点） |
+| Step 3 | `3728f4b` | 删 4 通道文件（process_log.md / context.md / handover_notes.md） + handover 改 None + Scribe 793→363 行 |
+| Step 4 | `d2772dd` | 删 `_scribe/` 目录 + `prompt.md` + Scribe 测试（440/440 pass） |
+| Step 5 | （本次） | 文档同步：CLAUDE.md / PROJECT.md / brief / memory |
+
+**架构变更**：
+- ❌ 删 `hagoku/agents/_scribe/` 整目录
+- ❌ 删 4 通道文件（process_log.md / context.md / handover_notes.md）
+- ❌ 删 4 个 Scribe 测试（`TestScribeRecoverFieldDescriptions`）
+- ❌ 删 `recover_field_descriptions`（LLM 兜底，0 生产调用方）
+- ❌ 删 `handover_notes.md`（handover 内容直接由 orchestrator 注入下游 agent prompt）
+- ✅ Kanban 状态机内联到 `Orchestrator`（`self.kanban` + `_on_event` + 3 个 handler + `_auto_promote_next` + `_init_pipeline_tasks`）
+- ✅ 4 agent 改用 `orchestrator.block_task` / `unblock_task`（门控流程不变）
+
+**为何不 LLM 化**：
+- Scribe 4 件真活（kanban / handover / block-unblock / init_pipeline）都是确定性 Python 状态机，不涉及 LLM 语义判断
+- 8 个 public 方法（`claim_task` / `record_interaction` / `update_context` 等）从未被调——证明"LLM 兜底"路径无人需要
+- 唯一 LLM 调用点 `recover_field_descriptions` 全仓 0 生产调用方
+- LLM 化（让 Scribe 做"活的协调者"）属于"愿景驱动"而非"需求驱动"
+
+**结果**：
+- pytest 444 → 440（删 4 个 Scribe 测试）
+- `_scribe/` 目录删除（-793 行 Scribe 代码 + 12KB prompt.md）
+- Orchestrator 净增 ~150 行内联 kanban 逻辑
+- 整体代码净减 600+ 行
+
+后续如需"活的协调者"愿景，可基于内联后的 Orchestrator 状态机做加法（每个新 LLM 节点是独立 commit、可独立回滚）。本次仅做减法。

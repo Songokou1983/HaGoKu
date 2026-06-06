@@ -299,7 +299,7 @@ LLM 失败必须**对用户可见**。代码不得自动重试到"看起来对�
 - `validate_analysis_output()` 综合 4 项检查
 - Reporter 需调用解析器验证 Analyst 输出结构完整性
 
-**Scribe**：确定性 Agent，仅字段描述不完整时用 LLM 补全。负责：看板管理、记忆维护、知识库检索与注入、字段仲裁。详见 PROJECT.md Agent 表。
+**Orchestrator 看板**（Step 4，2026-06-06 取代原 Scribe Agent）：kanban.db 状态机（7 状态）+ 事件驱动 promote 已内联到 `Orchestrator` 类内部。4 agent 通过 `orchestrator.block_task` / `orchestrator.unblock_task` 控制门控。原 `_scribe/` 目录已删，4 通道文件（process_log.md / context.md / handover_notes.md）已删。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段。
 
 **P0 架构净化（2026-05-20）**：移除 6 处代码级硬编码语义，彻底贯彻 `LLM 输出 → 代码搬运 → 用户` 通道原则：
 

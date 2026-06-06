@@ -289,7 +289,8 @@ pytest tests/test_product/test_information_arrival.py -q
 | 🧹 **Cleaner** | 数据清洗 + 缺失机制检验 | LLM 决策清洗策略 |
 | 📊 **Analyst** | 假设检验 + 回归分析 + 模型诊断 | **对话式分析**（LLM 自由探索数据，多轮对话，调 `submit_analysis` 结束） |
 | 📝 **Reporter** | 双轨 HTML 报告渲染 | LLM 生成叙述 |
-| 📋 **Scribe** | 记录 + 知识调度 + 看板维护 | 确定性引擎；仅字段描述不完整时用 LLM 补全遗漏列 |
+
+> **架构变更（2026-06-06）**：原 Scribe（记录+知识调度+看板维护）已简化为 Orchestrator 内部 kanban 状态机。4 通道文件（process_log.md / context.md / handover_notes.md）已删，`_scribe/` 目录已删。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段 + commit `d2772dd`。
 
 ### Analyst 对话式分析（2026-06-02 重构）
 
@@ -304,23 +305,6 @@ pytest tests/test_product/test_information_arrival.py -q
 - **plan/phase 参数废弃**：`analyst.run()` 签名保留兼容但不再使用（病理 F-054）
 
 返回结构：`{findings: [...], method_used: [...], summary: "..."}`，orchestrator 从此读取。
-
-### Scribe 4 通道架构
-
-Scribe 是项目管家，通过 4 个持久化通道实现管道可观测性和 Agent 间接力：
-
-| 通道 | 文件 | 内容 | 写入者 |
-|------|------|------|--------|
-| Channel 1 | `process_log.md` | 项目全过程时间线档案，每次运行的阶段、耗时、LLM 提示词追踪 | Scribe 确定性写入 |
-| Channel 2 | `context.md` | Agent 间接力棒（Markdown 叙事 + YAML 数据），Scout/Cleaner/Analyst 产出 | Scribe 汇总各阶段结果 |
-| Channel 3 | `kanban.db` | 看板状态机（SQLite），7 状态流转 | KanbanDB 确定性写入 |
-| Channel 4 | `handover_notes.md` | LLM 生成的交接笔记，记录 Agent 间传递的关键信息和决策理由 | Scribe 调用 Quick LLM 生成 |
-
-**额外能力**：
-- `recover_field_descriptions()`：当 LLM 返回的字段描述缺少某些列时，用 **Quick LLM** 专门补全遗漏列。若仍失败，生成机械占位描述（`字段 {col}（{dtype}）`），保证数据结构完整性但不做语义推断
-- `get_upstream_summary()`：为下游 Agent 生成上游阶段的摘要，供 prompt 注入
-
-> 实现：`hagoku/agents/_scribe/agent.py`
 
 ### ProjectContext — 统一上下文记忆系统
 
@@ -348,8 +332,8 @@ ProjectContext (追加式，只增不改)
 
 ```
 EventBus (已有)
-  ├── Scribe (已有)         → process_log.md / context.md / kanban.db
-  └── ProjectContext (新增)  → entries 追加 + build_prompt()
+  ├── Orchestrator (内联 kanban)  → kanban.db
+  └── ProjectContext (新增)        → entries 追加 + build_prompt()
 ```
 
 `ProjectContext` 是 EventBus 的被动消费者——监听 `AGENT_STARTED` / `AGENT_COMPLETED` / `USER_INPUT_RECEIVED`，自动追加 entries，不做任何流程控制。
@@ -359,7 +343,7 @@ EventBus (已有)
 | **ProjectContext** | `hagoku/context/project_context.py` | 统一上下文日志：追加 entries + `build_prompt(agent)` 拼装上下文 |
 | **ContextEntry** | 同上 | 单条记录：`type` / `stage` / `revision` / `raw_user_text` / `snapshot` |
 | **build_prompt()** | 同上 | 为 Agent 拼装 `system_prefix`（分析目标+字段状态+命令上下文）+ `history_context`（阶段对话历史） |
-| **Scribe 4 通道** | `hagoku/agents/_scribe/agent.py` | 不变——管持久化文档和看板，与 ProjectContext 互补不重叠 |
+| **Orchestrator 内联 kanban** | `hagoku/manager/orchestrator.py` | kanban.db 状态机（Step 4 从原 Scribe 内联） |
 | **MemoryManager** | `hagoku/storage/memory.py` | 不变——管跨 run 结构化知识，与 ProjectContext 互补不重叠 |
 
 #### 工作流
@@ -381,15 +365,6 @@ Cleaner 启动 → build_prompt("cleaner")
 > 设计规格：`docs/superpowers/specs/2026-05-30-project-context-memory-design.md`
 > 实现计划：`docs/superpowers/plans/2026-05-30-project-context-memory-plan.md`
 
-#### 与 Scribe 的分工
-
-| | ProjectContext | Scribe |
-|---|---|---|
-| **管什么** | 对话记忆（运行时上下文拼装） | 持久化文档（process_log / context.md / handover_notes） |
-| **生命周期** | run 级（内存，crash 丢失 → 后续阶段 3 持久化） | 项目级（磁盘文件，永久保留） |
-| **消费者** | 各 Agent 的 LLM 调用 | 用户阅读 / 开发者调试 |
-| **写入触发** | EventBus 事件（被动） | EventBus 事件 + 看板状态变更 |
-
 ### 多模型分派
 
 HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策略权衡：
@@ -398,7 +373,7 @@ HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策
 |---------|---------|---------|------|
 | **默认模型** | `HAGOKYU_LLM_MODEL` | 所有 Agent 的基础模型 | `Qwen3.6-35B-A3B` |
 | **深度推理** | `HAGOKYU_LLM_MODEL_DEEP` | Analyst（假设检验/回归诊断）、仲裁器 | 复用默认模型 |
-| **快速模型** | `HAGOKYU_LLM_MODEL_QUICK` | Scout（字段语义）、Reporter（叙述生成）、Scribe（交接笔记/字段恢复）、QueryParser（意图解析） | 复用默认模型 |
+| **快速模型** | `HAGOKYU_LLM_MODEL_QUICK` | Scout（字段语义）、Reporter（叙述生成）、QueryParser（意图解析） | 复用默认模型 |
 
 **分派策略**：
 - `create_deep_client()` → `model_deep or model`，使用 instructor 结构化输出
@@ -518,7 +493,7 @@ Layer 3: LLM 自由发挥（前两层无匹配时兜底）
 - **Analyst**：分析方法选择经验（`recall_analysis_experience()`、`add_analysis_experience()`）
 - **Reporter**：报表模板经验（`recall_report_experience()`、`add_report_experience()`）
 
-Scribe 在 Agent 启动前检索知识库并注入 prompt。Agent 不主动查知识库。embedding API 需要配置 `HAGOKYU_EMBEDDING_*` 环境变量；未配置时知识库仅做 YAML 索引（无向量检索）。
+各 Agent 通过自己的 `knowledge.py` 检索知识库并注入 prompt（Step 4 前由 Scribe 统一检索，Step 4 后 Scribe 已删，knowledge 系统归属到各 agent 自身）。embedding API 需要配置 `HAGOKYU_EMBEDDING_*` 环境变量；未配置时知识库仅做 YAML 索引（无向量检索）。
 
 > 实现：`hagoku/storage/knowledge_vector.py`、`hagoku/agents/{agent}/knowledge.py`、`hagoku/agents/{agent}/knowledge.yaml`
 
@@ -680,7 +655,7 @@ HaGoKu Studio 全程透明，用户坐副驾驶位：
 🧹 Cleaner ── ✅ 完成 (8s)
 📊 Analyst ── 🔄 执行中...
 📝 Reporter ── ⏳ 等待中
-> Scribe（📋 看板仲裁）在后台运行，不显示终端进度。
+> Orchestrator（📋 看板驱动 + 阶段消息生成）在后台运行，不显示终端进度。
 ```
 
 ---
@@ -691,7 +666,7 @@ HaGoKu Studio 全程透明，用户坐副驾驶位：
 hagoku/
 ├── llm/              # LLM 客户端 (OpenAI-compatible)
 ├── manager/          # 编排器（计划生成 + 调度 + 降级）
-├── agents/           # 5 个 Agent（scout/cleaner/analyst/reporter/_scribe）
+├── agents/           # 4 个 Agent（scout/cleaner/analyst/reporter）+ base/types/constants
 ├── kb/               # 领域知识库（Layer 1）
 ├── tools/            # 分析工具集（插件架构）
 ├── guardrails/       # 统计护栏 + 输出解析
@@ -739,7 +714,7 @@ hagoku/
 | `HAGOKYU_LLM_API_KEY` | API 密钥 | `none` |
 | `HAGOKYU_LLM_MODEL` | 默认模型名 | `Qwen3.6-35B-A3B` |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理（Analyst/仲裁器） | 同 `MODEL` |
-| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter/Scribe） | 同 `MODEL` |
+| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter） | 同 `MODEL` |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding 服务地址 | 空（须自行填写） |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | `none` |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |

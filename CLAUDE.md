@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - except 兜底默认值 / 静默重试（铁律 7）
 - 缓存 LLM 决策 / 隐藏 LLM 状态（铁律 6, 8）
 - 业务关键词列表 / 中文语义正则（铁律 1 配套）
+- **项目文档/AI 输出/记忆绑具体 LLM 模型名 / 部署 URL（铁律 9）**
 
 **绝对要做**：
 - LLM 走 `tool_calls` + Pydantic 收结构（铁律 4 通道）
@@ -21,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **5 分钟读这三处**（按顺序）：
 1. [`PROJECT.md`](PROJECT.md) 顶部核心信条
-2. 本文件「铁律」节（1-8 全部）
+2. 本文件「铁律」节（1-9 全部）
 3. `PROJECT.md` §「代码边界」+「通道完备性十律」
 
 **不确定时**：见下方「拿不准时问自己唯一的问题」节。
@@ -235,6 +236,31 @@ LLM 失败必须**对用户可见**。代码不得自动重试到"看起来对�
 
 **检验**：`grep -rn "self\.\(mode\|strategy\|state\|context\)" hagoku/agents/`，确认所有相关状态都已注入 prompt
 
+### 铁律 9（配置中性律）
+
+项目文档 / AI 输出 / 记忆 / 源代码注释**不绑具体部署配置**（LLM 模型名、API 端点、端口等）。这些是用户运行时通过设置功能选择的，不是项目真理。
+
+**❌ 反例**：
+- `PROJECT.md` 写 `HAGOKYU_LLM_MODEL=Qwen3.6-35B-A3B` 当默认值——一旦换模型就过时
+- `CLAUDE.md` 写 "通过 llama-server (localhost:8000) 调用本地 35B"——绑死部署形态
+- `.env.example` 写 `HAGOKYU_LLM_BASE_URL=http://localhost:8080/v1` 当模板值——云端模型不是这个地址
+- AI 输出 "因为当前用 35B 模型 context 是 128K"——把 runtime config 当 design constraint
+- memory 写 "项目当前用某个云端模型 1M context"——memory 跨 session 持久，runtime 变了就误导
+
+**✅ 唯一合法写法**：
+- 文档/示例里出现模型名时 → `<用户配置>` 占位
+- BASE_URL / port 等部署值 → 留空 + `# 用户配置` 注释
+- 描述列加 "（用户运行时通过设置功能选择）" 说明
+- 涉及 LLM 能力时 → 按"配置范围"评估（"假设 context 在 128K-1M 之间"），不绑具体模型
+- 评估 LLM 是否胜任某任务时 → 先问用户当前用的是什么，把答案当 runtime config 不当 design constraint
+- `config.py` 数据类默认值可保留（Python 类行为），但 docs 描述不许指向具体值
+
+**检验**：
+```bash
+grep -rn "Qwen\|A3B\|localhost:8\|text-embedding" CLAUDE.md PROJECT.md .env.example  # 应空
+grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留具体模型名
+```
+
 ### 触发词速查表（写代码时秒查）
 
 看到以下代码模式 / 写以下逻辑时，先查对应铁律：
@@ -251,6 +277,8 @@ LLM 失败必须**对用户可见**。代码不得自动重试到"看起来对�
 | `INTERNAL_.*MAP = {...}` / `.*_CACHE = {...}` 与 LLM 决策平行存在 | 4 决策位置 |
 | 缓存的"上次分析结论"作为 LLM 上下文但不标注 | 8 状态显化 |
 | LLM 失败时返回 cached 上次结果 | 7 失败在场 |
+| `PROJECT.md` / `.env.example` / AI 输出写具体 LLM 模型名 / `localhost:<port>` / 厂商 URL | 9 配置中性 |
+| memory / commit message / docstring 出现 `Qwen3.6-35B-A3B` / `minimax` / `claude` / `gpt-4` 等具体模型名 | 9 配置中性 |
 
 ### 常见错误模式（每次都会犯，请警惕）
 

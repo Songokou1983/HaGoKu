@@ -221,6 +221,31 @@ LLM 不仅能管语义，也必须能管"下一步去哪 / 是否再问用户"�
 
 **反例**：项目记忆里写"Inc1=收入"，下次 run 自动覆盖用户当前纠正"Inc1=销售额"，用户感觉"刚才说的没用"。
 
+### 律 11：配置中性律（🟡 文档脱敏）
+
+> 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过 `hagoku-ui` 设置功能选择的，不是项目真理。
+
+**反例**：
+- `PROJECT.md` 写 `HAGOKYU_LLM_MODEL=Qwen3.6-35B-A3B` 当默认值——一旦换模型就过时
+- `.env.example` 写 `HAGOKYU_LLM_BASE_URL=http://localhost:8080/v1` 当模板值——云端模型不是这个地址
+- AI 输出 "因为当前用 35B 模型 context 是 128K"——把 runtime config 当 design constraint
+- memory 写 "项目当前用某个云端模型 1M context"——memory 跨 session 持久，runtime 变了就误导
+
+**合法写法**：
+- 文档/示例里出现模型名时 → `<用户配置>` 占位
+- BASE_URL / port 等部署值 → 留空 + `# 用户配置` 注释
+- 描述列加 "（用户运行时通过设置功能选择）" 说明
+- 涉及 LLM 能力时 → 按"配置范围"评估（如"假设 context 在 128K-1M 之间"），不绑具体模型
+- `config.py` 数据类默认值可保留（Python 类行为），但 docs 描述不许指向具体值
+
+**检验**：
+```bash
+grep -rn "Qwen\|A3B\|localhost:8\|text-embedding" CLAUDE.md PROJECT.md .env.example  # 应空
+grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留具体模型名
+```
+
+> 起源：2026-06-06 scribe redesign 讨论中，AI 反复在项目文档/AI 输出/记忆里写具体模型名（先 Qwen 后又写另一个云端模型名），被用户两次纠正。
+
 ---
 
 ## 防退化机制

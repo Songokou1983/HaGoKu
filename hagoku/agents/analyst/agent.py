@@ -447,7 +447,7 @@ class AnalystAgent(InteractionMixin):
 
         except Exception as e:
             self._emit(EventType.AGENT_FAILED, {"error": str(e)})
-            return self._done("done", f"Analyst 失败: {e}", {"error": str(e)})
+            raise RuntimeError(f"Analyst 通道失败：{e}") from e
 
     def respond(  # type: ignore[override]
         self,

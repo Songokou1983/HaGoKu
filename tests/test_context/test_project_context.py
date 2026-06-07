@@ -271,6 +271,44 @@ def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
     assert ctx.entries[0].snapshot["target"] == "Revenue"
 
 
+# ── _on_event _context_ref is None 回归测试（CH-3 fixup）──
+
+def test_on_event_agent_completed_without_context_ref_raises():
+    """_context_ref is None 时 AGENT_COMPLETED → raise RuntimeError，不静默降级。
+    律 7 守门：通道断裂必须 raise，logging.warning + ctx={} 是违规。"""
+    from hagoku.observability.events import Event, EventType
+    from datetime import datetime
+
+    ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+    # 不 subscribe，_context_ref 保持默认 None
+    event = Event(
+        event_id="e1",
+        event_type=EventType.AGENT_COMPLETED,
+        timestamp=datetime.now(),
+        agent="scout",
+        data={"result_summary": "完成"},
+    )
+    with pytest.raises(RuntimeError, match="信息通道断裂"):
+        ctx._on_event(event)
+
+
+def test_on_event_user_input_received_without_context_ref_raises():
+    """_context_ref is None 时 USER_INPUT_RECEIVED → raise RuntimeError。"""
+    from hagoku.observability.events import Event, EventType
+    from datetime import datetime
+
+    ctx = ProjectContext(run_id="r1", analysis_goal="分析ROI")
+    event = Event(
+        event_id="e2",
+        event_type=EventType.USER_INPUT_RECEIVED,
+        timestamp=datetime.now(),
+        agent="scout",
+        data={"reply": "Code是店铺编号"},
+    )
+    with pytest.raises(RuntimeError, match="信息通道断裂"):
+        ctx._on_event(event)
+
+
 def test_一轮scout反馈不产生重复entries():
     """守门：一轮 _apply_scout_reply_with_llm + emit USER_INPUT_RECEIVED
     应恰好产生 1 user_feedback + 1 agent_response，不能重复。"""

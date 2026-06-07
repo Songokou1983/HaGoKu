@@ -1,7 +1,5 @@
 """HaGoKu Studio Agent 层"""
 
-from .base import DataAgentBase
-
 # Agent 类（从包目录导入，如 analyst/agent.py、cleaner/agent.py 等）
 from .analyst import AnalysisResult, AnalystAgent
 from .cleaner import CleanerAgent
@@ -17,7 +15,6 @@ __all__ = [
     "CleanerAgent",
     "ColumnSemantic",
     "DataContext",
-    "DataAgentBase",
     "InteractionResult",
     "ReporterAgent",
     "ScoutAgent",

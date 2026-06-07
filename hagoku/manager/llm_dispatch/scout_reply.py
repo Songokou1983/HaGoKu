@@ -626,6 +626,17 @@ def _apply_scout_reply_with_llm(
                     _apply_restrict_analysis_to(context, columns, applied, semantics, func_args_str)
                     continue
 
+                if func_name == "route_to":
+                    try:
+                        args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+                    except (_json.JSONDecodeError, TypeError):
+                        continue
+                    context["_scout_route_to"] = {
+                        "stage": args.get("stage"),
+                        "reason": args.get("reason", ""),
+                    }
+                    continue
+
                 if func_name != "update_field_understanding":
                     continue
 

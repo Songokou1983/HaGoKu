@@ -34,6 +34,17 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         llm_client=self.llm_quick_raw,
         llm_model=self.config.llm.model_quick or self.config.llm.model,
     )
+
+    # 优先判 route_to：LLM 主动表达流程意图
+    route_to = context.pop("_scout_route_to", None)
+    if route_to:
+        target = route_to.get("stage")
+        if target and target != "scout":
+            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
+        # target == "scout" 或空 → 留在当前阶段；标记已消费避免 fallthrough
+        if not applied:
+            applied.append("[route_to]stay")
+
     if applied and self.memory:
         self._persist_scout_field_updates(self._project_name, applied, context)
     if not applied:

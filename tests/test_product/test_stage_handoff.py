@@ -124,14 +124,24 @@ def test_下游_agent_实际注入_messages_history(agent_key):
             else:
                 from hagoku.agents.analyst.agent import AnalystAgent
                 agent = AnalystAgent(LLMConfig(model="t", model_quick="t"), event_bus=_FakeEventBus())
-                agent.run(df=pd.DataFrame({"X": [1]}), plan={}, context={
-                    "_project_context": ctx_proj,
-                    "analysis_goal": "Gate",
-                    "column_semantics": [
-                        {"column_name": "X", "used_in_analysis": True, "display_name": "X",
-                         "role": "target", "needs_user_input": False},
+                # run_step 的 messages 参数承载活跃对话历史；
+                # messages_history 由 build_prompt 返回但仅用于 resume，不注入 run_step
+                agent.run_step(
+                    messages=[
+                        {"role": "user", "content": anchor_a},
+                        {"role": "assistant", "content": "ok"},
+                        {"role": "user", "content": anchor_b},
                     ],
-                })
+                    context={
+                        "_project_context": ctx_proj,
+                        "analysis_goal": "Gate",
+                        "column_semantics": [
+                            {"column_name": "X", "used_in_analysis": True, "display_name": "X",
+                             "role": "target", "needs_user_input": False},
+                        ],
+                    },
+                    df=pd.DataFrame({"X": [1]}),
+                )
         except RuntimeError:
             pass
         finally:

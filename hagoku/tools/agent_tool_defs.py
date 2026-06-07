@@ -436,6 +436,43 @@ agent_tools.register(Tool(
     agents=["analyst"],
 ))
 
+
+def _handle_submit_first_pass(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """首波自动分析完成，提交原始 findings 给 Orchestrator 重写为书面概括。"""
+    return {
+        "findings": args.get("findings", []),
+        "method_used": args.get("method_used", []),
+        "summary": args.get("summary", ""),
+    }
+
+agent_tools.register(Tool(
+    name="submit_first_pass",
+    description="首波自动分析完成，提交原始发现。Orchestrator 会将这些发现重写为书面概括化结论并展示给用户。仅在阶段 1（自动分析）使用；阶段 2 使用 submit_analysis 提交最终结论。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "findings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "detail": {"type": "string"},
+                        "evidence_columns": {"type": "array", "items": {"type": "string"}},
+                        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    },
+                    "required": ["title", "detail", "evidence_columns", "confidence"],
+                },
+            },
+            "method_used": {"type": "array", "items": {"type": "string"}},
+            "summary": {"type": "string"},
+        },
+        "required": ["findings", "method_used", "summary"],
+    },
+    handler=_handle_submit_first_pass,
+    agents=["analyst"],
+))
+
 import numpy as _np
 from scipy import stats as _scipy_stats
 

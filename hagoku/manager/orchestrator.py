@@ -152,6 +152,7 @@ class Orchestrator:
         self._df_raw: pd.DataFrame | None = None
         self._analyst_messages: list[dict] = []
         self._analyst_agent: Any = None
+        self._analyst_first_pass_done: bool = False
         self._error: Exception | None = None
 
 
@@ -183,6 +184,7 @@ class Orchestrator:
         self._df_raw = None
         self._analyst_messages = []
         self._analyst_agent = None
+        self._analyst_first_pass_done = False
         self._error = None
 
     def request_cancel(self) -> None:

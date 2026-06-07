@@ -76,14 +76,123 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
     # 用户确认 → 进入下一阶段
     return ("switch", "analyst")
 
+def _run_analyst_first_pass(self, context: dict) -> None:
+    """阶段 1：自动跑首波分析，循环 run_step 直到 LLM 收敛或调 submit_first_pass。
+
+    拿到原始 findings 后调 LLM 重写为书面概括化结论，emit USER_INPUT_REQUESTED。
+    """
+    import json as _json
+
+    max_rounds = 20
+    findings = None
+    first_pass_text = ""
+
+    for _round in range(max_rounds):
+        result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
+        self._analyst_messages = result["messages"]
+
+        if result.get("submit_analysis"):
+            findings = result.get("findings")
+            break
+
+        # 检查本轮是否调了 submit_first_pass
+        if self._analyst_messages:
+            last_msg = self._analyst_messages[-1]
+            if last_msg.get("role") == "tool":
+                # tool 消息在上一条 assistant 之后 — 检查上一条 assistant 的 tool_calls
+                for i in range(len(self._analyst_messages) - 2, -1, -1):
+                    m = self._analyst_messages[i]
+                    if m.get("role") == "assistant" and m.get("tool_calls"):
+                        for tc in m["tool_calls"]:
+                            if tc.get("function", {}).get("name") == "submit_first_pass":
+                                # dispatch 结果在 tool 消息中
+                                try:
+                                    findings = _json.loads(last_msg.get("content", "{}"))
+                                except (_json.JSONDecodeError, TypeError):
+                                    findings = {}
+                                break
+                        break
+            if findings is not None:
+                break
+
+        # LLM 无 tool_calls 且无文本 → 收敛
+        if not result.get("text") and not findings:
+            break
+
+        first_pass_text = result.get("text", "")
+
+    # 重写为书面概括
+    if findings:
+        summary = _rewrite_as_written_summary(self, findings)
+    elif first_pass_text:
+        summary = first_pass_text
+    else:
+        summary = "首波自动分析完成。请提出你的问题或方向调整。"
+        self._analyst_messages.append({
+            "role": "assistant",
+            "content": "首波自动分析完成，等待用户输入。",
+        })
+
+    # emit 给前端
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {
+        "message": summary,
+        "analyst_first_pass_summary": summary,
+    })
+
+
+def _rewrite_as_written_summary(self, findings: dict) -> str:
+    """调 LLM 把原始统计 findings 重写为 3-5 段书面概括化发现。
+
+    每段含 [发现] / [统计依据] / [局限或解读] 三要素。
+    """
+    import json as _json
+    from ...llm.client import create_raw_client
+
+    system = (
+        "你是数据分析师，把以下统计结果重写为 3-5 段书面发现。\n"
+        "每段必须含 [发现] / [统计依据] / [局限或解读] 三要素标记。\n"
+        "不许编造未在输入中出现的统计数字。\n"
+        "不许给「建议进入报告阶段」等诱导用户终止的句式。\n"
+        "用中文输出。"
+    )
+    user_content = _json.dumps(findings, ensure_ascii=False, default=str)
+
+    client = create_raw_client(self.config.llm)
+    resp = client.chat.completions.create(
+        model=self.config.llm.model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        temperature=0.3,
+        max_tokens=2048,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """处理 Analyst 对话阶段的用户回复。"""
+    """处理 Analyst 对话阶段的用户回复。
+
+    首次进入时自动跑首波分析（阶段 1），产出书面概括化结论。
+    后续回复进入自由对话（阶段 2）。
+    """
     if self._analyst_agent is None:
         from hagoku.agents.analyst import AnalystAgent
         self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
         self._analyst_messages = []
+
+    if not self._analyst_first_pass_done:
+        # 阶段 1：自动跑首波分析（不消耗用户输入）
+        _run_analyst_first_pass(self, context)
+        self._analyst_first_pass_done = True
+        # 用户首次进入时尾话保留，作为阶段 2 第一条用户消息
+        if user_input:
+            self._analyst_messages.append({"role": "user", "content": user_input})
+        return {"status": "analyst_review", "message": ""}
+
     if user_input:
         self._analyst_messages.append({"role": "user", "content": user_input})
+
     result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
     self._analyst_messages = result["messages"]
     if result.get("submit_analysis"):

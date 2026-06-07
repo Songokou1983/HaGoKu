@@ -254,10 +254,8 @@ class ProjectContext:
 
         elif etype == EventType.AGENT_COMPLETED:
             if self._context_ref is None:
-                logging.warning("ProjectContext._context_ref is None, using empty dict")
-                ctx = {}
-            else:
-                ctx = self._context_ref
+                raise RuntimeError("ProjectContext._context_ref 未设置，信息通道断裂")
+            ctx = self._context_ref
             snapshot = self._derive_snapshot(ctx) if ctx else None
             revision = ctx.get("interaction_revision", 0) if ctx else 0
             self.add_agent_response(
@@ -269,10 +267,8 @@ class ProjectContext:
 
         elif etype == EventType.USER_INPUT_RECEIVED:
             if self._context_ref is None:
-                logging.warning("ProjectContext._context_ref is None, using empty dict")
-                ctx = {}
-            else:
-                ctx = self._context_ref
+                raise RuntimeError("ProjectContext._context_ref 未设置，信息通道断裂")
+            ctx = self._context_ref
             revision = ctx.get("interaction_revision", 0) if ctx else 0
             raw = data.get("reply", "")
             self.add_user_feedback(

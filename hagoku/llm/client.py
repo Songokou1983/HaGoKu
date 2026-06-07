@@ -2,37 +2,30 @@
 
 提供共享的 LLM 客户端创建函数，供 Orchestrator 和 Agent 基类共同使用。
 使用 instructor 包装 OpenAI 兼容客户端以获得结构化输出能力。
+
+CH-7e（2026-06-07）：_clear_proxy_env 全局 os.environ.pop 替换为 per-client
+httpx transport。每个客户端持有独立的 HTTPTransport，禁用代理以避免 socks://
+等不被 httpx 支持的 scheme 抛出 ValueError。不再污染进程级环境变量。
 """
 
 from __future__ import annotations
 
-import os
-from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any
+
+import httpx
 
 from ..config import LLMConfig
 
-# 需要清理的代理环境变量 key 列表，避免 socks:// 等不被 httpx 支持的 scheme
-_PROXY_ENV_KEYS = [
-    "ALL_PROXY", "all_proxy",
-    "HTTP_PROXY", "http_proxy",
-    "HTTPS_PROXY", "https_proxy",
-]
 
+def _create_http_client() -> httpx.Client:
+    """创建不读代理环境变量的 httpx 客户端（per-client transport）。
 
-@contextmanager
-def _clear_proxy_env() -> Generator[None, None, None]:
-    """清理代理环境变量，避免 httpx 对 socks:// 等不支持 scheme 抛出 ValueError。
-
-    适用于 LLM 服务为本地/内网访问、无需代理的场景。
-    不再恢复代理设置——httpx 在请求时读取环境变量，恢复后会导致请求走代理。
+    替换旧 _clear_proxy_env 的全局 os.environ.pop 方案——
+    旧方案永久污染进程环境，影响同进程内其他网络调用。
     """
-    for k in _PROXY_ENV_KEYS:
-        os.environ.pop(k, None)
-    try:
-        yield
-    finally:
-        pass  # 不恢复，避免 httpx 请求时重新读取代理
+    return httpx.Client(
+        transport=httpx.HTTPTransport(retries=1),
+    )
 
 
 def create_structured_llm_client(llm_config: LLMConfig) -> Any:
@@ -52,26 +45,26 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
         import instructor
         from openai import OpenAI
 
-        with _clear_proxy_env():
-            client = instructor.from_openai(
-                OpenAI(
-                    base_url=llm_config.base_url,
-                    api_key=llm_config.api_key,
-                    timeout=120.0,
-                ),
-                mode=instructor.Mode.JSON,
-            )
-            return client
+        client = instructor.from_openai(
+            OpenAI(
+                base_url=llm_config.base_url,
+                api_key=llm_config.api_key,
+                timeout=120.0,
+                http_client=_create_http_client(),
+            ),
+            mode=instructor.Mode.JSON,
+        )
+        return client
     except ImportError:
         # 退回原始 OpenAI（无结构化输出）
         from openai import OpenAI
 
-        with _clear_proxy_env():
-            return OpenAI(
-                base_url=llm_config.base_url,
-                api_key=llm_config.api_key,
-                timeout=120.0,
-            )
+        return OpenAI(
+            base_url=llm_config.base_url,
+            api_key=llm_config.api_key,
+            timeout=120.0,
+            http_client=_create_http_client(),
+        )
 
 
 def create_raw_client(config: Any) -> Any:
@@ -84,12 +77,12 @@ def create_raw_client(config: Any) -> Any:
 
     llm = _unwrap_llm(config)
 
-    with _clear_proxy_env():
-        return OpenAI(
-            base_url=llm.base_url,
-            api_key=llm.api_key,
-            timeout=120.0,
-        )
+    return OpenAI(
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        timeout=120.0,
+        http_client=_create_http_client(),
+    )
 
 
 def _unwrap_llm(config: Any) -> LLMConfig:
@@ -151,13 +144,13 @@ def _get_async_client() -> Any:
     cache_key = (llm.base_url, llm.api_key)
 
     if _async_client is None or _async_client_config != cache_key:
-        with _clear_proxy_env():
-            _async_client = AsyncOpenAI(
-                base_url=llm.base_url,
-                api_key=llm.api_key,
-                timeout=30.0,
-            )
-            _async_client_config = cache_key
+        _async_client = AsyncOpenAI(
+            base_url=llm.base_url,
+            api_key=llm.api_key,
+            timeout=30.0,
+            http_client=_create_http_client(),
+        )
+        _async_client_config = cache_key
 
     return _async_client
 

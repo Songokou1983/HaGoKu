@@ -296,22 +296,25 @@ triage → todo → ready → running → blocked → ready → done
 
 **Claim 锁**：`ready → running` 原子操作，15 分钟过期，长任务需 heartbeat 续期。`claim_task()` 返回值必须检查。
 
-**Scribe 钩子**：监听 EventBus → Agent STARTED 更新状态 → Agent COMPLETED 触发晋升 → USER_INPUT_REQUESTED 进入 blocked。
+**Orchestrator 钩子（2026-06-06 从 Scribe 内联而来）**：监听 EventBus → Agent STARTED 更新状态 → Agent COMPLETED 触发晋升 → USER_INPUT_REQUESTED 进入 blocked。
 
 ### 文件对应关系
 
 | 功能 | 文件 |
 |------|------|
 | SQLite 操作 | `hagoku/storage/kanban.py` |
-| Scribe Agent | `hagoku/agents/_scribe/agent.py` |
-| context.md | 项目根目录 |
+| **Orchestrator 内联 kanban** | `hagoku/manager/orchestrator.py`（_on_event / _init_pipeline_tasks / block_task / unblock_task） |
 | kanban.db | 项目根目录 |
+| ~~Scribe Agent~~ | ~~`hagoku/agents/_scribe/agent.py`~~ — **2026-06-06 删除** |
+| ~~context.md~~ | **2026-06-06 删除**（handover 改直传） |
+| ~~handover_notes.md~~ | **2026-06-06 删除** |
+| ~~process_log.md~~ | **2026-06-06 删除** |
 
 ### 禁止事项
 
 - ❌ kanban.db 不放在全局目录，必须在项目文件夹内
 - ❌ 不做通用看板（不做多项目全局视图，不做用户管理）
-- ❌ Scribe 不直接与用户对话，只在后台记录
+- ❌ Orchestrator 不直接与用户对话，只在后台做 ctx 注入 + 看板管理
 - ❌ 不要忽略 `claim_task()` 的返回值
 
 ---
@@ -382,8 +385,8 @@ HaGoKu Studio 的字段理解完全依赖 LLM。任何「字段含义」相关�
 | 层级 | 触发条件 | 处理方式 | 负责模块 |
 |------|---------|---------|---------|
 | **1. 前置健康检查** | pipeline 启动前 | `check_llm_health()` 验证 LLM 可达；失败 → 返回错误，不进 pipeline | `hagoku/tools/health.py` |
-| **2. Agent 异常上报** | Scout LLM 调用失败/返回空 | emit `AGENT_FAILED` → Scribe 看板 block + 前端展示错误 | `scout/agent.py` → `_scribe/agent.py` |
-| **3. Scribe LLM 兜底恢复** | Scout 产出部分列描述缺失 | Scribe 用 LLM 补全遗漏列；失败 → emit `AGENT_FAILED` | `_scribe/agent.py` |
+| **2. Agent 异常上报** | Scout LLM 调用失败/返回空 | emit `AGENT_FAILED` → Orchestrator 看板 block + 前端展示错误 | `scout/agent.py` → `manager/orchestrator.py` |
+| ~~**3. Scribe LLM 兜底恢复**~~ | ~~Scout 产出部分列描述缺失~~ | ~~Scribe 用 LLM 补全遗漏列；失败 → emit `AGENT_FAILED`~~ | ~~`_scribe/agent.py`~~ — **2026-06-06 Scribe 类删除，本层防护不再存在；Scout 走 `needs_user_input=True` 让用户填** |
 
 ### 健康检查流程
 

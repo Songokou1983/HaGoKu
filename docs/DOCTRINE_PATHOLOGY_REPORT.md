@@ -1,5 +1,7 @@
 # Doctrine Pathology Report
 
+> **历史快照**（2026-06-05）：本文件记录当时状态。**2026-06-06 Scribe 类已删除**，报告中"Scribe 缺失"等病理观察已被 Scribe 删除动作直接闭环。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段。
+
 > **报告人**：doctrine 病理学家（评估 AI，只读不写）
 > **性质**：append-only living document
 > **追踪**：git history + 每条 finding 唯一 ID（F-YYYY-MM-DD-NNN）

@@ -4,6 +4,26 @@
 
 - **`ProjectPanel.tsx`**：失败/超时提示去掉命令名 **`hagoku-api`**，改为「先在本机打开 HaGoKu Studio 后端再刷新」的白话。
 
+## 2026-06-06 — Scribe 类删除，kanban 内联到 Orchestrator
+
+> 5 步执行（commits `237310d` / `2e3197d` / `3728f4b` / `d2772dd` / `4f13e8a`）；详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段
+
+### 变更概要
+
+- **删 `hagoku/agents/_scribe/`** 整目录（agent.py / prompt.md / __init__.py / process_log.md）
+- **删 4 通道文件**：`process_log.md` / `context.md` / `handover_notes.md`（仅保留 kanban.db）
+- **删 `recover_field_descriptions()`**（LLM 兜底，0 生产调用方）+ `TestScribeRecoverFieldDescriptions` 4 个测试（440→444 pytest，删除 4 个后 440/440）
+- **Orchestrator 内联**：
+  - `_init_pipeline_tasks()` 创建 4 个 kanban 任务（从 Scribe.init_pipeline 迁移）
+  - `_on_event` 监听 3 个事件（AGENT_STARTED / COMPLETED / FAILED），其他事件 Scribe 之前只写日志已删
+  - `_on_agent_started` / `_on_agent_completed` / `_on_agent_failed` 状态机（kanban SQLite 操作）
+  - `_auto_promote_next` 上下游任务晋升
+  - `block_task` / `unblock_task` 公开方法（4 agent 调）
+- **4 agent 改用** `orchestrator.block_task` / `orchestrator.unblock_task`（替代 `self.scribe.X`）
+- **API 契约不变**：`GET /api/projects/{name}/kanban/tasks` 仍读 kanban.db 返回 task 行（UI 看板功能保留）
+- **行为零变化**：门控流程、看板状态、用户确认交互全部保留
+- 配套铁律：`CLAUDE.md` 新增**铁律 9（配置中性律）**，`PROJECT.md` 新增**律 11**
+
 ## 2026-05-27 — 律 4 + 律 7 修复：restrict_analysis_to 工具 + 未理解信号
 
 ### 变更概要

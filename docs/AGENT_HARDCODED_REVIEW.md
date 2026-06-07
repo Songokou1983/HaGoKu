@@ -1,5 +1,7 @@
 # HaGoKu Studio — 全方位核心原则审计报告
 
+> **历史快照**（2026-05-20 审计）：本文件记录当时状态。**2026-06-06 Scribe 类已删除**（详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段 + commit `d2772dd`），下方"原则 5：没有代码兜底"中 Scribe 灰区相关讨论不再适用。
+
 > 审计时间：2026-05-20
 > 审计范围：对照 PROJECT.md 六条核心原则，全代码库逐项扫描
 > 审计方法：grep 硬匹配扫描 + 关键模块逐行阅读 + 刹车清单对照

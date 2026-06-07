@@ -1,5 +1,7 @@
 # 外部项目思想参考
 
+> **2026-06-06 更新**：原"Scribe 4 通道架构"（C4，详见 DEVELOPMENT_PROMPT.md）受本文件引述的多个项目启发。Scribe 类已删除，4 通道文件全部清理，只剩 `kanban.db` 内联到 Orchestrator。**下方外部参考仍有效**，但与"Scribe 4 通道"相关的设计讨论需在 4 Agent + Orchestrator 架构下重新审视。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段。
+
 HaGoKu Studio 设计的核心理念受以下项目启发，并在此基础上做了适应性重构。
 
 ---

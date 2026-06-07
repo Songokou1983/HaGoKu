@@ -192,9 +192,9 @@
 |----|---------|-------------|---------|------|
 | **C1** | `hagoku/manager/orchestrator.py` `_apply_scout_reply_with_llm` → `update_field_understanding` tool | **Function calling 模式**：Scout 字段纠错通过 LLM `tool_calls` 自主完成，代码仅机械执行 | `docs/INTERACTION_MULTITURN_PLAN.md` | **已更新**（2026-05-18）；`PROJECT.md`「通道首选机制」已覆盖function calling |
 | **C2** | `hagoku/manager/orchestrator.py` `_is_scout_aligned` + `_is_gate_confirm` + `interaction_revision` | Scout 多轮对齐（字段纠错→再展示→闸门确认）完整子状态机 | `PROJECT.md`「人机互动」、`docs/INTERACTION_MULTITURN_PLAN.md` | **已更新**（本次）；PROJECT.md 已补 C4/C5 多轮描述 |
-| **C3** | `hagoku/agents/_scribe/agent.py` `persist_field_descriptions()` | 字段理解持久化：写入 `memory.db` SQLite + `field_descriptions.yaml`，下次分析自动复用 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「人机互动」已补字段理解持久化 |
-| **C4** | `hagoku/agents/_scribe/agent.py` 4 通道架构 | Channel 1–4：`process_log.md` / `context.md` / `kanban.db` / `handover_notes.md` | `PROJECT.md`「Scribe 4 通道架构」、`docs/EXTERNAL_REFERENCES.md` | **已更新**（本次）；EXTERNAL_REFERENCES.md 已补 4 通道架构 |
-| **C5** | `hagoku/agents/_scribe/agent.py` `recover_field_descriptions()` + `get_upstream_summary()` | 字段描述遗漏补全（Quick LLM）+ 上游摘要生成 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「Scribe 4 通道架构」已补额外能力 |
+| **C3** | `hagoku/agents/_scribe/agent.py` `persist_field_descriptions()` | 字段理解持久化：写入 `memory.db` SQLite + `field_descriptions.yaml`，下次分析自动复用 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「人机互动」已补字段理解持久化；**2026-06-06 Scribe 类删除，本特性已不存在** |
+| **C4** | `hagoku/agents/_scribe/agent.py` 4 通道架构 | Channel 1–4：`process_log.md` / `context.md` / `kanban.db` / `handover_notes.md` | `PROJECT.md`「Scribe 4 通道架构」、`docs/EXTERNAL_REFERENCES.md` | **已更新**（本次）；EXTERNAL_REFERENCES.md 已补 4 通道架构；**2026-06-06 4 通道文件全部删除，只剩 kanban.db 内联到 Orchestrator** |
+| **C5** | `hagoku/agents/_scribe/agent.py` `recover_field_descriptions()` + `get_upstream_summary()` | 字段描述遗漏补全（Quick LLM）+ 上游摘要生成 | `PROJECT.md` | **已更新**（本次）；PROJECT.md「Scribe 4 通道架构」已补额外能力；**2026-06-06 两个方法连同 Scribe 类一起删除** |
 | **C6** | `hagoku_web/src/panels/CommandsPanel.tsx` 457 行 | 完整的命令速查面板：FastCommand 卡片、StageRefCommands、FAQ、搜索过滤、快捷插入 | `docs/COMMAND_SYSTEM.md` | **已更新**（本次）；COMMAND_SYSTEM.md 已补前端命令面板章节 |
 | **C7** | `hagoku/manager/command_parser.py` | `parse_command()` 方法：解析 `/command` 格式，区分全局/阶段命令，返回 `{command, args}` 字典 | `docs/COMMAND_SYSTEM.md`「命令解析器」 | 文档已完整（解析格式、输出结构、支持的命令均记录） |
 | **C8** | `hagoku/devtools/interaction_scenarios.py` + `scripts/simulate_interaction_scenario.py` | 交互场景夹具系统：JSON 剧本驱动 orchestrator，断言预期状态 | `docs/DEVELOPMENT.md` §「交互场景测试」 | 已完整 |

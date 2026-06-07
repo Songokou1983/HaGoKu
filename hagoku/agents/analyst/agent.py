@@ -243,6 +243,7 @@ class AnalystAgent(InteractionMixin):
         txt = (msg.content or "").strip()
         tc_list = getattr(msg, "tool_calls", None)
         findings = None
+        route_to_args = None
 
         if tc_list:
             tool_results = []
@@ -253,6 +254,8 @@ class AnalystAgent(InteractionMixin):
                 if fn.name == "submit_analysis":
                     findings = result
                     break
+                if fn.name == "route_to":
+                    route_to_args = result
                 tc_id = getattr(tc, "id", "") or ""
                 tool_results.append({
                     "role": "tool", "tool_call_id": tc_id,
@@ -275,6 +278,7 @@ class AnalystAgent(InteractionMixin):
             "text": txt,
             "submit_analysis": findings is not None,
             "findings": findings,
+            "route_to": route_to_args,
         }
 
     def _emit(self, event_type: EventType, data: dict | None = None) -> None:

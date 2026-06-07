@@ -195,6 +195,15 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
 
     result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
     self._analyst_messages = result["messages"]
+
+    # 优先判 route_to：LLM 主动表达流程意图
+    route_to = result.get("route_to")
+    if route_to:
+        target = route_to.get("stage")
+        if target and target in {"scout", "cleaner", "reporter"}:
+            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
+        # target == "analyst" 或空 → 留在当前阶段，继续对话
+
     if result.get("submit_analysis"):
         findings = result["findings"]
         # 护栏检查

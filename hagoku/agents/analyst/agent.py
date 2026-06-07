@@ -187,8 +187,42 @@ class AnalystAgent(InteractionMixin):
 
         path.write_text(content, encoding="utf-8")
 
+    def _compose_system_messages(self, context: dict) -> list[dict]:
+        """拼装 system prompt 头部消息。
+
+        包含：
+        1. prompt.md 内容（Analyst 角色定义、能力、工具使用说明）
+        2. ProjectContext 上下文（分析目标、字段状态、上游摘要）
+
+        每次调用重拼，不永久存储到对话历史中。
+        """
+        system_msgs: list[dict] = []
+
+        # 1. prompt.md 作为第一条 system 消息
+        prompt = getattr(self, 'prompt', '')
+        if prompt:
+            system_msgs.append({"role": "system", "content": prompt})
+
+        # 2. ProjectContext 上下文注入
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("analyst", context)
+            parts: list[str] = []
+            if ctx_block.get("system_prefix"):
+                parts.append(ctx_block["system_prefix"])
+            if ctx_block.get("upstream_summary"):
+                parts.append(ctx_block["upstream_summary"])
+            if parts:
+                system_msgs.append({"role": "system", "content": "\n\n".join(parts)})
+
+        return system_msgs
+
     def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
-        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, findings or None)"""
+        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, findings or None)
+
+        messages 视为对话历史（仅含 user/assistant/tool 角色）；
+        每次调用前重新拼装 system prompt 头部，确保 LLM 不失明。
+        """
         import json as _json
         from hagoku.tools.registry import agent_tools as _agt
         from ...llm.client import create_raw_client
@@ -198,8 +232,11 @@ class AnalystAgent(InteractionMixin):
         client = create_raw_client(self.llm_config)
         _tools = _agt.to_openai("analyst")
 
+        # 拼装 system prompt 头部（每次重拼，不永久存储到 messages）
+        composed = self._compose_system_messages(context) + messages
+
         resp = client.chat.completions.create(
-            model=self.llm_config.model, messages=messages,
+            model=self.llm_config.model, messages=composed,
             temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
         )
         msg = resp.choices[0].message

@@ -22,7 +22,6 @@ class ChannelLogger:
             )
         run_dir.mkdir(parents=True, exist_ok=True)
         self._run_log = run_dir / "run.log"
-        self._llm_log = run_dir / "llm.log"
 
     # ── 通道事件 ──
 
@@ -30,33 +29,6 @@ class ChannelLogger:
         """写一行 JSON 到 run.log"""
         record = {"ts": self._now(), "agent": agent, "event": event, **kwargs}
         self._append_json(self._run_log, record)
-
-    # ── LLM 调用录制 ──
-
-    def log_llm(
-        self,
-        agent: str,
-        model: str,
-        system_prompt: str,
-        user_prompt: str,
-        response_tool_calls: list[dict] | None = None,
-        response_content: str = "",
-        tokens: int = 0,
-        duration_ms: int = 0,
-    ) -> None:
-        """写一条 LLM 完整记录到 llm.log"""
-        record = {
-            "ts": self._now(),
-            "agent": agent,
-            "model": model,
-            "system_prompt": system_prompt,
-            "user_prompt": user_prompt,
-            "response_tool_calls": response_tool_calls or [],
-            "response_content": response_content,
-            "tokens": tokens,
-            "duration_ms": duration_ms,
-        }
-        self._append_json(self._llm_log, record)
 
     # ── 决策链 ──
 

@@ -1662,6 +1662,10 @@ class Orchestrator:
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
 
+        # ── LLM dump：设置当前 run 的 dump 目录（CH-4：观察通道四合一）──
+        from ..observability.llm_dump import set_run_dir
+        set_run_dir(run_dir)
+
         # ── ProjectContext：统一上下文记忆系统（阶段1：并行旧路径）──
         from ..context.project_context import ProjectContext
         self._project_context = ProjectContext(

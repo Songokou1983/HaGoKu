@@ -627,17 +627,21 @@ class ScoutAgent(InteractionMixin):
         raw_text = _re.sub(r"<think>.*?</think>", "", raw_text, flags=_re.DOTALL).strip()
         tool_calls = response.choices[0].message.tool_calls
 
-        # ── 通道日志：LLM 调用后，记录完整输入输出（含 think 块）──
-        if self._channel_logger:
-            tc = tool_calls or []
-            self._channel_logger.log_llm("scout",
-                model=self.llm_config.model_quick or self.llm_config.model,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt_str,
-                response_tool_calls=[{"name": t.function.name, "arguments": t.function.arguments} for t in tc] if tc else [],
-                response_content=f"<think>\n{think_content}\n</think>\n{raw_text}" if think_content else raw_text,
-                tokens=response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0,
-                duration_ms=_call_duration_ms)
+        # ── LLM dump：调用后记录完整响应（CH-4：观察通道四合一，替代 ChannelLogger.log_llm）──
+        tc = tool_calls or []
+        dump_messages(
+            "scout_infer_all_semantics_response",
+            [{"role": "system", "content": system_prompt},
+             {"role": "user", "content": "请分析以下数据集的字段语义：\n```json\n" + user_prompt_str + "\n```"}],
+            model=self.llm_config.model_quick or self.llm_config.model,
+            extra={
+                "query": query,
+                "response_tool_calls": [{"name": t.function.name, "arguments": t.function.arguments} for t in tc] if tc else [],
+                "response_content": f"<think>\n{think_content}\n</think>\n{raw_text}" if think_content else raw_text,
+                "tokens": response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0,
+                "duration_ms": _call_duration_ms,
+            },
+        )
 
         if tool_calls:
             # 优先：LLM 支持 tool calling，从结构化参数中解析

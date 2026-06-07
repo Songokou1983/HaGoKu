@@ -1,7 +1,11 @@
-"""LLM messages 诊断 dump — 由 HAGOKU_DUMP_LLM=1 环境变量控制。
+"""LLM messages 诊断 dump — 默认开启（HAGOKU_DUMP_LLM=0 可关闭）。
 
-落盘所有 LLM 调用的完整 messages，用于诊断通道污染与衔接断点。
-失败不影响主流程。
+每个 run 一份 dump 写入 run_dir/llm_dumps/，与 events.jsonl 同目录。
+用于诊断通道污染与衔接断点。失败不影响主流程。
+
+契约变更（2026-06-07 CH-4）：
+- HAGOKU_DUMP_LLM 语义反转：原 "=1" 才写 → 现默认写，"=0" 才关闭
+- 路径：~/.hagoku/llm_dumps/ → run_dir/llm_dumps/（与 events.jsonl 同目录）
 """
 from __future__ import annotations
 
@@ -14,11 +18,27 @@ from typing import Any
 
 _log = logging.getLogger("hagoku.llm_dump")
 
-DUMP_DIR = Path.home() / ".hagoku" / "llm_dumps"
+# 历史遗留（仅作 get_dump_dir() fallback），新路径由 set_run_dir 设置
+_DEFAULT_DUMP_DIR = Path.home() / ".hagoku" / "llm_dumps"
+_run_dump_dir: Path | None = None
+_run_dump_seq: int = 0  # per-run 递增序号
+
+
+def set_run_dir(run_dir: Path) -> None:
+    """由 Orchestrator 在 pipeline 启动时调用，设置当前 run 的 dump 目录。"""
+    global _run_dump_dir, _run_dump_seq
+    _run_dump_dir = run_dir / "llm_dumps"
+    _run_dump_seq = 0
 
 
 def _is_enabled() -> bool:
-    return os.environ.get("HAGOKU_DUMP_LLM", "").strip() == "1"
+    v = os.environ.get("HAGOKU_DUMP_LLM", "").strip()
+    return v != "0"  # 默认开，仅显式设 0 才关
+
+
+def get_dump_dir() -> Path:
+    """返回当前 dump 输出目录。"""
+    return _run_dump_dir or _DEFAULT_DUMP_DIR
 
 
 def dump_messages(
@@ -29,40 +49,29 @@ def dump_messages(
     run_id: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """落盘 LLM 调用的完整 messages。
+    """落盘 LLM 调用的完整 messages + 可选 response（extra）。
 
     Args:
         stage: 阶段标识，如 "scout_infer_all_semantics"
         messages: LLM 调用的完整 messages 列表
         model: 模型名称
-        run_id: 当前 run_id，用于目录组织
-        extra: 额外上下文（query / via_project_ctx / tools 等）
+        run_id: 当前 run_id，用于目录组织（_run_dump_dir 优先）
+        extra: 额外上下文（query / tools / response_tool_calls / response_content 等）
     """
     if not _is_enabled():
         return
 
     try:
-        seq_file = DUMP_DIR / ".seq"
-        DUMP_DIR.mkdir(parents=True, exist_ok=True)
-
-        # 读取/递增序号
-        seq = 1
-        if seq_file.exists():
-            seq = int(seq_file.read_text().strip()) + 1
-        seq_file.write_text(str(seq))
-
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        seq_str = f"{seq:03d}"
-        filename = f"{seq_str}_{stage}_{ts}.json"
-
-        if run_id:
-            out_dir = DUMP_DIR / run_id
-        else:
-            out_dir = DUMP_DIR
+        global _run_dump_seq
+        out_dir = _run_dump_dir or _DEFAULT_DUMP_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        _run_dump_seq += 1
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S%f")[:17]
+        filename = f"{_run_dump_seq:03d}_{stage}_{ts}.json"
+
         payload: dict[str, Any] = {
-            "seq": seq,
+            "seq": _run_dump_seq,
             "stage": stage,
             "model": model,
             "timestamp": datetime.now(timezone.utc).isoformat(),

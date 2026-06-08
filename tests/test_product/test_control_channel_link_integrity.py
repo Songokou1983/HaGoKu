@@ -247,22 +247,12 @@ class TestCleanerControlChannelLinks:
 # Reporter 盲点声明（B-3 Option B：schema-only）
 # ═══════════════════════════════════════════════════════════════════
 
-class TestReporterControlChannelBlindSpot:
-    """Reporter 控制通道盲点 — route_to schema-only"""
+class TestReporterControlChannelLinks:
+    """Reporter 控制通道链路验证 — route_to 已生效"""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Reporter 无用户交互循环（_handle_reporter_reply 直接返回 done），route_to schema-only"
-    )
-    def test_reporter_route_to_link_present(self):
-        """验证 Reporter 的 route_to 链路已触达——若 PASS 说明盲点已修复。
-
-        当前预期 FAIL：Reporter 阶段 _handle_reporter_reply 不消费 route_to。
-        """
+    def test_reporter_route_to_in_handler(self):
+        """_handle_reporter_reply 含 route_to 处理。"""
         from hagoku.manager.llm_dispatch.reply_handlers import _handle_reporter_reply
         import inspect
         src = inspect.getsource(_handle_reporter_reply)
-        assert "route_to" in src, (
-            "Reporter 当前不消费 route_to——盲点存在。\n"
-            "当 Reporter 有用户交互后此测试将 PASS，届时移除 xfail。"
-        )
+        assert "route_to" in src, "_handle_reporter_reply 应含 route_to 处理"

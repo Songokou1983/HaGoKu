@@ -166,6 +166,8 @@ class Orchestrator(
         self._cleaner_agent: Any = None
         self._cleaner_messages: list[dict] = []
         self._cleaner_dialog_open: bool = False
+        self._reporter_agent: Any = None
+        self._reporter_messages: list[dict] = []
         self._error: Exception | None = None
 
 

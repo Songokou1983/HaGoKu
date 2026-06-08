@@ -263,9 +263,29 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
         return ("switch", "reporter", {"findings": findings})
     return {"status": "analyst_review", "message": result.get("text", "")}
 
-def _handle_reporter_reply(self, user_input: str, context: dict) -> dict:
-    """Reporter 阶段不互动，直接返回。"""
-    return {"status": "reporter_done"}
+def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple:
+    """Reporter 阶段用户回复处理。支持 route_to 跳转。"""
+    if self._reporter_agent is None:
+        from hagoku.agents.reporter import ReporterAgent
+        self._reporter_agent = ReporterAgent(
+            llm_config=self.config.llm, event_bus=self.event_bus,
+            llm_client=self.llm_quick_raw,
+        )
+        self._reporter_messages = []
+
+    if user_input:
+        self._reporter_messages.append({"role": "user", "content": user_input})
+
+    result = self._reporter_agent.run_step(self._reporter_messages, context)
+    self._reporter_messages = result["messages"]
+
+    route_to = result.get("route_to")
+    if route_to:
+        target = route_to.get("stage")
+        if target and target in {"scout", "cleaner", "analyst"}:
+            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
+
+    return {"status": "reporter_done", "message": result.get("text", "")}
 
 def respond(self, user_input: dict) -> dict[str, Any]:
     """

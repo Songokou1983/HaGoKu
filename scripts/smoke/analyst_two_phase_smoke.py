@@ -304,18 +304,20 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
 
         results["steps"][str(step_id)] = step_result
 
-        # Step 3 切换到 scout 后需重置回 analyst 继续步骤 4-5
-        if isinstance(resp_result, tuple) and step_id == 3:
-            print(f"   🔄 Step 3 已切 {resp_result[1]}，重置回 analyst（仅冒烟用）")
+        # Step 3 若切换到 scout，重置回 analyst 继续步骤 4-5
+        stage_after = _fmt_stage(orch)
+        if step_id == 3 and stage_after != "analyst":
+            print(f"   🔄 Step 3 后阶段={stage_after}，重置回 analyst（仅冒烟用）")
             orch._stage = "analyst"
             orch._analyst_first_pass_done = False
             orch._analyst_messages = []
             orch.respond({"text": ""})
             print(f"   首波重跑后阶段: {_fmt_stage(orch)}, _analyst_first_pass_done: {orch._analyst_first_pass_done}")
 
-        # Step 4 切换到 reporter 后需重置回 analyst 继续步骤 5
-        if isinstance(resp_result, tuple) and step_id == 4 and resp_result[1] == "reporter":
-            print(f"   🔄 Step 4 已切 reporter，Step 5 重置回 analyst（仅冒烟用）")
+        # Step 4 若切换到 reporter，重置回 analyst 继续步骤 5
+        stage_after = _fmt_stage(orch)
+        if step_id == 4 and stage_after != "analyst":
+            print(f"   🔄 Step 4 后阶段={stage_after}，Step 5 重置回 analyst（仅冒烟用）")
             orch._stage = "analyst"
             orch._analyst_first_pass_done = False
             orch._analyst_messages = []

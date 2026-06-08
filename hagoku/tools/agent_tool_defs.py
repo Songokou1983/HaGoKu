@@ -588,6 +588,74 @@ agent_tools.register(Tool(
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Cleaner 对话式清洗工具
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_propose_cleaning_rule(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    return {
+        "column": args.get("column", ""),
+        "rule": args.get("rule", ""),
+        "reason": args.get("reason", ""),
+    }
+
+agent_tools.register(Tool(
+    name="propose_cleaning_rule",
+    description="提议一条清洗规则。包含目标列、规则内容和理由。用户确认后才会应用。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "column": {"type": "string", "description": "目标列名"},
+            "rule": {"type": "string", "description": "清洗规则内容（如「将空值填充为0」「剔除 Z>3 的离群值」）"},
+            "reason": {"type": "string", "description": "提议这条规则的理由"},
+        },
+        "required": ["column", "rule", "reason"],
+    },
+    handler=_handle_propose_cleaning_rule,
+    agents=["cleaner"],
+))
+
+
+def _handle_compare_before_after(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
+    """跑 before/after 对比，展示清洗规则对数据的影响。"""
+    column = str(args.get("column", ""))
+    rule = str(args.get("rule", ""))
+    if df is None or column not in df.columns:
+        return {"error": f"列 {column} 不存在"}
+    before = {
+        "count": int(len(df)),
+        "nulls": int(df[column].isna().sum()),
+    }
+    if pd.api.types.is_numeric_dtype(df[column]):
+        before.update({
+            "mean": round(float(df[column].mean()), 4),
+            "std": round(float(df[column].std()), 4),
+            "min": float(df[column].min()),
+            "max": float(df[column].max()),
+        })
+    return {
+        "column": column,
+        "rule": rule,
+        "before": before,
+        "note": "before/after 对比需由调用方在应用规则后计算 after 值。此工具仅返回当前状态（before）。",
+    }
+
+agent_tools.register(Tool(
+    name="compare_before_after",
+    description="对比清洗规则应用前后的数据变化。传入列名和规则描述，返回当前（before）统计值。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "column": {"type": "string", "description": "目标列名"},
+            "rule": {"type": "string", "description": "要对比的清洗规则"},
+        },
+        "required": ["column", "rule"],
+    },
+    handler=_handle_compare_before_after,
+    agents=["cleaner"],
+))
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 流程路由工具（所有 Agent 可用）
 # ═══════════════════════════════════════════════════════════════════
 

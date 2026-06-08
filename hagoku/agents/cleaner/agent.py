@@ -117,6 +117,117 @@ class CleanerAgent(InteractionMixin):
         if self.event_bus:
             self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
+    def _compose_system_messages(self, context: dict) -> list[dict]:
+        """拼装 system prompt 头部消息。
+
+        包含：
+        1. prompt.md 内容（Cleaner 角色定义、清洗规则）
+        2. ProjectContext 上下文（分析目标、字段状态、上游摘要）
+
+        每次调用重拼，不永久存储到对话历史中。
+        """
+        system_msgs: list[dict] = []
+
+        # 1. prompt.md 作为第一条 system 消息
+        prompt = getattr(self, 'prompt', '')
+        if prompt:
+            system_msgs.append({"role": "system", "content": prompt})
+
+        # 2. ProjectContext 上下文注入
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            ctx_block = project_ctx.build_prompt("cleaner", context)
+            parts: list[str] = []
+            if ctx_block.get("system_prefix"):
+                parts.append(ctx_block["system_prefix"])
+            if ctx_block.get("upstream_summary"):
+                parts.append(ctx_block["upstream_summary"])
+            if parts:
+                system_msgs.append({"role": "system", "content": "\n\n".join(parts)})
+
+        return system_msgs
+
+    def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
+        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, assessment or None)
+
+        messages 视为对话历史（仅含 user/assistant/tool 角色）；
+        每次调用前重新拼装 system prompt 头部。
+        """
+        import json as _json
+        from hagoku.tools.registry import agent_tools as _agt
+        from ...llm.client import create_raw_client
+
+        if df is None:
+            df = getattr(self, '_df', None)
+        client = create_raw_client(self.llm_config)
+        _tools = _agt.to_openai("cleaner")
+
+        # 拼装 system prompt 头部（每次重拼）
+        composed = self._compose_system_messages(context) + messages
+
+        # 确保至少有一条 user 消息
+        if not any(m.get("role") == "user" for m in composed):
+            query = context.get("query", "") or context.get("analysis_goal", "数据清洗")
+            composed.append({"role": "user", "content": f"分析目标：{query}"})
+
+        # ── LLM dump ──
+        from ...observability.llm_dump import dump_messages
+        dump_messages(
+            "cleaner_run_step",
+            composed,
+            model=self.llm_config.model,
+            extra={"tools": [t["function"]["name"] for t in _tools]},
+        )
+
+        resp = client.chat.completions.create(
+            model=self.llm_config.model, messages=composed,
+            temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
+        )
+        msg = resp.choices[0].message
+        txt = (msg.content or "").strip()
+        tc_list = getattr(msg, "tool_calls", None)
+        assessment = None
+        route_to_args = None
+
+        if tc_list:
+            tool_results = []
+            for tc in tc_list:
+                fn = tc.function
+                try:
+                    args = _json.loads(fn.arguments) if fn.arguments else {}
+                except (_json.JSONDecodeError, TypeError):
+                    continue
+                result = _agt.dispatch(fn.name, args, context, df)
+                if fn.name == "submit_assessment":
+                    assessment = result
+                    break
+                if fn.name == "route_to":
+                    route_to_args = result
+                tc_id = getattr(tc, "id", "") or ""
+                tool_results.append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": _json.dumps(result, ensure_ascii=False, default=str),
+                })
+            if tool_results:
+                assistant_block = {"role": "assistant", "content": txt or None}
+                assistant_block["tool_calls"] = [
+                    {"id": getattr(tc, "id", ""), "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tc_list if getattr(tc, "function", None)
+                ]
+                messages.append(assistant_block)
+                messages.extend(tool_results)
+        elif txt:
+            messages.append({"role": "assistant", "content": txt})
+
+        return {
+            "messages": messages,
+            "text": txt,
+            "submit_assessment": assessment is not None,
+            "assessment": assessment,
+            "route_to": route_to_args,
+        }
+
     # ── 核心逻辑 ────────────────────────────────────────────
 
     def run(

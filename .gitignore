@@ -56,3 +56,6 @@ UI_CHANGELOG_backup_*
 
 # AI 工具缓存：understand-anything 插件生成的知识图谱（同 .codegraph / .reasonix）
 .understand-anything/
+
+# 本地快照归档（mv 而非 rm，保留历史）
+.archive/

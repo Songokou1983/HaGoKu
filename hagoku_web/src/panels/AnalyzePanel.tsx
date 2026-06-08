@@ -44,7 +44,7 @@ export default function AnalyzePanel() {
   void loadFiles;
 
   // Conversation hook
-  const { messages, setMessages } = useConversation();
+  const { messages, setMessages, addSystemMsg, addUserMsg } = useConversation();
 
   // Analyze session hook
   const sess = useAnalyzeSession(
@@ -99,14 +99,10 @@ export default function AnalyzePanel() {
       const s = send("respond", { text: outgoing });
       if (!s) {
         sess.replySnapshotRef.current = null;
-        setMessages((prev) => [
-          ...prev,
-          { id: Date.now().toString(), role: "system", text: "当前未连接到服务器，回复未发出。请确认右上角连接状态后重试。", timestamp: new Date().toISOString() },
-        ]);
+        addSystemMsg("当前未连接到服务器，回复未发出。请确认右上角连接状态后重试。");
         return;
       }
-      const ts = new Date().toISOString();
-      setMessages((prev) => [...prev, { id: Date.now().toString() + Math.random(), role: "user", text: outgoing, timestamp: ts }]);
+      addUserMsg(outgoing);
       sess.setReplyText("");
       setQueryText("");
       sess.setWaitingAgent(null);

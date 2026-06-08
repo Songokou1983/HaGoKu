@@ -33,13 +33,15 @@ from ...tools.cleaning import (
 # 模块级配置
 _cconfig = CleaningConfig()
 from ...tools.data_io import load_data
-from .._interactive import InteractionMixin
+from ..base import BaseAgent
 from ..types import InteractionResult
 from . import knowledge as cleaner_knowledge
 
 
-class CleanerAgent(InteractionMixin):
+class CleanerAgent(BaseAgent):
     """数据清洗员：保守清洗，影响可追溯"""
+    role = "cleaner"
+    _memory_yaml_key = "cleaning_preferences"
 
     def __init__(
         self,
@@ -48,28 +50,14 @@ class CleanerAgent(InteractionMixin):
         orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
-        self.role = "cleaner"
-        self.llm_config = llm_config
-        self.event_bus = event_bus
-        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
-        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
-
-        self.prompt = self._load_prompt()
-        self.memory = self._load_memory()
-
-        # 交互状态
-        self._phase = "begin"
+        super().__init__(llm_config=llm_config, event_bus=event_bus,
+                         orchestrator=orchestrator, llm_client=llm_client)
+        # Cleaner 特有字段
         self._context: dict | None = None
         self._data_path: str | None = None
         self._df: pd.DataFrame | None = None
         self._operations: list[dict] = []
         self._report: CleaningReport | None = None
-
-    def _load_prompt(self) -> str:
-        path = Path(__file__).parent / "prompt.md"
-        if path.exists():
-            return path.read_text(encoding="utf-8")
-        return ""
 
     def _load_memory(self) -> dict:
         path = Path(__file__).parent / "memory.md"
@@ -112,10 +100,6 @@ class CleanerAgent(InteractionMixin):
             content = re.sub(r"cleaning_preferences: \{\}", f"cleaning_preferences:\n{prefs_yaml}", content)
 
         path.write_text(content, encoding="utf-8")
-
-    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
-        if self.event_bus:
-            self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     def _compose_system_messages(self, context: dict) -> list[dict]:
         """拼装 system prompt 头部消息。

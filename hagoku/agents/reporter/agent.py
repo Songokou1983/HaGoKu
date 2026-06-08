@@ -24,12 +24,14 @@ from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.reporting import ReportData, ReportGenerator, ReportSection
 from ...tools.visualization import generate_data_overview_charts
-from .._interactive import InteractionMixin
+from ..base import BaseAgent
 from ..types import InteractionResult
 
 
-class ReporterAgent(InteractionMixin):
+class ReporterAgent(BaseAgent):
     """报告员：让分析结果说话，LLM 决定说什么、怎么说"""
+    role = "reporter"
+    _memory_yaml_key = "reports"
 
     def __init__(
         self,
@@ -40,32 +42,20 @@ class ReporterAgent(InteractionMixin):
         **kwargs: Any,
     ) -> None:
         # 兼容旧签名的第一个位置参数 llm_config
-        self.llm_config = args[0] if args and hasattr(args[0], 'model') else None
-        self.role = "reporter"
-        self.event_bus = event_bus or args[1] if len(args) > 1 else event_bus  # type: ignore[assignment]
-        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
-        self._llm_client = llm_client
+        llm_config = args[0] if args and hasattr(args[0], 'model') else None
+        eb = event_bus or (args[1] if len(args) > 1 else event_bus)
+        super().__init__(llm_config=llm_config, event_bus=eb,
+                         orchestrator=orchestrator, llm_client=llm_client)
         if not self.event_bus:
             raise ValueError("ReporterAgent 需要 event_bus 参数")
 
-        # 运行时加载 prompt + memory
-        self.prompt = self._load_prompt()
-        self.memory = self._load_memory()
-
-        # 交互状态
-        self._phase = "begin"
+        # Reporter 特有字段
         self._results: list[dict] = []
         self._context: dict = {}
         self._cleaning_summary: dict = {}
         self._pending_data: dict = {}
 
-    # ── prompt / memory 读写 ────────────────────────────────
-
-    def _load_prompt(self) -> str:
-        path = Path(__file__).parent / "prompt.md"
-        if path.exists():
-            return path.read_text(encoding="utf-8")
-        return ""
+    # ── memory 读写 ──────────────────────────────────────────
 
     def _load_memory(self) -> dict:
         path = Path(__file__).parent / "memory.md"
@@ -158,9 +148,6 @@ class ReporterAgent(InteractionMixin):
                 },
             },
         }]
-
-    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
-        self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     # ── 核心：run() ─────────────────────────────────────────
 

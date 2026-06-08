@@ -24,7 +24,7 @@ from ...observability.event_bus import EventBus
 from ...observability.events import EventType
 from ...tools.data_io import load_data
 from ...tools.profiling import generate_profile
-from .._interactive import InteractionMixin
+from ..base import BaseAgent
 from ..types import InteractionResult, build_submit_field_inference_schema
 from . import knowledge as scout_knowledge
 
@@ -101,8 +101,9 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
 
 
 
-class ScoutAgent(InteractionMixin):
+class ScoutAgent(BaseAgent):
     """数据侦察员：理解数据上下文，不猜，问"""
+    role = "scout"
 
     def __init__(
         self,
@@ -113,29 +114,13 @@ class ScoutAgent(InteractionMixin):
         *,
         channel_logger: Any | None = None,
     ) -> None:
-        self.role = "scout"
-        self.llm_config = llm_config
-        self.event_bus = event_bus
-        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
-        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
-        self._channel_logger = channel_logger
-
-        # 加载 prompt.md
-        self.prompt = self._load_prompt()
-        self.memory = self._load_memory()
-
-        # 交互状态
-        self._phase = "begin"
+        super().__init__(llm_config=llm_config, event_bus=event_bus,
+                         orchestrator=orchestrator, llm_client=llm_client,
+                         channel_logger=channel_logger)
+        # Scout 特有字段
         self._context: dict | None = None
         self._data_path: str | None = None
         self._query: str = ""
-
-    def _load_prompt(self) -> str:
-        """从 prompt.md 加载角色定义"""
-        path = Path(__file__).parent / "prompt.md"
-        if path.exists():
-            return path.read_text(encoding="utf-8")
-        return ""
 
     def _load_memory(self) -> dict:
         """从 memory.md 加载记忆"""
@@ -170,9 +155,6 @@ class ScoutAgent(InteractionMixin):
             content = re.sub(r"fields:.*", fields_yaml, content)
 
         path.write_text(content, encoding="utf-8")
-
-    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
-        self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     # ── 核心逻辑 ────────────────────────────────────────────
 

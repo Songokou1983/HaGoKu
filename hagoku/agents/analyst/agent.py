@@ -36,7 +36,7 @@ from ...tools.analysis import (
     ttest,
 )
 from ...tools.power_analysis import power_ttest
-from .._interactive import InteractionMixin
+from ..base import BaseAgent
 from ..types import InteractionResult
 from . import knowledge as analyst_knowledge
 
@@ -111,10 +111,11 @@ class AnalysisResult:
         }
 
 
-class AnalystAgent(InteractionMixin):
+class AnalystAgent(BaseAgent):
     """数理分析员：用统计方法挖出数据背后的真相"""
+    role = "analyst"
+    _memory_yaml_key = "analysis_patterns"
 
-    # ── 分析方法注册表（P1.1 修复：支持 LLM 动态扩展分析类型） ──
     def __init__(
         self,
         llm_config: LLMConfig,
@@ -122,21 +123,9 @@ class AnalystAgent(InteractionMixin):
         orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
-        self.role = "analyst"
-        self.llm_config = llm_config
-        self.event_bus = event_bus
-        self.orchestrator = orchestrator  # 看板 block/unblock 通过 orchestrator 走
-        self._llm_client = llm_client  # 外部传入的 LLM 客户端（双层策略用）
-
-        self.prompt = self._load_prompt()
-        self.memory = self._load_memory()
+        super().__init__(llm_config=llm_config, event_bus=event_bus,
+                         orchestrator=orchestrator, llm_client=llm_client)
         self.guardrails = StatisticalGuardrails()
-
-    def _load_prompt(self) -> str:
-        path = Path(__file__).parent / "prompt.md"
-        if path.exists():
-            return path.read_text(encoding="utf-8")
-        return ""
 
     def _load_memory(self) -> dict:
         path = Path(__file__).parent / "memory.md"
@@ -290,7 +279,4 @@ class AnalystAgent(InteractionMixin):
             "findings": findings,
             "route_to": route_to_args,
         }
-
-    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
-        self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 

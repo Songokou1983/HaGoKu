@@ -153,44 +153,94 @@ class TestAnalystControlChannelLinks:
 # Cleaner 盲点声明（B-2 Option B：schema-only）
 # ═══════════════════════════════════════════════════════════════════
 
-class TestCleanerControlChannelBlindSpot:
-    """Cleaner 控制通道盲点 — route_to schema-only"""
+class TestCleanerControlChannelLinks:
+    """Cleaner 控制通道链路验证 — CL-1~CL-3 后 route_to 已生效"""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Cleaner 无 LLM 工具调用入口（仅一次评估），route_to 为 schema-only"
-    )
-    def test_cleaner_route_to_link_present(self):
-        """验证 Cleaner 的 route_to 链路已触达——若此测试 PASS 说明盲点已修复。
+    @pytest.fixture
+    def orch(self):
+        orch = Orchestrator(HaGoKuConfig())
+        orch._df_raw = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+        orch._df_clean = orch._df_raw
+        return orch
 
-        当前预期 FAIL：Cleaner 阶段 _handle_cleaner_reply 不消费 route_to。
-        当 Cleaner 有了 LLM 交互循环并消费 route_to 时，此测试将 PASS（XPASS），
-        提醒开发者移除 xfail 并补充链路测试。
-        """
-        from hagoku.manager.llm_dispatch.reply_handlers import _handle_cleaner_reply
-        import inspect
-        src = inspect.getsource(_handle_cleaner_reply)
-        assert "route_to" in src, (
-            "Cleaner 当前不消费 route_to——盲点存在。\n"
-            "当 Cleaner 有 LLM 交互循环后此测试将 PASS，届时移除 xfail。"
-        )
+    def _cleaner_context(self):
+        return {
+            "column_semantics": [
+                {"column_name": "A", "display_name": "列A", "suggested_role": "target", "used_in_analysis": True},
+            ],
+            "query": "分析",
+            "_cleaner_assessment": {"summary": "done", "columns": []},
+        }
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Cleaner 无 LLM 工具调用入口，submit_assessment 是唯一退出路径"
-    )
-    def test_cleaner_plan_via_llm_handles_route_to(self):
-        """验证 Cleaner._plan_via_llm 处理 route_to——若 PASS 说明盲点缩小。
-
-        当前预期 FAIL：_plan_via_llm 不处理 route_to（仅处理 submit_assessment）。
-        """
+    def test_route_to_analyst_triggers_switch(self, orch):
+        """Cleaner route_to(analyst) → switch"""
+        context = self._cleaner_context()
         from hagoku.agents.cleaner.agent import CleanerAgent
-        import inspect
-        src = inspect.getsource(CleanerAgent._plan_via_llm)
-        assert "route_to" in src, (
-            "Cleaner._plan_via_llm 当前不处理 route_to——盲点存在。\n"
-            "当 _plan_via_llm 处理 route_to 后此测试将 PASS，届时移除 xfail。"
-        )
+        agent = CleanerAgent.__new__(CleanerAgent)
+        agent.llm_config = orch.config.llm
+        agent.event_bus = orch.event_bus
+        agent.prompt = "test"
+        orch._cleaner_agent = agent
+        orch._cleaner_messages = [{"role": "user", "content": "可以了"}]
+        orch._cleaner_dialog_open = True
+
+        agent.run_step = MagicMock(return_value={
+            "messages": orch._cleaner_messages,
+            "text": "ok",
+            "submit_assessment": False,
+            "assessment": None,
+            "route_to": {"stage": "analyst", "reason": "done"},
+        })
+        result = orch._handle_cleaner_reply("可以了", context)
+        assert isinstance(result, tuple)
+        assert result[0] == "switch"
+        assert result[1] == "analyst"
+
+    def test_route_to_scout_triggers_switch(self, orch):
+        """Cleaner route_to(scout) → switch"""
+        context = self._cleaner_context()
+        from hagoku.agents.cleaner.agent import CleanerAgent
+        agent = CleanerAgent.__new__(CleanerAgent)
+        agent.llm_config = orch.config.llm
+        agent.event_bus = orch.event_bus
+        agent.prompt = "test"
+        orch._cleaner_agent = agent
+        orch._cleaner_messages = [{"role": "user", "content": "重看字段"}]
+        orch._cleaner_dialog_open = True
+
+        agent.run_step = MagicMock(return_value={
+            "messages": orch._cleaner_messages,
+            "text": "ok",
+            "submit_assessment": False,
+            "assessment": None,
+            "route_to": {"stage": "scout", "reason": "重看"},
+        })
+        result = orch._handle_cleaner_reply("清洗方案有问题", context)
+        assert isinstance(result, tuple)
+        assert result[1] == "scout"
+
+    def test_no_route_to_stays_in_cleaner(self, orch):
+        """无 route_to → 留在 cleaner"""
+        context = self._cleaner_context()
+        from hagoku.agents.cleaner.agent import CleanerAgent
+        agent = CleanerAgent.__new__(CleanerAgent)
+        agent.llm_config = orch.config.llm
+        agent.event_bus = orch.event_bus
+        agent.prompt = "test"
+        orch._cleaner_agent = agent
+        orch._cleaner_messages = [{"role": "user", "content": "讨论"}]
+        orch._cleaner_dialog_open = True
+
+        agent.run_step = MagicMock(return_value={
+            "messages": orch._cleaner_messages + [{"role": "assistant", "content": "好的"}],
+            "text": "好的，继续讨论",
+            "submit_assessment": False,
+            "assessment": None,
+            "route_to": None,
+        })
+        result = orch._handle_cleaner_reply("再讨论一下", context)
+        assert not isinstance(result, tuple)
+        assert result["status"] == "cleaner_review"
 
 
 # ═══════════════════════════════════════════════════════════════════

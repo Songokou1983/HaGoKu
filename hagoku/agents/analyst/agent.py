@@ -256,7 +256,10 @@ class AnalystAgent(InteractionMixin):
             tool_results = []
             for tc in tc_list:
                 fn = tc.function
-                args = _json.loads(fn.arguments) if fn.arguments else {}
+                try:
+                    args = _json.loads(fn.arguments) if fn.arguments else {}
+                except (_json.JSONDecodeError, TypeError):
+                    continue
                 result = _agt.dispatch(fn.name, args, context, df)
                 if fn.name == "submit_analysis":
                     findings = result

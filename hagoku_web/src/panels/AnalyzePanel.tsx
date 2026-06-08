@@ -8,8 +8,19 @@ import { PanelHeader } from "../components/PanelHeader";
 import {
   Loader2, WifiOff, Search, Sparkles, BarChart2, FileText,
   ArrowRight, FolderOpen, Upload, ChevronDown, CheckCircle2, X,
-  PlayCircle, RotateCcw, Clock, ShieldAlert, MessageSquarePlus, Trash2,
+  PlayCircle, RotateCcw, Clock, ShieldAlert, Trash2,
 } from "lucide-react";
+import type {
+  AgentKey, AgentRunState, SessionPhase,
+  FieldReviewPayload, CleaningReviewPayload,
+  AnalystReviewPayload, ConvoMessage, ProjectFile,
+} from "./AnalyzePanel/types";
+import {
+  resolveAgentKey, parsePauseInteractionRevision,
+  parseFieldReview, parseCleaningAssessment, parseCleaningReview,
+  parseAnalystReview, significanceShort,
+} from "./AnalyzePanel/parsers";
+import { fmtSize, uid, formatScoutUserInputFactLine, formatStageProceedFactLine } from "./AnalyzePanel/utils";
 
 // ── Agent pipeline definition ─────────────────────────────────
 const PIPELINE_AGENTS = [
@@ -19,224 +30,6 @@ const PIPELINE_AGENTS = [
   { key: "reporter", label: "Reporter", icon: FileText,  desc: "生成报告" },
 ] as const;
 
-type AgentKey = typeof PIPELINE_AGENTS[number]["key"];
-type AgentRunState = "idle" | "running" | "done" | "error" | "skipped";
-
-// Map raw WS event agent names → pipeline keys
-function resolveAgentKey(raw: string): AgentKey | null {
-  const s = raw.toLowerCase();
-  if (s.includes("scout"))    return "scout";
-  if (s.includes("clean"))    return "cleaner";
-  if (s.includes("analys"))   return "analyst";
-  if (s.includes("report"))   return "reporter";
-  return null;
-}
-
-function parsePauseInteractionRevision(data: Record<string, unknown>): number | null {
-  const v = data.interaction_revision;
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-// ── Types ────────────────────────────────────────────────────
-type SessionPhase = "setup" | "running" | "done";
-
-/** Scout 字段核对：后端 `field_review`（列：字段名称 / 中文名称 / 含义理解 / 分析角色） */
-interface FieldReviewPayload {
-  n_rows: number | string;
-  n_cols: number;
-  /** 分析字段摘要：目标变量/特征/标识列的划分概览 */
-  analysis_fields_summary?: string;
-  rows: Array<{
-    field_name: string;
-    /** 中文名称：column_display_names 显式命名；无则占位「—」 */
-    chinese_name: string;
-    /** AI 对字段的含义理解（column_descriptions 或语义兜底） */
-    meaning: string;
-    /** LLM 对参与分析的判断原因 */
-    evidence?: string;
-    /** 建议分析角色：target / feature / identifier（由 Scout 语义推断） */
-    suggested_role: string;
-    needs_attention?: boolean;
-    /** 用户是否明确指定该字段参与本次分析（true/false/null） */
-    used_in_analysis?: boolean | null;
-  }>;
-}
-
-function parseFieldReview(raw: unknown): FieldReviewPayload | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  const rowsRaw = o.rows;
-  if (!Array.isArray(rowsRaw) || rowsRaw.length === 0) return null;
-  const rows: FieldReviewPayload["rows"] = [];
-  for (const item of rowsRaw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    rows.push({
-      field_name: String(r.field_name ?? ""),
-      chinese_name: String(r.chinese_name ?? "—"),
-      meaning: String(r.meaning ?? ""),
-      suggested_role: String(r.suggested_role ?? "—"),
-      needs_attention: Boolean(r.needs_attention),
-      evidence: String(r.evidence ?? ''),
-        used_in_analysis: "used_in_analysis" in r ? (r.used_in_analysis === null ? null : Boolean(r.used_in_analysis)) : undefined,
-    });
-  }
-  if (rows.length === 0) return null;
-  const nCols = typeof o.n_cols === "number" && Number.isFinite(o.n_cols) ? o.n_cols : rows.length;
-  const nRowsRaw = o.n_rows;
-  const nRows: number | string =
-    typeof nRowsRaw === "number" && Number.isFinite(nRowsRaw)
-      ? nRowsRaw
-      : typeof nRowsRaw === "string"
-        ? nRowsRaw
-        : "?";
-  const summaryRaw = o.analysis_fields_summary;
-  const analysis_fields_summary: string | undefined =
-    typeof summaryRaw === "string" && summaryRaw.trim() ? summaryRaw.trim() : undefined;
-  return {
-    n_rows: nRows,
-    n_cols: nCols,
-    rows,
-    ...(analysis_fields_summary !== undefined ? { analysis_fields_summary } : {}),
-  };
-}
-
-/** Cleaner 评估：后端 `cleaning_assessment` — LLM 的自由文本评估 */
-interface CleaningAssessment {
-  summary: string;
-  columns: Array<{
-    column: string;
-    display_name?: string;
-    action: "skip" | "clean";
-    reason: string;
-    operations?: Array<{ strategy: string }>;
-  }>;
-}
-function parseCleaningAssessment(raw: unknown): CleaningAssessment | null {
-  if (!raw || typeof raw !== "object") return null;
-  const d = raw as Record<string, unknown>;
-  if (!Array.isArray(d.columns)) return null;
-  return { summary: String(d.summary || ""), columns: (d.columns as any[]).map((c: any) => ({ ...c, reason: c.reason || c.reason || "" })) };
-}
-
-/** Cleaner 核对：后端 `cleaning_review` 结构化载荷（非 Agent 台词） */
-interface CleaningReviewPayload {
-  data_quality: string;
-  impact_rate: number;
-  total_rows_original: number;
-  total_rows_after: number;
-  rows_removed: number;
-  bias_risk: string;
-  n_ops: number;
-  warnings: string[];
-  rows: Array<{
-    column: string;
-    strategy: string;
-    reason: string;
-    rows_affected: number;
-  }>;
-}
-
-function parseCleaningReview(raw: unknown): CleaningReviewPayload | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  const rowsRaw = o.rows;
-  if (!Array.isArray(rowsRaw)) return null;
-  const rows: CleaningReviewPayload["rows"] = [];
-  for (const item of rowsRaw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    rows.push({
-      column: String(r.column ?? ""),
-      strategy: String(r.strategy ?? ""),
-      reason: String(r.reason ?? ""),
-      rows_affected: typeof r.rows_affected === "number" && Number.isFinite(r.rows_affected) ? r.rows_affected : 0,
-    });
-  }
-  const wRaw = o.warnings;
-  const warnings: string[] = Array.isArray(wRaw)
-    ? wRaw.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim())
-    : [];
-  const ir = o.impact_rate;
-  const impact = typeof ir === "number" && Number.isFinite(ir) ? ir : 0;
-  const nOps = typeof o.n_ops === "number" && Number.isFinite(o.n_ops) ? o.n_ops : rows.length;
-  const tOrig = typeof o.total_rows_original === "number" && Number.isFinite(o.total_rows_original)
-    ? o.total_rows_original
-    : 0;
-  const tAfter = typeof o.total_rows_after === "number" && Number.isFinite(o.total_rows_after)
-    ? o.total_rows_after
-    : 0;
-  const rrRaw = o.rows_removed;
-  const rowsRemoved =
-    typeof rrRaw === "number" && Number.isFinite(rrRaw) ? rrRaw : Math.max(0, tOrig - tAfter);
-  return {
-    data_quality: String(o.data_quality ?? "—"),
-    impact_rate: impact,
-    total_rows_original: tOrig,
-    total_rows_after: tAfter,
-    rows_removed: rowsRemoved,
-    bias_risk: String(o.bias_risk ?? "unknown"),
-    n_ops: nOps,
-    warnings,
-    rows,
-  };
-}
-
-/** Analyst 结果核对：后端 `analyst_review` 结构化载荷（非 Agent 台词）；含 p 值/效应量/置信区间与「精、准、狠」一致 */
-interface AnalystReviewPayload {
-  n_findings: number;
-  n_significant: number;
-  rows: Array<{
-    result_id: string;
-    analysis_type: string;
-    question: string;
-    significance: string;
-    p_value: string;
-    effect_summary: string;
-    confidence_interval: string;
-    conclusion_plain: string;
-  }>;
-}
-
-function parseAnalystReview(raw: unknown): AnalystReviewPayload | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (!Array.isArray(o.rows)) return null;
-  const rowsRaw = o.rows;
-  const rows: AnalystReviewPayload["rows"] = [];
-  for (const item of rowsRaw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    rows.push({
-      result_id: String(r.result_id ?? ""),
-      analysis_type: String(r.analysis_type ?? ""),
-      question: String(r.question ?? ""),
-      significance: String(r.significance ?? ""),
-      p_value: typeof r.p_value === "string" ? r.p_value : String(r.p_value ?? "—"),
-      effect_summary: typeof r.effect_summary === "string"
-        ? r.effect_summary
-        : String(r.effect_summary ?? "—"),
-      confidence_interval: typeof r.confidence_interval === "string"
-        ? r.confidence_interval
-        : String(r.confidence_interval ?? "—"),
-      conclusion_plain: String(r.conclusion_plain ?? ""),
-    });
-  }
-  const nf = o.n_findings;
-  const nFindings = typeof nf === "number" && Number.isFinite(nf) ? nf : rows.length;
-  const ns = o.n_significant;
-  const nSig =
-    typeof ns === "number" && Number.isFinite(ns)
-      ? ns
-      : rows.filter((x) => x.significance === "significant").length;
-  return { n_findings: nFindings, n_significant: nSig, rows };
-}
-
-function significanceShort(s: string): string {
-  if (s === "significant") return "显著";
-  if (s === "not_significant") return "未显著";
-  return s.trim() || "—";
-}
 
 function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
   return (
@@ -459,47 +252,6 @@ function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
       </table>
     </div>
   );
-}
-
-interface ConvoMessage {
-  id: string;
-  role: "system" | "user" | "agent" | "workflow";
-  text: string;
-  timestamp: string;
-  html?: string;
-  fieldReview?: FieldReviewPayload;
-  cleaningReview?: CleaningReviewPayload;
-  analystReview?: AnalystReviewPayload;
-}
-
-interface ProjectFile {
-  name: string;
-  path: string;
-  size: number;
-  mtime: number;
-}
-
-function fmtSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-let _idCtr = 0;
-function uid() { return `m-${++_idCtr}-${Date.now()}`; }
-
-/** 由后端 `user_input_received` 结构化字段拼一条事实行（随状态变化，非固定话术库） */
-function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
-  const llmReply = typeof inner.llm_reply === "string" ? inner.llm_reply : "";
-  return llmReply;
-}
-
-function formatStageProceedFactLine(label: "清洗" | "统计", inner: Record<string, unknown>): string {
-  const ok = Boolean(inner.proceed_accepted);
-  const rev = inner.interaction_revision;
-  const revStr = typeof rev === "number" && Number.isFinite(rev) ? String(rev) : "?";
-  const r = typeof inner.reply === "string" ? inner.reply : "";
-  return `${label}确认 · revision ${revStr}: proceed=${ok} · 回复长度 ${r.length}`;
 }
 
 // ── Pipeline status bar ───────────────────────────────────────

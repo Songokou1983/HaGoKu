@@ -5,19 +5,19 @@ import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 import {
-  Loader2, WifiOff, ArrowRight, FolderOpen, Upload,
-  ChevronDown, PlayCircle, RotateCcw,
-  CheckCircle2, FileText, ShieldAlert, X,
+  Loader2, WifiOff, ArrowRight,
+  RotateCcw,
+  CheckCircle2, FileText, ShieldAlert,
 } from "lucide-react";
-import { fmtSize } from "./AnalyzePanel/utils";
 import { PipelineBar } from "./AnalyzePanel/PipelineBar";
 import { ConvoFeed } from "./AnalyzePanel/ConvoFeed";
 import { ClearHistoryButton } from "./AnalyzePanel/ClearHistoryButton";
+import { ProjectFileSelectors } from "./AnalyzePanel/ProjectFileSelectors";
+import { StartPanel } from "./AnalyzePanel/StartPanel";
 import { useFileUpload } from "./AnalyzePanel/hooks/useFileUpload";
 import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
-
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
   const status = useWorkspaceStore((s) => s.status);
@@ -157,151 +157,39 @@ export default function AnalyzePanel() {
       )}
 
       {/* ── Setup: project + file selectors ── */}
-      <div className="px-3 py-2 border-b border-app-border bg-app-bg-secondary shrink-0 space-y-2">
-        {/* Project selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-ui-xs text-app-text-muted w-12 shrink-0">项目</span>
-          <div className="relative flex-1" ref={projectDropdownRef}>
-            <button
-              onClick={() => setShowProjectDropdown((v) => !v)}
-              disabled={phase === "running"}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded
-                         text-ui-sm transition-colors
-                         ${phase !== "running"
-                           ? "border-app-border hover:border-app-accent cursor-pointer text-app-text"
-                           : "border-app-border opacity-50 cursor-not-allowed text-app-text-muted"}`}
-            >
-              <FolderOpen size={13} className="text-app-accent shrink-0" />
-              <span className="flex-1 text-left truncate font-mono">{currentProject ?? "— 选择项目 —"}</span>
-              <ChevronDown size={12} className="text-app-text-muted shrink-0" />
-            </button>
-            {showProjectDropdown && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-48 overflow-y-auto">
-                {projects.length === 0
-                  ? <div className="px-3 py-2 text-ui-xs text-app-text-muted">暂无项目</div>
-                  : projects.map((p) => (
-                    <button key={p} onClick={() => { setCurrentProject(p); setShowProjectDropdown(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-ui-sm font-mono hover:bg-app-bg cursor-pointer
-                        ${p === currentProject ? "text-app-accent" : "text-app-text"}`}>
-                      {p === currentProject && <CheckCircle2 size={11} className="inline mr-1.5 text-app-accent" />}
-                      {p}
-                    </button>
-                  ))}
-                <div className="border-t border-app-border">
-                  <button onClick={() => { setShowProjectDropdown(false); setActiveView("projects"); }}
-                    className="w-full text-left px-3 py-1.5 text-ui-xs text-app-accent hover:bg-app-bg cursor-pointer">
-                    + 新建项目 →
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* File selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-ui-xs text-app-text-muted w-12 shrink-0">数据</span>
-          <div className="relative flex-1" ref={dropdownRef}>
-            <button
-              disabled={!currentProject || phase === "running"}
-              onClick={() => setShowFileDropdown((v) => !v)}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded text-ui-sm transition-colors
-                ${currentProject && phase !== "running"
-                  ? "border-app-border hover:border-app-accent cursor-pointer text-app-text"
-                  : "border-app-border opacity-40 cursor-not-allowed text-app-text-muted"}`}
-            >
-              <FileText size={13} className={selectedFileName ? "text-app-accent shrink-0" : "text-app-text-muted shrink-0"} />
-              <span className="flex-1 text-left truncate font-mono text-ui-xs">{selectedFileName ?? "— 选择文件 —"}</span>
-              {filesLoading
-                ? <Loader2 size={12} className="animate-spin text-app-text-muted shrink-0" />
-                : <ChevronDown size={12} className="text-app-text-muted shrink-0" />}
-            </button>
-            {showFileDropdown && currentProject && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-56 overflow-y-auto">
-                {projectFiles.length === 0
-                  ? <div className="px-3 py-3 text-ui-xs text-app-text-muted text-center">暂无数据文件，请上传</div>
-                  : projectFiles.map((f) => (
-                    <button key={f.path} onClick={() => { setDataPath(f.path); setShowFileDropdown(false); }}
-                      className={`w-full text-left px-3 py-2 hover:bg-app-bg cursor-pointer border-b border-app-border/50 last:border-0
-                        ${f.path === dataPath ? "text-app-accent" : "text-app-text"}`}>
-                      <div className="flex items-center gap-2">
-                        {f.path === dataPath && <CheckCircle2 size={11} className="text-app-accent shrink-0" />}
-                        <span className="text-ui-xs font-mono truncate flex-1">{f.name}</span>
-                        <span className="text-ui-xs text-app-text-muted shrink-0">{fmtSize(f.size)}</span>
-                      </div>
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
-          {/* Upload button */}
-          <div className="relative shrink-0">
-            <input ref={fileInputRef} type="file"
-              accept=".csv,.tsv,.json,.jsonl,.xlsx,.xls,.parquet,.txt"
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              disabled={!currentProject || uploading || phase === "running"}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f); }}
-            />
-            <button disabled={!currentProject || uploading || phase === "running"}
-              className={`flex items-center gap-1 px-2 py-1.5 border rounded text-ui-xs transition-colors
-                ${currentProject && !uploading && phase !== "running"
-                  ? "border-app-accent text-app-accent hover:bg-app-accent hover:text-white cursor-pointer"
-                  : "border-app-border text-app-text-muted opacity-40 cursor-not-allowed"}`}>
-              {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-              {uploading ? "上传中…" : "上传"}
-            </button>
-          </div>
-        </div>
-        {uploadError && (
-          <div className="flex items-center gap-1 text-ui-xs text-app-error">
-            <X size={11} />{uploadError}
-            <button onClick={() => setUploadError(null)} className="ml-auto text-app-text-muted hover:text-app-text cursor-pointer">忽略</button>
-          </div>
-        )}
-      </div>
-
+      <ProjectFileSelectors
+        currentProject={currentProject}
+        projects={projects}
+        setCurrentProject={setCurrentProject}
+        setActiveView={setActiveView}
+        dataPath={dataPath}
+        setDataPath={setDataPath}
+        selectedFileName={selectedFileName}
+        projectFiles={projectFiles}
+        filesLoading={filesLoading}
+        showFileDropdown={showFileDropdown}
+        setShowFileDropdown={setShowFileDropdown}
+        showProjectDropdown={showProjectDropdown}
+        setShowProjectDropdown={setShowProjectDropdown}
+        uploading={uploading}
+        uploadError={uploadError}
+        setUploadError={setUploadError}
+        fileInputRef={fileInputRef}
+        dropdownRef={dropdownRef}
+        projectDropdownRef={projectDropdownRef}
+        handleUpload={handleUpload}
+        phase={phase}
+      />
       {/* ── Setup idle: start button ── */}
-      {phase === "setup" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
-          {!currentProject || !dataPath ? (
-            <div className="text-center space-y-2">
-              <div className="text-app-text-muted text-ui-sm">
-                {!currentProject ? "请先选择一个项目" : "请选择或上传数据文件"}
-              </div>
-              <div className="text-app-text-muted text-ui-xs">准备好后点击"开始分析"</div>
-            </div>
-          ) : (
-            <>
-              <div className="text-center space-y-2">
-                <div className="text-ui-sm text-app-text-muted">项目和数据文件已就绪</div>
-                <div className="text-ui-xs text-app-text-muted opacity-60">
-                  需要暂停确认时会在对话区提示，并在下方出现输入框
-                </div>
-              </div>
-              <div className="w-full max-w-md">
-                <textarea
-                  value={queryText}
-                  onChange={(e) => setQueryText(e.target.value)}
-                  placeholder="你想分析什么？例如：这批广告投放的 ROI 如何？哪个渠道转化最高？"
-                  rows={3}
-                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-ui-sm text-app-text placeholder:text-app-text-muted focus:outline-none focus:border-app-accent resize-none transition-colors"
-                />
-              </div>
-            </>
-          )}
-          <button
-            onClick={sess.handleStartSession}
-            disabled={!canStart}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg text-ui-base font-medium transition-all duration-200
-              ${canStart
-                ? "bg-app-accent hover:bg-app-accent-hover text-white cursor-pointer shadow-lg hover:shadow-app-accent/30 hover:-translate-y-0.5"
-                : "bg-app-bg-secondary border border-app-border text-app-text-muted cursor-not-allowed"}`}
-          >
-            <PlayCircle size={18} />
-            开始分析
-          </button>
-        </div>
-      )}
+      <StartPanel
+        phase={phase}
+        currentProject={currentProject}
+        dataPath={dataPath}
+        canStart={canStart}
+        queryText={queryText}
+        setQueryText={setQueryText}
+        handleStartSession={sess.handleStartSession}
+      />
 
       {/* ── Query / running / done: conversation view ── */}
       {phase !== "setup" && (

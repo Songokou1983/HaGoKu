@@ -1,5 +1,15 @@
-# Analyst 二段化 + 控制通道全面修复 brief（2026-06-07）
+# [已完成] Analyst 二段化 + 控制通道全面修复 brief（2026-06-07）
 
+> ✅ **本 brief 已全部交付完成**，10 commit 一次性模式执行通过。
+>
+> **完成时间**：2026-06-07 ~ 2026-06-08
+> **commit 范围**：`c7a640a` (A-1) ~ `27a8012` (C-2)，共 10 commits
+> **测试结果**：523 passed + 3 strict xfail（CH-7 494 → 523，新增 29 测试，0 回归）
+> **agent.py 行数**：483 → 279（A-5 死代码清理减少 204 行）
+> **架构审核结论**：通过；详见本文末 §8「审核报告」
+>
+> ---
+>
 > **文档定位**：架构审核方（Cascade）出具，交付实施 AI 执行。
 > 
 > **执行流程契约**：与 `2026-06-07-channel-hardening-brief.md` / `2026-06-07-analyst-two-phase-brief.md` 同 — 实施→审核→退回返工→fixup。
@@ -593,5 +603,92 @@ A-1 (run_step 注入 prompt + ctx) ─┐
 **Brief 出具方**：Cascade（架构审核方）
 **前置依赖**：通道收口 brief（`2026-06-07-channel-hardening-brief.md`）已闭环 ✅
 **作废前任**：`2026-06-07-analyst-two-phase-brief.md`（基于错误生产路径假设）
-**预计完成**：2026-06-11
-**下一次评估**：A-1 ~ C-2 全部收口后，跑一次完整真 LLM pipeline 端到端冒烟，记录 Analyst 二段化行为符合 §1.5 全部"用户设想"列。
+**完成时间**：2026-06-08
+**完成状态**：✅ 10 commit 全部通过，详见 §8
+
+---
+
+## §8 审核报告（2026-06-08）
+
+### 8.1 commit 链路
+
+| Commit | 任务 | 主题 |
+|--------|------|------|
+| `c7a640a` | A-1 | `run_step` 注入 system prompt + ProjectContext |
+| `9e0652e` | A-2 | 进入 Analyst 自动跑首波分析 + 书面概括化 |
+| `1d76594` | A-3 | Analyst `route_to` 链路修复 — LLM 调 route_to 真生效 |
+| `5426b01` | B-1 | Scout `route_to` 链路修复 |
+| `a625ed0` | B-2 | Cleaner `route_to` 链路审计 — Option B（schema-only） |
+| `9402c46` | B-3 | Reporter `route_to` 链路审计 — Option B（schema-only） |
+| `8512cb3` | A-4 | prompt.md 重写：从"通往报告的关卡" → "分析伙伴" |
+| `16312d7` | C-1 | 律 4 / 律 8 升级 — 链路验证而非仅 schema |
+| `8e41b76` | A-5 | 死代码清理：删除 `run/begin/respond` + 五关联字段 |
+| `27a8012` | C-2 | 端到端冒烟回归 |
+
+执行顺序与 §6 依赖图完全一致；commit prefix L3 红线零违反。
+
+### 8.2 量化验收
+
+| 指标 | 基线（CH-7 后） | 完成态 | 变化 |
+|------|----------------|--------|------|
+| `pytest -q` 通过数 | 494 passed | **523 passed + 3 strict xfailed** | +29 测试，0 回归 |
+| `hagoku/agents/analyst/agent.py` 行数 | 483 | **279** | −204（A-5 实测） |
+| 死代码 `def begin/respond/run` | 3 个方法 | **0**（AST 双验） | 全清 |
+| `route_to` 生产路径消费者 | 0 / 4 Agent | **2 / 4 Agent**（Analyst + Scout）+ 2 strict xfail 锁盲点 | 装饰品问题根除 |
+| 三要素契约 `[发现]/[统计依据]/[局限或解读]` | 不存在 | prompt + 重写函数 + 单测 + E2E 四处对齐 | 闭环 |
+
+### 8.3 关键设计验证
+
+#### ✅ A-1 LLM 失明修复
+- `_compose_system_messages` 在 `run_step` 每次调用前重拼，不污染 `_analyst_messages`
+- prompt.md 内容 + `ProjectContext.build_prompt("analyst", ctx)` 双注入
+- `test_analyst_run_step_injection.py` 断言传给 `chat.completions.create` 的 `messages[0].role == "system"`
+
+#### ✅ A-2 首波自动 + 书面概括两段式
+- 新增工具 `submit_first_pass`（`agent_tool_defs.py:440-472`）独立于 `submit_analysis`，语义区分"首波收敛"vs"分析终结"
+- `_run_analyst_first_pass` 循环检测 `submit_first_pass` tool_call → 拿到 findings → `_rewrite_as_written_summary` 二次 LLM 调用产出三要素文本 → emit `USER_INPUT_REQUESTED`
+- `_analyst_first_pass_done` 标志位接到 `Orchestrator.__init__` + `_reset_run_state`，重新进入 Analyst 时正确重置（E2E 第 4 步验证）
+
+#### ✅ A-3 / B-1 `route_to` 真生效
+- Analyst：`run_step` 返回值新增 `route_to` 字段，`_handle_analyst_reply` 消费切换
+- Scout：通过 `context["_scout_route_to"]` ctx 桥递交（与现有 LLM diff 流程兼容），`_handle_scout_reply` 优先判 `route_to`
+- 两种模式各自最贴合 Agent 现有架构，未强行统一
+
+#### ✅ B-2 / B-3 诚信处理盲点
+- 调研后确认 Cleaner / Reporter 无 LLM 工具调用入口（Cleaner 一次性评估，Reporter 不互动）
+- 用 `pytest.mark.xfail(strict=True)` 锁定盲点：若未来接通工具入口，xfail 会 **XPASS 失败**，逼迫开发者移除标记并补链路测试
+- **未使用 `skip` 隐藏**（R9 红线零违反）
+
+#### ✅ A-5 死代码清理彻底
+- AST 双验：`def begin/respond/run` 全部消失（279 行 agent.py 中零命中）
+- 关联实例字段 `_phase/_df/_context/_plan/_preliminary_results` 全清
+- 三按钮硬字符串 `["生成报告","继续分析","结束分析"]` 全清
+
+#### ✅ C-1 / C-2 契约护栏闭环
+- C-1 链路测试：Scout 3 + Analyst 3 + Cleaner 2 xfail + Reporter 1 xfail = **6 passed + 3 strict xfail**
+- C-2 E2E：完整剧本（Cleaner→首波→对话→`route_to(scout)`→重进→`route_to(reporter)`）单测覆盖
+
+### 8.4 与用户原始设想对照
+
+| 用户设想 | 验证 |
+|---------|------|
+| 阶段 1：进入 Analyst 自动跑分析得结论 | ✅ `_run_analyst_first_pass` 不等用户开口自动触发 |
+| 阶段 1 输出"偏书面和概括" | ✅ `_rewrite_as_written_summary` 二次 LLM 调用产出三要素文本 |
+| 阶段 2 自由对话 | ✅ `run_step` 单步循环 + 完整工具集 + LLM 不再失明 |
+| 用户说"方向不对"→ 跳回 Scout | ✅ `route_to(stage="scout")` E2E 测试覆盖 |
+| 用户说"够了"→ 跳 Reporter | ✅ `route_to(stage="reporter")` E2E 测试覆盖 |
+| 用户说"再等等"→ 留 | ✅ LLM 不调 `route_to` 即自然留（用户挽留零代码） |
+| UI 自由文本输入框 | ✅ 始终存在（前端 `AnalyzePanel.tsx:1528`） |
+
+### 8.5 后续观察点
+
+1. **B-2 / B-3 strict xfail 监控**：若未来 Cleaner / Reporter 需要接通 LLM 工具入口，xfail 会 XPASS 失败，需对应补充链路测试并移除标记
+2. **真 LLM 端到端冒烟**：C-2 仅用 mock LLM；建议后续在真实 pipeline 上手工跑一次完整剧本，验证 prompt 重写后的"分析伙伴"行为符合预期
+3. **`submit_analysis` vs `submit_first_pass` 语义分化**：当前两个工具并存。`submit_analysis` 走 reporter 切换路径，`submit_first_pass` 走首波收敛路径。prompt 工程上需关注 LLM 是否会混用
+
+### 8.6 审核结论
+
+**通过**。本 brief 10 任务在一次性 commit 模式下质量与单 commit 审核模式相当，部分维度（B-2/B-3 诚信盲点处理、A-5 AST 双验、三要素契约四处对齐）更高。`route_to` 装饰品根因已根除；Analyst 二段化用户设想全部落地；契约护栏 C-1 把 CH-6 律 4/8 盲点补齐。
+
+**审核方**：Cascade（架构审核方）
+**审核时间**：2026-06-08

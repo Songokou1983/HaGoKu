@@ -741,6 +741,11 @@ class CleanerAgent(InteractionMixin):
                     # tool_calls 已通过标准 OpenAI 协议追加到 messages，不再写 conv_history
                     if fn.name == "submit_assessment":
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
+                    if fn.name == "route_to":
+                        context["_cleaner_route_to"] = {
+                            "stage": args.get("stage"),
+                            "reason": args.get("reason", ""),
+                        }
                     result = _agt.dispatch(fn.name, args, context, df)
                     tc_id = getattr(t, "id", "") or ""
                     messages.append({"role": "assistant", "content": txt, "tool_calls": [{

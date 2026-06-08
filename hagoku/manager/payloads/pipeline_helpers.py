@@ -295,3 +295,13 @@ def _attach_pause_dialogue_message(
     if "message" not in out or out.get("message") is None:
         out["message"] = ""
     return out
+
+
+class PipelineHelpersMixin:
+    """Mixin：pipeline_helpers 模块级函数注册为 Orchestrator 的方法。"""
+    _check_mandatory_guardrails = _check_mandatory_guardrails
+    _handle_mandatory_violations = _handle_mandatory_violations
+    _finish_run_cancelled = _finish_run_cancelled
+    _handle_command_if_present = _handle_command_if_present
+    _init_pipeline_tasks = _init_pipeline_tasks
+    _attach_pause_dialogue_message = _attach_pause_dialogue_message

@@ -73,4 +73,13 @@ def _get_upstream_summary(self, agent_name: str) -> str | None:
     """
     return None
 
+
+class PlanGenerationMixin:
+    """Mixin：plan_generation 模块级函数注册为 Orchestrator 的方法。"""
+    _parse_user_query = _parse_user_query
+    _describe_intent = _describe_intent
+    _build_analysis_purpose = _build_analysis_purpose
+    _get_upstream_summary = _get_upstream_summary
+
+
 # ── Kanban 状态机（Step 4：从 Scribe 内联到 Orchestrator） ──

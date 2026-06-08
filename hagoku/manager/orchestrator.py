@@ -91,7 +91,12 @@ from .llm_dispatch.reply_handlers import (  # noqa: F401
     _handle_reporter_reply,
     _handle_scout_reply,
     respond,
+    ReplyHandlersMixin,
 )
+
+from .llm_dispatch.plan_generation import PlanGenerationMixin  # noqa: F401
+from .llm_dispatch.confirmation import ConfirmationMixin  # noqa: F401
+from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
 from .payloads.pipeline_helpers import (  # noqa: F401
     _attach_pause_dialogue_message,
@@ -102,7 +107,12 @@ from .payloads.pipeline_helpers import (  # noqa: F401
     _init_pipeline_tasks,
 )
 
-class Orchestrator:
+class Orchestrator(
+    ReplyHandlersMixin,
+    PlanGenerationMixin,
+    ConfirmationMixin,
+    PipelineHelpersMixin,
+):
     _STAGE_HANDLERS: dict[str, str] = {
         "scout": "_handle_scout_reply",
         "cleaner": "_handle_cleaner_reply",
@@ -692,27 +702,3 @@ class Orchestrator:
         except Exception as e:
             # 保存失败不影响主流程，只打印警告
             print(f"   ⚠️ 保存字段描述失败: {e}")
-
-
-# ── CH-5 方法委托：将提取的实例方法挂回 Orchestrator ─────────
-
-Orchestrator._parse_user_query = _parse_user_query
-Orchestrator._describe_intent = _describe_intent
-Orchestrator._build_analysis_purpose = _build_analysis_purpose
-Orchestrator._get_upstream_summary = _get_upstream_summary
-Orchestrator._llm_classify_confirmation = _llm_classify_confirmation
-Orchestrator._build_intent_context = _build_intent_context
-Orchestrator._request_field_confirmation = _request_field_confirmation
-Orchestrator._apply_field_corrections = _apply_field_corrections
-Orchestrator._handle_scout_reply = _handle_scout_reply
-Orchestrator._handle_cleaner_reply = _handle_cleaner_reply
-Orchestrator._handle_analyst_reply = _handle_analyst_reply
-Orchestrator._handle_reporter_reply = _handle_reporter_reply
-Orchestrator.respond = respond
-Orchestrator._ensure_memory_for_respond = _ensure_memory_for_respond
-Orchestrator._check_mandatory_guardrails = _check_mandatory_guardrails
-Orchestrator._handle_mandatory_violations = _handle_mandatory_violations
-Orchestrator._finish_run_cancelled = _finish_run_cancelled
-Orchestrator._handle_command_if_present = _handle_command_if_present
-Orchestrator._init_pipeline_tasks = _init_pipeline_tasks
-Orchestrator._attach_pause_dialogue_message = _attach_pause_dialogue_message

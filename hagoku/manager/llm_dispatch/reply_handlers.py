@@ -321,3 +321,20 @@ def _ensure_memory_for_respond(self, project_name: str) -> None:
         self.output_mgr = OutputManager(self.config.output, project_name)
     schema_file = self.output_mgr.project_dir / "progress.yaml"
     self.memory = MemoryManager(self.db, progress_path=schema_file)
+
+
+# ── Mixin class for Orchestrator multiple inheritance ──────────
+
+class ReplyHandlersMixin:
+    """Mixin：将 reply_handlers 模块级函数注册为 Orchestrator 的方法。
+
+    IDE F12 可跳转到此类，再通过模块级别名跳转到实际实现。
+    """
+    _handle_scout_reply = _handle_scout_reply
+    _handle_cleaner_reply = _handle_cleaner_reply
+    _run_analyst_first_pass = _run_analyst_first_pass
+    _rewrite_as_written_summary = _rewrite_as_written_summary
+    _handle_analyst_reply = _handle_analyst_reply
+    _handle_reporter_reply = _handle_reporter_reply
+    respond = respond
+    _ensure_memory_for_respond = _ensure_memory_for_respond

@@ -175,3 +175,11 @@ def _apply_field_corrections(
                 s["display_name"] = info["chinese_name"]
                 break
         print(f"   ✅ {col} = {info['chinese_name']}（{info['business_meaning']}）")
+
+
+class ConfirmationMixin:
+    """Mixin：confirmation 模块级函数注册为 Orchestrator 的方法。"""
+    _llm_classify_confirmation = _llm_classify_confirmation
+    _build_intent_context = _build_intent_context
+    _request_field_confirmation = _request_field_confirmation
+    _apply_field_corrections = _apply_field_corrections

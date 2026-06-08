@@ -29,6 +29,7 @@ fields:
   date: date（分类型）
   impressions: impressions（标识符）
   revenue: revenue（标识符）
+  roi: 投资回报率，数值在1.5到3.1之间，表示每条投放记录对应的投入产出比。
   sessions: sessions（标识符）
 ```
 

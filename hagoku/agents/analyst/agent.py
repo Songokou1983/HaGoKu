@@ -228,6 +228,11 @@ class AnalystAgent(InteractionMixin):
         # 拼装 system prompt 头部（每次重拼，不永久存储到 messages）
         composed = self._compose_system_messages(context) + messages
 
+        # 确保至少有一条 user 消息（部分 API 如 MiniMax 要求非空 user content）
+        if not any(m.get("role") == "user" for m in composed):
+            intro = f"分析目标：{context.get('query', '') or context.get('analysis_goal', '数据分析')}"
+            composed.append({"role": "user", "content": intro})
+
         resp = client.chat.completions.create(
             model=self.llm_config.model, messages=composed,
             temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",

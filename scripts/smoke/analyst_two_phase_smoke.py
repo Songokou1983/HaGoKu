@@ -199,17 +199,10 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         print(f"   当前阶段: {_fmt_stage(orch)}")
         print(f"   耗时: {time.time() - t3:.1f}s")
 
-    # ── Analyst 阶段：首波自动触发 ──
+    # ── Analyst 阶段：首波由 Cleaner→Analyst 切换时自动触发（无需额外 respond）──
     if orch._stage == "analyst":
         print("\n── Step 0（自动）: Analyst 首波自动分析 ──")
-        t4 = time.time()
-        # 首波由 _handle_analyst_reply 自动触发（无需用户输入）
-        analyst_first = orch.respond({"text": ""})
-        print(f"   respond 返回: {type(analyst_first).__name__}")
-        if isinstance(analyst_first, dict):
-            print(f"   status={analyst_first.get('status')}")
         print(f"   _analyst_first_pass_done: {orch._analyst_first_pass_done}")
-        print(f"   耗时: {time.time() - t4:.1f}s")
 
         # 检查 USER_INPUT_REQUESTED 事件中的首波概括消息
         first_pass_events = [

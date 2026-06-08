@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type {
   AgentKey, AgentRunState, SessionPhase,
-  ConvoMessage, ProjectFile,
+  ConvoMessage,
 } from "./AnalyzePanel/types";
 import {
   resolveAgentKey, parsePauseInteractionRevision,
@@ -23,6 +23,8 @@ import { fmtSize, uid, formatScoutUserInputFactLine, formatStageProceedFactLine 
 import { PipelineBar } from "./AnalyzePanel/PipelineBar";
 import { ConvoFeed } from "./AnalyzePanel/ConvoFeed";
 import { ClearHistoryButton } from "./AnalyzePanel/ClearHistoryButton";
+import { useFileUpload } from "./AnalyzePanel/hooks/useFileUpload";
+
 
 // ── Main component ────────────────────────────────────────────
 
@@ -35,6 +37,17 @@ export default function AnalyzePanel() {
   const projects = useWorkspaceStore((s) => s.projects);
   const setActiveView = useWorkspaceStore((s) => s.setActiveView);
   const resetRunUiState = useWorkspaceStore((s) => s.resetRunUiState);
+  // File upload hook
+  const [dataPath, setDataPath] = useState("");
+  const {
+    projectFiles, filesLoading, showFileDropdown, setShowFileDropdown,
+    showProjectDropdown, setShowProjectDropdown, uploading, uploadError,
+    setUploadError, fileExists, fileInputRef, dropdownRef, projectDropdownRef,
+    loadFiles, handleUpload,
+  } = useFileUpload(currentProject, dataPath, setDataPath);
+  void loadFiles; // suppress unused warning (used internally by hook)
+  const selectedFileName = dataPath ? dataPath.split("/").pop() ?? dataPath : null;
+
 
   // Session state machine
   const [phase, setPhase] = useState<SessionPhase>("setup");
@@ -72,49 +85,7 @@ export default function AnalyzePanel() {
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
 
   // File / project state
-  const [dataPath, setDataPath] = useState("");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [showFileDropdown, setShowFileDropdown] = useState(false);
-  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const projectDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns on outside click
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
-        setShowFileDropdown(false);
-      if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node))
-        setShowProjectDropdown(false);
-    }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, []);
-
-  const loadFiles = useCallback((proj: string) => {
-    setFilesLoading(true);
-    fetch(`/api/projects/${proj}/files`)
-      .then((r) => r.json())
-      .then((d: { files: ProjectFile[] }) => setProjectFiles(d.files ?? []))
-      .catch(() => setProjectFiles([]))
-      .finally(() => setFilesLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (!currentProject) { setDataPath(""); setProjectFiles([]); return; }
-    loadFiles(currentProject);
-    fetch(`/api/projects/${currentProject}/detail`)
-      .then((r) => r.json())
-      .then((d: { data_path?: string; last_query?: string }) => {
-        if (d.data_path) setDataPath(d.data_path);
-        if (d.last_query && phase === "setup") setQueryText(d.last_query);
-      })
-      .catch(() => {});
-  }, [currentProject, loadFiles]);
 
   useAgentStatusSync();
   const batch = useBatchEvents();
@@ -566,40 +537,6 @@ export default function AnalyzePanel() {
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
   }, [send, resetRunUiState]);
 
-  const handleUpload = useCallback(async (file: File) => {
-    if (!currentProject) return;
-    setUploading(true);
-    setUploadError(null);
-    const form = new FormData();
-    form.append("file", file);
-    try {
-      const res = await fetch(`/api/projects/${currentProject}/upload`, { method: "POST", body: form });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "上传失败" }));
-        throw new Error(err.detail ?? "上传失败");
-      }
-      const data = await res.json() as { path: string };
-      setDataPath(data.path);
-      loadFiles(currentProject);
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "上传失败");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [currentProject, loadFiles]);
-
-  const selectedFileName = dataPath ? dataPath.split("/").pop() ?? dataPath : null;
-  const [fileExists, setFileExists] = useState(false);
-  useEffect(() => {
-    if (!currentProject || !dataPath) { setFileExists(false); return; }
-    fetch(`/api/projects/${currentProject}/files`)
-      .then(r => r.json())
-      .then((d: { files?: Array<{path: string}> }) => {
-        setFileExists((d.files || []).some((f: {path: string}) => f.path === dataPath));
-      })
-      .catch(() => setFileExists(false));
-  }, [currentProject, dataPath]);
   const canStart = !!currentProject && !!dataPath && fileExists && connectionStatus === "connected";
   const scoutFieldReviewOpen =
     Boolean(activeFieldReviewId) && waitingAgent === "scout";

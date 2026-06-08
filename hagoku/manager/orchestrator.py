@@ -153,6 +153,9 @@ class Orchestrator:
         self._analyst_messages: list[dict] = []
         self._analyst_agent: Any = None
         self._analyst_first_pass_done: bool = False
+        self._cleaner_agent: Any = None
+        self._cleaner_messages: list[dict] = []
+        self._cleaner_dialog_open: bool = False
         self._error: Exception | None = None
 
 
@@ -185,6 +188,9 @@ class Orchestrator:
         self._analyst_messages = []
         self._analyst_agent = None
         self._analyst_first_pass_done = False
+        self._cleaner_agent = None
+        self._cleaner_messages = []
+        self._cleaner_dialog_open = False
         self._error = None
 
     def request_cancel(self) -> None:

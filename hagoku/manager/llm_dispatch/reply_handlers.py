@@ -63,29 +63,63 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
     }
 
 def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """处理 Cleaner 评估阶段的用户回复。首次调用运行评估，后续直接进入下一阶段。"""
+    """处理 Cleaner 评估阶段的用户回复。
+
+    首次调用：运行一次性评估（assess），展示结果给用户，打开对话窗口。
+    后续回复：进入对话模式，LLM 通过 run_step + 工具与用户互动。
+    """
+    df = self._df_raw if self._df_raw is not None else self._df_clean
+
+    # 首次评估（首波展示）
     assessment = context.get("_cleaner_assessment")
     if assessment is None:
         from hagoku.agents.cleaner import CleanerAgent
         cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
         cleaning_rules = cleaner._load_cleaning_rules()
         context["_user_feedback"] = user_input
-        # F-082: Cleaner 评估优先用原始数据 _df_raw（用户原始数据特征
-        # 是清洗决策的依据）；若不可用（如 resume 跳过了原始加载），回退 _df_clean
-        df = self._df_raw if self._df_raw is not None else self._df_clean
         assessment = cleaner.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
+        # 保存 Cleaner agent 供后续对话使用
+        self._cleaner_agent = cleaner
+        self._cleaner_messages = []
+        self._cleaner_dialog_open = True
         # 通知前端展示清洗评估
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
             "cleaning_assessment": assessment,
-            "message": "清洗评估完成",
+            "message": "清洗评估完成。你可以接受或提出调整。",
         })
         self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
             "result_summary": "清洗评估完成",
         })
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
-    # 用户确认 → 进入下一阶段
-    return ("switch", "analyst")
+
+    # 对话模式：用户已看过评估，现在自由对话
+    if self._cleaner_agent is None:
+        from hagoku.agents.cleaner import CleanerAgent
+        self._cleaner_agent = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+
+    if user_input:
+        self._cleaner_messages.append({"role": "user", "content": user_input})
+
+    result = self._cleaner_agent.run_step(self._cleaner_messages, context, df)
+    self._cleaner_messages = result["messages"]
+
+    # 优先判 route_to
+    route_to = result.get("route_to")
+    if route_to:
+        target = route_to.get("stage")
+        if target and target in {"scout", "analyst", "reporter"}:
+            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
+
+    # 用户确认"够了" → 传统路径切 analyst
+    if user_input.strip() in ("确认", "好的", "OK", "ok", "可以了", "进入分析", "继续", "下一步"):
+        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {
+            "result_summary": "清洗评估完成",
+        })
+        return ("switch", "analyst")
+
+    return {"status": "cleaner_review", "message": result.get("text", ""),
+            "cleaning_assessment": assessment}
 
 def _run_analyst_first_pass(self, context: dict) -> None:
     """阶段 1：自动跑首波分析，循环 run_step 直到 LLM 收敛或调 submit_first_pass。

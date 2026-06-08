@@ -158,6 +158,7 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
     """
     import json as _json
     from ...llm.client import create_raw_client
+    from ...observability.llm_dump import dump_messages
 
     system = (
         "你是数据分析师，把以下统计结果重写为 3-5 段书面发现。\n"
@@ -167,6 +168,12 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
         "用中文输出。"
     )
     user_content = _json.dumps(findings, ensure_ascii=False, default=str)
+
+    rewrite_msgs = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
+    dump_messages("analyst_rewrite_summary", rewrite_msgs, model=self.config.llm.model)
 
     client = create_raw_client(self.config.llm)
     resp = client.chat.completions.create(

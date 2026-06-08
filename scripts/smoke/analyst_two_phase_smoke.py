@@ -304,46 +304,68 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
 
         results["steps"][str(step_id)] = step_result
 
-        # Step 4 之后可能切换到了 reporter，后续步骤无法继续
-        if isinstance(resp_result, tuple) and step_id < 5:
-            print(f"   ⚠️ 已切换到 {resp_result[1]}，后续步骤需要重新进入 analyst")
-            # 对于 step 5（再等等），需要重新进入 analyst
-            if step_id == 4:
-                # 模拟重新 run（实际上生产环境不会这样，这里仅用于冒烟）
-                # 直接设置回 analyst 并重置标志
-                orch._stage = "analyst"
-                orch._analyst_first_pass_done = False
-                orch._analyst_messages = []
-                print("   🔄 已重置回 analyst 阶段（仅冒烟用）")
-                # 重新触发首波
-                orch.respond({"text": ""})
-                print(f"   首波重跑后阶段: {_fmt_stage(orch)}")
+        # Step 3 切换到 scout 后需重置回 analyst 继续步骤 4-5
+        if isinstance(resp_result, tuple) and step_id == 3:
+            print(f"   🔄 Step 3 已切 {resp_result[1]}，重置回 analyst（仅冒烟用）")
+            orch._stage = "analyst"
+            orch._analyst_first_pass_done = False
+            orch._analyst_messages = []
+            orch.respond({"text": ""})
+            print(f"   首波重跑后阶段: {_fmt_stage(orch)}, _analyst_first_pass_done: {orch._analyst_first_pass_done}")
+
+        # Step 4 切换到 reporter 后需重置回 analyst 继续步骤 5
+        if isinstance(resp_result, tuple) and step_id == 4 and resp_result[1] == "reporter":
+            print(f"   🔄 Step 4 已切 reporter，Step 5 重置回 analyst（仅冒烟用）")
+            orch._stage = "analyst"
+            orch._analyst_first_pass_done = False
+            orch._analyst_messages = []
+            orch.respond({"text": ""})
+            print(f"   首波重跑后阶段: {_fmt_stage(orch)}, _analyst_first_pass_done: {orch._analyst_first_pass_done}")
+
+    # ── 收集 dump 文件 ──
+    # 优先从 orchestrator 的 run_dir 收集（orch.run() 内部 set_run_dir 覆盖了外部设置）
+    orch_dump_dir = None
+    try:
+        from hagoku.observability.llm_dump import get_dump_dir
+        orch_dump_dir = get_dump_dir()
+    except Exception:
+        pass
+
+    if orch_dump_dir and orch_dump_dir.exists():
+        dump_dir_to_use = orch_dump_dir
+        print(f"\n   从 orch run_dir 收集 dump: {orch_dump_dir}")
+        # 复制到冒烟 dump-dir
+        import shutil as _shutil
+        for f in _collect_dump_files(orch_dump_dir):
+            _shutil.copy2(f, dump_dir / f.name)
+    else:
+        dump_dir_to_use = dump_dir
 
     # ── 最终检查 ──
     results["emitted_events_count"] = len(emitted_events)
 
-    # 搜索所有 dump 中的关键工具
-    all_dumps = _collect_dump_files(dump_dir)
+    all_dumps = _collect_dump_files(dump_dir_to_use)
     results["total_dumps"] = len(all_dumps)
 
     # 搜索 submit_first_pass
-    sfp_files = _search_in_dumps(dump_dir, "submit_first_pass")
+    sfp_files = _search_in_dumps(dump_dir_to_use, "submit_first_pass")
     results["submit_first_pass_found"] = len(sfp_files) > 0
     results["submit_first_pass_files"] = [str(f.name) for f in sfp_files]
 
     # 搜索 run_statistical_test
-    rst_files = _search_in_dumps(dump_dir, "run_statistical_test")
+    rst_files = _search_in_dumps(dump_dir_to_use, "run_statistical_test")
     results["run_statistical_test_found"] = len(rst_files) > 0
 
     # 搜索 route_to
-    rt_files = _search_in_dumps(dump_dir, "route_to")
+    rt_files = _search_in_dumps(dump_dir_to_use, "route_to")
     results["route_to_found"] = len(rt_files) > 0
 
     # 搜索 "再等等" 附近的 route_to（Step 5 不应调 route_to）
     step5_safe = True
     # 简单检查：如果最后一个 dump 不含 route_to，大概率安全
-    if all_dumps:
-        last_dump_data = _read_dump(all_dumps[-1])
+    all_dumps_step5 = _collect_dump_files(dump_dir_to_use)
+    if all_dumps_step5:
+        last_dump_data = _read_dump(all_dumps_step5[-1])
         if last_dump_data:
             last_dump_str = _json.dumps(last_dump_data, ensure_ascii=False)
             if "route_to" in last_dump_str:

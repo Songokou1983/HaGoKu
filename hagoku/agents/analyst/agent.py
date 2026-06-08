@@ -233,6 +233,15 @@ class AnalystAgent(InteractionMixin):
             intro = f"分析目标：{context.get('query', '') or context.get('analysis_goal', '数据分析')}"
             composed.append({"role": "user", "content": intro})
 
+        # ── LLM dump（CH-4 观察通道）──
+        from ...observability.llm_dump import dump_messages
+        dump_messages(
+            "analyst_run_step",
+            composed,
+            model=self.llm_config.model,
+            extra={"tools": [t["function"]["name"] for t in _tools]},
+        )
+
         resp = client.chat.completions.create(
             model=self.llm_config.model, messages=composed,
             temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",

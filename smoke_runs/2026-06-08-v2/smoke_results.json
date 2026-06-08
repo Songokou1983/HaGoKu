@@ -1,0 +1,60 @@
+{
+  "run_start": "2026-06-08T17:12:10.583003",
+  "data": "tests/fixtures/smoke_demo.csv",
+  "query": "哪个渠道ROI最高",
+  "dump_dir": "smoke_runs/2026-06-08-v2",
+  "steps": {
+    "0": {
+      "description": "首波自动分析 + 书面概括",
+      "first_pass_done": true,
+      "three_elements": {
+        "[发现]": true,
+        "[统计依据]": true,
+        "[局限或解读]": true
+      },
+      "all_three": true,
+      "message_preview": "<think>\nThe user wants me to rewrite the statistical findings into 3-5 paragraphs of written findings in Chinese. Each paragraph must have three elements: [发现] / [统计依据] / [局限或解读]. I should not fabricate any statistics not in the input, and not give language that suggests the user should stop the ana"
+    },
+    "2": {
+      "description": "用户要求换检验方法",
+      "user_input": "换 t 检验试试",
+      "expected_tool": "run_statistical_test",
+      "tool_found_in_dump": false,
+      "dump_preview": "(无新 dump)",
+      "respond_type": "dict",
+      "stage_after": "analyst",
+      "elapsed_s": 14.3
+    },
+    "3": {
+      "description": "用户纠偏分析方向",
+      "user_input": "我觉得方向不对，应该看渠道维度",
+      "expected_tool": "update_analysis_scope|route_to",
+      "tool_found_in_dump": false,
+      "dump_preview": "(无新 dump)",
+      "respond_type": "dict",
+      "stage_after": "analyst",
+      "elapsed_s": 12.6
+    },
+    "4": {
+      "description": "用户要求收尾进入报告",
+      "user_input": "够了，去写报告吧",
+      "expected_tool": "route_to",
+      "tool_found_in_dump": false,
+      "dump_preview": "(无新 dump)",
+      "respond_type": "dict",
+      "stage_after": "reporter",
+      "elapsed_s": 3.5
+    },
+    "5": {
+      "description": "用户挽留",
+      "error": "非 analyst 阶段: reporter"
+    }
+  },
+  "emitted_events_count": 16,
+  "total_dumps": 0,
+  "submit_first_pass_found": false,
+  "submit_first_pass_files": [],
+  "run_statistical_test_found": false,
+  "route_to_found": false,
+  "step5_no_route_to": true
+}

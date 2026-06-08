@@ -35,16 +35,12 @@ class ReporterAgent(BaseAgent):
 
     def __init__(
         self,
-        *args: Any,
+        llm_config: Any = None,
         event_bus: EventBus | None = None,
         llm_client: Any | None = None,
         orchestrator: Any | None = None,
-        **kwargs: Any,
     ) -> None:
-        # 兼容旧签名的第一个位置参数 llm_config
-        llm_config = args[0] if args and hasattr(args[0], 'model') else None
-        eb = event_bus or (args[1] if len(args) > 1 else event_bus)
-        super().__init__(llm_config=llm_config, event_bus=eb,
+        super().__init__(llm_config=llm_config, event_bus=event_bus,
                          orchestrator=orchestrator, llm_client=llm_client)
         if not self.event_bus:
             raise ValueError("ReporterAgent 需要 event_bus 参数")

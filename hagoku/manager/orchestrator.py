@@ -329,8 +329,8 @@ class Orchestrator(
                                llm_client=self.llm_quick)
         analyst = AnalystAgent(self.config.llm, self.event_bus, orchestrator=self,
                                llm_client=self.llm_deep)
-        reporter = ReporterAgent(self.config.llm, self.event_bus, orchestrator=self,
-                                 llm_client=self.llm_quick_raw)
+        reporter = ReporterAgent(llm_config=self.config.llm, event_bus=self.event_bus,
+                                 orchestrator=self, llm_client=self.llm_quick_raw)
 
         # Resume 支持
         df_clean = None

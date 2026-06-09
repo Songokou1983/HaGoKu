@@ -45,6 +45,22 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         if not applied:
             applied.append("[route_to]stay")
 
+    if not applied and not user_input.strip() in ("可以进入下一阶段了", "确认", "好的", "OK", "ok", "继续", "下一步", "进入下一阶段"):
+        # LLM 未能应用用户的纠正 → 保持当前阶段，让用户看到错误
+        context["_last_understanding_failure"] = {
+            "raw_text": user_input,
+            "stage": "scout_field_review",
+            "reason": "LLM 未能解析用户输入，请重新描述或确认字段理解",
+        }
+        scout_msg = scout_field_review_pause_payload(context)
+        scout_msg["_scout_error"] = "未能理解你的修改，请用「XX列是XX含义」的格式重新描述，或输入「确认」先跳过"
+        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
+        return {
+            "status": "scout_review",
+            "message": "未能理解你的修改，请用「XX列是XX含义」的格式重新描述，或输入「确认」先跳过",
+            "field_review": scout_msg.get("field_review"),
+        }
     if applied and self.memory:
         self._persist_scout_field_updates(self._project_name, applied, context)
     if not applied:

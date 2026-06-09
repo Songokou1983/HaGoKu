@@ -273,6 +273,8 @@ async def ws_handler(ws: WebSocket) -> None:
                         await ws.send_json({"type": "error", "message": str(e)})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
+                # 清理整个 payload 中的 null 字节（与 analyze 命令一致）
+                payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 user_text = payload.get("text", "").strip()
                 if not user_text:
                     continue

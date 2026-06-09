@@ -377,6 +377,9 @@ async def clear_project_history(project_name: str):
         runs_dir = proj_dir / "runs"
         if runs_dir.exists():
             shutil.rmtree(runs_dir)
+        kanban_db = proj_dir / "kanban.db"
+        if kanban_db.exists():
+            kanban_db.unlink()
         for f in ("progress.yaml", "process_log.md", "handover_notes.md", "context.md"):
             fp = proj_dir / f
             if fp.exists():

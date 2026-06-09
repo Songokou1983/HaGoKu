@@ -1,6 +1,7 @@
 """Pipeline 辅助（护栏、取消、指令处理）。CH-5 从 orchestrator.py 拆分。"""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from ...observability.events import EventType

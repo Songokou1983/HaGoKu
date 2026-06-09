@@ -227,6 +227,10 @@ Meta Agent 面板首次打开时运行自检：
 
 如果拒绝启动，用户改了 Meta Agent 的 prompt 后无法验证改动是否正确——形成死锁。暂停确认即可。
 
+### 边界声明
+
+`git diff HEAD` 只覆盖本地未提交改动。已合并的 prompt 改动（如通过 PR 合入的坏 commit）完全绕过自检。自检是**第一道防线**（防本地意外修改），**不是完整防护**。已合并的 prompt 改动由 gate（Phase 2a）守护。
+
 ---
 
 ## 基础数据：Dump 文件格式
@@ -367,6 +371,8 @@ class FixPlan:
     from_text: str           # 当前文本
     to_text: str             # 建议改成什么
     expected_effect: str     # 预期效果："Quantity 恢复参与分析，StroeID 保持排除"
+    suspected_commit: str    # Meta LLM 推理后填入："cd3c2c3 (2026-06-03)"
+                              #   注：这是 Meta LLM 关联 git log 的结果，不是 diagnose_regression 工具的输出
     confidence: str          # "high" | "medium" | "low"
     evidence_dumps: list[str]  # 支撑证据的 dump 文件名
 ```
@@ -435,7 +441,11 @@ loop:
 
 硬性上限：
   - 最多 10 轮二分（覆盖 1024 条 dump）
-  - 单次 diagnose 总耗时上限：120s（Prompt Lab 单次 5-15s，二分最多 10 轮 ≈ 150s，加 margin）
+  - 单次 diagnose 总耗时上限：240s。计算：10 轮二分 × 每轮最多 2 次 Prompt Lab 调用（agent 模式 60s 超时），含重试最差 10 × 2 × 66s = 1320s，但实际中位值约 10 × 2 × 8s = 160s。240s 覆盖中位值 × 1.5 margin，超出时终止并输出已有结果。
+
+注：Prompt Lab agent 模式单次调用最差耗时 = 60s 超时 + 3 次重试 × (60s + 2s 间隔) = 246s。但这是极端情况——如果单次调用超时，重试 3 次后还有 246s 限制，但诊断总上限 240s 优先：超时时不等待重试完成，直接中断并保留已完成步骤的结果。
+
+限制：`_run_diagnose` 使用二分查找定位**单一最早退化点**。当存在多层累积破坏时（如多个独立 commit 各自造成退化），二分查找只返回最早的退化时间点。修复第一层后需要**重新触发诊断**才能发现后续层次。本次事故（三层累积破坏）就是典型案例——5/31、6/3、6/9 三个独立的退化点，需要三次独立的 diagnose 会话。
 ```
 
 ### 失败模式处理
@@ -487,7 +497,7 @@ loop:
     "stage": "string (如 scout_infer_all_semantics)",
     "before_dumps": ["list of dump filenames"],
     "after_dumps": ["list of dump filenames"],
-    "compare_fields": ["used_in_analysis", "suggested_role", "display_name"]
+    "compare_fields": "string[] | null (default: null = 比对所有 tool_calls.arguments 路径。仅在需聚焦特定字段时传入，如 [\"used_in_analysis\", \"suggested_role\"])"
   },
   "returns": {
     "regression_detected": true,
@@ -500,9 +510,10 @@ loop:
       {"field": "used_in_analysis", "column": "StoreID", "value": false}
     ],
     "before_summary": "3 个字段参与，1 个排除",
-    "after_summary": "1 个字段参与，3 个排除",
-    "suspected_commit": "cd3c2c3 (2026-06-03, 'prompt 补 used_in_analysis=false 约束')"
+    "after_summary": "1 个字段参与，3 个排除"
   }
+  // 注：commit 关联不属于工具的职责。Meta LLM 推理后，在 FixPlan 中写入 suspected_commit 字段。
+  // 工具是纯 dump 比对器，不读 git log。
 }
 ```
 

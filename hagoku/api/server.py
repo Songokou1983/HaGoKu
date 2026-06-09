@@ -380,6 +380,8 @@ async def clear_project_history(project_name: str):
         kanban_db = proj_dir / "kanban.db"
         if kanban_db.exists():
             kanban_db.unlink()
+        from hagoku.storage.kanban import KanbanDB
+        KanbanDB.clear_instance(proj_dir)
         for f in ("progress.yaml", "process_log.md", "handover_notes.md", "context.md"):
             fp = proj_dir / f
             if fp.exists():

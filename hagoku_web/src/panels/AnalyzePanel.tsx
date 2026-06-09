@@ -27,13 +27,16 @@ export default function AnalyzePanel() {
   const projects = useWorkspaceStore((s) => s.projects);
   const setActiveView = useWorkspaceStore((s) => s.setActiveView);
   const resetRunUiState = useWorkspaceStore((s) => s.resetRunUiState);
+  const currentDataPath = useWorkspaceStore((s) => s.currentDataPath);
+  const setCurrentDataPath = useWorkspaceStore((s) => s.setCurrentDataPath);
 
   // Phase state
   const [phase, setPhase] = useState<any>("setup");
   const [queryText, setQueryText] = useState("");
 
   // File upload hook
-  const [dataPath, setDataPath] = useState("");
+  const [dataPath, _setDataPath] = useState(currentDataPath);
+  const setDataPath = (path: string) => { _setDataPath(path); setCurrentDataPath(path); };
   const {
     projectFiles, filesLoading, showFileDropdown, setShowFileDropdown,
     showProjectDropdown, setShowProjectDropdown, uploading, uploadError,

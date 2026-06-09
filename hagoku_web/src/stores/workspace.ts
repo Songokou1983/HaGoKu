@@ -18,6 +18,7 @@ interface WorkspaceStore {
   connectionStatus: ConnectionStatus;
   projects: string[];
   currentProject: string | null;
+  currentDataPath: string;
   reportFiles: { name: string; url: string; mtime: number }[];
   lastError: string | null;
 
@@ -27,6 +28,7 @@ interface WorkspaceStore {
   setConnectionStatus: (s: ConnectionStatus) => void;
   setProjects: (projects: string[]) => void;
   setCurrentProject: (name: string | null) => void;
+  setCurrentDataPath: (path: string) => void;
   setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
   setLastError: (msg: string | null) => void;
   /** 分析重置：全局运行状态 + Agent 状态条（与项目卡片「进行中」一致） */
@@ -40,6 +42,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   connectionStatus: "idle",
   projects: [],
   currentProject: localStorage.getItem('hagoku_active_project') || null,
+  currentDataPath: localStorage.getItem('hagoku_active_data_path') || '',
   reportFiles: [],
   lastError: null,
 
@@ -58,6 +61,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     if (currentProject) localStorage.setItem('hagoku_active_project', currentProject);
     else localStorage.removeItem('hagoku_active_project');
     set({ currentProject });
+  },
+  setCurrentDataPath: (currentDataPath) => {
+    if (currentDataPath) localStorage.setItem('hagoku_active_data_path', currentDataPath);
+    else localStorage.removeItem('hagoku_active_data_path');
+    set({ currentDataPath });
   },
   setReportFiles: (reportFiles) => set({ reportFiles }),
   setLastError: (lastError) => set({ lastError }),

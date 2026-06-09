@@ -568,6 +568,15 @@ def _apply_scout_reply_with_llm(
         tool_calls = getattr(msg, "tool_calls", None)
         _raw_text = (msg.content or "").strip()
 
+        # ── Response dump ──
+        dump_messages(
+            "scout_reply_review_response",
+            messages + [{"role": "assistant", "content": _raw_text,
+             "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                            for tc in (tool_calls or [])] if tool_calls else None}],
+            model=llm_model,
+        )
+
         if channel_logger and tool_calls:
             for tc in (tool_calls or []):
                 fn = tc.function.name if hasattr(tc, "function") else str(tc)

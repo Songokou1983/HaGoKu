@@ -238,6 +238,16 @@ class AnalystAgent(BaseAgent):
         msg = resp.choices[0].message
         txt = (msg.content or "").strip()
         tc_list = getattr(msg, "tool_calls", None)
+
+        # ── Response dump ──
+        dump_messages(
+            "analyst_run_step_response",
+            composed + [{"role": "assistant", "content": txt,
+             "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                            for tc in (tc_list or [])] if tc_list else None}],
+            model=self.llm_config.model,
+        )
+
         findings = None
         route_to_args = None
 

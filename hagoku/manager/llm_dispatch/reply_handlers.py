@@ -219,7 +219,11 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
         temperature=0.3,
         max_tokens=2048,
     )
-    return (resp.choices[0].message.content or "").strip()
+    result = (resp.choices[0].message.content or "").strip()
+    dump_messages("analyst_rewrite_summary_response",
+                  rewrite_msgs + [{"role": "assistant", "content": result}],
+                  model=self.config.llm.model)
+    return result
 
 
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:

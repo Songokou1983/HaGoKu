@@ -170,6 +170,9 @@ class CleanerAgent(BaseAgent):
         msg = resp.choices[0].message
         txt = (msg.content or "").strip()
         tc_list = getattr(msg, "tool_calls", None)
+
+        dump_messages("cleaner_run_step_response", composed + [{"role": "assistant", "content": txt, "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}} for tc in (tc_list or [])] if tc_list else None}], model=self.llm_config.model)
+
         assessment = None
         route_to_args = None
 
@@ -712,6 +715,13 @@ class CleanerAgent(BaseAgent):
             tc = getattr(msg, "tool_calls", None)
             txt = msg.content or ""
 
+            # ── Response dump ──
+            dump_messages("cleaner_assess_response", messages + [
+                {"role": "assistant", "content": txt,
+                 "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}}
+                                for t in (tc or [])] if tc else None}
+            ], model=self.llm_config.model)
+
             if tc:
                 for t in tc:
                     fn = t.function
@@ -973,6 +983,12 @@ class CleanerAgent(BaseAgent):
                 max_tokens=4096,
             )
             raw = response.choices[0].message.content or ""
+
+            # ── Response dump ──
+            dump_messages("cleaner_planning_response",
+                          [{"role": "assistant", "content": raw}],
+                          model=self.llm_config.model)
+
         except Exception as e:
             raise RuntimeError(f"Cleaner LLM 清洗规划失败：LLM 不可达。原始错误: {e}") from e
 

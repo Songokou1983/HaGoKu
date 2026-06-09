@@ -57,6 +57,66 @@ export function useWsEventHandler(deps: WsEventDeps) {
   useEffect(() => {
     if (batch.length === 0) return;
     for (const msg of batch) {
+      if (msg.type === "state_snapshot") {
+        const snap = (msg as any).data;
+        if (!snap) continue;
+        // 恢复阶段
+        if (snap.stage) {
+          setPhase("running");
+        }
+        // 恢复 Scout 字段核对表
+        if (snap.field_review) {
+          const fr = parseFieldReview(snap.field_review);
+          if (fr) {
+            const wfId = uid();
+            setActiveFieldReviewId(wfId);
+            setMessages((prev) => [
+              ...prev,
+              { id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview: fr },
+            ]);
+            setActiveFieldReviewRevision(0);
+            setFieldReviewScrollNonce((n: number) => n + 1);
+          }
+          setWaitingAgent("scout");
+          setGateOpen(true);
+        }
+        // 恢复 Cleaner 评估
+        if (snap.cleaning_review) {
+          const cr = parseCleaningReview(snap.cleaning_review);
+          if (cr) {
+            const cid = uid();
+            setActiveCleaningReviewId(cid);
+            setMessages((prev) => [
+              ...prev,
+              { id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview: cr },
+            ]);
+            setActiveCleaningReviewRevision(0);
+          }
+          setWaitingAgent("cleaner");
+          setGateOpen(true);
+        }
+        // 恢复 Analyst 消息
+        if (snap.analyst_message) {
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() },
+          ]);
+          setWaitingAgent("analyst");
+          setGateOpen(true);
+        }
+        // Agent 状态设为运行中
+        const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
+        const doneIdx = agentOrder.indexOf(snap.stage);
+        const states: Record<string, string> = {};
+        for (let i = 0; i < 4; i++) {
+          const a = agentOrder[i];
+          if (i < doneIdx) states[a] = "done";
+          else if (i === doneIdx) states[a] = "running";
+          else states[a] = "idle";
+        }
+        setAgentStates(states as any);
+        continue;
+      }
       if (msg.type === "ack" && msg.cmd === "respond") {
         replySnapshotRef.current = null;
         continue;

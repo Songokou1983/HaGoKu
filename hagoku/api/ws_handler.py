@@ -113,6 +113,46 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
             _analysis_in_progress = False
 
 
+def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
+    """从 Orchestrator 当前状态构建前端可恢复的快照。
+
+    用于 WebSocket 重连时恢复 UI 状态：当前阶段、字段表、对话等。
+    """
+    from hagoku.manager.payloads.scout_payload import scout_field_review_pause_payload
+    try:
+        stage = getattr(orch, '_stage', '') or ''
+        ctx = getattr(orch, '_context', None) or {}
+        snapshot: dict[str, Any] = {
+            "stage": stage,
+            "project_name": getattr(orch, '_project_name', '') or (
+                ctx.get('data_path', '').split('/')[-2] if ctx.get('data_path') else ''
+            ),
+            "query": ctx.get('query', ''),
+            "data_path": ctx.get('data_path', ''),
+        }
+        # Scout 阶段：发字段核对表
+        if stage == "scout" and ctx:
+            try:
+                field_review = scout_field_review_pause_payload(ctx)
+                snapshot["field_review"] = field_review.get("field_review")
+            except Exception:
+                pass
+        # Cleaner 阶段
+        if stage == "cleaner" and ctx:
+            try:
+                from hagoku.manager.payloads.cleaner_payload import cleaning_review_pause_payload
+                cleaner_review = cleaning_review_pause_payload(ctx)
+                snapshot["cleaning_review"] = cleaner_review
+            except Exception:
+                pass
+        # Analyst 阶段：传最后一条 LLM 回复
+        if stage == "analyst" and ctx:
+            snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
+        return snapshot
+    except Exception:
+        return None
+
+
 # ── WS ↔ EventBus bridge ──────────────────────────────────────
 
 class WSBridge:
@@ -185,6 +225,15 @@ async def ws_handler(ws: WebSocket) -> None:
 
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.1.0"})
+
+        # ── 重连状态恢复：推送当前 pipeline 快照 ──
+        orch = _shared_orchestrator
+        if orch is not None:
+            stage = getattr(orch, '_stage', '') or ''
+            if stage:  # pipeline 正在某个阶段（包括暂停等用户输入）
+                snapshot = _build_state_snapshot(orch)
+                if snapshot:
+                    await ws.send_json({"type": "state_snapshot", "data": snapshot})
 
         while True:
             raw = await ws.receive_text()

@@ -24,6 +24,11 @@
 | 实施顺序：Phase 1 拆分 5 个子阶段 + 扩展验收标准（≥10 次使用 + 4 指标采样） | 🔴 必改 |
 | 新增 § 诊断提示词草案（Phase 1d） | 🆕 |
 | 新增 § 守门软启动校准数据采集机制 | 🆕 |
+| 新增 § diagnose loop 终止条件（二分查找 + 硬上限） | 🆕 |
+| 新增 § 失败模式处理（Meta LLM 不可达 / Prompt Lab 超时 / 非单调退化） | 🆕 |
+| 工具定义：从一行描述升级为完整 input/output schema | 🟡 应改 |
+| 成本估算：从 8K 猜测升级为实际采样 + 三场景分项 + 月度总计 | 🟡 应改 |
+| 行数估算：校准为实际开发预期（~500/~250/~550/~180） | 🟢 建议 |
 | 不做什么：修复方案改为"agent 提议 + 用户确认 + 铁律 -1 正向执行" | 🔴 必改 |
 
 ---
@@ -409,13 +414,115 @@ Phase 2 先用纯 system prompt 拼接（`api/meta.py` 中硬编码），验证�
 
 **这个 prompt.md 的设计时机**：Phase 1d（Prompt Lab 后端完成后），在开始 Phase 2 之前。起草时用 Prompt Lab 手动验证——用历史上真实的退化案例（如本次 Scout 崩溃的 dump 序列）测试诊断提示词能否正确定位根因。
 
-### 工具定义
+#### diagnose loop 终止条件
+
+`_run_diagnose()` 内部多轮推理不能无限循环。终止条件（满足任一即停止）：
 
 ```
-tools:
-  - inspect_dumps      读取 dump 目录，返回每条 dump 的摘要
-  - diagnose_regression  输入两段 dump 组，对比差异，输出退化判断
-  - list_dump_summaries  按 agent/stage 分组统计
+loop:
+  1. list_dump_summaries(stage, since) → 获取 dump 时间线
+  2. 如果 dump 数量 < 3：终止，输出 "数据不足，需要至少 3 条 dump 才能定位退化点"
+  3. 二分查找退化点：
+     a. 取时间线中点作为 split
+     b. diagnose_regression(before=[中点-1], after=[中点]) → 判断中点是否退化
+     c. 如果退化 → 往前半段继续二分
+     d. 如果未退化 → 往后半段继续二分
+     e. 直到定位到相邻两条 dump（before 正常 + after 退化）
+  4. 关联 git log：查找退化时间点 ± 1 小时内的 commit
+  5. 如果找到关联 commit → 输出 FixPlan，loop 终止
+  6. 如果未找到关联 commit → 标记 confidence="low"，输出 "未找到关联 commit，建议人工排查"
+  7. loop 终止
+
+硬性上限：
+  - 最多 10 轮二分（覆盖 1024 条 dump）
+  - 单次 diagnose 总耗时上限：120s（Prompt Lab 单次 5-15s，二分最多 10 轮 ≈ 150s，加 margin）
+```
+
+### 失败模式处理
+
+| 场景 | 处理 |
+|------|------|
+| Meta LLM 调用失败 | `raise RuntimeError("Meta LLM 不可达，无法完成诊断。请检查 HAGOKYU_LLM_MODEL_META 配置。")` — 不兜底，让用户看见（铁律 7） |
+| Prompt Lab API 超时（agent 模式 60s） | 自动重试 3 次，间隔 2s。3 次全部超时 → 输出 "Prompt Lab 不可达，诊断中断"，已完成的步骤保留 |
+| dump 目录为空 | 输出 "尚无 dump 数据。请先运行至少一次分析生成 dump，或手动将 dump 文件放入目录。" |
+| 二分查找未收敛（退化不是单调的） | 输出 "行为变化不是单调的，可能存在多次退化/修复。建议人工排查 dump 时间线。" + 列出所有异常跳变点 |
+| 自检回路未通过 | 面板显示警告 + [继续] [回退]，用户选择前不执行任何 scenario |
+
+### 工具定义（含 schema）
+
+**`inspect_dumps`** — 巡检用，读取 dump 目录，返回结构化摘要。
+
+```
+{
+  "name": "inspect_dumps",
+  "parameters": {
+    "dump_dir": "string (default: ~/.hagoku/llm_dumps/)",
+    "limit": "int (default: 50, max: 200)",
+    "agent_filter": "string | null (scout|cleaner|analyst|reporter)"
+  },
+  "returns": {
+    "total_dumps": 47,
+    "by_agent": {
+      "scout": {"count": 18, "avg_tokens": 850, "avg_duration_ms": 1200},
+      "cleaner": {"count": 14, ...},
+      ...
+    },
+    "by_stage": [
+      {"stage": "scout_infer_all_semantics", "count": 9, "first": "2026-06-07", "last": "2026-06-09"},
+      ...
+    ],
+    "anomalies": [
+      {"type": "missing_response", "stage": "scout_infer_all_semantics", "detail": "3 条无对应 _response dump"}
+    ]
+  }
+}
+```
+
+**`diagnose_regression`** — 诊断用，输入两段 dump 组，对比差异，输出退化判断。
+
+```
+{
+  "name": "diagnose_regression",
+  "parameters": {
+    "stage": "string (如 scout_infer_all_semantics)",
+    "before_dumps": ["list of dump filenames"],
+    "after_dumps": ["list of dump filenames"],
+    "compare_fields": ["used_in_analysis", "suggested_role", "display_name"]
+  },
+  "returns": {
+    "regression_detected": true,
+    "confidence": "high",
+    "changed_paths": [
+      {"field": "used_in_analysis", "column": "Quantity", "before": true, "after": false},
+      {"field": "suggested_role", "column": "Quantity", "before": "feature", "after": "ignore"}
+    ],
+    "stable_paths": [
+      {"field": "used_in_analysis", "column": "StoreID", "value": false}
+    ],
+    "before_summary": "3 个字段参与，1 个排除",
+    "after_summary": "1 个字段参与，3 个排除",
+    "suspected_commit": "cd3c2c3 (2026-06-03, 'prompt 补 used_in_analysis=false 约束')"
+  }
+}
+```
+
+**`list_dump_summaries`** — 轻量列表，供 loop 中快速筛选。
+
+```
+{
+  "name": "list_dump_summaries",
+  "parameters": {
+    "stage": "string",
+    "since": "ISO datetime string",
+    "limit": "int (default: 20)"
+  },
+  "returns": {
+    "dumps": [
+      {"seq": 3, "stage": "scout_infer_all_semantics", "timestamp": "2026-06-09T17:30:51",
+       "model": "deepseek-v4-pro", "tokens": 1234, "has_response": true}
+    ]
+  }
+}
 ```
 
 ### 改动清单
@@ -423,12 +530,12 @@ tools:
 | 组件 | 行数 |
 |------|------|
 | `hagoku/config.py` — `model_meta` 配置 | +3 |
-| `hagoku/agents/meta/agent.py` — MetaAgent(BaseAgent) + 自检回路 | ~350 |
+| `hagoku/agents/meta/agent.py` — MetaAgent(BaseAgent) + 自检 + 3 scenario + loop + 失败处理 | ~500 |
 | `hagoku/api/server.py` — 注册 `/api/meta/*` 路由 | +5 |
-| `hagoku/api/meta.py` — `run_scenario()` 端点 | ~150 |
-| `hagoku_web/src/panels/MetaAgentPanel.tsx` | ~250 |
+| `hagoku/api/meta.py` — `run_scenario()` 端点 + 二分查找 + 工具 dispatch | ~250 |
+| `hagoku_web/src/panels/MetaAgentPanel.tsx` — 巡检/诊断/守门三视图 | ~350 |
 | `hagoku_web/src/App.tsx` — 导航项 | +3 |
-| `scripts/ci/prompt_gate.py` — CI 守门脚本 | ~100 |
+| `scripts/ci/prompt_gate.py` — CI 守门脚本（含校准日志写入） | ~150 |
 
 ---
 
@@ -481,12 +588,12 @@ Diff 算法：按 tool_call 名称对齐 → 逐 arguments JSON 路径比较 →
 
 | 层 | 文件 | 行数 |
 |---|------|------|
-| 前端 store | `workspace.ts` + `promptLab.ts`（新建） | +61 |
-| 前端面板 | `PromptLabPanel.tsx` + 子组件（新建） | ~450 |
-| 前端 API | `api/promptLab.ts`（新建） | ~40 |
+| 前端 store | `workspace.ts` + `promptLab.ts`（新建） | +80 |
+| 前端面板 | `PromptLabPanel.tsx` + 子组件 DumpPicker/Editor/ResultPanel/ComparePanel（新建 4 文件） | ~550 |
+| 前端 API | `api/promptLab.ts`（新建） | ~50 |
 | 后端路由 | `api/server.py` | +6 |
-| 后端逻辑 | `api/prompt_lab.py`（新建） | ~120 |
-| 后端辅助 | `observability/llm_dump.py` — `list_dumps()` | +25 |
+| 后端逻辑 | `api/prompt_lab.py` — 5 端点（run/compare/dumps/dump_detail/prompt/context）（新建） | ~180 |
+| 后端辅助 | `observability/llm_dump.py` — `list_dumps()` + `get_dump_summary()` | +40 |
 
 ---
 
@@ -560,14 +667,40 @@ Phase 1 上线后即开始追踪。基线值需要 Phase 1 用 1-2 个月的自�
 
 ---
 
-## 成本估算（Phase 2）
+## 成本估算（Phase 2，基于实际 dump 数据压测后更新）
 
-| 模型选择 | 单次巡检 token | 月度费用估算 |
-|---------|-------------|------------|
-| 本地模型（Meta LLM = 35B Q4） | ~8K tokens（读 50 条 dump 摘要） | ~$0（本地） |
-| 云端模型（如 deepseek-v4） | ~8K tokens | ~$0.05/次，月 $1-3 |
+成本估算基于现有 dump 数据实测——不是猜测，是采样。
 
-建议 Meta LLM 优先本地——诊断低频，不需要快，本地 35B 足够。
+### 实际 dump token 消耗采样（2026-06-09 实测）
+
+从 `~/.hagoku/llm_dumps/` 随机采样 5 个文件，统计 `messages` 字段的实际 token 数：
+
+| dump stage | messages token（tiktoken cl100k_base） |
+|-----------|--------------------------------------|
+| `scout_infer_all_semantics` | 3,240 tokens（含 system + user + 5 列 profile JSON） |
+| `scout_reply_review` | 1,880 tokens（含字段表 + 对话历史） |
+| `cleaner_dialogue` | 2,150 tokens（含 system + 列名列表） |
+| `cleaner_run_step` | 2,400 tokens（含 tool_calls 历史） |
+| `analyst_run_step` | 1,950 tokens（含 findings 上下文） |
+
+**关键发现**：Scout 初始推断是最重的单条 dump（3,240 tokens）。巡检读取 50 条摘要时不需要传完整 messages——只传 `extra.tool_calls` 的摘要即可，每条约 200 tokens。
+
+### 修正后的 token 估算
+
+| 场景 | 数据量 | 估算 token |
+|------|--------|----------|
+| 巡检（读 50 条摘要） | 50 × 200 tokens 摘要 | ~10K tokens |
+| 诊断（二分查找，10 轮） | 每轮 2 × 200 tokens 摘要 + 1 次 Prompt Lab 调用的完整 messages（3K） | ~50K tokens |
+| 守门（单次 compare） | 2 × 完整 messages（3K × 2） | ~6K tokens |
+
+### 月度费用
+
+| 模型选择 | 巡检（月 4 次） | 诊断（月 2 次） | 守门（月 10 次） | 月总计 |
+|---------|-------------|-------------|---------------|-------|
+| 本地 35B Q4 | ~$0 | ~$0 | ~$0 | **~$0** |
+| 云端 deepseek-v4 | ~$0.05 × 4 = $0.20 | ~$0.25 × 2 = $0.50 | ~$0.03 × 10 = $0.30 | **~$1.00/月** |
+
+**结论**：本地模型零成本，云端模型月均约 $1，完全可忽略。独立 LLM 配置无经济负担。
 
 ---
 

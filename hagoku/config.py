@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 # 加载 ~/.hagoku/.env 中的环境变量
 _load_env_path = Path.home() / ".hagoku" / ".env"
 if _load_env_path.exists():
-    load_dotenv(_load_env_path)
+    load_dotenv(_load_env_path, override=True)
 
 
 class LLMConfig(BaseModel):

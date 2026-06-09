@@ -49,6 +49,7 @@ export default function AnalyzePanel() {
   // Analyze session hook
   const sess = useAnalyzeSession(
     send, dataPath, currentProject, queryText, setQueryText, setPhase, resetRunUiState,
+    setMessages,
   );
 
   // Merge messages from conversation hook into session hook

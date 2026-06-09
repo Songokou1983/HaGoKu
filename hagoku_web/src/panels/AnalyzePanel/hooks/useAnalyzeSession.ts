@@ -9,8 +9,8 @@ export function useAnalyzeSession(
   _setQueryText: (v: string) => void,
   setPhase: (v: SessionPhase) => void,
   resetRunUiState: () => void,
+  setMessages: (v: any[] | ((prev: any[]) => any[])) => void,
 ) {
-  const [messages, setMessages] = useState<any[]>([]); // type loosened for cross-hook sharing
   const [agentStates, setAgentStates] = useState<Record<AgentKey, AgentRunState>>({
     scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle",
   });
@@ -87,7 +87,6 @@ export function useAnalyzeSession(
   }, [send, resetRunUiState, setPhase]);
 
   return {
-    messages, setMessages,
     agentStates, setAgentStates,
     agentElapsed, setAgentElapsed,
     agentStartTimes,

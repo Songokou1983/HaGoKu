@@ -157,6 +157,48 @@ HaGoKu Agent 需要访问 dump 历史（同机）和 Prompt Lab API。同样不�
 
 ---
 
+## 两个组件的定位
+
+### Prompt Lab：完全并行的提示词研究沙箱
+
+Prompt Lab 不依赖 pipeline。它和 Scout/Cleaner/Analyst/Reporter **完全并行**——不启动分析流程、不读 kanban、不碰数据。它的唯一目的是：
+
+> **在修改任何 Agent 的提示词之前，先用同样的输入数据模拟 LLM 响应，研究具体语义变化对 LLM 造成的影响。**
+
+使用场景：
+- 你想把 Scout 的"判断并说明原因"改成"只选必需的"——先在 Prompt Lab 里用同一段 dump 跑两版，看 used_in_analysis 的值具体怎么变
+- 你想给 Cleaner 加一句新的判断原则——先在 Prompt Lab 里用历史上的清洗场景回放，看 `submit_assessment` 的列建议会不会变
+- 你在设计新 Agent 的 prompt.md ——先在手写模式里反复迭代，确认 LLM 理解正确后，再写入文件
+
+它不是"快速测试工具"——它是**研究工具**。结果不直接进入代码，先理解、再决策。
+
+### HaGoKu Agent：系统故障修复 + 日常维护 Agent
+
+HaGoKu Agent 的定位是 **"系统医生"**。它在系统**出错时**被激活，完成诊断和修复；在日常运行中做预防性维护。提示词的模拟和更新是它的附带能力——不是主业。
+
+使用场景：
+- **故障修复**：用户说"字段理解又崩了" → HaGoKu Agent 调 Prompt Lab API 逐 dump 回放对比 → 定位退化点 → 输出修复建议
+- **日常维护**：定期读取 dump 历史 → meta LLM 分析异常模式 → 生成巡检报告 → 在用户发现之前预警
+- **提示词协助**（附带能力）：发现退化后，可以调 Prompt Lab 验证修复方案是否有效。或者开发者说"帮我测试一下这句话对 Scout 的影响"→ HaGoKu Agent 代为操作 Prompt Lab
+
+它不是"被动观察者"——它是**主动维护者**。
+
+### 关系
+
+```
+Prompt Lab（研究沙箱）
+  ├── 完全并行，不碰 pipeline
+  ├── 用户手动操作：选输入 → 改提示词 → 看输出
+  └── 被 HaGoKu Agent 调用：POST /api/prompt-lab/run
+
+HaGoKu Agent（维护 Agent）
+  ├── 系统出错时激活：诊断 → 定位 → 建议修复
+  ├── 日常运行时激活：巡检 → 预警
+  └── 调用 Prompt Lab API 完成提示词模拟和验证
+```
+
+---
+
 ## 架构
 
 ```
@@ -165,22 +207,17 @@ HaGoKu Agent 需要访问 dump 历史（同机）和 Prompt Lab API。同样不�
 │                                                               │
 │  ┌─────────────────────────┐  ┌───────────────────────────┐  │
 │  │ 🤖 HaGoKu Agent         │  │ 🧪 Prompt Lab             │  │
-│  │ (MetaAgentPanel.tsx)    │  │ (PromptLabPanel.tsx)      │  │
+│  │ 系统医生                 │  │ 完全并行的研究沙箱         │  │
 │  │                         │  │                           │  │
-│  │ 巡检: 读 dump 历史       │  │ 手动试 prompt             │  │
-│  │   → meta LLM 分析        │  │ 选 dump → 改 prompt → 跑  │  │
-│  │   → 生成巡检报告         │  │ 对比两版输出              │  │
-│  │                         │  │                           │  │
-│  │ 诊断: 用户报问题          │  │ 被 HaGoKu Agent API 调用  │  │
-│  │   → 调 POST /api/       │  │   → POST /api/           │  │
-│  │     prompt-lab/run      │  │     prompt-lab/run       │  │
+│  │ 故障修复: 用户报错        │  │ 模拟研究: 选 dump →       │  │
+│  │   → 调 Prompt Lab API   │  │   改 prompt → 看 LLM 输出  │  │
 │  │   → 逐 dump 回放对比     │  │                           │  │
-│  │   → 生成诊断报告         │  │                           │  │
-│  │                         │  │                           │  │
-│  │ 守门: CI 触发            │  │                           │  │
-│  │   → 调 Prompt Lab API   │  │                           │  │
-│  │   → 对比改前/改后        │  │                           │  │
-│  │   → diff 报告贴 PR       │  │                           │  │
+│  │   → 输出诊断报告         │  │ 对比验证: 改前 vs 改后     │  │
+│  │                         │  │   → diff 报告              │  │
+│  │ 日常维护: 定期巡检        │  │                           │  │
+│  │   → 读 dump 历史         │  │ 被 HaGoKu Agent 调用:     │  │
+│  │   → meta LLM 分析        │  │   POST /api/prompt-lab/*  │  │
+│  │   → 生成巡检报告         │  │                           │  │
 │  └──────────┬──────────────┘  └───────────┬───────────────┘  │
 │             │                             │                   │
 │             ▼                             ▼                   │
@@ -980,12 +1017,14 @@ Phase 2: HaGoKu Agent（依赖 Phase 1）
 
 ## 开放问题
 
-1. **Meta Agent 是否需要自己的 `prompt.md`**？目前设计是"需要"——80 行的专用提示词。好处是巡检/诊断逻辑可调，坏处是多一个需要铁律 10 保护的提示词文件。
+1. **HaGoKu Agent 是否需要自己的 `prompt.md`？** 好处是巡检/诊断逻辑可调，坏处是多一个需要铁律 10 保护的提示词文件。建议 Phase 2 先用纯 system prompt 拼接（`api/meta.py` 中硬编码），验证效果后 Phase 3 再提取为 prompt.md。
 
-2. **巡检触发方式**？建议 Phase 2 先做手动触发（面板上的「开始巡检」按钮）。自动触发（每次分析完成后跑 / 定时跑）放 Phase 3。
+2. **巡检触发方式？** Phase 2：手动触发（面板上的「开始巡检」按钮）。Phase 3：每次分析完成自动跑 + 定时（每小时）。手动优先——先保证人在回路中，验证巡检报告质量后再自动化。
 
-3. **守门 CI 的 golden set**？建议用最近一次主分析的 Scout dump 作为固定测试数据。备选：维护一个 `tests/fixtures/prompt_gate/` 目录，包含一组代表性 CSV + 预期 tool_calls。
+3. **`HAGOKYU_LLM_MODEL_META` 未设置时的行为？** 记录 warning 但允许回退到 `HAGOKYU_LLM_MODEL`。拒绝启动太激进——用户可能只有一个模型但依然需要诊断能力。warning 日志："HAGOKYU_LLM_MODEL_META 未设置，使用主模型进行诊断。建议配置独立模型以保证故障隔离。"
 
-4. **`HAGOKYU_LLM_MODEL_META` 未设置时的行为**？建议：**记录 warning 但允许回退**到 `HAGOKYU_LLM_MODEL`。拒绝启动太激进——用户可能只有一个模型但依然需要诊断能力。
+4. **对比模式 diff 阈值？** tool_calls 变化 > 20% 和 content 相似度 < 0.8 是初始值。Phase 2 先只报告不阻断（soft gate），积累一个月数据后校准阈值，再升级为 hard gate。
 
-5. **对比模式的 diff 阈值怎么定**？tool_calls 变化 > 20% 和 content 相似度 < 0.8 是初始值，需要实际使用后校准。Phase 2 的守门可以先只报告不阻断（soft gate），积累数据后再升级为 hard gate。
+5. **巡检历史持久化？** 存到 `~/.hagoku/inspections/` 下，JSON 格式，文件名 `inspection_{timestamp}.json`。HaGoKu Agent 面板展示最近 5 次报告。
+
+6. **HaGoKu Agent 的建议是否可以直接执行？** 不可以——铁律 -2：用户确认前禁止改代码。Agent 只输出诊断报告和修复建议，由用户决定是否采纳。Prompt Lab 的模拟验证也由用户手动操作或在 Agent 面板上确认后执行。

@@ -18,6 +18,7 @@ import { useFileUpload } from "./AnalyzePanel/hooks/useFileUpload";
 import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
+import { sanitizeText } from "../utils/sanitize";
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
   const status = useWorkspaceStore((s) => s.status);
@@ -97,7 +98,7 @@ export default function AnalyzePanel() {
   const submitUserReply = useCallback(
     (raw: string) => {
       if (!sess.waitingAgent) return;
-      const outgoing = raw.trim();
+      const outgoing = sanitizeText(raw.trim());
       if (!outgoing) return;
       sess.replySnapshotRef.current = { agent: sess.waitingAgent, gate: sess.gateOpen };
       const s = send("respond", { text: outgoing });
@@ -285,7 +286,7 @@ export default function AnalyzePanel() {
                 <textarea
                   ref={sess.replyInputRef}
                   value={sess.replyText}
-                  onChange={(e) => sess.setReplyText(e.target.value)}
+                  onChange={(e) => sess.setReplyText(sanitizeText(e.target.value))}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" || e.shiftKey) return;
                     // 中文输入法用 Enter 确认候选时勿 preventDefault，否则无法上屏

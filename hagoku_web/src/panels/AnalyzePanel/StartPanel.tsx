@@ -1,4 +1,5 @@
 import { PlayCircle } from "lucide-react";
+import { sanitizeText } from "../../utils/sanitize";
 
 interface StartPanelProps {
   phase: string;
@@ -36,7 +37,7 @@ export function StartPanel({
           <div className="w-full max-w-md">
             <textarea
               value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
+              onChange={(e) => setQueryText(sanitizeText(e.target.value))}
               placeholder="你想分析什么？例如：这批广告投放的 ROI 如何？哪个渠道转化最高？"
               rows={3}
               className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-ui-sm text-app-text placeholder:text-app-text-muted focus:outline-none focus:border-app-accent resize-none transition-colors"

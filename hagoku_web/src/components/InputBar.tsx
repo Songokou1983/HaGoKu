@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { Send, Zap, Loader2 } from "lucide-react";
 
+import { sanitizeText } from "../utils/sanitize";
+
 export interface InputBarProps {
   placeholder?: string;
   onSend: (text: string) => void;
@@ -16,7 +18,7 @@ export function InputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = useCallback(() => {
-    const text = value.trim();
+    const text = sanitizeText(value).trim();
     if (!text || disabled) return;
     onSend(text);
     setValue("");
@@ -59,7 +61,7 @@ export function InputBar({
         rows={1}
         value={value}
         onChange={(e) => {
-          setValue(e.target.value);
+          setValue(sanitizeText(e.target.value));
           autoResize();
         }}
         onKeyDown={handleKeyDown}

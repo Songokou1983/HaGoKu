@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import type { AgentKey, AgentRunState, SessionPhase } from "../types";
 
+import { sanitizeText } from "../utils/sanitize";
+
 export function useAnalyzeSession(
   send: (cmd: string, payload: Record<string, unknown>) => boolean,
   dataPath: string,
@@ -54,7 +56,7 @@ export function useAnalyzeSession(
     setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
     setPhase("running");
-    const q = queryText.trim();
+    const q = sanitizeText(queryText.trim());
     queryRef.current = q;
     send("analyze", {
       data_path: dataPath,

@@ -102,6 +102,8 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
     )
 
     raw = response.choices[0].message.content or ""
+    # 剥离 MiniMax 等模型的 <think>...</think> CoT 块
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError:

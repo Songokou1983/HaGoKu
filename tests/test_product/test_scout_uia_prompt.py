@@ -9,14 +9,19 @@ from hagoku.config import HaGoKuConfig
 from hagoku.agents.scout.agent import ScoutAgent
 
 
+@pytest.mark.xfail(
+    reason="铁律 10 刹车 A：禁止对提示词内容做关键词匹配测试。"
+    "提示词有/无 'ignore' 词 ≠ LLM 行为正确/错误。"
+    "此测试 GREEN 曾导致提示词被加结论性指令（'只选必需的'）→ 实际行为退化。"
+    "保留此测试以记录历史教训，不作为合并门禁。",
+    strict=False,
+)
 def test_scout_prompt_contains_ignore_role_instruction():
-    """TDD-RED: Scout 的 system prompt 必须包含明确指令——
-    与目标无关的字段应设为 ignore（而非 feature）。
+    """[已废弃] TDD-RED: Scout 的 system prompt 必须包含明确指令。
 
-    这是「字段全选」问题的根因修复——如果 LLM 把无关字段判为 feature,
-    下游 used_in_analysis 全为 true, 用户看到全部勾选。
-
-    若此测试失败: prompt 中缺少 ignore 指令 → LLM 不会主动用 ignore → 全选。
+    此测试为铁律 10 刹车 A 明确禁止的模式。
+    提示词内容关键词匹配无法验证 LLM 实际行为。
+    已于 2026-06-09 标记 xfail，详见 CLAUDE.md §铁律 10 刹车 A。
     """
     import pandas as pd
 

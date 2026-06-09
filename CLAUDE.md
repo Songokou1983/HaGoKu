@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 缓存 LLM 决策 / 隐藏 LLM 状态（铁律 6, 8）
 - 业务关键词列表 / 中文语义正则（铁律 1 配套）
 - **项目文档/AI 输出/记忆绑具体 LLM 模型名 / 部署 URL（铁律 9）**
+- **全文重写 prompt.md / 删 system_prompt 拼接片段 / 无 dump 对比改提示词（铁律 10）**
 
 **绝对要做**：
 - LLM 走 `tool_calls` + Pydantic 收结构（铁律 4 通道）
@@ -22,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **5 分钟读这三处**（按顺序）：
 1. [`PROJECT.md`](PROJECT.md) 顶部核心信条
-2. 本文件「铁律」节（1-9 全部）
+2. 本文件「铁律」节（0-10 全部）
 3. `PROJECT.md` §「代码边界」+「通道完备性十律」
 
 **不确定时**：见下方「拿不准时问自己唯一的问题」节。
@@ -261,6 +262,103 @@ grep -rn "Qwen\|A3B\|localhost:8\|text-embedding" CLAUDE.md PROJECT.md .env.exam
 grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留具体模型名
 ```
 
+### 铁律 10（提示词修改慎重律）— 提示词非代码，不可随意重构
+
+**提示词（prompt.md、agent.py 中的 system_prompt 字符串、tool description）和代码有本质区别。**
+
+代码可以审计——看逻辑、跑测试、静态分析。提示词是**与 LLM 多轮交互迭代总结出来的**，其效果取决于 LLM 对自然语言的理解，无法通过简单审计评价好坏。
+
+**❌ 绝对禁止的操作**：
+- **全文重写 prompt.md**：把 36 行精简成 64 行"清洗伙伴"风格——删掉的可能是多轮迭代后沉淀的关键指令
+- **"优化"提示词表述**：觉得某句话啰嗦，改成更简洁的版本——"啰嗦"可能是 LLM 需要的关键上下文
+- **删减 system_prompt 拼接片段**：如 `knowledge_section`、`command_context`——这些片段是用户反馈通道，删掉 = LLM 看不到用户说过什么
+- **把流程指令改成结论指令**："判断并说明原因"→"只选直接必需的"——前者是流程，后者是替 LLM 预设结论方向
+- **在没有 dump 对比的情况下改提示词**：不知道改之前 LLM 怎么想的、改之后怎么想的，就动手改
+
+**✅ 修改提示词的正规流程**：
+1. **先开 dump**：`HAGOKU_DUMP_LLM=1` 跑一次，看 LLM 收到的完整 prompt 和完整响应
+2. **定位具体问题**：是字段理解错了？是漏了步骤？是无限循环？——精确到哪一句话导致
+3. **最小修改**：改一行，跑 dump 对比。不改多行
+4. **保留原文对照**：commit message 必须引用删/改的原文，让后人知道"之前是这么写的"
+5. **跑冒烟**：改完必须跑对应的冒烟测试（smoke 脚本或手动端到端），确认行为改善
+
+**什么时候可以改提示词**：
+- 有 dump 证据证明某句话导致 LLM 行为异常
+- 新增功能需要新指令 → 加句子，不删已有句子
+- 工具 schema 变更需要同步更新 → 改 schema 对应的描述部分
+- 用户反馈某个 Agent 反复犯同一个错误 → dump 定位到具体语句后修改
+
+**什么时候绝对不可以改提示词**：
+- 觉得"写得不够好""风格不统一""太啰嗦"——这不构成修改理由
+- 代码重构顺手"优化"——提示词不是代码，不遵循 DRY/SOLID
+- 测试不绿就改提示词让它绿——这是头痛医头，治标不治本
+- 换 LLM 模型后行为变了——应该适配模型，不是改提示词迁就
+
+**检验**：
+```bash
+# 检视所有 prompt.md 的最近修改
+git -C hagoku log --oneline -10 -- '**/prompt.md' '**/prompts/*.md'
+# 检视所有 agent.py 中 system_prompt 片段的最近修改
+git -C hagoku log --oneline -10 -S "system_prompt" -- '**/agent.py'
+```
+任何最近 5 个 commit 内的提示词修改都必须附带 dump 对比证据，否则应视为可疑。
+
+### 刹车 A — 禁止对提示词内容做关键词匹配测试
+
+**❌ 绝对禁止写这种测试**：
+```python
+def test_scout_prompt_contains_ignore_role_instruction():
+    prompt = agent._build_prompt(...)
+    assert "ignore" in prompt.lower()  # ← 范畴错误
+```
+
+**为什么禁止**：`assert "ignore" in prompt` 只能验证"提示词里有没有这个词"，不能验证"LLM 行为是否正确"。
+- 提示词缺 ignore → LLM 仍可能正确使用 ignore（因为 tool schema 里有）
+- 提示词有 ignore → 加了"只选必需的"这种结论性指令，LLM 反而变得过度保守
+- 测试 GREEN ≠ 行为正确，测试 RED ≠ 行为错误——这个测试没有任何信号价值
+
+**但会产生严重的负信号**：测试 RED → 开发者加一句让测试 GREEN → 提示词被污染 → 实际行为退化 → 无人发现。
+
+**✅ 正确的验证方法**：
+- 开 dump (`HAGOKU_DUMP_LLM=1`)，人工看 LLM 实际返回的 `suggested_role` 和 `used_in_analysis` 值
+- 跑端到端冒烟，确认字段参与列勾选合理
+- 如果确实需要自动化回归 → **mock LLM 返回已知字段语义，验证代码层不覆盖 LLM 决策**（这是代码行为测试，不是提示词内容测试）
+
+**已存在的违规测试**：`tests/test_product/test_scout_uia_prompt.py::test_scout_prompt_contains_ignore_role_instruction` — 此测试为铁律 10 明确禁止的模式，应标记 `xfail` 并注明"提示词内容测试，不能反映 LLM 实际行为"。
+
+### 刹车 B — 提示词修改 PR 必须附带 dump 对比
+
+任何修改以下文件的 PR，PR body 中**必须**包含改前/改后的 dump 对比：
+- `**/prompt.md`
+- `**/agent.py` 中 `system_prompt` 字符串
+- `**/agent_tool_defs.py` 中 `description` 字段
+- `**/scout_reply.py` 中 `system_msg` 字符串
+
+对比格式：
+```
+### 改前 dump（HAGOKU_DUMP_LLM=1）
+- LLM 收到的完整 system prompt: <粘贴>
+- LLM 返回的 tool_calls: <粘贴>
+- 行为表现: <描述：字段参与列勾选是否合理>
+
+### 改后 dump
+- LLM 收到的完整 system prompt: <粘贴>
+- LLM 返回的 tool_calls: <粘贴>
+- 行为表现: <描述：改善了什么>
+```
+
+无 dump 对比的提示词 PR → **直接拒**。
+
+### 刹车 C — 冒烟测试只管流程，不管判断
+
+现有冒烟测试验证的是"流程是否跑通"（有无 crash、有无返回结果）。**流程 GREEN ≠ LLM 判断正确。**
+
+- 冒烟 GREEN 但字段全选 → 通过，无人察觉
+- 冒烟 GREEN 但字段全排除 → 通过，无人察觉  
+- 冒烟 GREEN 但清洗策略乱选 → 通过，无人察觉
+
+冒烟测试是**必要但不充分**的。提示词修改后，必须在冒烟之上额外做人工 dump 审查——没有例外。
+
 ### 触发词速查表（写代码时秒查）
 
 看到以下代码模式 / 写以下逻辑时，先查对应铁律：
@@ -279,6 +377,12 @@ grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留�
 | LLM 失败时返回 cached 上次结果 | 7 失败在场 |
 | `PROJECT.md` / `.env.example` / AI 输出写具体 LLM 模型名 / `localhost:<port>` / 厂商 URL | 9 配置中性 |
 | memory / commit message / docstring 出现 `Qwen3.6-35B-A3B` / `minimax` / `claude` / `gpt-4` 等具体模型名 | 9 配置中性 |
+| 全文重写 prompt.md / 删除 system_prompt 中的 `knowledge_section` 等拼接片段 | 10 提示词慎重 |
+| "优化"提示词表述 / 觉得啰嗦就改简洁 / 无 dump 对比就改 | 10 提示词慎重 |
+| 流程指令（"判断并说明原因"）改成结论指令（"只选必需的"） | 10 提示词慎重 |
+| `assert "ignore" in prompt` / 任何对 prompt 内容做关键词匹配的测试 | 10 刹车 A |
+| 改 prompt.md / system_prompt / tool description 但 PR 无 dump 对比 | 10 刹车 B |
+| 冒烟 GREEN 就合并提示词修改 | 10 刹车 C |
 
 ### 常见错误模式（每次都会犯，请警惕）
 

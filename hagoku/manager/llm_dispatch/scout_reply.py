@@ -497,11 +497,14 @@ def _apply_scout_reply_with_llm(
         "每次只更新一个字段，分多次调用 update_field_understanding。\n"
         "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
         "用户限定分析范围（如「只用X、Y」「本次只看」「其他都不参与」「限定为」）→ 调 update_field_role，target/features/ignored 三组全给。\n"
+        "根据分析目标和字段中文名，逐字段重新判断 used_in_analysis。\n"
+        "仅判断当前正在纠正的字段，不要改动其他字段的 used_in_analysis。\n"
+        "判断标准：纠正后的字段含义是否直接服务于分析目标。是→true，否→false。\n"
         f"{ap_summary}"
         f"{command_context}"
         "当前字段表格（参与分析列已由初始分析判断）：\n"
         f"{field_state}\n"
-        "💡 参与分析列的勾选状态是初始分析根据分析目标判断的结果。纠正中文名时保持 used_in_analysis 不变，不要重新判断。只有用户明确说「让X参与分析」或「X不参与分析」时才改动 used_in_analysis。\n"
+        "💡 纠正中文名时，根据分析目标逐字段重新判断 used_in_analysis。只判断当前字段，不推断其他字段的关联。用户明确说「让X参与」或「X不参与」时优先采纳。\n"
     )
     project_ctx = context.get("_project_context")
     # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
@@ -518,7 +521,9 @@ def _apply_scout_reply_with_llm(
             "每次只更新一个字段，分多次调用 update_field_understanding。\n"
             "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
             "用户限定分析范围（如「只用X、Y」「其他都不参与」）→ 调 update_field_role。\n"
-            "💡 参与分析列的勾选状态是初始分析根据分析目标判断的结果。纠正中文名时保持 used_in_analysis 不变，不要重新判断。只有用户明确说「让X参与分析」或「X不参与分析」时才改动 used_in_analysis。\n"
+            "根据分析目标和字段中文名，逐字段重新判断 used_in_analysis。\n"
+            "仅判断当前正在纠正的字段，不要改动其他字段的 used_in_analysis。\n"
+            "💡 纠正中文名时，根据分析目标逐字段重新判断 used_in_analysis。只判断当前字段，不推断其他字段的关联。用户明确说「让X参与」或「X不参与」时优先采纳。\n"
         )
         ctx_block = project_ctx.build_prompt("scout", context)
         messages = [

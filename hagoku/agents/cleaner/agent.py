@@ -680,9 +680,20 @@ class CleanerAgent(BaseAgent):
             messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
             messages.extend(ctx_block["messages_history"])  # 律 3
 
+        # ── 注入用户命令上下文（用户最近提出的指令/纠正）──
+        command_context = ""
+        try:
+            pt = (context.get("_pending_command_text") or "").strip()
+            if pt:
+                command_context = f"\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
+        except Exception:
+            pass
+
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
+        if command_context:
+            intro += command_context
         messages.append({"role": "user", "content": intro})
 
         # 工具：从注册表拉，代码不加任何额外 tool
@@ -958,7 +969,23 @@ class CleanerAgent(BaseAgent):
                 "Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块，"
                 "或该区块为空。请在 hagoku/agents/cleaner/prompt.md 中配置清洗规则后重试。"
             )
-        system_prompt = cleaning_rules.strip()
+        # 跨项目知识：检索历史清洗策略经验，注入 system prompt
+        query_text = (
+            f"{context.get('target', '')} "
+            f"{','.join(context.get('features', [])[:5])} "
+            f"缺失率{sum(1 for m in mechanisms.values() if m) / max(len(df.columns), 1):.0%}"
+        )
+        recalled = cleaner_knowledge.recall(query_text, top_k=2)
+        knowledge_notes = ""
+        if recalled:
+            knowledge_notes = (
+                "\n\n【历史清洗经验 — 以下是在类似数据上使用过的策略，供参考，最终判断需基于当前数据：】\n"
+                + "\n".join(
+                    f"  - {r['metadata'].get('action','?')}: {r['metadata'].get('reason','')} (相似度 {r['similarity']:.0%})"
+                    for r in recalled
+                )
+            )
+        system_prompt = cleaning_rules.strip() + knowledge_notes
 
         client = create_raw_client(self.llm_config)
 

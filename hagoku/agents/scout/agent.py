@@ -537,6 +537,27 @@ class ScoutAgent(BaseAgent):
                         lines.append(f"  - {col}: 含义：{desc}")
                 memory_notes = "\n".join(lines)
 
+        # 跨项目知识库：将 knowledge_notes_parts 格式化为 LLM 参考上下文
+        knowledge_section = ""
+        if knowledge_notes_parts:
+            knowledge_section = (
+                "\n\n"
+                "【跨项目知识库参考 — 以下是历史分析中类似字段的经验，供参考而非决定：】\n"
+                "这些字段在数据特征和列名上与当前数据集的某些列相似。"
+                "你可以参考这些历史经验来辅助推断，但最终判断需要基于当前数据集的实际情况。\n\n"
+                + "\n\n".join(knowledge_notes_parts)
+            )
+
+        # ── 注入用户命令上下文（用户最近提出的指令/纠正，优先级高于其他所有信息）──
+        command_context = ""
+        try:
+            ctx = getattr(self, "_context", {}) or {}
+            pt = (ctx.get("_pending_command_text") or "").strip()
+            if pt:
+                command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
+        except Exception as e:
+            logging.getLogger("hagoku").warning(f"获取命令上下文失败: {e}")
+
         # P4 修复：由 FieldInferenceResult 数据模型驱动 schema，新增字段无需改 Agent 代码
         _schema = build_submit_field_inference_schema()
         submit_tool = {
@@ -548,16 +569,22 @@ class ScoutAgent(BaseAgent):
             }
         }
 
-        # 过渡兜底：阶段 2 接 ProjectContext 后移除
-        analysis_goal_section = f"\n【最高优先级 — 用户分析目标】\n「{query.strip()}」\n\n" if query and query.strip() else ""
+        # ── 将用户分析目标前置为最高优先级指令 ──
+        analysis_goal_line = ""
+        if query and query.strip():
+            analysis_goal_line = (
+                f"\n\n【最高优先级 — 用户分析目标】\n"
+                f"「{query.strip()}」\n\n"
+                f"给每个字段翻译一个中文名。现在调用 submit_field_inference。\n"
+            )
 
         system_prompt = (
-            f"{analysis_goal_section}"
             "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
-            "1. 给每个字段一个中文名（display_name）\n"
-            "2. 判断是否参与本次分析（used_in_analysis）：只勾选直接回答分析目标必需的字段；与目标无关的设 suggested_role 为 ignore 且 used_in_analysis 为 false。勾选原因写在 evidence 里。used_in_analysis 和 evidence 必须一致，不可 evidence 说 ignore 但 used_in_analysis=true\n"
-            "现在调用 submit_field_inference。\n"
+            "建议角色：与目标直接相关的字段→target/feature，无关的→ignore。\n"
+            f"{analysis_goal_line}"
+            f"{knowledge_section}"
             f"{memory_notes}"
+            f"{command_context}"
         )
         import json as _json
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)

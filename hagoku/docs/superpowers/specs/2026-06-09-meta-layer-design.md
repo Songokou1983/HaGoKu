@@ -650,8 +650,11 @@ Phase 1 不只是"Prompt Lab 能用"。必须达到以下条件才能进入 Phas
 每行一条记录：
 {"date":"2026-07-01","commit":"abc123","agent":"scout","prompt_diff":"...",
  "baseline_dump":"005_scout_...","current_dump":"N/A (Prompt Lab)",
- "tool_calls_changed":true,"changed_fields":["columns[3].used_in_analysis"],
+ "tool_calls_changed":true,"tool_calls_change_pct":0.33,"content_similarity":0.71,
+ "changed_fields":["columns[3].used_in_analysis"],
  "human_review":"接受——Quantity 确实应该排除","accepted":true}
+// 注：tool_calls_change_pct 和 content_similarity 是校准的核心数据。
+// 仅仅 "changed":true 无法推导更好的阈值——必须知道"变化了多少"。
 ```
 
 **数据来源**：
@@ -733,19 +736,26 @@ Phase 1 上线后即开始追踪。基线值需要 Phase 1 用 1-2 个月的自�
 | 项目 | 负责人 |
 |------|-------|
 | Meta Agent prompt.md | 用户 final review（铁律 10 适用） |
+| `HAGOKYU_LLM_MODEL_META` 配置 | 部署时必须设置，未设置 = 故障隔离失效 |
 | 守门 CI 阈值（20%/0.8） | 积累一个月数据后用户校准 |
 | 巡检报告严重级别定义 | 用户定义（高/中/低） |
 
 ## 开放问题
 
-1. **HaGoKu Agent prompt.md？** Phase 2 先用硬编码，Phase 3 提取为 prompt.md。
+1. **HaGoKu Agent prompt.md？** Phase 2 先用硬编码，Phase 3 提取为 prompt.md。注意：Phase 2 在 `api/meta.py` 中硬编码的 prompt 同样受铁律 10 保护——不因为"还没提取"就可以随意改。实施时在硬编码位置加一行 `# 铁律 10：此提示词修改需 dump 对比` 注释。
 
-2. **巡检触发方式？** Phase 2b 手动触发，Phase 3 自动 + 定时。
+2. **巡检触发方式？** Phase 2b 手动触发。Phase 3 改为双触发：① 每次 PR 合入触碰 `prompt.md` 或 `agent.py` 时自动触发（补 gate 的全局视角——gate 只看单个 PR，巡检看累积效应）；② 每周固定一次全量巡检作为基线。两者通过 CI 的不同触发条件实现，不需要额外设计。
 
-3. **`HAGOKYU_LLM_MODEL_META` 未设置？** 记录 warning + 回退。warning："建议配置独立模型以保证故障隔离。"
+3. **`HAGOKYU_LLM_MODEL_META` 未设置？** warning 升级为明确的风险声明：
+   ```
+   WARNING: HAGOKYU_LLM_MODEL_META 未配置，已回退到 HAGOKYU_LLM_MODEL。
+   故障隔离失效：pipeline 模型不可达时，Meta 诊断同样无法运行。
+   强烈建议配置独立的 Meta 模型（本地 35B 或独立云端账户）。
+   ```
+   同时在维护者表格中增加此项，防止部署时遗漏。
 
-4. **对比 diff 阈值？** tool_calls 变化 > 20%、content 相似度 < 0.8。前 3 个月 soft gate，积累数据后校准。
+4. **对比 diff 阈值？** tool_calls 变化 > 20%、content 相似度 < 0.8。前 3 个月 soft gate。**校准日志需记录原始数值**——当前 `gate_calibration.jsonl` 只有布尔值 `tool_calls_changed`，缺失连续值。补充两个字段：`"tool_calls_change_pct": 0.33`（变化的具体百分比）和 `"content_similarity": 0.71`（原始相似度）。3 个月后绘制所有 `accepted=false` 记录的 `tool_calls_change_pct` 分布，找合适的切割点。这一个字段升级让 soft gate 的数据从"有没有变化"升级到"变化了多少"。
 
-5. **巡检历史持久化？** `~/.hagoku/inspections/inspection_{timestamp}.json`。
+5. **巡检历史持久化？** `~/.hagoku/inspections/inspection_{timestamp}.json`。保留策略：最近 90 天或 100 条，超出时由 `_run_inspect` 清理最旧条目。Phase 3 增强：对比当前报告 vs 上次报告，标注新增/消失的异常。
 
 6. **修复方案可否直接执行？** 不可——铁律 -2。Agent 提议 + 用户确认 + 铁律 -1 正向执行。

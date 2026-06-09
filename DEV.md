@@ -71,14 +71,14 @@ python3 scripts/clean_ui_changelog_backups.py --older-than 30 --apply
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `HAGOKYU_LLM_BASE_URL` | LLM API 地址（OpenAI 兼容；勿与 `hagoku-api` 端口 8000 混淆） | `http://localhost:8080/v1` |
+| `HAGOKYU_LLM_BASE_URL` | LLM API 地址（OpenAI 兼容；勿与 `hagoku-api` 端口 8000 混淆） | —（用户配置） |
 | `HAGOKYU_LLM_API_KEY` | LLM API 密钥 | — |
-| `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | `Qwen3.6-35B-A3B` |
+| `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | —（用户配置） |
 | `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 | `HAGOKYU_PROJECT_DIR` | 项目根目录（可选，覆盖默认 `~/.hagoku/projects`）；改后重启 `hagoku-api`；不设时报告用浏览器另存为即可带走 | — |
-| `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api.openai-proxy.org/v1` |
+| `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | —（用户配置） |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | — |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型 | `text-embedding-3-small` |
 | `HAGOKU_API_RELOAD` | `python -m hagoku.api.server` 是否启用 uvicorn **热重载**（`yes`/`1`/`true`）；默认关闭，避免监视子进程带来的偶发僵死 | 关闭 |

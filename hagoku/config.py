@@ -19,8 +19,8 @@ if _load_env_path.exists():
 class LLMConfig(BaseModel):
     """LLM 连接配置 — 只需三个参数"""
 
-    model: str = "Qwen3.6-35B-A3B"  # 模型名称
-    base_url: str = "http://localhost:8080/v1"  # OpenAI 兼容 LLM（与 `hagoku-api` 默认端口 8000 区分）
+    model: str = ""  # 模型名称 — 用户通过设置功能配置，禁止写死默认值（铁律 9）
+    base_url: str = ""  # OpenAI 兼容 LLM — 用户通过设置功能配置，禁止写死默认值（铁律 9）
     api_key: str = "none"  # API Key（本地模型填 none）
 
     def __repr__(self) -> str:
@@ -117,7 +117,7 @@ class EmbeddingConfig(BaseModel):
 
     base_url: str = ""
     api_key: str = "none"
-    model: str = "text-embedding-3-small"
+    model: str = ""  # 用户配置（铁律 9：不写死模型名）
     dimension: int = 1536
 
 

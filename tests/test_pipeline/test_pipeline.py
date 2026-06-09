@@ -11,8 +11,8 @@ from hagoku.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConf
 class TestLLMConfig:
     def test_defaults(self):
         config = LLMConfig()
-        assert config.base_url == "http://localhost:8080/v1"
-        assert config.model == "Qwen3.6-35B-A3B"
+        assert config.base_url == ""
+        assert config.model == ""
         assert config.temperature == 0.6
 
     def test_custom(self):
@@ -30,7 +30,7 @@ class TestManagerModeConfig:
 class TestHaGoKuConfig:
     def test_defaults(self):
         config = HaGoKuConfig()
-        assert config.llm.model == "Qwen3.6-35B-A3B"
+        assert config.llm.model == ""
         assert config.manager.cleaning_impact_warning == 0.3
 
     def test_from_yaml(self, tmp_path):
@@ -49,7 +49,7 @@ manager:
 
     def test_from_yaml_nonexistent(self):
         config = HaGoKuConfig.from_yaml(Path("/nonexistent/config.yaml"))
-        assert config.llm.model == "Qwen3.6-35B-A3B"  # 默认值
+        assert config.llm.model == ""  # 默认值
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("HAGOKU_LLM_BASE_URL", "http://env:7000/v1")

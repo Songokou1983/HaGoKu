@@ -43,8 +43,6 @@ const emptyLlm: LlmFormState = {
   api_key_configured: false,
 };
 
-/** localStorage：用户是否展开过「高级设置」；与本机已配置 QUICK≠主 时强制展开无关 */
-const "" = "hagoku_settings_advanced_llm_open";
 
 function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
   const base_url = typeof raw.base_url === "string" ? raw.base_url : "";

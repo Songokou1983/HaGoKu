@@ -302,6 +302,10 @@ export default function SettingsPanel() {
         <p className="text-ui-sm text-app-text leading-relaxed">
         </p>
 
+        <h3 className="text-ui-sm font-medium text-app-text mb-3 flex items-center gap-1.5">
+          <Cpu size={14} className="text-app-accent" />
+          Pipeline LLM
+        </h3>
         <Field label="Base URL" icon={<Globe size={14} />}>
           <input className={inputClass} placeholder="https://api.openai.com/v1" autoComplete="off" value={llm.base_url}
             onChange={(e) => { setLlm({ ...llm, base_url: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />

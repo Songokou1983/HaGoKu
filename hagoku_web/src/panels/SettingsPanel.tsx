@@ -180,6 +180,9 @@ export default function SettingsPanel() {
     const url = hasAll ? metaUrl.trim() : llm.base_url.trim();
     const model = hasAll ? metaModel.trim() : llm.main_model.trim();
     const key = hasAll ? metaKey.trim() : apiKeyInput.trim();
+    if (!url) { setTestStatusMeta("fail"); setTestMessageMeta("未配置 Base URL"); return; }
+    if (!model) { setTestStatusMeta("fail"); setTestMessageMeta("未配置模型名称"); return; }
+    if (!key) { setTestStatusMeta("fail"); setTestMessageMeta("未配置 API Key"); return; }
     try {
       const r = await fetch("/api/config/llm/test", {
         method: "POST",

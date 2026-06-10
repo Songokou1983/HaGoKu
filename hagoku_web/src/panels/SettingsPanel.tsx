@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Zap,
   XCircle,
-  Zap,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field } from "../components/FormField";

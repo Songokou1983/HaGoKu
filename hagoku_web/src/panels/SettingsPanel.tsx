@@ -332,6 +332,7 @@ export default function SettingsPanel() {
             )}
           </button>
           {advancedLlmOpen && (
+            <>
             <div className="px-3 py-3 space-y-3 border-t border-app-border bg-app-bg text-ui-xs text-app-text leading-relaxed">
               <p>
                 仍为<strong>同一套</strong>推理服务（上方网址与密钥不变）。保存时把「模型名称」写入{" "}
@@ -365,6 +366,7 @@ export default function SettingsPanel() {
                 <input className={inputClass} type="password" placeholder="不填则复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
               </Field>
             </div>
+          </>
           )}
         </div>
 

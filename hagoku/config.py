@@ -33,19 +33,8 @@ class LLMConfig(BaseModel):
         )
     temperature: float = 0.6  # 生成温度
     max_tokens: int = 8192  # 最大 token 数
-    model_deep: Optional[str] = None  # 深度推理模型（Analyst、仲裁器），不设则复用 model
-    model_quick: Optional[str] = None  # 快速模型（Scout、Reporter、Scribe 反思），不设则复用 model
 
 
-class MetaLLMConfig(BaseModel):
-    """HaGoKu Doctor 独立 LLM 配置 — 完全独立于 pipeline LLM。
-
-    Doctor 需要独立视角诊断 pipeline 行为。
-    未配置时回退使用主 LLMConfig（不推荐）。"""
-
-    base_url: str = ""
-    api_key: str = "none"
-    model: str = ""  # 不设则复用 pipeline 的 model_meta 或 model
 
 
 class ManagerModeConfig(BaseModel):
@@ -136,7 +125,6 @@ class HaGoKuConfig(BaseModel):
     """HaGoKu Studio 全局配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
-    meta_llm: MetaLLMConfig = Field(default_factory=MetaLLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
@@ -187,16 +175,11 @@ class HaGoKuConfig(BaseModel):
             config.embedding.api_key = v
         if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
-        if v := os.getenv("HAGOKU_LLM_MODEL_DEEP") or os.getenv("HAGOKYU_LLM_MODEL_DEEP"):
             config.llm.model_deep = v
-        if v := os.getenv("HAGOKU_LLM_MODEL_QUICK") or os.getenv("HAGOKYU_LLM_MODEL_QUICK"):
             config.llm.model_quick = v
         # Meta LLM 独立配置
-        if v := os.getenv("HAGOKU_META_LLM_BASE_URL") or os.getenv("HAGOKYU_META_LLM_BASE_URL"):
             config.meta_llm.base_url = v
-        if v := os.getenv("HAGOKU_META_LLM_API_KEY") or os.getenv("HAGOKYU_META_LLM_API_KEY"):
             config.meta_llm.api_key = v
-        if v := os.getenv("HAGOKU_META_LLM_MODEL") or os.getenv("HAGOKYU_META_LLM_MODEL"):
             config.meta_llm.model = v
         return config
 

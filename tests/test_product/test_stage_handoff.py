@@ -86,7 +86,7 @@ def test_下游_agent_实际注入_messages_history(agent_key):
                         raise RuntimeError("stop")
 
         agent = ReporterAgent.__new__(ReporterAgent)
-        agent.llm_config = LLMConfig(model="t", model_quick="t")
+        agent.llm_config = LLMConfig(model="t")
         agent.event_bus = _FakeEventBus()
         agent._llm_client = _ReporterFakeClient()
         agent.role = "reporter"
@@ -112,7 +112,7 @@ def test_下游_agent_实际注入_messages_history(agent_key):
         try:
             if agent_key == "cleaner":
                 from hagoku.agents.cleaner.agent import CleanerAgent
-                agent = CleanerAgent(LLMConfig(model="t", model_quick="t"), event_bus=None)
+                agent = CleanerAgent(LLMConfig(model="t"), event_bus=None)
                 ctx_dict = {
                     "_project_context": ctx_proj,
                     "column_semantics": [
@@ -123,7 +123,7 @@ def test_下游_agent_实际注入_messages_history(agent_key):
                 agent.assess(df=pd.DataFrame({"X": [1]}), context=ctx_dict, cleaning_rules="skip")
             else:
                 from hagoku.agents.analyst.agent import AnalystAgent
-                agent = AnalystAgent(LLMConfig(model="t", model_quick="t"), event_bus=_FakeEventBus())
+                agent = AnalystAgent(LLMConfig(model="t"), event_bus=_FakeEventBus())
                 # run_step 的 messages 参数承载活跃对话历史；
                 # messages_history 由 build_prompt 返回但仅用于 resume，不注入 run_step
                 agent.run_step(

@@ -232,7 +232,7 @@ class LlmConfigBody(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
     base_url: str
-    main_model: str
+    model: str
     api_key: str = ""
     sub_model: str = ""
     meta_base_url: str = ""
@@ -250,24 +250,12 @@ async def post_llm_config(req: LlmConfigBody):
     """
     path = _hagoku_dotenv_path()
     base_url = req.base_url.strip()
-    main = req.main_model.strip()
-    sub = req.sub_model.strip() or main
-    if not base_url or not main:
+    model = req.model.strip()
+    if not base_url or not model:
         raise HTTPException(status_code=400, detail="网址和模型名称不能为空")
     try:
         _dotenv_set(path, "HAGOKU_LLM_BASE_URL", base_url)
-        _dotenv_set(path, "HAGOKU_LLM_MODEL", main)
-        _dotenv_set(path, "HAGOKU_LLM_MODEL_DEEP", main)
-        _dotenv_set(path, "HAGOKU_LLM_MODEL_QUICK", sub)
-        meta_url = req.meta_base_url.strip()
-        meta_model = req.meta_model.strip()
-        meta_key = req.meta_api_key.strip()
-        if meta_url:
-            _dotenv_set(path, "HAGOKU_META_LLM_BASE_URL", meta_url)
-        if meta_model:
-            _dotenv_set(path, "HAGOKU_META_LLM_MODEL", meta_model)
-        if meta_key:
-            _dotenv_set(path, "HAGOKU_META_LLM_API_KEY", meta_key)
+        _dotenv_set(path, "HAGOKU_LLM_MODEL", model)
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
         # 重新加载 .env 到当前进程，让后续请求立即使用新配置
@@ -277,9 +265,6 @@ async def post_llm_config(req: LlmConfigBody):
         vals = dotenv_values(path) or {}
         akv = str(vals.get("HAGOKU_LLM_API_KEY") or "").strip()
         api_key_configured = bool(akv and akv.lower() != "none")
-        mq_eff = str(vals.get("HAGOKU_LLM_MODEL_QUICK") or sub).strip() or main
-        md_eff = str(vals.get("HAGOKU_LLM_MODEL_DEEP") or main).strip() or main
-        sub_display = "" if mq_eff == main else mq_eff
     except HTTPException:
         raise
     except Exception as exc:
@@ -287,20 +272,11 @@ async def post_llm_config(req: LlmConfigBody):
     return {
         "ok": True,
         "restart_required": False,
-        "hint": "配置已保存并立即生效，下次分析将使用新模型。",
+        "hint": "配置已保存并立即生效。",
         "llm": {
             "base_url": str(vals.get("HAGOKU_LLM_BASE_URL") or base_url),
-            "main_model": main,
-            "sub_model": sub_display,
-            "model": main,
-            "model_quick": mq_eff,
-            "model_deep": md_eff,
+            "model": model,
             "api_key_configured": api_key_configured,
-        },
-        "meta_llm": {
-            "base_url": str(vals.get("HAGOKU_META_LLM_BASE_URL") or meta_url or ""),
-            "model": str(vals.get("HAGOKU_META_LLM_MODEL") or meta_model or ""),
-            "api_key_configured": bool(meta_key),
         },
     }
 
@@ -308,7 +284,7 @@ async def post_llm_config(req: LlmConfigBody):
 # ── POST /api/config/llm/test — 测试模型连接 ────────────────
 class LlmTestBody(BaseModel):
     base_url: str
-    main_model: str
+    model: str
     api_key: str = ""
 
 
@@ -320,7 +296,7 @@ async def test_llm_connection(req: LlmTestBody):
     import os as _os
 
     base_url = req.base_url.strip()
-    model = req.main_model.strip()
+    model = req.model.strip()
     api_key = req.api_key.strip()
     # 如果前端没传 key，用 .env 里已保存的
     if not api_key:

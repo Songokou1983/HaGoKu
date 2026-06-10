@@ -32,8 +32,8 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
     try:
         applied = apply_scout_user_field_reply_to_context(
             context, user_input,
-            llm_client=self.llm_quick_raw,
-            llm_model=self.config.llm.model_quick or self.config.llm.model,
+            llm_client=self.llm_raw,
+            llm_model=self.config.llm.model,
         )
     except RuntimeError as e:
         # 铁律 7：LLM 失败对用户可见，保持当前阶段让用户重试
@@ -107,7 +107,7 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
     assessment = context.get("_cleaner_assessment")
     if assessment is None:
         from hagoku.agents.cleaner import CleanerAgent
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm)
         cleaning_rules = cleaner._load_cleaning_rules()
         context["_user_feedback"] = user_input
         assessment = cleaner.assess(df, context, cleaning_rules)
@@ -129,7 +129,7 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
     # 对话模式：用户已看过评估，现在自由对话
     if self._cleaner_agent is None:
         from hagoku.agents.cleaner import CleanerAgent
-        self._cleaner_agent = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm_quick)
+        self._cleaner_agent = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm)
 
     if user_input:
         self._cleaner_messages.append({"role": "user", "content": user_input})
@@ -270,7 +270,7 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
     """
     if self._analyst_agent is None:
         from hagoku.agents.analyst import AnalystAgent
-        self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
+        self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm)
         self._analyst_messages = []
 
     if not self._analyst_first_pass_done:
@@ -309,7 +309,7 @@ def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple
         from hagoku.agents.reporter import ReporterAgent
         self._reporter_agent = ReporterAgent(
             llm_config=self.config.llm, event_bus=self.event_bus,
-            llm_client=self.llm_quick_raw,
+            llm_client=self.llm_raw,
         )
         self._reporter_messages = []
 

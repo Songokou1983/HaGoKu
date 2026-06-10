@@ -93,73 +93,6 @@ def _unwrap_llm(config: Any) -> LLMConfig:
     return config.llm
 
 
-def create_deep_client(config: Any) -> Any:
-    """
-    创建深度推理客户端（Analyst、仲裁器用）
-
-    模型选择: llm.model_deep or llm.model
-    """
-    llm = _unwrap_llm(config)
-    deep_config = LLMConfig(
-        model=llm.model_deep or llm.model,
-        base_url=llm.base_url,
-        api_key=llm.api_key,
-        temperature=llm.temperature,
-        max_tokens=llm.max_tokens,
-    )
-    return create_structured_llm_client(deep_config)
-
-
-def create_quick_client(config: Any) -> Any:
-    """
-    创建快速客户端（Scout、Reporter、Scribe 反思用）
-
-    模型选择: llm.model_quick or llm.model
-    """
-    llm = _unwrap_llm(config)
-    quick_config = LLMConfig(
-        model=llm.model_quick or llm.model,
-        base_url=llm.base_url,
-        api_key=llm.api_key,
-        temperature=llm.temperature,
-        max_tokens=8192,  # 快速模型用较短上下文
-    )
-    return create_structured_llm_client(quick_config)
-
-
-def create_meta_client(config: Any) -> Any:
-    """
-    创建 Meta 层客户端（HaGoKu Doctor 诊断/巡检/守门用）
-
-    使用独立的 MetaLLMConfig。未配置时回退到 pipeline LLM。
-    Doctor 需要独立视角诊断 pipeline 行为——共用模型会失去诊断能力。
-    """
-    from ..config import HaGoKuConfig
-
-    if isinstance(config, HaGoKuConfig):
-        cfg = config
-    else:
-        cfg = None
-
-    if cfg and cfg.meta_llm.base_url and cfg.meta_llm.model:
-        meta_client_config = LLMConfig(
-            model=cfg.meta_llm.model,
-            base_url=cfg.meta_llm.base_url,
-            api_key=cfg.meta_llm.api_key,
-            temperature=0.0,
-            max_tokens=8192,
-        )
-    else:
-        llm = _unwrap_llm(config)
-        meta_client_config = LLMConfig(
-            model=llm.model,
-            base_url=llm.base_url,
-            api_key=llm.api_key,
-            temperature=0.0,
-            max_tokens=8192,
-        )
-    return create_structured_llm_client(meta_client_config)
-
 
 # 全局 AsyncOpenAI 客户端单例（连接复用）
 _async_client: Any = None
@@ -197,7 +130,6 @@ async def chat_completion(
 ) -> dict[str, str]:
     """轻量异步 chat completion，用于意图分类等无状态场景。
 
-    自动加载环境配置，使用快速模型（model_quick）以降低延迟。
     不依赖 instructor，直接调用 OpenAI chat.completions.create。
     复用全局 AsyncOpenAI 客户端以复用底层 HTTP 连接池。
 
@@ -211,7 +143,7 @@ async def chat_completion(
 
     client = _get_async_client()
     response = await client.chat.completions.create(
-        model=llm.model_quick or llm.model,
+        model=llm.model,
         messages=messages,  # type: ignore[arg-type]
         temperature=temperature,
         max_tokens=max_tokens,

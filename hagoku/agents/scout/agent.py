@@ -457,7 +457,7 @@ class ScoutAgent(BaseAgent):
                        包含 {"fields": {...}, "display_names": {...}}。
                        已确认的字段描述和中文名称会直接注入 prompt，LLM 可沿用而非重新推断。
         """
-        from ...llm.client import create_quick_client, create_raw_client
+        from ...llm.client import create_raw_client
 
         # 构建每列的 profile 摘要
         column_list: list[dict] = []
@@ -592,7 +592,7 @@ class ScoutAgent(BaseAgent):
         # ── 通道日志：LLM 调用前 ──
         if self._channel_logger:
             self._channel_logger.log("scout", "llm_call",
-                model=self.llm_config.model_quick or self.llm_config.model,
+                model=self.llm_config.model,
                 prompt_len=len(system_prompt))
 
         client = create_raw_client(self.llm_config)
@@ -608,13 +608,13 @@ class ScoutAgent(BaseAgent):
             "scout_infer_all_semantics",
             [{"role": "system", "content": system_prompt},
              {"role": "user", "content": "请分析以下数据集的字段语义：\n```json\n" + user_prompt_str + "\n```"}],
-            model=self.llm_config.model_quick or self.llm_config.model,
+            model=self.llm_config.model,
             extra={"query": query, "tools": ["submit_field_inference"]},
         )
 
         try:
             response = client.chat.completions.create(
-                model=self.llm_config.model_quick or self.llm_config.model,
+                model=self.llm_config.model,
                 messages=build_messages(
                     query=self._query or "",
                     user_input=f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
@@ -644,7 +644,7 @@ class ScoutAgent(BaseAgent):
             "scout_infer_all_semantics_response",
             [{"role": "system", "content": system_prompt},
              {"role": "user", "content": "请分析以下数据集的字段语义：\n```json\n" + user_prompt_str + "\n```"}],
-            model=self.llm_config.model_quick or self.llm_config.model,
+            model=self.llm_config.model,
             extra={
                 "query": query,
                 "response_tool_calls": [{"name": t.function.name, "arguments": t.function.arguments} for t in tc] if tc else [],

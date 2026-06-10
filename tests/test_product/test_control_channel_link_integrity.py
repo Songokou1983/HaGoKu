@@ -39,7 +39,7 @@ class TestScoutControlChannelLinks:
         """LLM route_to(stage="cleaner") → _handle_scout_reply 返回 ("switch", "cleaner")"""
         context = self._scout_context()
         mock_resp = self._make_route_to_response("cleaner", "done")
-        orch._llm_quick_raw = self._make_client(mock_resp)
+        orch._llm_raw = self._make_client(mock_resp)
         result = orch._handle_scout_reply("可以进入清洗了", context)
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -49,7 +49,7 @@ class TestScoutControlChannelLinks:
         """LLM route_to(stage="reporter") → switch to reporter"""
         context = self._scout_context()
         mock_resp = self._make_route_to_response("reporter", "直接报告")
-        orch._llm_quick_raw = self._make_client(mock_resp)
+        orch._llm_raw = self._make_client(mock_resp)
         result = orch._handle_scout_reply("直接去报告", context)
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -59,7 +59,7 @@ class TestScoutControlChannelLinks:
         """LLM route_to(stage="scout") → 留在 scout"""
         context = self._scout_context()
         mock_resp = self._make_route_to_response("scout", "stay")
-        orch._llm_quick_raw = self._make_client(mock_resp)
+        orch._llm_raw = self._make_client(mock_resp)
         result = orch._handle_scout_reply("继续字段理解", context)
         assert not isinstance(result, tuple), f"stage=scout 不应切换"
 

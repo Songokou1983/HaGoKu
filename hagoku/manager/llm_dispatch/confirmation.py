@@ -17,7 +17,7 @@ def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
 
         client = create_raw_client(self.config.llm)
         response = client.chat.completions.create(
-            model=self.config.llm.model_quick or self.config.llm.model,
+            model=self.config.llm.model,
             messages=build_messages(
                 query=user_input,
                 user_input=f"字段列表：{', '.join(columns)}\n用户说：{user_input}",

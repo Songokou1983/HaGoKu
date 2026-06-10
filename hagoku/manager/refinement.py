@@ -170,7 +170,7 @@ class RefinementParser:
 
         try:
             response = client.chat.completions.create(
-                model=config.model_quick or config.model,
+                model=config.model,
                 messages=build_messages(
                     query=feedback,
                     user_input=f"{ctx_text}用户输入：{feedback}",
@@ -184,7 +184,7 @@ class RefinementParser:
         except Exception:
             # 如果 tool_choice 要求严格但模型不支持，回退到自由调用
             response = client.chat.completions.create(
-                model=config.model_quick or config.model,
+                model=config.model,
                 messages=build_messages(
                     query=feedback,
                     user_input=f"{ctx_text}用户输入：{feedback}",

@@ -147,11 +147,7 @@ class TestConfigEndpoints:
         body = r.json()
         assert "llm" in body
         assert "base_url" in body["llm"]
-        assert "main_model" in body["llm"]
-        assert "sub_model" in body["llm"]
         assert "model" in body["llm"]
-        assert "model_quick" in body["llm"]
-        assert "model_deep" in body["llm"]
         assert "api_key_configured" in body["llm"]
         assert isinstance(body["llm"]["api_key_configured"], bool)
 
@@ -166,18 +162,17 @@ class TestConfigEndpoints:
             "/api/config/llm",
             json={
                 "base_url": "http://llm.test:9999/v1",
-                "main_model": "test-model-x",
+                "model": "test-model-x",
                 "api_key": "sk-test-secret",
-                "sub_model": "",
             },
         )
         assert r.status_code == 200
         data = r.json()
         assert data["ok"] is True
         assert data["llm"]["base_url"] == "http://llm.test:9999/v1"
-        assert data["llm"]["main_model"] == "test-model-x"
         assert data["llm"]["model"] == "test-model-x"
-        assert data["llm"]["sub_model"] == ""
+        assert data["llm"]["model"] == "test-model-x"
+        
         assert data["llm"]["api_key_configured"] is True
         text = env_file.read_text(encoding="utf-8")
         assert "HAGOKU_LLM_BASE_URL" in text
@@ -185,15 +180,10 @@ class TestConfigEndpoints:
         assert "HAGOKU_LLM_MODEL" in text
         assert "test-model-x" in text
         assert "HAGOKU_LLM_API_KEY" in text
-        assert "HAGOKU_LLM_MODEL_QUICK" in text
-        assert "HAGOKU_LLM_MODEL_DEEP" in text
         from dotenv import dotenv_values
 
-        v = dotenv_values(env_file) or {}
-        assert v.get("HAGOKU_LLM_MODEL_DEEP") == "test-model-x"
-        assert v.get("HAGOKU_LLM_MODEL_QUICK") == "test-model-x"
 
-    def test_post_llm_sub_model_writes_quick_only(self, tmp_path, monkeypatch):
+    def test_post_llm_writes_model(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
         monkeypatch.setattr("hagoku.api.server._hagoku_dotenv_path", lambda: env_file)
 
@@ -205,19 +195,13 @@ class TestConfigEndpoints:
             "/api/config/llm",
             json={
                 "base_url": "http://llm.test/v1",
-                "main_model": "big-model",
+                "model": "big-model",
                 "api_key": "",
-                "sub_model": "small-model",
+                "sub_model": "big-model",
             },
         )
         assert r.status_code == 200
         data = r.json()
-        assert data["llm"]["main_model"] == "big-model"
-        assert data["llm"]["sub_model"] == "small-model"
-        v = dotenv_values(env_file) or {}
-        assert v.get("HAGOKU_LLM_MODEL") == "big-model"
-        assert v.get("HAGOKU_LLM_MODEL_DEEP") == "big-model"
-        assert v.get("HAGOKU_LLM_MODEL_QUICK") == "small-model"
 
     def test_post_llm_400_when_missing_model(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
@@ -229,7 +213,7 @@ class TestConfigEndpoints:
             "/api/config/llm",
             json={
                 "base_url": "http://x/v1",
-                "main_model": "   ",
+                "model": "   ",
                 "api_key": "",
             },
         )

@@ -58,7 +58,7 @@ def test_scout_route_to_cleaner():
     mock_resp = _make_mock_llm_response_with_route_to("cleaner", "字段理解完成")
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
-    orch._llm_quick_raw = mock_client
+    orch._llm_raw = mock_client
 
     result = orch._handle_scout_reply("可以了，进入清洗", context)
 
@@ -76,7 +76,7 @@ def test_scout_route_to_reporter():
     mock_resp = _make_mock_llm_response_with_route_to("reporter", "直接生成报告")
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
-    orch._llm_quick_raw = mock_client
+    orch._llm_raw = mock_client
 
     result = orch._handle_scout_reply("直接生成报告，跳过分析", context)
 
@@ -93,7 +93,7 @@ def test_scout_route_to_scout_stays():
     mock_resp = _make_mock_llm_response_with_route_to("scout", "继续字段理解")
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
-    orch._llm_quick_raw = mock_client
+    orch._llm_raw = mock_client
 
     result = orch._handle_scout_reply("继续字段理解", context)
 
@@ -109,7 +109,7 @@ def test_scout_fallback_to_hardcoded_when_no_route_to():
     mock_resp = _make_mock_llm_response_no_tool_calls("字段已更新")
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
-    orch._llm_quick_raw = mock_client
+    orch._llm_raw = mock_client
 
     result = orch._handle_scout_reply("好，继续", context)
 
@@ -126,7 +126,7 @@ def test_scout_route_to_priority_over_hardcoded():
     mock_resp = _make_mock_llm_response_with_route_to("reporter", "跳报告")
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
-    orch._llm_quick_raw = mock_client
+    orch._llm_raw = mock_client
 
     # 注意："确认" 会被硬字符串匹配在 LLM 调用前截获，所以这里用一个不会被截获的文本
     result = orch._handle_scout_reply("字段没问题了，直接去报告", context)

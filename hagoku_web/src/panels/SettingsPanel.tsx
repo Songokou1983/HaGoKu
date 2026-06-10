@@ -29,9 +29,6 @@ interface LlmFormState {
   base_url: string;
   main_model: string;
   api_key_configured: boolean;
-  meta_url: string;
-  meta_model: string;
-  meta_key: string;
 }
 
 interface ConfigResponse {
@@ -44,9 +41,6 @@ const emptyLlm: LlmFormState = {
   base_url: "",
   main_model: "",
   api_key_configured: false,
-  meta_url: "",
-  meta_model: "",
-  meta_key: "",
 };
 
 /** localStorage：用户是否展开过「高级设置」；与本机已配置 QUICK≠主 时强制展开无关 */
@@ -68,14 +62,11 @@ function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
   return { base_url, main_model, sub_model, api_key_configured };
 }
 
-function formFromNormalized(n: LlmConfigPayload, metaModel?: string): LlmFormState {
+function formFromNormalized(n: LlmConfigPayload): LlmFormState {
   return {
     base_url: n.base_url,
     main_model: n.main_model,
     api_key_configured: n.api_key_configured,
-    meta_url: "",
-    meta_model: metaModel || "",
-    meta_key: "",
   };
 }
 
@@ -86,11 +77,7 @@ function hadDistinctQuickName(n: LlmConfigPayload): boolean {
 
 export default function SettingsPanel() {
   const [llm, setLlm] = useState<LlmFormState>(emptyLlm);
-  const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
-  const [subModelQuick, setSubModelQuick] = useState("");
-  const [metaUrl, setMetaUrl] = useState("");
-  const [metaModel, setMetaModel] = useState("");
-  const [metaKey, setMetaKey] = useState("");
+
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -116,9 +103,7 @@ export default function SettingsPanel() {
         const raw = (d.llm ?? {}) as Record<string, unknown>;
         if (Object.keys(raw).length) {
           const n = normalizeLlmFromApi(raw);
-          const metaM = typeof raw.model_meta === "string" ? raw.model_meta : "";
-          setMetaModel(metaM);
-          setLlm(formFromNormalized(n, metaM));
+          setLlm(formFromNormalized(n));
           const distinct = hadDistinctQuickName(n);
           if (distinct) {
             setAdvancedLlmOpen(true);
@@ -194,8 +179,7 @@ export default function SettingsPanel() {
           base_url: llm.base_url.trim(),
           main_model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
-          sub_model: advancedLlmOpen ? subModelQuick.trim() : "",
-        }),
+                  }),
       });
       const d = (await r.json().catch(() => ({}))) as {
         detail?: string;
@@ -207,15 +191,8 @@ export default function SettingsPanel() {
         throw new Error(msg);
       }
       if (d.llm) {
-        if (d.meta_llm) {
-          const ml = d.meta_llm as Record<string, unknown>;
-          setMetaUrl(typeof ml.base_url === "string" ? ml.base_url : "");
-          setMetaModel(typeof ml.model === "string" ? ml.model : "");
-          if (typeof ml.api_key_configured === "boolean" && ml.api_key_configured) setMetaKey("••••");
-        }
-        const n2 = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
-        const metaM2 = typeof (d.meta_llm as any)?.model === "string" ? (d.meta_llm as any).model : "";
-        setLlm(formFromNormalized(n2, metaM2));
+        const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
+        setLlm(formFromNormalized(n));
         const distinct = hadDistinctQuickName(n);
         if (distinct) {
           setAdvancedLlmOpen(true);
@@ -305,69 +282,6 @@ export default function SettingsPanel() {
           />
           <p className="mt-1 text-ui-xs text-app-text-muted">必填。全流程用同一个在推理服务里注册的名字。</p>
         </Field>
-
-        <div className="border border-app-border rounded-md overflow-hidden">
-          <button
-            type="button"
-            onClick={() => {
-              setAdvancedLlmOpen((prev) => {
-                const next = !prev;
-                try {
-                  localStorage.setItem(ADVANCED_LLM_STORAGE_KEY, next ? "1" : "0");
-                } catch {
-                  /* ignore */
-                }
-                return next;
-              });
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-left text-ui-sm text-app-text bg-app-bg-secondary hover:bg-app-bg transition-colors cursor-pointer"
-          >
-            <SlidersHorizontal size={14} className="text-app-accent shrink-0" />
-            <span className="flex-1 font-medium">高级设置</span>
-            {advancedLlmOpen ? (
-              <ChevronDown size={14} className="text-app-text-muted shrink-0" />
-            ) : (
-              <ChevronRight size={14} className="text-app-text-muted shrink-0" />
-            )}
-          </button>
-          {advancedLlmOpen && (
-            <>
-            <div className="px-3 py-3 space-y-3 border-t border-app-border bg-app-bg text-ui-xs text-app-text leading-relaxed">
-              <p>
-                仍为<strong>同一套</strong>推理服务（上方网址与密钥不变）。保存时把「模型名称」写入{" "}
-                <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL</code> 与{" "}
-                <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL_DEEP</code>（统计、假设检验、回归等深度步）。
-              </p>
-              <p>
-                下面可选填 <code className="px-0.5 rounded bg-app-bg-secondary">HAGOKYU_LLM_MODEL_QUICK</code>：Scout、Cleaner、Reporter
-                等前面轻步会优先用该名字；<strong>留空则与上面「模型名称」相同</strong>。
-              </p>
-              <Field label="HAGOKYU_LLM_MODEL_QUICK（可选）" icon={<SlidersHorizontal size={14} />}>
-                <input
-                  className={inputClass}
-                  placeholder="与主模型名不同则填写；否则留空"
-                  autoComplete="off"
-                  value={subModelQuick}
-                  onChange={(e) => setSubModelQuick(e.target.value)}
-                />
-              </Field>
-            </div>
-            <div className="space-y-1 border-t border-app-border/40 pt-3 mt-3">
-              <h4 className="text-ui-xs font-medium text-app-text mb-1">HaGoKu Doctor（系统医生）</h4>
-              <p className="text-ui-xs text-app-text-muted/70 mb-2">独立 LLM 配置。Doctor 用独立模型诊断 pipeline 行为。留空则复用主 LLM 配置。</p>
-              <Field label="Meta Base URL" icon={<Globe size={14} />}>
-                <input className={inputClass} placeholder="不填则复用主 LLM 地址" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
-              </Field>
-              <Field label="Meta 模型名称" icon={<Cpu size={14} />}>
-                <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
-              </Field>
-              <Field label="Meta API Key" icon={<Key size={14} />}>
-                <input className={inputClass} type="password" placeholder="不填则复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
-              </Field>
-            </div>
-          </>
-          )}
-        </div>
 
         {/* 测试连接 */}
         <button

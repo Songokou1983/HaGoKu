@@ -14,7 +14,7 @@ from ..agents.reporter import ReporterAgent
 from ..agents.scout import ScoutAgent
 from ..config import HaGoKuConfig
 from ..guardrails.statistical import StatisticalGuardrails
-from ..llm.client import create_deep_client, create_quick_client, create_raw_client, create_structured_llm_client
+from ..llm.client import create_raw_client, create_structured_llm_client
 from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
@@ -142,9 +142,8 @@ class Orchestrator(
 
         # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
         self._llm_client: Any | None = None
-        self._llm_deep: Any | None = None  # 深度推理客户端（懒初始化）
-        self._llm_quick: Any | None = None  # 快速客户端（懒初始化，instructor 包装）
-        self._llm_quick_raw: Any | None = None  # 快速原始客户端（非 instructor 包装）
+        self._llm: Any | None = None  # 统一结构化客户端
+        self._llm_raw: Any | None = None  # 原始客户端
 
         # 设置模块级配置
         from ..tools.analysis import set_analysis_config
@@ -174,23 +173,25 @@ class Orchestrator(
     @property
     def llm_deep(self) -> Any:
         """深度推理客户端（懒初始化）"""
-        if self._llm_deep is None:
-            self._llm_deep = create_deep_client(self.config)
-        return self._llm_deep
 
     @property
     def llm_quick(self) -> Any:
         """快速客户端（懒初始化，instructor 包装，用于结构化输出）"""
-        if self._llm_quick is None:
-            self._llm_quick = create_quick_client(self.config)
-        return self._llm_quick
+
 
     @property
-    def llm_quick_raw(self) -> Any:
-        """快速原始客户端（懒初始化，非 instructor 包装，用于 _apply_scout_reply_with_llm 等 JSON-only 调用）"""
-        if self._llm_quick_raw is None:
-            self._llm_quick_raw = create_raw_client(self.config)
-        return self._llm_quick_raw
+    def llm(self) -> Any:
+        """统一结构化 LLM 客户端（instructor 包装）。"""
+        if self._llm is None:
+            self._llm = create_structured_llm_client(self.config.llm)
+        return self._llm
+
+    @property
+    def llm_raw(self) -> Any:
+        """原始客户端（非 instructor 包装，用于 JSON-only 调用）。"""
+        if self._llm_raw is None:
+            self._llm_raw = create_raw_client(self.config.llm)
+        return self._llm_raw
 
     def _reset_run_state(self) -> None:
         """新一轮分析前清理上次残留。"""
@@ -326,13 +327,13 @@ class Orchestrator(
         # 初始化 Agent（Step 4：Scribe 类已删，agent 不再接收 scribe= 参数）
         # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
         scout = ScoutAgent(self.config.llm, self.event_bus, orchestrator=self,
-                           llm_client=self.llm_quick, channel_logger=self._channel_logger)
+                           llm_client=self.llm, channel_logger=self._channel_logger)
         cleaner = CleanerAgent(self.config.llm, self.event_bus, orchestrator=self,
-                               llm_client=self.llm_quick)
+                               llm_client=self.llm)
         analyst = AnalystAgent(self.config.llm, self.event_bus, orchestrator=self,
-                               llm_client=self.llm_deep)
+                               llm_client=self.llm)
         reporter = ReporterAgent(llm_config=self.config.llm, event_bus=self.event_bus,
-                                 orchestrator=self, llm_client=self.llm_quick_raw)
+                                 orchestrator=self, llm_client=self.llm_raw)
 
         # Resume 支持
         df_clean = None

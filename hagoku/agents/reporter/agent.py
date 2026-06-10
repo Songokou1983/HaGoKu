@@ -180,7 +180,7 @@ class ReporterAgent(BaseAgent):
         _messages.append({"role": "user", "content": user})
         try:
             response = self._llm_client.chat.completions.create(
-                model=self.llm_config.model_quick or self.llm_config.model,
+                model=self.llm_config.model,
                 messages=_messages,
                 temperature=0.3,
                 max_tokens=4096,

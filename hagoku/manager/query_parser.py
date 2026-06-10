@@ -93,7 +93,7 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
     from hagoku.channel import build_messages
 
     response = client.chat.completions.create(
-        model=config.model_quick or config.model,
+        model=config.model,
         messages=build_messages(
             query=query,
             user_input=f"用户问题：{query}{hints_text}",

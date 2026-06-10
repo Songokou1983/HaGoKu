@@ -110,7 +110,7 @@ def _handle_mandatory_violations(
         llm_config = self.config.llm
         client = create_raw_client(llm_config)
         response = client.chat.completions.create(
-            model=llm_config.model_quick or llm_config.model,
+            model=llm_config.model,
             messages=build_messages(
                 query=risk_prompt,
                 user_input=risk_prompt,

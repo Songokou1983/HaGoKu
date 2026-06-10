@@ -302,49 +302,17 @@ export default function SettingsPanel() {
         <p className="text-ui-sm text-app-text leading-relaxed">
         </p>
 
-        <Field label="大模型服务网址" icon={<Globe size={14} />}>
-          <input
-            className={inputClass}
-            placeholder="例：http://127.0.0.1:8080/v1"
-            autoComplete="off"
-            value={llm.base_url}
-            onChange={(e) => {
-              setLlm({ ...llm, base_url: e.target.value });
-              setTestStatus("idle");
-              setTestMessage(null);
-            }}
-          />
-          <p className="mt-1 text-ui-xs text-app-text-muted">从你自己部署的推理软件说明里抄，一般末尾带 /v1。</p>
+        <Field label="Base URL" icon={<Globe size={14} />}>
+          <input className={inputClass} placeholder="https://api.openai.com/v1" autoComplete="off" value={llm.base_url}
+            onChange={(e) => { setLlm({ ...llm, base_url: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
-
-        <Field label="密钥" icon={<Key size={14} />}>
-          <input
-            className={inputClass}
-            type="text"
-            placeholder="粘贴 API 密钥"
-            value={apiKeyInput}
-            onChange={(e) => {
-              setApiKeyInput(e.target.value);
-              setTestStatus("idle");
-              setTestMessage(null);
-            }}
-          />
-          <p className="mt-1 text-ui-xs text-app-text-muted">和上面网址是同一套服务，只填一个密钥。</p>
+        <Field label="API Key" icon={<Key size={14} />}>
+          <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={apiKeyInput}
+            onChange={(e) => { setApiKeyInput(e.target.value); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
-
         <Field label="模型名称" icon={<Cpu size={14} />}>
-          <input
-            className={inputClass}
-            placeholder="在推理服务里注册的名字，例如 Qwen2.5-32B-Instruct"
-            autoComplete="off"
-            value={llm.main_model}
-            onChange={(e) => {
-              setLlm({ ...llm, main_model: e.target.value });
-              setTestStatus("idle");
-              setTestMessage(null);
-            }}
-          />
-          <p className="mt-1 text-ui-xs text-app-text-muted">必填。全流程用同一个在推理服务里注册的名字。</p>
+          <input className={inputClass} placeholder="gpt-4o-mini" autoComplete="off" value={llm.main_model}
+            onChange={(e) => { setLlm({ ...llm, main_model: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
 
         {/* 主模型：测试 + 保存 */}
@@ -370,14 +338,14 @@ export default function SettingsPanel() {
             HaGoKu Doctor（系统医生）
           </h3>
           <p className="text-ui-xs text-app-text-muted mb-3">独立 LLM。全部留空则复用主 LLM。填了任意一项则三项必须全填。</p>
-          <Field label="Doctor Base URL" icon={<Globe size={14} />}>
-            <input className={inputClass} placeholder="https://api.example.com/v1" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
+          <Field label="Base URL" icon={<Globe size={14} />}>
+            <input className={inputClass} placeholder="https://api.openai.com/v1" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
           </Field>
-          <Field label="Doctor 模型名称" icon={<Cpu size={14} />}>
-            <input className={inputClass} placeholder="doctor-model-name" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
-          </Field>
-          <Field label="Doctor API Key" icon={<Key size={14} />}>
+          <Field label="API Key" icon={<Key size={14} />}>
             <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+          </Field>
+          <Field label="模型名称" icon={<Cpu size={14} />}>
+            <input className={inputClass} placeholder="gpt-4o-mini" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
           </Field>
           <div className="flex gap-3 mt-3">
             <button type="button" disabled={testStatusMeta === "testing"} onClick={() => handleTestMeta()}

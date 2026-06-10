@@ -145,9 +145,6 @@ export default function SettingsPanel() {
           base_url: llm.base_url.trim(),
           main_model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
-          meta_base_url: metaUrl.trim(),
-          meta_model: metaModel.trim(),
-          meta_api_key: metaKey.trim(),
         }),
       });
       const d = (await r.json().catch(() => ({}))) as { ok?: boolean; reply?: string; detail?: string };
@@ -187,6 +184,33 @@ export default function SettingsPanel() {
       setTestStatus("fail");
       setTestMessage(e instanceof Error ? e.message : "连接失败");
       setTestTime(new Date().toLocaleTimeString());
+    }
+  };
+
+  const handleSaveMeta = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch("/api/config/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url: llm.base_url.trim(),
+          model: llm.main_model.trim(),
+          api_key: apiKeyInput.trim(),
+          meta_base_url: metaUrl.trim(),
+          meta_model: metaModel.trim(),
+          meta_api_key: metaKey.trim(),
+        }),
+      });
+      const d = (await r.json().catch(() => ({}))) as { detail?: string; hint?: string; llm?: LlmConfigPayload };
+      if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : `保存失败 (${r.status})`);
+      setSaved(true);
+      setSaveHint(typeof d.hint === "string" ? d.hint : null);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -343,6 +367,11 @@ export default function SettingsPanel() {
               className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed text-app-text transition-colors cursor-pointer">
               {testStatus === "testing" ? <Loader2 size={14} className="animate-spin" /> : testStatus === "ok" ? <CheckCircle2 size={14} className="text-green-500" /> : testStatus === "fail" ? <XCircle size={14} className="text-app-error" /> : <Zap size={14} />}
               {testStatus === "testing" ? "测试中…" : "测试连接"}
+            </button>
+            <button type="button" onClick={() => void handleSaveMeta()} disabled={saving || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-ui-base rounded transition-colors cursor-pointer">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+              {saving ? "保存中…" : saved ? "已保存" : "保存"}
             </button>
           </div>
         </div>

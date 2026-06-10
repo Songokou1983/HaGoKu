@@ -256,6 +256,12 @@ async def post_llm_config(req: LlmConfigBody):
     try:
         _dotenv_set(path, "HAGOKU_LLM_BASE_URL", base_url)
         _dotenv_set(path, "HAGOKU_LLM_MODEL", model)
+        if req.meta_base_url.strip():
+            _dotenv_set(path, "HAGOKU_META_LLM_BASE_URL", req.meta_base_url.strip())
+        if req.meta_model.strip():
+            _dotenv_set(path, "HAGOKU_META_LLM_MODEL", req.meta_model.strip())
+        if req.meta_api_key.strip():
+            _dotenv_set(path, "HAGOKU_META_LLM_API_KEY", req.meta_api_key.strip())
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
         # 重新加载 .env 到当前进程，让后续请求立即使用新配置

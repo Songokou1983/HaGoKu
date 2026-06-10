@@ -28,6 +28,23 @@ def _create_http_client() -> httpx.Client:
     )
 
 
+def create_meta_client(config: Any) -> Any:
+    """HaGoKu Doctor 独立 LLM 客户端。未配置时回退到 pipeline。"""
+    from ..config import HaGoKuConfig
+
+    if isinstance(config, HaGoKuConfig) and config.meta_llm.base_url and config.meta_llm.model:
+        cfg = LLMConfig(
+            model=config.meta_llm.model,
+            base_url=config.meta_llm.base_url,
+            api_key=config.meta_llm.api_key,
+            temperature=0.0,
+            max_tokens=8192,
+        )
+    else:
+        cfg = _unwrap_llm(config)
+    return create_structured_llm_client(cfg)
+
+
 def create_structured_llm_client(llm_config: LLMConfig) -> Any:
     """
     创建 instructor 包装的 OpenAI 客户端（结构化输出）

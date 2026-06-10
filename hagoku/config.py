@@ -34,6 +34,14 @@ class LLMConfig(BaseModel):
     temperature: float = 0.6  # 生成温度
     max_tokens: int = 8192  # 最大 token 数
 
+class MetaLLMConfig(BaseModel):
+    """HaGoKu Doctor 独立 LLM 配置。全部留空则复用 pipeline LLM。"""
+
+    base_url: str = ""
+    api_key: str = "none"
+    model: str = ""
+
+
 
 
 
@@ -125,6 +133,7 @@ class HaGoKuConfig(BaseModel):
     """HaGoKu Studio 全局配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    meta_llm: MetaLLMConfig = Field(default_factory=MetaLLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
@@ -165,6 +174,12 @@ class HaGoKuConfig(BaseModel):
             config.llm.base_url = v
         if v := os.getenv("HAGOKU_LLM_API_KEY") or os.getenv("HAGOKYU_LLM_API_KEY"):
             config.llm.api_key = v
+        if v := os.getenv("HAGOKU_META_LLM_BASE_URL"):
+            config.meta_llm.base_url = v
+        if v := os.getenv("HAGOKU_META_LLM_API_KEY"):
+            config.meta_llm.api_key = v
+        if v := os.getenv("HAGOKU_META_LLM_MODEL"):
+            config.meta_llm.model = v
         if v := os.getenv("HAGOKU_WORK_DIR") or os.getenv("HAGOKYU_WORK_DIR"):
             config.work_dir = Path(v).expanduser()
         if v := os.getenv("HAGOKU_PROJECT_DIR") or os.getenv("HAGOKYU_PROJECT_DIR"):

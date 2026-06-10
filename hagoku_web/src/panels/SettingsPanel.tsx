@@ -163,12 +163,20 @@ export default function SettingsPanel() {
   };
 
   const handleTestMeta = async () => {
+    const hasSome = !!(metaUrl.trim() || metaModel.trim() || metaKey.trim());
+    const hasAll = !!(metaUrl.trim() && metaModel.trim() && metaKey.trim());
+    if (hasSome && !hasAll) {
+      setTestStatus("fail");
+      setTestMessage("Doctor 填了部分字段——要填就三项全填，要不填就全部留空复用主 LLM");
+      setTestTime(new Date().toLocaleTimeString());
+      return;
+    }
     setTestStatus("testing");
     setTestMessage(null);
     setTestTime(null);
-    const url = metaUrl.trim() || llm.base_url.trim();
-    const model = metaModel.trim() || llm.main_model.trim();
-    const key = metaKey.trim() || apiKeyInput.trim();
+    const url = hasAll ? metaUrl.trim() : llm.base_url.trim();
+    const model = hasAll ? metaModel.trim() : llm.main_model.trim();
+    const key = hasAll ? metaKey.trim() : apiKeyInput.trim();
     try {
       const r = await fetch("/api/config/llm/test", {
         method: "POST",
@@ -188,6 +196,12 @@ export default function SettingsPanel() {
   };
 
   const handleSaveMeta = async () => {
+    const hasSome = !!(metaUrl.trim() || metaModel.trim() || metaKey.trim());
+    const hasAll = !!(metaUrl.trim() && metaModel.trim() && metaKey.trim());
+    if (hasSome && !hasAll) {
+      setSaveError("Doctor 填了部分字段——要填就三项全填，要不填就全部留空");
+      return;
+    }
     setSaving(true);
     try {
       const r = await fetch("/api/config/llm", {
@@ -352,15 +366,15 @@ export default function SettingsPanel() {
             <Zap size={14} className="text-app-accent" />
             HaGoKu Doctor（系统医生）
           </h3>
-          <p className="text-ui-xs text-app-text-muted mb-3">独立 LLM 配置。全部留空则复用上方主 LLM。</p>
+          <p className="text-ui-xs text-app-text-muted mb-3">独立 LLM。全部留空则复用主 LLM。填了任意一项则三项必须全填。</p>
           <Field label="Doctor Base URL" icon={<Globe size={14} />}>
-            <input className={inputClass} placeholder="留空复用主 LLM 地址" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
+            <input className={inputClass} placeholder="https://api.example.com/v1" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
           </Field>
           <Field label="Doctor 模型名称" icon={<Cpu size={14} />}>
-            <input className={inputClass} placeholder="留空复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
+            <input className={inputClass} placeholder="doctor-model-name" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
           </Field>
           <Field label="Doctor API Key" icon={<Key size={14} />}>
-            <input className={inputClass} type="text" placeholder="留空复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+            <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
           <div className="flex gap-3 mt-3">
             <button type="button" disabled={(!metaUrl.trim() && !llm.base_url.trim()) || testStatus === "testing"} onClick={() => handleTestMeta()}

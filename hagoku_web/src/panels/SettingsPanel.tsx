@@ -307,15 +307,15 @@ export default function SettingsPanel() {
           Pipeline LLM
         </h3>
         <Field label="Base URL" icon={<Globe size={14} />}>
-          <input className={inputClass} placeholder="https://api.openai.com/v1" autoComplete="off" value={llm.base_url}
+          <input className={inputClass} autoComplete="off" value={llm.base_url}
             onChange={(e) => { setLlm({ ...llm, base_url: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
         <Field label="API Key" icon={<Key size={14} />}>
-          <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={apiKeyInput}
+          <input className={inputClass} type="text" autoComplete="off" value={apiKeyInput}
             onChange={(e) => { setApiKeyInput(e.target.value); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
         <Field label="模型名称" icon={<Cpu size={14} />}>
-          <input className={inputClass} placeholder="gpt-4o-mini" autoComplete="off" value={llm.main_model}
+          <input className={inputClass} autoComplete="off" value={llm.main_model}
             onChange={(e) => { setLlm({ ...llm, main_model: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
 
@@ -343,13 +343,13 @@ export default function SettingsPanel() {
           </h3>
           <p className="text-ui-xs text-app-text-muted mb-3">独立 LLM。全部留空则复用主 LLM。填了任意一项则三项必须全填。</p>
           <Field label="Base URL" icon={<Globe size={14} />}>
-            <input className={inputClass} placeholder="https://api.openai.com/v1" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
+            <input className={inputClass} autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
           </Field>
           <Field label="API Key" icon={<Key size={14} />}>
-            <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+            <input className={inputClass} type="text" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
           <Field label="模型名称" icon={<Cpu size={14} />}>
-            <input className={inputClass} placeholder="gpt-4o-mini" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
+            <input className={inputClass} autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
           </Field>
           <div className="flex gap-3 mt-3">
             <button type="button" disabled={testStatusMeta === "testing"} onClick={() => handleTestMeta()}

@@ -189,7 +189,6 @@ async def get_config():
         m = (cfg.llm.model or "").strip()
         mq_eff = ((cfg.llm.model_quick or m) or "").strip() or m
         md_eff = ((cfg.llm.model_deep or m) or "").strip() or m
-        mm_eff = ((cfg.llm.model_meta or m) or "").strip() or m
         main_eff = m or md_eff
         sub_display = "" if mq_eff == main_eff else mq_eff
         return {
@@ -200,8 +199,12 @@ async def get_config():
                 "model": main_eff,
                 "model_quick": mq_eff,
                 "model_deep": md_eff,
-                "model_meta": mm_eff,
                 "api_key_configured": api_key_configured,
+            },
+            "meta_llm": {
+                "base_url": cfg.meta_llm.base_url or "",
+                "model": cfg.meta_llm.model or "",
+                "api_key_configured": bool(cfg.meta_llm.api_key and cfg.meta_llm.api_key != "none"),
             },
         }
     except Exception:
@@ -213,7 +216,11 @@ async def get_config():
                 "model": "",
                 "model_quick": "",
                 "model_deep": "",
-                "model_meta": "",
+                "api_key_configured": False,
+            },
+            "meta_llm": {
+                "base_url": "",
+                "model": "",
                 "api_key_configured": False,
             },
         }
@@ -228,7 +235,9 @@ class LlmConfigBody(BaseModel):
     main_model: str
     api_key: str = ""
     sub_model: str = ""
+    meta_base_url: str = ""
     meta_model: str = ""
+    meta_api_key: str = ""
 
 
 @app.post("/api/config/llm")
@@ -250,8 +259,15 @@ async def post_llm_config(req: LlmConfigBody):
         _dotenv_set(path, "HAGOKU_LLM_MODEL", main)
         _dotenv_set(path, "HAGOKU_LLM_MODEL_DEEP", main)
         _dotenv_set(path, "HAGOKU_LLM_MODEL_QUICK", sub)
-        meta = req.meta_model.strip() or main
-        _dotenv_set(path, "HAGOKU_LLM_MODEL_META", meta)
+        meta_url = req.meta_base_url.strip()
+        meta_model = req.meta_model.strip()
+        meta_key = req.meta_api_key.strip()
+        if meta_url:
+            _dotenv_set(path, "HAGOKU_META_LLM_BASE_URL", meta_url)
+        if meta_model:
+            _dotenv_set(path, "HAGOKU_META_LLM_MODEL", meta_model)
+        if meta_key:
+            _dotenv_set(path, "HAGOKU_META_LLM_API_KEY", meta_key)
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
         # 重新加载 .env 到当前进程，让后续请求立即使用新配置
@@ -263,7 +279,6 @@ async def post_llm_config(req: LlmConfigBody):
         api_key_configured = bool(akv and akv.lower() != "none")
         mq_eff = str(vals.get("HAGOKU_LLM_MODEL_QUICK") or sub).strip() or main
         md_eff = str(vals.get("HAGOKU_LLM_MODEL_DEEP") or main).strip() or main
-        mm_eff = str(vals.get("HAGOKU_LLM_MODEL_META") or meta).strip() or main
         sub_display = "" if mq_eff == main else mq_eff
     except HTTPException:
         raise
@@ -280,8 +295,12 @@ async def post_llm_config(req: LlmConfigBody):
             "model": main,
             "model_quick": mq_eff,
             "model_deep": md_eff,
-            "model_meta": mm_eff,
             "api_key_configured": api_key_configured,
+        },
+        "meta_llm": {
+            "base_url": str(vals.get("HAGOKU_META_LLM_BASE_URL") or meta_url or ""),
+            "model": str(vals.get("HAGOKU_META_LLM_MODEL") or meta_model or ""),
+            "api_key_configured": bool(meta_key),
         },
     }
 

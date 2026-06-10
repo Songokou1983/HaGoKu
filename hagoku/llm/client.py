@@ -131,18 +131,34 @@ def create_meta_client(config: Any) -> Any:
     """
     创建 Meta 层客户端（HaGoKu Doctor 诊断/巡检/守门用）
 
-    模型选择: llm.model_meta or llm.model
-    独立于 pipeline 的 LLM 客户端——Doctor 需要独立视角诊断 pipeline 行为。
+    使用独立的 MetaLLMConfig。未配置时回退到 pipeline LLM。
+    Doctor 需要独立视角诊断 pipeline 行为——共用模型会失去诊断能力。
     """
-    llm = _unwrap_llm(config)
-    meta_config = LLMConfig(
-        model=llm.model_meta or llm.model,
-        base_url=llm.base_url,
-        api_key=llm.api_key,
-        temperature=0.0,  # 诊断/巡检需要确定性输出
-        max_tokens=8192,
-    )
-    return create_structured_llm_client(meta_config)
+    from ..config import HaGoKuConfig
+
+    if isinstance(config, HaGoKuConfig):
+        cfg = config
+    else:
+        cfg = None
+
+    if cfg and cfg.meta_llm.base_url and cfg.meta_llm.model:
+        meta_client_config = LLMConfig(
+            model=cfg.meta_llm.model,
+            base_url=cfg.meta_llm.base_url,
+            api_key=cfg.meta_llm.api_key,
+            temperature=0.0,
+            max_tokens=8192,
+        )
+    else:
+        llm = _unwrap_llm(config)
+        meta_client_config = LLMConfig(
+            model=llm.model,
+            base_url=llm.base_url,
+            api_key=llm.api_key,
+            temperature=0.0,
+            max_tokens=8192,
+        )
+    return create_structured_llm_client(meta_client_config)
 
 
 # 全局 AsyncOpenAI 客户端单例（连接复用）

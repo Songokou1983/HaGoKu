@@ -83,6 +83,11 @@ export default function SettingsPanel() {
   const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
   const [subModelQuick, setSubModelQuick] = useState("");
   const [metaModel, setMetaModel] = useState("");
+  const [metaUrl, setMetaUrl] = useState("");
+  const [metaKey, setMetaKey] = useState("");
+  const [metaModel, setMetaModel] = useState("");
+  const [metaUrl, setMetaUrl] = useState("");
+  const [metaKey, setMetaKey] = useState("");
     const [apiKeyInput, setApiKeyInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -108,8 +113,7 @@ export default function SettingsPanel() {
         const raw = (d.llm ?? {}) as Record<string, unknown>;
         if (Object.keys(raw).length) {
           const n = normalizeLlmFromApi(raw);
-          const metaFromApi = typeof raw.model_meta === "string" ? raw.model_meta : "";
-          setMetaModel(metaFromApi);
+          setMetaModel(typeof raw.model_meta === "string" ? raw.model_meta : "");
           setLlm(formFromNormalized(n, metaFromApi));
           const distinct = hadDistinctQuickName(n);
           if (distinct) {
@@ -187,7 +191,12 @@ export default function SettingsPanel() {
           main_model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
           sub_model: advancedLlmOpen ? subModelQuick.trim() : "",
+        meta_base_url: metaUrl.trim(),
         meta_model: metaModel.trim(),
+        meta_api_key: metaKey.trim(),
+        meta_base_url: metaUrl.trim(),
+        meta_model: metaModel.trim(),
+        meta_api_key: metaKey.trim(),
         }),
       });
       const d = (await r.json().catch(() => ({}))) as {
@@ -199,7 +208,15 @@ export default function SettingsPanel() {
         const msg = typeof d.detail === "string" ? d.detail : `保存失败 (${r.status})`;
         throw new Error(msg);
       }
-      if (d.llm) {
+      if (d.meta_llm) {
+            const ml = d.meta_llm as Record<string, unknown>;
+            setMetaUrl(typeof ml.base_url === "string" ? ml.base_url : "");
+            setMetaModel(typeof ml.model === "string" ? ml.model : "");
+            if (typeof ml.api_key_configured === "boolean" && ml.api_key_configured) {
+              setMetaKey("••••");
+            }
+          }
+          if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
         const raw2 = (d.llm ?? {}) as Record<string, unknown>;
         const metaFromApi2 = typeof raw2.model_meta === "string" ? raw2.model_meta : "";
@@ -339,12 +356,42 @@ export default function SettingsPanel() {
                   onChange={(e) => setSubModelQuick(e.target.value)}
                 />
               </Field>
+            <div className="space-y-1 border-t border-app-border/40 pt-3 mt-3">
+              <h4 className="text-ui-xs font-medium text-app-text mb-1">HaGoKu Doctor（系统医生）</h4>
+              <p className="text-ui-xs text-app-text-muted/70 mb-2">
+                独立 LLM 配置——Doctor 用独立模型诊断 pipeline 行为。留空则复用主 LLM。
+              </p>
+              <Field label="Meta Base URL" icon={<Globe size={14} />}>
+                <input className={inputClass} placeholder="不填则复用主 LLM 地址" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
+              </Field>
+              <Field label="Meta 模型名称" icon={<Cpu size={14} />}>
+                <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
+              </Field>
+              <Field label="Meta API Key" icon={<Key size={14} />}>
+                <input className={inputClass} type="password" placeholder="不填则复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+              </Field>
+            </div>
             <div className="space-y-1">
               <h4 className="text-ui-xs font-medium text-app-text-muted mb-1">HaGoKu Doctor（系统医生）</h4>
               <p className="text-ui-xs text-app-text-muted/70 mb-2">Meta 层独立模型，用于诊断 pipeline 行为和巡检。留空则复用主模型。</p>
               <Field label="HAGOKYU_LLM_MODEL_META（可选）" icon={<Zap size={14} />}>
                 <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
               </Field>
+            <div className="space-y-1 border-t border-app-border/40 pt-3 mt-3">
+              <h4 className="text-ui-xs font-medium text-app-text mb-1">HaGoKu Doctor（系统医生）</h4>
+              <p className="text-ui-xs text-app-text-muted/70 mb-2">
+                独立 LLM 配置——Doctor 用独立模型诊断 pipeline 行为。留空则复用主 LLM。
+              </p>
+              <Field label="Meta Base URL" icon={<Globe size={14} />}>
+                <input className={inputClass} placeholder="不填则复用主 LLM 地址" autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
+              </Field>
+              <Field label="Meta 模型名称" icon={<Cpu size={14} />}>
+                <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
+              </Field>
+              <Field label="Meta API Key" icon={<Key size={14} />}>
+                <input className={inputClass} type="password" placeholder="不填则复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+              </Field>
+            </div>
             </div>
           )}
         </div>

@@ -187,18 +187,10 @@ async def get_config():
         ak = (cfg.llm.api_key or "").strip()
         api_key_configured = bool(ak and ak.lower() != "none")
         m = (cfg.llm.model or "").strip()
-        mq_eff = ((cfg.llm.model_quick or m) or "").strip() or m
-        md_eff = ((cfg.llm.model_deep or m) or "").strip() or m
-        main_eff = m or md_eff
-        sub_display = "" if mq_eff == main_eff else mq_eff
         return {
             "llm": {
                 "base_url": cfg.llm.base_url or "",
-                "main_model": main_eff,
-                "sub_model": sub_display,
-                "model": main_eff,
-                "model_quick": mq_eff,
-                "model_deep": md_eff,
+                "model": m,
                 "api_key_configured": api_key_configured,
             },
             "meta_llm": {
@@ -211,28 +203,15 @@ async def get_config():
         return {
             "llm": {
                 "base_url": "",
-                "main_model": "",
-                "sub_model": "",
                 "model": "",
-                "model_quick": "",
-                "model_deep": "",
-                "api_key_configured": False,
+                "api_key_configured": false,
             },
             "meta_llm": {
                 "base_url": "",
                 "model": "",
-                "api_key_configured": False,
+                "api_key_configured": false,
             },
         }
-
-
-class LlmConfigBody(BaseModel):
-    """OpenAI 兼容服务：网址 + 密钥 + 模型名称 + 可选子模型/Meta 模型名；写入 ~/.hagoku/.env。"""
-
-    model_config = ConfigDict(protected_namespaces=())
-
-    base_url: str
-    model: str
     api_key: str = ""
     sub_model: str = ""
     meta_base_url: str = ""

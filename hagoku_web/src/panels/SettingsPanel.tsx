@@ -47,17 +47,8 @@ const emptyLlm: LlmFormState = {
 function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
   const base_url = typeof raw.base_url === "string" ? raw.base_url : "";
   const api_key_configured = typeof raw.api_key_configured === "boolean" ? raw.api_key_configured : false;
-  let main_model = typeof raw.main_model === "string" ? raw.main_model : "";
-  let sub_model = typeof raw.sub_model === "string" ? raw.sub_model : "";
-  if (!main_model) {
-    const m = typeof raw.model === "string" ? raw.model : "";
-    const md = typeof raw.model_deep === "string" ? raw.model_deep : "";
-    main_model = (m || md).trim();
-  }
-  if (!sub_model && typeof raw.model_quick === "string" && raw.model_quick.trim() && raw.model_quick.trim() !== main_model) {
-    sub_model = raw.model_quick.trim();
-  }
-  return { base_url, main_model, sub_model, api_key_configured };
+  const model = typeof raw.model === "string" ? raw.model : "";
+  return { base_url, main_model: model, sub_model: "", api_key_configured };
 }
 
 function formFromNormalized(n: LlmConfigPayload): LlmFormState {

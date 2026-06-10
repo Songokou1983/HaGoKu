@@ -83,7 +83,7 @@ export default function SettingsPanel() {
   const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
   const [subModelQuick, setSubModelQuick] = useState("");
   const [metaModel, setMetaModel] = useState("");
-  const [apiKeyInput, setApiKeyInput] = useState("");
+    const [apiKeyInput, setApiKeyInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -201,7 +201,9 @@ export default function SettingsPanel() {
       }
       if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
-        setLlm(formFromNormalized(n));
+        const metaFromApi = typeof raw.model_meta === "string" ? raw.model_meta : "";
+        setMetaModel(metaFromApi);
+        setLlm(formFromNormalized(n, metaFromApi));
         const distinct = hadDistinctQuickName(n);
         if (distinct) {
           setAdvancedLlmOpen(true);
@@ -336,6 +338,13 @@ export default function SettingsPanel() {
                   onChange={(e) => setSubModelQuick(e.target.value)}
                 />
               </Field>
+            <div className="space-y-1">
+              <h4 className="text-ui-xs font-medium text-app-text-muted mb-1">HaGoKu Doctor（系统医生）</h4>
+              <p className="text-ui-xs text-app-text-muted/70 mb-2">Meta 层独立模型，用于诊断 pipeline 行为和巡检。留空则复用主模型。</p>
+              <Field label="HAGOKYU_LLM_MODEL_META（可选）" icon={<Zap size={14} />}>
+                <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
+              </Field>
+            </div>
             </div>
           )}
         </div>

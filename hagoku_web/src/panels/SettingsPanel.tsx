@@ -281,6 +281,23 @@ export default function SettingsPanel() {
           <p className="mt-1 text-ui-xs text-app-text-muted">必填。全流程用同一个在推理服务里注册的名字。</p>
         </Field>
 
+        {/* 主模型：测试 + 保存 */}
+        <div className="flex gap-3 mt-3">
+          <button type="button" disabled={!hasFields || testStatus === "testing"} onClick={() => void handleTest()}
+            className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed text-app-text transition-colors cursor-pointer">
+            {testStatus === "testing" ? <Loader2 size={14} className="animate-spin" /> : testStatus === "ok" ? <CheckCircle2 size={14} className="text-green-500" /> : testStatus === "fail" ? <XCircle size={14} className="text-app-error" /> : <Zap size={14} />}
+            {testStatus === "testing" ? "测试中…" : "测试连接"}
+          </button>
+          <button type="button" onClick={() => void handleSave()} disabled={saving || loading}
+            className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-ui-base rounded transition-colors cursor-pointer">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+            {saving ? "保存中…" : saved ? "已保存" : "保存"}
+          </button>
+        </div>
+        {testMessage && <div className={`text-ui-xs leading-relaxed px-2 py-1.5 rounded border ${testStatus === "ok" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-app-error/30 bg-app-error/10 text-app-error"}`}><span>{testMessage}</span>{testTime && <span className="ml-2 opacity-70">&mdash; {testStatus === "ok" ? "成功" : "失败"} {testTime}</span>}</div>}
+        {saveError && <p className="flex items-center gap-2 text-ui-sm text-app-error"><AlertCircle size={14} className="shrink-0"/>{saveError}</p>}
+        {saveHint && <p className="text-ui-xs text-app-text-muted leading-relaxed border border-app-border rounded px-2 py-1.5 bg-app-bg-secondary">{saveHint}</p>}
+
         <div className="border-t border-app-border/50 pt-4 mt-2">
           <h3 className="text-ui-sm font-medium text-app-text mb-3 flex items-center gap-1.5">
             <Zap size={14} className="text-app-accent" />
@@ -296,68 +313,6 @@ export default function SettingsPanel() {
           <Field label="Doctor API Key" icon={<Key size={14} />}>
             <input className={inputClass} type="text" placeholder="留空复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
-        </div>
-
-        {/* 测试连接 */}
-        <button
-          type="button"
-          disabled={!hasFields || testStatus === "testing"}
-          onClick={() => void handleTest()}
-          className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border
-                     bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed
-                     text-app-text transition-colors duration-150 cursor-pointer"
-        >
-          {testStatus === "testing" ? (
-            <Loader2 size={14} className="animate-spin shrink-0" />
-          ) : testStatus === "ok" ? (
-            <CheckCircle2 size={14} className="text-green-500 shrink-0" />
-          ) : testStatus === "fail" ? (
-            <XCircle size={14} className="text-app-error shrink-0" />
-          ) : (
-            <Zap size={14} className="shrink-0" />
-          )}
-          {testStatus === "testing" ? "测试中…" : "测试模型连接"}
-        </button>
-        {testMessage && (
-          <div
-            className={`text-ui-xs leading-relaxed px-2 py-1.5 rounded border ${
-              testStatus === "ok"
-                ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
-                : "border-app-error/30 bg-app-error/10 text-app-error"
-            }`}
-          >
-            <span>{testMessage}</span>
-            {testTime && (
-              <span className="ml-2 opacity-70">
-                &mdash; {testStatus === "ok" ? "成功" : "失败"} {testTime}
-              </span>
-            )}
-          </div>
-        )}
-
-        {saveError && (
-          <p className="flex items-center gap-2 text-ui-sm text-app-error">
-            <AlertCircle size={14} className="shrink-0" />
-            {saveError}
-          </p>
-        )}
-        {saveHint && (
-          <p className="text-ui-xs text-app-text-muted leading-relaxed border border-app-border rounded px-2 py-1.5 bg-app-bg-secondary">
-            {saveHint}
-          </p>
-        )}
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed
-                       text-white text-ui-base rounded transition-colors duration-150 cursor-pointer"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-            {saving ? "保存中…" : saved ? "已保存" : "保存设置"}
-          </button>
         </div>
       </div>
     </div>

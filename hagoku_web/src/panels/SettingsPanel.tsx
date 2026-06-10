@@ -68,11 +68,6 @@ function formFromNormalized(n: LlmConfigPayload): LlmFormState {
   };
 }
 
-function hadDistinctQuickName(n: LlmConfigPayload): boolean {
-  const s = n.sub_model.trim();
-  return Boolean(s && s !== n.main_model.trim());
-}
-
 export default function SettingsPanel() {
   const [llm, setLlm] = useState<LlmFormState>(emptyLlm);
   const [metaUrl, setMetaUrl] = useState("");
@@ -106,7 +101,6 @@ export default function SettingsPanel() {
           const metaFromApi = (d.meta_llm as any)?.model || "";
           setMetaModel(metaFromApi);
           setLlm(formFromNormalized(n));
-          const distinct = hadDistinctQuickName(n);
           if (distinct) {
             setAdvancedLlmOpen(true);
             setSubModelQuick(n.sub_model.trim());
@@ -199,7 +193,6 @@ export default function SettingsPanel() {
       if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
         setLlm(formFromNormalized(n));
-        const distinct = hadDistinctQuickName(n);
         if (distinct) {
           setAdvancedLlmOpen(true);
           setSubModelQuick(n.sub_model.trim());

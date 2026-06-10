@@ -15,18 +15,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 业务关键词列表 / 中文语义正则（铁律 1 配套）
 - **项目文档/AI 输出/记忆绑具体 LLM 模型名 / 部署 URL（铁律 9）**
 - **全文重写 prompt.md / 删 system_prompt 拼接片段 / 无 dump 对比改提示词（铁律 10）**
+- **绕过 `build_messages()` 直接构造发给 LLM 的 messages（通道守门 / Phase 0）**
 
 **绝对要做**：
 - LLM 走 `tool_calls` + Pydantic 收结构（铁律 4 通道）
 - LLM 失败 `raise RuntimeError`，让用户看见（铁律 7）
 - 状态显式注入 prompt，不偷影响 LLM（铁律 8）
+- **所有 Agent 调 LLM 必须走 `build_messages()`，不准直接构造 messages（通道守门）**
 
-**5 分钟读这三处**（按顺序）：
+**5 分钟读这四处**（按顺序）：
 1. [`PROJECT.md`](PROJECT.md) 顶部核心信条
-2. 本文件「铁律」节（0-10 全部）
+2. 本文件「铁律」节（0-11 全部）
 3. `PROJECT.md` §「代码边界」+「通道完备性十律」
+4. [`docs/superpowers/specs/2026-06-09-meta-layer-design.md`](docs/superpowers/specs/2026-06-09-meta-layer-design.md) — HaGoKu Doctor 设计
 
-**不确定时**：见下方「拿不准时问自己唯一的问题」节。
+**不确定时**：见下方「拿不准时问自己两个问题」节。
 
 ---
 
@@ -417,15 +420,23 @@ def test_scout_prompt_contains_ignore_role_instruction():
 ```
 不写不改。Code review 没有自检答案 → 直接拒。
 
-### 拿不准时问自己唯一一个问题
+### 拿不准时问自己两个问题
 
-> "这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"
+> **问题 1**："这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"
 
 | 答案 | 行动 |
 |------|------|
 | 能 → 这是 LLM 的活 | 删掉代码。prompt 里给的是分析目标和数据，不是 id→false 这种结论 |
 | 不能（纯运算/IO/序列化）→ 代码的活 | 写代码，但确保不夹带业务判断 |
 | 拿不准 | 默认是 LLM 的活（LLM 主导是项目第一原则） |
+
+> **问题 2**："我正在拼装传给 LLM 的 messages——我是在追加信息，还是在筛选/删减/重排信息？"
+
+| 答案 | 行动 |
+|------|------|
+| 筛选/删减/重排 → 你在替 LLM 决定它应该看到什么 | 删掉。走 `build_messages()`，只追加不筛选 |
+| 追加 → 可以 | 确保用 `build_messages()` 而非直接构造 messages |
+| 不确定 | 走 `build_messages()`——它是唯一合法的 messages 构造入口 |
 
 ## hagoku/ — HaGoKu Studio 多 Agent 数据分析平台
 

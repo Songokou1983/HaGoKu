@@ -1,22 +1,31 @@
-# HaGoKu Meta 层设计：HaGoKu Agent
+# HaGoKu Doctor — Meta 层设计（系统医生 + Prompt Lab 模拟器）
 
-> 状态：设计稿 v4 | 日期：2026-06-09 | 作者：用户 + AI
+> 状态：设计稿 v5 | 日期：2026-06-10 | 作者：用户 + AI
+
+## v4→v5 changelog
+
+| 变更 | 类型 |
+|------|------|
+| 新增 § 通道守门：`build_messages()` 通道函数 + lint hook + pre-commit hook | 🔴 必改 |
+| 新增 § 四道防线关系表：通道函数 → inspect → gate → diagnose | 🆕 |
+| Phase 0 插入所有阶段之前：先建通道守门，再建 HaGoKu Doctor | 🔴 必改 |
+| 铁律 11（通道优先律）引用本文档 | 🟡 应改 |
 
 ## v3→v4 changelog
 
 | 变更 | 类型 |
 |------|------|
-| 标题从"Prompt Lab + HaGoKu Agent"改为"HaGoKu Agent" | 🔴 必改 |
+| 标题从"Prompt Lab + HaGoKu Doctor"改为"HaGoKu Doctor" | 🔴 必改 |
 | 架构翻转：Agent 为主，Prompt Lab 是它的工具/API | 🔴 必改 |
 | 新增 § 定位：一段话定死"维修员 + 模拟器"主从关系 | 🆕 |
-| 新增 § Meta Agent 自检回路：启动前对比 git HEAD diff | 🆕 |
+| 新增 § HaGoKu Doctor 自检回路：启动前对比 git HEAD diff | 🆕 |
 | 新增 § 修复方案格式：结构化 schema（哪里坏/为什么/改哪行/预期效果） | 🆕 |
 | 新增 § 成功度量：4 个指标 | 🆕 |
 | 新增 § 替代方案对比：为什么不是 LangSmith/Langfuse | 🆕 |
 | 新增 § dump 完整性自检 | 🆕 |
 | 新增 § 成本估算 | 🆕 |
 | 新增 § 维护者说明 | 🆕 |
-| HaGoKu Agent 内部架构重写：run_scenario() 入口 + 内部多轮 loop | 🔴 必改 |
+| HaGoKu Doctor 内部架构重写：run_scenario() 入口 + 内部多轮 loop | 🔴 必改 |
 | 巡检/诊断/守门重命名为"三种工作场景"，按触发频率排列 | 🟢 建议 |
 | Prompt Lab API：加 ?caller=agent|human 参数 | 🟡 应改 |
 | 守门 CI：明确前 3 个月 soft gate | 🟡 应改 |
@@ -95,29 +104,29 @@
 
 刹车依赖人的自律——**工具让正确的做法变容易、错误的做法变难。**
 
-**工具层**：HaGoKu Agent（即本文档的设计内容），包含 Prompt Lab 作为其核心工具。
+**工具层**：HaGoKu Doctor（即本文档的设计内容），包含 Prompt Lab 作为其核心工具。
 
 ---
 
 ## 定位
 
-HaGoKu Agent 是 HaGoKu 系统的**维修员**。Prompt Lab 是它的**模拟器工具**。
+HaGoKu Doctor 是 HaGoKu 系统的**维修员**。Prompt Lab 是它的**模拟器工具**。
 
 主从关系不可颠倒：
 
 ```
-HaGoKu Agent（维修员）
+HaGoKu Doctor（维修员）
   │
   ├── 故障处理：用户报错 → 调 Prompt Lab 回放 dump → 定位退化点 → 输出修复方案 → 用户确认 → 执行
   ├── 日常保养：定期读取 dump 历史 → 分析异常模式 → 生成巡检报告 → 在用户发现之前预警
   └── 定期检查：PR 改 prompt → 自动对比改前/改后输出 → diff 报告 → 3 个月内 soft gate
 
 Prompt Lab（模拟器）
-  ├── 被 HaGoKu Agent 调用：POST /api/prompt-lab/run?caller=agent
+  ├── 被 HaGoKu Doctor 调用：POST /api/prompt-lab/run?caller=agent
   └── 被开发者调用：POST /api/prompt-lab/run?caller=human（侧边栏手动操作）
 ```
 
-**一句话定死**：HaGoKu Agent 是维修员。Prompt Lab 是它手里的模拟器——维修员用它验证故障、测试修复方案。开发者也可以直接拿模拟器研究提示词语义。但维修员才是 Meta 层的主角。
+**一句话定死**：HaGoKu Doctor 是维修员。Prompt Lab 是它手里的模拟器——维修员用它验证故障、测试修复方案。开发者也可以直接拿模拟器研究提示词语义。但维修员才是 Meta 层的主角。
 
 ---
 
@@ -134,13 +143,13 @@ Meta 层：分析系统自身的 LLM 行为 → HAGOKYU_LLM_MODEL_META（独立�
 
 为什么分层：故障隔离（pipeline 崩了 meta 还能诊断）、不同能力需求（强推理 vs 快响应）、独立计费。
 
-### 为什么 HaGoKu Agent 需要独立 LLM
+### 为什么 HaGoKu Doctor 需要独立 LLM
 
 诊断逻辑是比较同一段输入在两版 prompt 下的输出差异。如果和 pipeline 共用模型：LLM 升级→误报退化，崩了→无法诊断，有偏见→无法识别。独立模型 = 独立视角。
 
 ### 为什么是侧边栏
 
-HaGoKu Agent 需要访问 dump 历史（同机）和 Prompt Lab API。侧边栏触手可及，不需要独立应用。
+HaGoKu Doctor 需要访问 dump 历史（同机）和 Prompt Lab API。侧边栏触手可及，不需要独立应用。
 
 ---
 
@@ -151,7 +160,7 @@ HaGoKu Agent 需要访问 dump 历史（同机）和 Prompt Lab API。侧边栏�
 │                       HaGoKu Meta 层                          │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────────┐ │
-│  │               🤖 HaGoKu Agent（维修员）                    │ │
+│  │               🤖 HaGoKu Doctor（维修员）                    │ │
 │  │                                                          │ │
 │  │  【自检回路】启动前对比 git HEAD diff                     │ │
 │  │     → 发现自己 prompt 被改过 → 暂停让用户确认              │ │
@@ -193,9 +202,9 @@ HaGoKu Agent 需要访问 dump 历史（同机）和 Prompt Lab API。侧边栏�
 
 ---
 
-## Meta Agent 自检回路
+## HaGoKu Doctor 自检回路
 
-Phase 1 必做。Meta Agent 是维修员——如果维修员自己的工具坏了，它就不能修别人。
+Phase 1 必做。HaGoKu Doctor 是维修员——如果维修员自己的工具坏了，它就不能修别人。
 
 ### 实现
 
@@ -203,7 +212,7 @@ Phase 1 必做。Meta Agent 是维修员——如果维修员自己的工具坏�
 # hagoku/agents/meta/agent.py
 
 def _self_check(self) -> bool:
-    """启动前自检：Meta Agent 自身 prompt.md 是否被改动过。"""
+    """启动前自检：HaGoKu Doctor 自身 prompt.md 是否被改动过。"""
     import subprocess
 
     # 检查当前工作区是否有未提交的 prompt.md 修改
@@ -219,13 +228,13 @@ def _self_check(self) -> bool:
 
 ### 界面行为
 
-Meta Agent 面板首次打开时运行自检：
+HaGoKu Doctor 面板首次打开时运行自检：
 - ✅ 通过 → 正常显示面板
-- ⚠️ 未通过 → 面板显示："⚠️ Meta Agent 自身的提示词已被修改。维修员需要经过验证的提示词才能准确诊断其他 Agent。请确认是否继续使用当前版本。[继续] [回退到 git HEAD]"
+- ⚠️ 未通过 → 面板显示："⚠️ HaGoKu Doctor 自身的提示词已被修改。维修员需要经过验证的提示词才能准确诊断其他 Agent。请确认是否继续使用当前版本。[继续] [回退到 git HEAD]"
 
 ### 为什么不直接拒绝
 
-如果拒绝启动，用户改了 Meta Agent 的 prompt 后无法验证改动是否正确——形成死锁。暂停确认即可。
+如果拒绝启动，用户改了 HaGoKu Doctor 的 prompt 后无法验证改动是否正确——形成死锁。暂停确认即可。
 
 ### 边界声明
 
@@ -284,7 +293,7 @@ Meta Agent 面板首次打开时运行自检：
 
 ---
 
-## 一、HaGoKu Agent
+## 一、HaGoKu Doctor
 
 ### 内部架构
 
@@ -334,7 +343,7 @@ def run_scenario(self, scenario: str, params: dict) -> dict:
 定期读取 dump 历史 → meta LLM 分析异常模式 → 生成巡检报告。
 
 ```
-🤖 HaGoKu Agent 巡检报告 — 2026-06-09 19:45
+🤖 HaGoKu Doctor 巡检报告 — 2026-06-09 19:45
 
 ⚠️ 发现 2 个异常：
 
@@ -359,12 +368,12 @@ PR 改 prompt → 自动调 Prompt Lab API 对比改前/改后输出 → diff �
 
 ### 修复方案格式（DiagnosisReport.fix_plan）
 
-HaGoKu Agent 的故障处理场景下，诊断报告必须包含结构化修复方案——这是它的一等输出，不是建议。
+HaGoKu Doctor 的故障处理场景下，诊断报告必须包含结构化修复方案——这是它的一等输出，不是建议。
 
 ```python
 @dataclass
 class FixPlan:
-    """HaGoKu Agent 故障处理后输出的修复方案"""
+    """HaGoKu Doctor 故障处理后输出的修复方案"""
     what_broke: str          # 哪里坏了："Scout 字段理解中 Quantity 被错误排除"
     why: str                 # 为什么："提示词中'只选直接必需的'导致 LLM 过度保守"
     which_line: str          # 改哪行："hagoku/agents/scout/agent.py:558"
@@ -550,17 +559,97 @@ loop:
 
 ---
 
-## 二、Prompt Lab（HaGoKu Agent 的模拟器工具）
+## 通道守门：代码层强制约束（v5 新增）
+
+> 2026-06-10 新增。根因：HaGoKu Doctor 能诊断"通道断了"，但不能阻止通道被写断。需要代码层强制约束——所有传给 LLM 的信息必须经过通道函数，通道函数只能追加不能删减。
+
+### 问题
+
+`scout_reply.py` 原来 170 行 prompt 拼装代码——`field_state` 构建、`ap_summary`、`command_context`、`chat_history`、两套 `system_msg`——每一步都在筛选 LLM 看到的信息。半年积累，没人察觉。HaGoKu Doctor 的 inspect 场景能发现"分析目标丢了"，但发现时信息已经丢了。事后诊断不如事前预防。
+
+### 方案：通道函数
+
+所有 Agent 调用 LLM 时必须经过统一的通道函数：
+
+```python
+# hagoku/channel.py
+
+def build_messages(
+    *,
+    query: str,                    # 分析目标（必传）
+    user_input: str,               # 当前用户输入（必传）
+    history: list[dict] | None = None,  # 对话历史（可选）
+    tools: list[dict] | None = None,    # 工具定义（可选）
+    system_extra: str | None = None,    # 额外系统指令（可选，需标注理由）
+) -> list[dict]:
+    """
+    构建发给 LLM 的 messages。只追加，不筛选、不删减、不重排。
+
+    规则：
+    - query 作为第一条 user 消息注入，永不删除
+    - history 原样追加
+    - user_input 作为最后一条 user 消息
+    - system_extra 如提供，追加到 system message，标注来源
+
+    禁止：
+    - 从 query/history/user_input 中删除或修改任何内容
+    - 派生摘要替换原始内容
+    - if-else 分支决定 LLM 看到什么
+    """
+    msgs = [{"role": "user", "content": query}]
+    if history:
+        msgs.extend(history)
+    msgs.append({"role": "user", "content": user_input})
+    return msgs
+```
+
+### 强制机制
+
+**lint 规则**：禁止在 `hagoku/agents/` 和 `hagoku/manager/` 中直接构造 `messages = [...]`。必须通过 `build_messages()` 或声明的例外。
+
+```python
+# ruff 插件或简单 grep hook
+# 禁止: messages = [{"role": "system"...
+# 禁止: messages.append({"role": "user"...
+# 允许: from hagoku.channel import build_messages
+```
+
+**pre-commit hook**：
+```bash
+# 检查是否有绕过通道函数直接构造 messages 的代码
+git diff --cached -- 'hagoku/agents/' 'hagoku/manager/' \
+  | grep -E '^\+\s*messages\s*=\s*\[.*"role"' \
+  && echo "ERROR: 禁止直接构造 messages，请使用 build_messages()" && exit 1
+```
+
+### 与 HaGoKu Doctor 的关系
+
+| 组件 | 职责 |
+|------|------|
+| 通道函数 | 事前预防——代码层保证信息不丢 |
+| HaGoKu Doctor inspect | 事后巡检——验证 dump 中信息完整性 |
+| HaGoKu Doctor gate | 变更门禁——PR 改 prompt 必须对比 dump |
+| HaGoKu Doctor diagnose | 故障诊断——定位历史退化点 |
+
+通道函数是第一道防线。HaGoKu Doctor 的三场景是第二、三、四道防线。防线之间互补，不重复。
+
+### 实施
+
+Phase 0，放在所有其他 Phase 之前。先把现有调用点迁移到 `build_messages()`，加 lint hook，再加 pre-commit hook。然后才开始 Phase 1。
+
+---
+
+## 二、Prompt Lab（HaGoKu Doctor 的模拟器工具）
 
 ### 定位
 
-Prompt Lab 是 HaGoKu Agent 的核心工具，也是一个独立的侧边栏面板。**HaGoKu Agent 调用它时走 `?caller=agent`，开发者手动操作时走 `?caller=human`。**
+Prompt Lab 是 HaGoKu Doctor 的核心工具，也是一个独立的侧边栏面板。**HaGoKu Doctor 调用它时走 `?caller=agent`，开发者手动操作时走 `?caller=human`。**
 
 两种调用方的差异：
 
 | 维度 | `?caller=agent` | `?caller=human` |
 |------|----------------|-----------------|
-| 触发方式 | HaGoKu Agent 内部 loop | 用户点侧边栏「运行」 |
+| 触发方式 | HaGoKu Doctor 内部 loop | 用户点侧边栏「运行」 |
 | 超时 | 60s（可重试） | 30s |
 | 重试 | 自动 3 次 | 手动点击重试 |
 | 输出格式 | JSON（机器可读） | JSON + 前端渲染 |
@@ -611,9 +700,16 @@ Diff 算法：按 tool_call 名称对齐 → 逐 arguments JSON 路径比较 →
 ## 实施顺序
 
 ```
+Phase 0: 通道守门（最先做，所有其他 Phase 的前置条件）
+  ├── 实现 hagoku/channel.py — build_messages() 通道函数
+  ├── 迁移现有调用点（scout_reply, cleaner, analyst, reporter）
+  ├── lint hook：禁止直接构造 messages
+  ├── pre-commit hook
+  └── 验收: grep -r 'messages\s*=\s*\[' hagoku/agents/ hagoku/manager/ 返回空
+
 Phase 1a: Prompt Lab 后端 API（/api/prompt-lab/*） + ?caller 参数
 Phase 1b: Prompt Lab 前端面板
-Phase 1c: 自检回路（Meta Agent _self_check 框架）
+Phase 1c: 自检回路（HaGoKu Doctor _self_check 框架）
 Phase 1d: 诊断提示词起草（用 Prompt Lab 手动验证）
 Phase 1e: 基线数据采集启动
 
@@ -735,14 +831,14 @@ Phase 1 上线后即开始追踪。基线值需要 Phase 1 用 1-2 个月的自�
 
 | 项目 | 负责人 |
 |------|-------|
-| Meta Agent prompt.md | 用户 final review（铁律 10 适用） |
+| HaGoKu Doctor prompt.md | 用户 final review（铁律 10 适用） |
 | `HAGOKYU_LLM_MODEL_META` 配置 | 部署时必须设置，未设置 = 故障隔离失效 |
 | 守门 CI 阈值（20%/0.8） | 积累一个月数据后用户校准 |
 | 巡检报告严重级别定义 | 用户定义（高/中/低） |
 
 ## 开放问题
 
-1. **HaGoKu Agent prompt.md？** Phase 2 先用硬编码，Phase 3 提取为 prompt.md。注意：Phase 2 在 `api/meta.py` 中硬编码的 prompt 同样受铁律 10 保护——不因为"还没提取"就可以随意改。实施时在硬编码位置加一行 `# 铁律 10：此提示词修改需 dump 对比` 注释。
+1. **HaGoKu Doctor prompt.md？** Phase 2 先用硬编码，Phase 3 提取为 prompt.md。注意：Phase 2 在 `api/meta.py` 中硬编码的 prompt 同样受铁律 10 保护——不因为"还没提取"就可以随意改。实施时在硬编码位置加一行 `# 铁律 10：此提示词修改需 dump 对比` 注释。
 
 2. **巡检触发方式？** Phase 2b 手动触发。Phase 3 改为双触发：① 每次 PR 合入触碰 `prompt.md` 或 `agent.py` 时自动触发（补 gate 的全局视角——gate 只看单个 PR，巡检看累积效应）；② 每周固定一次全量巡检作为基线。两者通过 CI 的不同触发条件实现，不需要额外设计。
 

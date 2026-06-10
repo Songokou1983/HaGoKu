@@ -10,7 +10,13 @@ HaGoKu Studio 追求统计分析深度：自动检验假设、报告效应量、
 
 > 💡 当前通道设计在 ~30B+ 模型上验证稳定。随着技术进步，7B 级已退化为玩具级别——幻觉率高、指令遵循弱，不是 HaGoKu 的目标运行环境。如果你在用小模型遇到「字段全选」「角色乱判」等问题，换个稍大的模型通常就解决了。
 >
-> **最近大改**（2026-06-02 ~ 06-03，17 commits / 22 files / +1877 -377）：
+> **最近大改**（2026-06-10）：
+> - 通道修复：`scout_reply.py` 删除 170 行 prompt 拼装代码，直传分析目标+对话历史+用户原话
+> - 铁律 11（通道优先律）：LLM 行为异常第一步查通道不准改提示词
+> - HaGoKu Doctor 设计：Meta 层系统医生 + Prompt Lab 模拟器（[设计文档](docs/superpowers/specs/2026-06-09-meta-layer-design.md)）
+> - 通道守门（Phase 0）：`build_messages()` 通道函数，禁止代码筛选 LLM 看到的信息
+>
+> **前次大改**（2026-06-02 ~ 06-03，17 commits / 22 files / +1877 -377）：
 > - 架构层 P0+P1 全部清零（铁律 2 失守修复、字段语义同步链闭环、业务阈值硬编码移除）
 > - 守门测试扫描范围 5→9 子目录，CI 不再假绿
 > - Scout 知识库不再存取字段名（字段语义归 LLM + 项目记忆）
@@ -763,6 +769,7 @@ hagoku/
 | `DEVELOPMENT_PROMPT.md` | 路线图跟踪 + 任务传递 + 审查约定 | 协作者 |
 | `docs/COMMAND_SYSTEM.md` | 命令系统完整设计 | 开发者 |
 | `CLAUDE.md` | AI 编码助手上下文 | AI 助手 |
+| `docs/superpowers/specs/2026-06-09-meta-layer-design.md` | HaGoKu Doctor 设计（系统医生 + Prompt Lab 模拟器 + 通道守门） | 开发者 |
 
 ---
 

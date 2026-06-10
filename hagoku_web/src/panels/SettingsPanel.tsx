@@ -360,23 +360,6 @@ export default function SettingsPanel() {
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={async () => {
-              try {
-                const r = await fetch("/api/analysis/cancel", { method: "POST" });
-                const d = await r.json();
-                setSaveHint(d.message || "已请求终止");
-              } catch {
-                setSaveHint("终止请求失败");
-              }
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-app-error/20 hover:bg-app-error/30
-                       text-app-error text-ui-base rounded border border-app-error/40
-                       transition-colors duration-150 cursor-pointer"
-          >
-            强制终止当前分析
-          </button>
-          <button
-            type="button"
             onClick={() => void handleSave()}
             disabled={saving || loading}
             className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed

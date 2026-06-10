@@ -165,6 +165,31 @@ export default function SettingsPanel() {
     }
   };
 
+  const handleTestMeta = async () => {
+    setTestStatus("testing");
+    setTestMessage(null);
+    setTestTime(null);
+    const url = metaUrl.trim() || llm.base_url.trim();
+    const model = metaModel.trim() || llm.main_model.trim();
+    const key = metaKey.trim() || apiKeyInput.trim();
+    try {
+      const r = await fetch("/api/config/llm/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: url, model, api_key: key }),
+      });
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; reply?: string; detail?: string };
+      if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : `连接失败 (${r.status})`);
+      setTestStatus("ok");
+      setTestMessage(d.reply?.slice(0, 120) || "模型响应正常");
+      setTestTime(new Date().toLocaleTimeString());
+    } catch (e: unknown) {
+      setTestStatus("fail");
+      setTestMessage(e instanceof Error ? e.message : "连接失败");
+      setTestTime(new Date().toLocaleTimeString());
+    }
+  };
+
   const handleSave = async () => {
     setSaveError(null);
     setSaveHint(null);
@@ -313,6 +338,13 @@ export default function SettingsPanel() {
           <Field label="Doctor API Key" icon={<Key size={14} />}>
             <input className={inputClass} type="text" placeholder="留空复用主密钥" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
+          <div className="flex gap-3 mt-3">
+            <button type="button" disabled={(!metaUrl.trim() && !llm.base_url.trim()) || testStatus === "testing"} onClick={() => handleTestMeta()}
+              className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed text-app-text transition-colors cursor-pointer">
+              {testStatus === "testing" ? <Loader2 size={14} className="animate-spin" /> : testStatus === "ok" ? <CheckCircle2 size={14} className="text-green-500" /> : testStatus === "fail" ? <XCircle size={14} className="text-app-error" /> : <Zap size={14} />}
+              {testStatus === "testing" ? "测试中…" : "测试连接"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

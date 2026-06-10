@@ -13,11 +13,15 @@ def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
 
         columns = [s["column_name"] for s in context["column_semantics"]]
 
+        from hagoku.channel import build_messages
+
         client = create_raw_client(self.config.llm)
         response = client.chat.completions.create(
             model=self.config.llm.model_quick or self.config.llm.model,
-            messages=[
-                {"role": "system", "content": (
+            messages=build_messages(
+                query=user_input,
+                user_input=f"字段列表：{', '.join(columns)}\n用户说：{user_input}",
+                system_extra=(
                     "你是意图分类器。判断用户在字段确认阶段的输入属于：\n"
                     "- confirm: 用户确认字段理解正确，同意继续（如「好」「对的」「没问题」「确认」「可以」）\n"
                     "- correction: 用户纠正字段含义（如「Inc1 是销售额」「渠道错了，应该是来源」）\n"
@@ -25,9 +29,8 @@ def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
                     "输出纯 JSON:\n"
                     '{"type": "confirm|correction|mixed", '
                     '"updates": {"字段名": {"chinese_name": "...", "business_meaning": "..."}}}'
-                )},
-                {"role": "user", "content": f"字段列表：{', '.join(columns)}\n用户说：{user_input}"},
-            ],
+                ),
+            ),
             temperature=0.0,
             max_tokens=256,
             response_format={"type": "json_object"},

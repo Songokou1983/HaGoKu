@@ -398,28 +398,24 @@ def _apply_scout_reply_with_llm(
     applied: list[str] = []
     seen_col: set[str] = set()
 
-    # ── 通道：直传上下文，不做筛选 ─────────────
+    # ── 通道：build_messages() 只追加不筛选 ──
     query_raw = context.get("query", "") or ""
     project_ctx = context.get("_project_context")
 
-    if project_ctx:
-        ctx_block = project_ctx.build_prompt("scout", context)
-        messages = [
-            {"role": "system", "content": ctx_block["system_prefix"]},
-            *ctx_block["messages_history"],
-            {"role": "user", "content": raw},
-        ]
-    else:
-        messages = [
-            {"role": "system", "content": f"分析目标: {query_raw}"},
-            {"role": "user", "content": raw},
-        ]
+    from hagoku.channel import build_messages
+
+    history = project_ctx.build_prompt("scout", context)["messages_history"] if project_ctx else None
+    messages = build_messages(
+        query=query_raw,
+        user_input=raw,
+        history=history,
+    )
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
     try:
         if channel_logger:
-            channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(system_msg), phase="field_reply")
+            channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(query_raw) if query_raw else 0, phase="field_reply")
 
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages

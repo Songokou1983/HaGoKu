@@ -156,6 +156,7 @@ class CleanerAgent(BaseAgent):
 
         # ── LLM dump ──
         from ...observability.llm_dump import dump_messages
+        from hagoku.channel import build_messages
         dump_messages(
             "cleaner_run_step",
             composed,
@@ -704,6 +705,7 @@ class CleanerAgent(BaseAgent):
 
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages
+        from hagoku.channel import build_messages
         dump_messages(
             "cleaner_dialogue",
             messages,
@@ -991,6 +993,7 @@ class CleanerAgent(BaseAgent):
 
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages
+        from hagoku.channel import build_messages
         dump_messages(
             "cleaner_planning",
             [{"role": "system", "content": system_prompt},
@@ -1002,10 +1005,11 @@ class CleanerAgent(BaseAgent):
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```"},
-                ],
+                messages=build_messages(
+                    query=payload.get("query", ""),
+                    user_input=f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```",
+                    system_extra=system_prompt,
+                ),
                 temperature=0.0,
                 max_tokens=4096,
             )

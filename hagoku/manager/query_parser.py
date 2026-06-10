@@ -90,12 +90,15 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
             if col_names:
                 hints_text = f"\n\n已知数据列名: {', '.join(col_names)}"
 
+    from hagoku.channel import build_messages
+
     response = client.chat.completions.create(
         model=config.model_quick or config.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"用户问题：{query}{hints_text}"},
-        ],
+        messages=build_messages(
+            query=query,
+            user_input=f"用户问题：{query}{hints_text}",
+            system_extra=system_prompt,
+        ),
         temperature=0.0,
         max_tokens=512,
         response_format={"type": "json_object"},

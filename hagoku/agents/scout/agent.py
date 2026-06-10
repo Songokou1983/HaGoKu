@@ -603,6 +603,7 @@ class ScoutAgent(BaseAgent):
 
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages
+        from hagoku.channel import build_messages
         dump_messages(
             "scout_infer_all_semantics",
             [{"role": "system", "content": system_prompt},
@@ -614,10 +615,11 @@ class ScoutAgent(BaseAgent):
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model_quick or self.llm_config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```"},
-                ],
+                messages=build_messages(
+                    query=self._query or "",
+                    user_input=f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
+                    system_extra=system_prompt,
+                ),
                 temperature=SCOUT_INFER_TEMPERATURE,
                 max_tokens=SCOUT_INFER_MAX_TOKENS,
                 tools=[submit_tool],
@@ -1005,10 +1007,11 @@ class ScoutAgent(BaseAgent):
         client = self._create_llm_client()
         response = client.chat.completions.create(
             model=self.llm_config.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=build_messages(
+                query=self._query or "",
+                user_input=user_prompt,
+                system_extra=system_prompt,
+            ),
             temperature=SCOUT_CONFIRM_TEMPERATURE,
             max_tokens=SCOUT_CONFIRM_MAX_TOKENS,
         )

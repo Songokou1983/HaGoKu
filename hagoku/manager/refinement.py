@@ -119,6 +119,7 @@ class RefinementParser:
         from hagoku.agents.types import build_submit_refinement_schema
         from hagoku.config import HaGoKuConfig
         from hagoku.llm.client import create_raw_client
+        from hagoku.channel import build_messages
 
         config = HaGoKuConfig.load().llm
         client = create_raw_client(config)
@@ -170,10 +171,11 @@ class RefinementParser:
         try:
             response = client.chat.completions.create(
                 model=config.model_quick or config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{ctx_text}用户输入：{feedback}"},
-                ],
+                messages=build_messages(
+                    query=feedback,
+                    user_input=f"{ctx_text}用户输入：{feedback}",
+                    system_extra=system_prompt,
+                ),
                 temperature=0.0,
                 max_tokens=512,
                 tools=[submit_tool],
@@ -183,10 +185,11 @@ class RefinementParser:
             # 如果 tool_choice 要求严格但模型不支持，回退到自由调用
             response = client.chat.completions.create(
                 model=config.model_quick or config.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{ctx_text}用户输入：{feedback}"},
-                ],
+                messages=build_messages(
+                    query=feedback,
+                    user_input=f"{ctx_text}用户输入：{feedback}",
+                    system_extra=system_prompt,
+                ),
                 temperature=0.0,
                 max_tokens=512,
                 tools=[submit_tool],

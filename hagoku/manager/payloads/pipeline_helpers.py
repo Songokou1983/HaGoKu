@@ -111,10 +111,11 @@ def _handle_mandatory_violations(
         client = create_raw_client(llm_config)
         response = client.chat.completions.create(
             model=llm_config.model_quick or llm_config.model,
-            messages=[
-                {"role": "system", "content": "你是数据统计专家，用清晰易懂的中文解释统计风险。"},
-                {"role": "user", "content": risk_prompt},
-            ],
+            messages=build_messages(
+                query=risk_prompt,
+                user_input=risk_prompt,
+                system_extra="你是数据统计专家，用清晰易懂的中文解释统计风险。",
+            ),
             temperature=0.0,
             max_tokens=1024,
         )

@@ -243,12 +243,15 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
     dump_messages("analyst_rewrite_summary", rewrite_msgs, model=self.config.llm.model)
 
     client = create_raw_client(self.config.llm)
+    from hagoku.channel import build_messages
+
     resp = client.chat.completions.create(
         model=self.config.llm.model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content},
-        ],
+        messages=build_messages(
+            query=user_content,
+            user_input=user_content,
+            system_extra=system,
+        ),
         temperature=0.3,
         max_tokens=2048,
     )

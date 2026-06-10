@@ -454,12 +454,14 @@ class Orchestrator(
             if self._llm_client is None:
                 self._llm_client = create_structured_llm_client(self.config.llm)
 
-            intent_context = self._build_intent_context(query, parsed_intent)
-            messages = [
-                {"role": "system", "content": PLAN_GENERATION_SYSTEM},
-                {"role": "user", "content": PLAN_GENERATION_USER.format(query=intent_context)},
-            ]
+            from hagoku.channel import build_messages
 
+            intent_context = self._build_intent_context(query, parsed_intent)
+            messages = build_messages(
+                query=query,
+                user_input=PLAN_GENERATION_USER.format(query=intent_context),
+                system_extra=PLAN_GENERATION_SYSTEM,
+            )
             response: LLMPlanResponse = self._llm_client.chat.completions.create(
                 model=self.config.llm.model,
                 messages=messages,

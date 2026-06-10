@@ -377,7 +377,7 @@ export default function SettingsPanel() {
             <input className={inputClass} type="text" placeholder="sk-..." autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
           <div className="flex gap-3 mt-3">
-            <button type="button" disabled={(!metaUrl.trim() && !llm.base_url.trim()) || testStatus === "testing"} onClick={() => handleTestMeta()}
+            <button type="button" disabled={testStatus === "testing"} onClick={() => handleTestMeta()}
               className="flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed text-app-text transition-colors cursor-pointer">
               {testStatus === "testing" ? <Loader2 size={14} className="animate-spin" /> : testStatus === "ok" ? <CheckCircle2 size={14} className="text-green-500" /> : testStatus === "fail" ? <XCircle size={14} className="text-app-error" /> : <Zap size={14} />}
               {testStatus === "testing" ? "测试中…" : "测试连接"}

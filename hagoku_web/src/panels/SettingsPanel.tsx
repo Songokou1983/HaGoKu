@@ -124,7 +124,6 @@ export default function SettingsPanel() {
             setAdvancedLlmOpen(false);
           }
         }
-        setApiKeyInput("");
       })
       .catch((e: unknown) => {
         setLoadError(e instanceof Error ? e.message : "无法加载配置");
@@ -275,7 +274,6 @@ export default function SettingsPanel() {
           setSubModelQuick("");
         }
       }
-      setApiKeyInput("");
       setSaved(true);
       setSaveHint(typeof d.hint === "string" ? d.hint : null);
       setTimeout(() => setSaved(false), 2500);

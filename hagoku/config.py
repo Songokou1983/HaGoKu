@@ -35,6 +35,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = 8192  # 最大 token 数
     model_deep: Optional[str] = None  # 深度推理模型（Analyst、仲裁器），不设则复用 model
     model_quick: Optional[str] = None  # 快速模型（Scout、Reporter、Scribe 反思），不设则复用 model
+    model_meta: Optional[str] = None  # Meta 层模型（HaGoKu Doctor 诊断/巡检/守门），不设则复用 model
 
 
 class ManagerModeConfig(BaseModel):
@@ -179,6 +180,8 @@ class HaGoKuConfig(BaseModel):
             config.llm.model_deep = v
         if v := os.getenv("HAGOKU_LLM_MODEL_QUICK") or os.getenv("HAGOKYU_LLM_MODEL_QUICK"):
             config.llm.model_quick = v
+        if v := os.getenv("HAGOKU_LLM_MODEL_META") or os.getenv("HAGOKYU_LLM_MODEL_META"):
+            config.llm.model_meta = v
         return config
 
     def ensure_work_dir(self) -> None:

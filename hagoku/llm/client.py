@@ -127,6 +127,24 @@ def create_quick_client(config: Any) -> Any:
     return create_structured_llm_client(quick_config)
 
 
+def create_meta_client(config: Any) -> Any:
+    """
+    创建 Meta 层客户端（HaGoKu Doctor 诊断/巡检/守门用）
+
+    模型选择: llm.model_meta or llm.model
+    独立于 pipeline 的 LLM 客户端——Doctor 需要独立视角诊断 pipeline 行为。
+    """
+    llm = _unwrap_llm(config)
+    meta_config = LLMConfig(
+        model=llm.model_meta or llm.model,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        temperature=0.0,  # 诊断/巡检需要确定性输出
+        max_tokens=8192,
+    )
+    return create_structured_llm_client(meta_config)
+
+
 # 全局 AsyncOpenAI 客户端单例（连接复用）
 _async_client: Any = None
 _async_client_config: tuple[str, str] | None = None  # (base_url, api_key)

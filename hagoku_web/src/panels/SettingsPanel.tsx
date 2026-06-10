@@ -137,6 +137,12 @@ export default function SettingsPanel() {
   }, [loadConfig]);
 
   const handleTest = async () => {
+    const url = llm.base_url.trim();
+    const model = llm.main_model.trim();
+    const key = apiKeyInput.trim();
+    if (!url) { setTestStatus("fail"); setTestMessage("未配置 Base URL"); return; }
+    if (!model) { setTestStatus("fail"); setTestMessage("未配置模型名称"); return; }
+    if (!key) { setTestStatus("fail"); setTestMessage("未配置 API Key"); return; }
     setTestStatus("testing");
     setTestMessage(null);
     setTestTime(null);
@@ -145,9 +151,9 @@ export default function SettingsPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          base_url: llm.base_url.trim(),
-          main_model: llm.main_model.trim(),
-          api_key: apiKeyInput.trim(),
+          base_url: url,
+          model: model,
+          api_key: key,
         }),
       });
       const d = (await r.json().catch(() => ({}))) as { ok?: boolean; reply?: string; detail?: string };

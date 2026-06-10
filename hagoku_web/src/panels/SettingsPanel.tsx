@@ -201,9 +201,10 @@ export default function SettingsPanel() {
       }
       if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
-        const metaFromApi = typeof raw.model_meta === "string" ? raw.model_meta : "";
-        setMetaModel(metaFromApi);
-        setLlm(formFromNormalized(n, metaFromApi));
+        const raw2 = (d.llm ?? {}) as Record<string, unknown>;
+        const metaFromApi2 = typeof raw2.model_meta === "string" ? raw2.model_meta : "";
+        setMetaModel(metaFromApi2);
+        setLlm(formFromNormalized(n, metaFromApi2));
         const distinct = hadDistinctQuickName(n);
         if (distinct) {
           setAdvancedLlmOpen(true);
@@ -344,7 +345,6 @@ export default function SettingsPanel() {
               <Field label="HAGOKYU_LLM_MODEL_META（可选）" icon={<Zap size={14} />}>
                 <input className={inputClass} placeholder="不填则复用主模型" autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />
               </Field>
-            </div>
             </div>
           )}
         </div>

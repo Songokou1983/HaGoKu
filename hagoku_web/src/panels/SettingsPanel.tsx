@@ -24,10 +24,11 @@ interface LlmConfigPayload {
   api_key_configured: boolean;
 }
 
-/** 表单里只编辑这三项；本页不提供第二格模型名 */
+/** 表单状态 */
 interface LlmFormState {
   base_url: string;
   main_model: string;
+  meta_model: string;
   api_key_configured: boolean;
 }
 
@@ -40,6 +41,7 @@ type TestStatus = "idle" | "testing" | "ok" | "fail";
 const emptyLlm: LlmFormState = {
   base_url: "",
   main_model: "",
+  meta_model: "",
   api_key_configured: false,
 };
 
@@ -62,10 +64,11 @@ function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
   return { base_url, main_model, sub_model, api_key_configured };
 }
 
-function formFromNormalized(n: LlmConfigPayload): LlmFormState {
+function formFromNormalized(n: LlmConfigPayload, metaModel?: string): LlmFormState {
   return {
     base_url: n.base_url,
     main_model: n.main_model,
+    meta_model: metaModel || "",
     api_key_configured: n.api_key_configured,
   };
 }
@@ -79,6 +82,7 @@ export default function SettingsPanel() {
   const [llm, setLlm] = useState<LlmFormState>(emptyLlm);
   const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
   const [subModelQuick, setSubModelQuick] = useState("");
+  const [metaModel, setMetaModel] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -104,7 +108,9 @@ export default function SettingsPanel() {
         const raw = (d.llm ?? {}) as Record<string, unknown>;
         if (Object.keys(raw).length) {
           const n = normalizeLlmFromApi(raw);
-          setLlm(formFromNormalized(n));
+          const metaFromApi = typeof raw.model_meta === "string" ? raw.model_meta : "";
+          setMetaModel(metaFromApi);
+          setLlm(formFromNormalized(n, metaFromApi));
           const distinct = hadDistinctQuickName(n);
           if (distinct) {
             setAdvancedLlmOpen(true);
@@ -181,6 +187,7 @@ export default function SettingsPanel() {
           main_model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
           sub_model: advancedLlmOpen ? subModelQuick.trim() : "",
+        meta_model: metaModel.trim(),
         }),
       });
       const d = (await r.json().catch(() => ({}))) as {

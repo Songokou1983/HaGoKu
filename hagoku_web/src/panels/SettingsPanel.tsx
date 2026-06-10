@@ -136,12 +136,6 @@ export default function SettingsPanel() {
   }, [loadConfig]);
 
   const handleTest = async () => {
-    const url = llm.base_url.trim();
-    const model = llm.main_model.trim();
-    const key = apiKeyInput.trim();
-    if (!url) { setTestStatus("fail"); setTestMessage("未配置 Base URL"); return; }
-    if (!model) { setTestStatus("fail"); setTestMessage("未配置模型名称"); return; }
-    if (!key) { setTestStatus("fail"); setTestMessage("未配置 API Key"); return; }
     setTestStatus("testing");
     setTestMessage(null);
     setTestTime(null);
@@ -150,9 +144,9 @@ export default function SettingsPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          base_url: url,
-          model: model,
-          api_key: key,
+          base_url: llm.base_url.trim(),
+          model: llm.main_model.trim(),
+          api_key: apiKeyInput.trim(),
         }),
       });
       const d = (await r.json().catch(() => ({}))) as { ok?: boolean; reply?: string; detail?: string };
@@ -185,9 +179,6 @@ export default function SettingsPanel() {
     const url = hasAll ? metaUrl.trim() : llm.base_url.trim();
     const model = hasAll ? metaModel.trim() : llm.main_model.trim();
     const key = hasAll ? metaKey.trim() : apiKeyInput.trim();
-    if (!url) { setTestStatusMeta("fail"); setTestMessageMeta("未配置 Base URL"); return; }
-    if (!model) { setTestStatusMeta("fail"); setTestMessageMeta("未配置模型名称"); return; }
-    if (!key) { setTestStatusMeta("fail"); setTestMessageMeta("未配置 API Key"); return; }
     try {
       const r = await fetch("/api/config/llm/test", {
         method: "POST",

@@ -309,7 +309,9 @@ export default function SettingsPanel() {
             onChange={(e) => { setLlm({ ...llm, base_url: e.target.value }); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
         <Field label="API Key" icon={<Key size={14} />}>
-          <input className={inputClass} type="text" autoComplete="off" value={apiKeyInput}
+          <input className={inputClass} type="text" autoComplete="off"
+            placeholder={llm.api_key_configured ? "已配置密钥（重新输入可覆盖）" : ""}
+            value={apiKeyInput}
             onChange={(e) => { setApiKeyInput(e.target.value); setTestStatus("idle"); setTestMessage(null); }} />
         </Field>
         <Field label="模型名称" icon={<Cpu size={14} />}>
@@ -344,7 +346,9 @@ export default function SettingsPanel() {
             <input className={inputClass} autoComplete="off" value={metaUrl} onChange={(e) => setMetaUrl(e.target.value)} />
           </Field>
           <Field label="API Key" icon={<Key size={14} />}>
-            <input className={inputClass} type="text" autoComplete="off" value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
+            <input className={inputClass} type="text" autoComplete="off"
+              placeholder={llm.api_key_configured ? "已配置密钥（重新输入可覆盖）" : ""}
+              value={metaKey} onChange={(e) => setMetaKey(e.target.value)} />
           </Field>
           <Field label="模型名称" icon={<Cpu size={14} />}>
             <input className={inputClass} autoComplete="off" value={metaModel} onChange={(e) => setMetaModel(e.target.value)} />

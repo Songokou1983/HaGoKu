@@ -326,6 +326,20 @@ def test_scout_prompt_contains_ignore_role_instruction():
 
 **已存在的违规测试**：`tests/test_product/test_scout_uia_prompt.py::test_scout_prompt_contains_ignore_role_instruction` — 此测试为铁律 10 明确禁止的模式，应标记 `xfail` 并注明"提示词内容测试，不能反映 LLM 实际行为"。
 
+### 铁律 11（通道优先律）— 执行闸门：LLM 行为异常 → 第一步查通道，不准改提示词
+
+收到 LLM 行为异常报告（如字段全选、角色乱判、阶段跳转错误）后：
+
+1. **第一个动作必须是查 dump 验证通道完整性**，检查 LLM 收到的信息里：
+   - 分析目标在不在？
+   - 完整上下文（字段表、数据画像）在不在？
+   - 工具 schema 能不能表达 LLM 的决策？
+2. 通道确认完整 → LLM 行为仍不对 → 才可以看提示词
+3. 提示词改动必须在 commit message 里引用 dump 文件名作为证据
+4. 改提示词超过 2 次仍不行 → 停止，问题不在提示词，回到通道
+
+**反例**：2026-06-10，LLM 纠正字段名后全选。AI 反复改提示词七八次。根因是 dump 里 LLM think 写道"逐字段重新判断 used_in_analysis"——这是 prompt 指令，不是通道问题。删掉三行指令即修复。如果第一步看 dump，10 分钟解决。实际花了半天。
+
 ### 刹车 B — 提示词修改 PR 必须附带 dump 对比
 
 任何修改以下文件的 PR，PR body 中**必须**包含改前/改后的 dump 对比：

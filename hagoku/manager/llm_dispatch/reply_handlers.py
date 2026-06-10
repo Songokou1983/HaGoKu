@@ -29,11 +29,28 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         })
         return ("switch", "cleaner")
 
-    applied = apply_scout_user_field_reply_to_context(
-        context, user_input,
-        llm_client=self.llm_quick_raw,
-        llm_model=self.config.llm.model_quick or self.config.llm.model,
-    )
+    try:
+        applied = apply_scout_user_field_reply_to_context(
+            context, user_input,
+            llm_client=self.llm_quick_raw,
+            llm_model=self.config.llm.model_quick or self.config.llm.model,
+        )
+    except RuntimeError as e:
+        # 铁律 7：LLM 失败对用户可见，保持当前阶段让用户重试
+        context["_last_understanding_failure"] = {
+            "raw_text": user_input,
+            "stage": "scout_field_review",
+            "reason": str(e),
+        }
+        scout_msg = scout_field_review_pause_payload(context)
+        scout_msg["_scout_error"] = str(e)
+        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
+        return {
+            "status": "scout_review",
+            "message": str(e),
+            "field_review": scout_msg.get("field_review"),
+        }
 
     # 优先判 route_to：LLM 主动表达流程意图
     route_to = context.pop("_scout_route_to", None)

@@ -63,21 +63,24 @@ def _mock_llm_client(*tool_calls: dict):
 
 # ── 无 LLM client：安全返回空列表，不写入 context ────────────
 
-def test_no_llm_client_returns_empty():
-    """无 LLM client 时返回 []，context 不变。"""
+def test_no_llm_client_raises():
+    """无 LLM client 时 raise RuntimeError（铁律 2 路径 A / 铁律 7），不静默兜底。"""
     ctx = _ctx()
     before_descs = dict(ctx["column_descriptions"])
-    applied = apply_scout_user_field_reply_to_context(ctx, "Code 代表店铺编号")
-    assert applied == []
+    import pytest
+    with pytest.raises(RuntimeError, match="LLM client 未初始化"):
+        apply_scout_user_field_reply_to_context(ctx, "Code 代表店铺编号")
     assert ctx["column_descriptions"] == before_descs
 
 
 def test_pure_confirm_no_llm_needed():
-    """纯确认不需要 LLM，直接返回 []。"""
+    """纯确认由 _handle_scout_reply 上层截获，不进入 apply_scout_user_field_reply_to_context。
+    直接调用此函数且无 LLM client 时 raise RuntimeError（铁律 2 路径 A）。"""
     ctx = _ctx()
     before = dict(ctx["column_descriptions"])
-    # 纯确认输入不再由代码判断——交给 LLM；无 LLM client 时保留原 context 不变
-    assert apply_scout_user_field_reply_to_context(ctx, "确认") == []
+    import pytest
+    with pytest.raises(RuntimeError, match="LLM client 未初始化"):
+        apply_scout_user_field_reply_to_context(ctx, "确认")
     assert ctx["column_descriptions"] == before
 
 
@@ -213,12 +216,13 @@ def test_llm_tool_call_no_tool_calls_no_action():
     assert ctx["column_descriptions"] == before
 
 
-def test_llm_exception_returns_empty():
-    """LLM 抛出异常 → 返回 []，context 不变。"""
+def test_llm_exception_raises():
+    """LLM 抛出异常 → raise RuntimeError（铁律 2 路径 A / 铁律 7），不静默兜底。"""
     ctx = _ctx()
     before = dict(ctx["column_descriptions"])
     mock = MagicMock()
     mock.chat.completions.create.side_effect = RuntimeError("LLM timeout")
-    applied = _apply_scout_reply_with_llm(ctx, "Code is store", ["Code", "Period"], mock, "test-model")
-    assert applied == []
+    import pytest
+    with pytest.raises(RuntimeError, match="Scout 字段理解 LLM 调用失败"):
+        _apply_scout_reply_with_llm(ctx, "Code is store", ["Code", "Period"], mock, "test-model")
     assert ctx["column_descriptions"] == before

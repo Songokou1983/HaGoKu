@@ -6,7 +6,7 @@ import numpy as np
 
 from hagoku.agents.scout import ScoutAgent, ColumnSemantic, SemanticType, DataContext
 from hagoku.agents.analyst import AnalystAgent, AnalysisResult
-from hagoku.config import LLMConfig
+from hagoku.config import HaGoKuConfig, LLMConfig
 from hagoku.observability.event_bus import EventBus
 from hagoku.observability.events import EventType
 
@@ -18,7 +18,7 @@ class TestScoutAgent:
 
     @pytest.fixture
     def llm_config(self):
-        return LLMConfig()
+        return HaGoKuConfig.load().llm
 
 
     def test_infer_all_semantics(self, event_bus, llm_config):
@@ -110,7 +110,7 @@ class TestAnalystAgent:
 
     @pytest.fixture
     def llm_config(self):
-        return LLMConfig()
+        return HaGoKuConfig.load().llm
 
     def test_analysis_result_to_dict(self, event_bus, llm_config):
         result = AnalysisResult(

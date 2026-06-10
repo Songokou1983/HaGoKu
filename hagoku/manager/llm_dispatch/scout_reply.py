@@ -31,7 +31,8 @@ def apply_scout_user_field_reply_to_context(
     原样转发给 LLM 理解语义，LLM 主动识别目标字段、区分含义与中文名称。
     代码只负责把 LLM 返回的 JSON 机械写入 context —— 不解析、不判断、不兜底。
 
-    若 LLM 不可用或解析失败，保留原 context 不变，返回 []，不启用代码硬解析。
+    若 LLM 不可用或调用失败，raise RuntimeError（铁律 2 路径 A / 铁律 7），
+    让用户看见错误而非看见错误的结果。
 
     返回简短人类可读记录（如 ``Code←店铺编号``），供事件或日志；无写入则返回 []。
     """
@@ -44,15 +45,13 @@ def apply_scout_user_field_reply_to_context(
         return []
 
     # ── LLM 唯一引擎：将用户自然语言说明交给 LLM 理解 ──────────
-    if llm_client is not None and llm_model:
-        return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model, channel_logger)
-
-    # ── LLM 不可用（client/model 为空）：保留原 context，无写入 ──
-    import logging
-    _log = logging.getLogger("hagoku.orchestrator")
-    _log.warning("字段理解跳过：LLM client/model 不可用，保留原字段信息不变")
-
-    return []
+    # 铁律 2（路径 A）+ 铁律 7：LLM client 不可用必须 raise，不准静默兜底
+    if llm_client is None:
+        raise RuntimeError(
+            "Scout 字段理解失败：LLM client 未初始化。\n"
+            "请检查 LLM 配置（base_url / api_key / model）是否正确。"
+        )
+    return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model, channel_logger)
 
 def _get_scout_tools() -> list[dict[str, Any]]:
     """从全局工具注册表获取 Scout Agent 可用的工具。"""
@@ -399,146 +398,20 @@ def _apply_scout_reply_with_llm(
     applied: list[str] = []
     seen_col: set[str] = set()
 
-    # ── 构建当前字段表格状态，供 LLM 理解已有信息 ─────────────
-    field_state_lines: list[str] = []
-    for sem in semantics:
-        col = str(sem.get("column_name", ""))
-        if not col:
-            continue
-        current_desc = str(descs.get(col, "") or "").strip()
-        current_dn = str(display_names.get(col, "") or "").strip()
-        current_role = str(sem.get("suggested_role", "") or "").strip()
-        parts = [f"  - {col}"]
-        if current_dn:
-            parts.append(f"中文名: {current_dn}")
-        if current_desc:
-            parts.append(f"含义: {current_desc}")
-        if current_role:
-            parts.append(f"当前角色: {current_role}")
-        uia = sem.get("used_in_analysis")
-        if uia is True:
-            parts.append(f"参与分析: 是（直接服务于分析目标）")
-        elif uia is False:
-            parts.append(f"参与分析: 否（与目标无关）")
-        if not current_dn and not current_desc:
-            parts.append("(尚未理解)")
-        field_state_lines.append(" | ".join(parts))
-
-    field_state = "\n".join(field_state_lines) if field_state_lines else "（尚无任何字段）"
-
-    # ── 分析目的：让 LLM 基于用户分析目标理解字段 ─────────────
-    analysis_purpose_text = ""
+    # ── 通道：直传上下文，不做筛选 ─────────────
     query_raw = context.get("query", "") or ""
-    if query_raw:
-        analysis_purpose_text = f"用户分析目的：{query_raw}\n"
-
-    # ── 当前分析目的状态（target/features）──
-    ap_summary = ""
-    ap = context.get("analysis_purpose") or {}
-    # 分析目的可能尚未构建（对齐循环中），回落读取 context 中已由 _derive_roles 设置的 target/features
-    current_target = str(
-        ap.get("target")
-        or context.get("target")
-        or ""
-    ).strip()
-    current_features_raw = ap.get("features") or context.get("features") or []
-    current_features = [str(f).strip() for f in current_features_raw if str(f).strip()]
-    if current_target or current_features:
-        ap_summary = (
-            "当前分析目的状态：\n"
-            f"  - 目标变量 (target): {current_target if current_target else '（未设置）'}\n"
-            f"  - 特征变量 (features): {', '.join(current_features) if current_features else '（未设置）'}\n\n"
-        )
-    if channel_logger:
-        channel_logger.log("scout", "respond_context", query=query_raw)
-
-    # ── 注入用户历史命令/纠错（与初始 Scout 推理一致的通道）─────────────
-    command_context = ""
-    try:
-        pt = (context.get("_pending_command_text") or "").strip()
-        if pt:
-            command_context = f"\n【用户最近提出的指令/纠错（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}\n"
-    except Exception:
-        pass
-
-    # 对话历史（律 3：多轮上下文传输，含完整工具调用参数）
-    conv_history: list[dict[str, str]] = context.get("_conversation_history", [])
-    # 首次 respond 时注入初始 Scout 的完整判断作为上下文
-    if not conv_history:
-        init_summary_lines = ["初始分析判断（基于分析目标的独立判断，非用户纠正）："]
-        for sem in semantics:
-            col = sem.get("column_name", "")
-            uia = sem.get("used_in_analysis")
-            dn = str(sem.get("display_name", "") or "").strip()
-            dn_str = f"（{dn}）" if dn else ""
-            if uia is True:
-                init_summary_lines.append(f"  {col}{dn_str}: 参与 —— 直接服务于分析目标")
-            elif uia is False:
-                init_summary_lines.append(f"  {col}{dn_str}: 不参与 —— 与目标无关")
-            else:
-                init_summary_lines.append(f"  {col}{dn_str}: 待定")
-        init_text = "\n".join(init_summary_lines)
-        conv_history.append({"role": "assistant", "content": init_text})
-    conv_history_for_prompt: list[dict[str, str]] = conv_history
-    chat_lines: list[str] = []
-    for turn in conv_history_for_prompt[-(_CONV_HISTORY_INJECT_TURNS * 2):]:
-        role_label = "用户" if turn.get("role") == "user" else "系统"
-        chat_lines.append(f"{role_label}：{turn.get('content', '')}")
-    chat_history = "\n".join(chat_lines) if chat_lines else "（尚无对话历史）"
-
-    system_msg = (
-        f"{analysis_purpose_text}\n"
-        "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
-        "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
-        "⚠️ 用户当前输入的字段理解绝对优先于已有状态中的中文名。即使已有名称看起来合理，用户说的必须覆盖。\n"
-        "用户说的简称/标签（≤6字，如「公司」「店铺积分」「费用」）→ display_name。\n"
-        "含义扩展说明（完整语句）→ description。两者不能相同。\n"
-        "参与分析理由 → evidence。纠正中文名或含义时，顺带更新 evidence 保持三者一致。\n"
-        "每次只更新一个字段，分多次调用 update_field_understanding。\n"
-        "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
-        "用户限定分析范围（如「只用X、Y」「本次只看」「其他都不参与」「限定为」）→ 调 update_field_role，target/features/ignored 三组全给。\n"
-        "根据分析目标和字段中文名，逐字段重新判断 used_in_analysis。\n"
-        "仅判断当前正在纠正的字段，不要改动其他字段的 used_in_analysis。\n"
-        "判断标准：纠正后的字段含义是否直接服务于分析目标。是→true，否→false。\n"
-        f"{ap_summary}"
-        f"{command_context}"
-        "当前字段表格（参与分析列已由初始分析判断）：\n"
-        f"{field_state}\n"
-        "💡 纠正中文名时，根据分析目标逐字段重新判断 used_in_analysis。只判断当前字段，不推断其他字段的关联。用户明确说「让X参与」或「X不参与」时优先采纳。\n"
-    )
     project_ctx = context.get("_project_context")
-    # 当 project_ctx 存在时，用静态 system_msg（动态内容由 system_prefix 提供）
-    system_msg_for_llm = system_msg
+
     if project_ctx:
-        # 移除 system_msg 中与 system_prefix 重复的动态部分
-        system_msg_for_llm = (
-            "你是资深字段理解专家，精通从自然语言中提取字段语义。\n"
-            "你需要调用 update_field_understanding 或 update_field_role 来更新对应字段。\n"
-            "⚠️ 用户当前输入的字段理解绝对优先于已有状态中的中文名。即使已有名称看起来合理，用户说的必须覆盖。\n"
-            "用户说的简称/标签（≤6字）→ display_name。\n"
-            "含义扩展说明（完整语句）→ description。两者不能相同。\n"
-            "参与分析理由 → evidence。纠正时顺带更新，保持三者一致。\n"
-            "每次只更新一个字段，分多次调用 update_field_understanding。\n"
-            "字段范围如 Bos1-3 指 Bos1、Bos2、Bos3，需逐一调用三次。\n"
-            "用户限定分析范围（如「只用X、Y」「其他都不参与」）→ 调 update_field_role。\n"
-            "根据分析目标和字段中文名，逐字段重新判断 used_in_analysis。\n"
-            "仅判断当前正在纠正的字段，不要改动其他字段的 used_in_analysis。\n"
-            "💡 纠正中文名时，根据分析目标逐字段重新判断 used_in_analysis。只判断当前字段，不推断其他字段的关联。用户明确说「让X参与」或「X不参与」时优先采纳。\n"
-        )
         ctx_block = project_ctx.build_prompt("scout", context)
         messages = [
-            {"role": "system", "content": system_msg_for_llm + "\n\n" + ctx_block["system_prefix"]
-                                          + "\n\n" + ctx_block["upstream_summary"]},
+            {"role": "system", "content": ctx_block["system_prefix"]},
             *ctx_block["messages_history"],
             {"role": "user", "content": raw},
         ]
     else:
-        # ProjectContext 不可用时，最小降级：直接 system_msg + raw
-        import logging
-        _fallback_log = logging.getLogger("hagoku.orchestrator")
-        _fallback_log.warning("ProjectContext 不可用，使用最小降级路径")
         messages = [
-            {"role": "system", "content": system_msg},
+            {"role": "system", "content": f"分析目标: {query_raw}"},
             {"role": "user", "content": raw},
         ]
 
@@ -768,21 +641,16 @@ def _apply_scout_reply_with_llm(
         return applied
 
     except Exception as e:
-        if raw and not applied:
-            context["_last_understanding_failure"] = {
-                "raw_text": raw,
-                "model_reply_text": _raw_text or "",
-                "had_tool_calls": bool(tool_calls),
-                "stage": "scout_field_review",
-            }
-        import traceback
-        import logging
-
-        _log = logging.getLogger("hagoku.orchestrator")
-        _log.warning(
-            "LLM 字段理解失败（保留原字段信息不变）：%s | 原始响应: %s",
-            e,
-            repr(_raw_text if _raw_text else "(无响应)"),
-        )
-        _log.debug(traceback.format_exc())
-        return []
+        # 铁律 2（路径 A）：LLM 不可达 / 通道异常 → raise RuntimeError，让用户看见
+        # 铁律 7：失败必须对用户可见，不准静默兜底
+        context["_last_understanding_failure"] = {
+            "raw_text": raw,
+            "model_reply_text": _raw_text or "",
+            "had_tool_calls": bool(tool_calls) if tool_calls else False,
+            "stage": "scout_field_review",
+        }
+        raise RuntimeError(
+            f"Scout 字段理解 LLM 调用失败：{e}\n"
+            f"用户输入: {raw[:200]}\n"
+            f"请检查 LLM 配置（base_url / api_key / model）是否正确。"
+        ) from e

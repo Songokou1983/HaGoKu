@@ -40,8 +40,8 @@ def test_G2_Scout_handler_空输入_返回字段表(orch):
     assert "field_review" in result
 
 
-def test_G3_Scout_handler_无字段更新_切Cleaner(orch):
-    """G3: Scout handler 无字段更新 → 返回 ("switch", "cleaner")。"""
+def test_G3_Scout_handler_纯确认_切Cleaner(orch):
+    """G3: Scout handler 纯确认 → 返回 ("switch", "cleaner")。"""
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "used_in_analysis": True},
@@ -49,7 +49,7 @@ def test_G3_Scout_handler_无字段更新_切Cleaner(orch):
         "column_descriptions": {},
         "column_display_names": {},
     }
-    result = orch._handle_scout_reply("好，继续", context)
+    result = orch._handle_scout_reply("继续", context)
     assert isinstance(result, tuple)
     assert result[0] == "switch"
     assert result[1] == "cleaner"
@@ -228,21 +228,42 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
     csv_path.write_text("A,B\n1,3\n2,4\n3,5\n", encoding="utf-8")
 
     # mock parse_query 在源头（query_parser 模块），因为 orchestrator 用 local import
-    with patch("hagoku.manager.query_parser.parse_query") as mock_parse:
+    # Mock plan + Scout + Cleaner assess（非本测试关注点），核心验证 _handle_cleaner_reply 不抛 ValueError
+    with patch("hagoku.manager.query_parser.parse_query") as mock_parse, \
+         patch.object(orch, "_create_plan", return_value={
+             "plan_name": "探索性分析", "agents": ["scout", "cleaner", "analyst", "reporter"],
+             "analyst_focus": ["regression"], "target": "", "query": "分析", "reasoning": "",
+             "llm_generated": True,
+         }), \
+         patch("hagoku.agents.scout.ScoutAgent.run") as mock_scout_run, \
+         patch("hagoku.agents.cleaner.agent.CleanerAgent.assess") as mock_cleaner_assess:
         mock_parse.return_value = QueryIntent(intent_type="exploration", confidence="high")
+        mock_cleaner_assess.return_value = {
+            "summary": "数据质量良好",
+            "columns": [{"column": "A", "display_name": "列A", "action": "skip", "reason": "良好"}],
+        }
+        mock_scout_run.return_value = {
+            "column_semantics": [
+                {"column_name": "A", "display_name": "列A", "suggested_role": "feature", "used_in_analysis": True},
+                {"column_name": "B", "display_name": "列B", "suggested_role": "feature", "used_in_analysis": True},
+            ],
+            "column_descriptions": {"A": "列A", "B": "列B"},
+            "column_display_names": {"A": "列A", "B": "列B"},
+            "query": "分析", "n_rows": 3, "n_cols": 2,
+        }
         result = orch.run(data_path=str(csv_path), query="分析")
 
-    assert result.get("status") == "scout_review"
-    assert isinstance(orch._df_raw, pd.DataFrame)
-    assert isinstance(orch._df_clean, pd.DataFrame)
+        assert result.get("status") == "scout_review"
+        assert isinstance(orch._df_raw, pd.DataFrame)
+        assert isinstance(orch._df_clean, pd.DataFrame)
 
-    # 真调 _handle_cleaner_reply——之前会 ValueError，现在应正常返回
-    try:
-        resp = orch._handle_cleaner_reply("确认清洗策略", orch._context)
-    except ValueError as e:
-        if "ambiguous" in str(e):
-            pytest.fail(f"回归：DataFrame truth value ambiguous 复发: {e}")
-        raise
+        # 真调 _handle_cleaner_reply——之前会 ValueError，现在应正常返回
+        try:
+            resp = orch._handle_cleaner_reply("确认清洗策略", orch._context)
+        except ValueError as e:
+            if "ambiguous" in str(e):
+                pytest.fail(f"回归：DataFrame truth value ambiguous 复发: {e}")
+            raise
 
-    assert resp["status"] == "cleaner_review"
-    assert "cleaning_assessment" in resp
+        assert resp["status"] == "cleaner_review"
+        assert "cleaning_assessment" in resp

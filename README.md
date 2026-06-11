@@ -2,6 +2,8 @@
 
 > **让每个小模型，都能做专业级商业分析。**
 
+> 📍 **项目演进方向（2026-06-11 起）**：项目正在从「4 Agent 协作 pipeline」收缩为「1 个数据分析师 LLM + 专业工具箱」。新重心：**本地优先的严肃数据分析师，基于大模型能力，配备深度统计工具箱**。改造按 6 个 Phase 推进，下方"Pipeline 四阶段"是**当前实现**，会随 Phase D 完成而演变为同一 LLM 的 4 个关注点。详见 [`docs/plans/2026-06-11-collapse-to-single-agent-brief.md`](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)。
+
 HaGoKu Studio 是一个多 Agent 数据分析平台——四个分工明确的 LLM Agent 协作，把一份原始数据带到结构化的统计结论与可视化报告。本地 LLM 优先，数据不出本机。
 
 ```

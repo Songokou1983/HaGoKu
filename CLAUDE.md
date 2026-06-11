@@ -8,6 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **核心信条**：LLM 在语义判断上比代码更可靠。Code 的活是构建通道让 LLM 自由发挥，不替 LLM 干活。
 完整信条见 [`PROJECT.md`](PROJECT.md) 顶部。
 
+> 📍 **项目演进方向（2026-06-11 起）**：项目正在从「4 Agent 协作 pipeline」收缩为「1 个数据分析师 LLM + 专业工具箱」。改造按 6 Phase 推进。核心信条不变。
+> 任何架构层改动前**必读** [`docs/plans/2026-06-11-collapse-to-single-agent-brief.md`](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)，确认方向一致。
+
 **绝对不能做**：
 - if-elif 中文分支判断意图 / 字段角色（铁律 1）
 - except 兜底默认值 / 静默重试（铁律 7）

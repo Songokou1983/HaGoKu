@@ -101,8 +101,8 @@ def test_cleaner_route_to_analyst():
     assert result[1] == "analyst"
 
 
-def test_cleaner_confirmation_text_still_works():
-    """用户说"确认" → 传统路径切 analyst（保留兼容）"""
+def test_cleaner_confirmation_text_no_longer_triggers_switch():
+    """Phase C: 用户说"确认"但无 route_to → 留在 cleaner（不再硬编码切 analyst）。"""
     orch = Orchestrator(HaGoKuConfig())
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
@@ -111,11 +111,9 @@ def test_cleaner_confirmation_text_still_works():
 
     fake = FakeCleanerAgent()
     orch._cleaner_agent = fake
-    orch._cleaner_messages = [{"role": "user", "content": "确认"}]
     orch._cleaner_dialog_open = True
 
     fake.run_step.return_value = {
-        "messages": orch._cleaner_messages,
         "text": "ok",
         "submit_assessment": False,
         "assessment": None,
@@ -123,6 +121,6 @@ def test_cleaner_confirmation_text_still_works():
     }
 
     result = orch._handle_cleaner_reply("确认", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "analyst"
+    # Phase C: 留在 cleaner，不再自动切 analyst
+    assert isinstance(result, dict)
+    assert result["status"] == "cleaner_review"

@@ -136,14 +136,14 @@ def test_scout_route_to_priority_over_hardcoded():
     assert result[1] == "reporter"
 
 
-def test_scout_confirmation_text_bypasses_llm():
-    """纯确认文本在 LLM 调用前被硬字符串截获，不触发 route_to 路径。"""
+def test_scout_confirmation_text_no_longer_bypasses_llm():
+    """Phase C: 纯确认文本不再被硬字符串截获——LLM route_to 是唯一切换入口。"""
     orch = Orchestrator(HaGoKuConfig())
     context = _setup_scout_context()
 
-    # "确认" 在 LLM 调用前即被截获，不需要 mock LLM
+    # "确认" 现在走正常 LLM 路径（mock LLM 无 route_to → 留在 scout）
     result = orch._handle_scout_reply("确认", context)
 
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "cleaner"
+    # Phase C: 留在 scout（展示更新后的字段表），不再自动切 Cleaner
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"

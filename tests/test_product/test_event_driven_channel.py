@@ -41,7 +41,8 @@ def test_G2_Scout_handler_空输入_返回字段表(orch):
 
 
 def test_G3_Scout_handler_纯确认_切Cleaner(orch):
-    """G3: Scout handler 纯确认 → 返回 ("switch", "cleaner")。"""
+    """Phase C: 确认词不再触发切换——LLM route_to 是唯一入口。
+    用户说"继续"但 LLM 没调 route_to → 留在 scout。"""
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "used_in_analysis": True},
@@ -50,9 +51,9 @@ def test_G3_Scout_handler_纯确认_切Cleaner(orch):
         "column_display_names": {},
     }
     result = orch._handle_scout_reply("继续", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "cleaner"
+    # Phase C: 不再是 switch，留在 scout
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
 
 
 def test_G4_cancel_via_respond(orch):

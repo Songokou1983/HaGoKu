@@ -485,7 +485,7 @@ class MemoryManager:
         5. user_constraints
         6. derive_from_column_semantics()
         """
-        from ..agents.scout import SemanticType
+        from hagoku.agents.types import SemanticType
 
         # 1. 列语义覆盖
         confirmed = self.get_column_semantics(project_id)

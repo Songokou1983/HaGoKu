@@ -239,7 +239,7 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
              "llm_generated": True,
          }), \
          patch("hagoku.agents.agent.DataAnalystAgent.run_scout_phase") as mock_scout_run, \
-         patch("hagoku.agents.cleaner.agent.CleanerAgent.assess") as mock_cleaner_assess:
+         patch("hagoku.agents.agent.DataAnalystAgent.assess") as mock_cleaner_assess:
         mock_parse.return_value = QueryIntent(intent_type="exploration", confidence="high")
         mock_cleaner_assess.return_value = {
             "summary": "数据质量良好",

@@ -147,7 +147,7 @@ def test_律1_scout字段纠错_空意图时不强制抵达():
 def test_律1_scout首次推断_分析意图抵达LLM():
     """ScoutAgent._infer_all_semantics 调用 LLM 时，user_query 必须出现在 messages 中。"""
     import pandas as pd
-    from hagoku.agents.scout.agent import ScoutAgent
+    from hagoku.agents.agent import DataAnalystAgent as ScoutAgent  # Phase D
     from hagoku.config import HaGoKuConfig
 
     df = pd.DataFrame({"Inc1": [100, 200, 300], "Period": [1, 2, 3]})
@@ -170,7 +170,7 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     original = llm_client_mod.create_raw_client
     llm_client_mod.create_raw_client = lambda _cfg: spy.client  # type: ignore[assignment]
     try:
-        agent._infer_all_semantics(df, intent, memory_project=None)
+        agent.infer_field_semantics(df, intent, memory_project=None)
     finally:
         llm_client_mod.create_raw_client = original  # type: ignore[assignment]
 

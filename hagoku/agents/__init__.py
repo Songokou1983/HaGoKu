@@ -1,22 +1,11 @@
-"""HaGoKu Studio Agent 层"""
-
-# Agent 类（从包目录导入，如 analyst/agent.py、cleaner/agent.py 等）
-from .analyst import AnalysisResult, AnalystAgent
-from .cleaner import CleanerAgent
-from .reporter import ReporterAgent
-from .scout import ScoutAgent
-
-# 共享类型
-from .types import ColumnSemantic, DataContext, InteractionResult, SemanticType
+"""HaGoKu Studio Agent 层 — Phase D: 唯一 DataAnalystAgent"""
+from hagoku.agents.agent import DataAnalystAgent
+from hagoku.agents.types import ColumnSemantic, DataContext, InteractionResult, SemanticType
 
 __all__ = [
-    "AnalysisResult",
-    "AnalystAgent",
-    "CleanerAgent",
+    "DataAnalystAgent",
     "ColumnSemantic",
     "DataContext",
     "InteractionResult",
-    "ReporterAgent",
-    "ScoutAgent",
     "SemanticType",
 ]

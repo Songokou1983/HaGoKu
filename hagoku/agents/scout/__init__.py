@@ -1,10 +1,4 @@
-"""
-Scout Agent — 数据侦察员
-
-职责：理解数据、发现字段含义、标注数据质量
-"""
-
-from ..types import ColumnSemantic, DataContext, SemanticType
-from .agent import ScoutAgent
-
-__all__ = ["ScoutAgent", "ColumnSemantic", "DataContext", "SemanticType"]
+# Phase D shim — 旧 scout agent 已合并到 DataAnalystAgent
+# 此模块仅保留兼容旧 import 路径，Phase E 删除
+from hagoku.agents.agent import DataAnalystAgent as ScoutAgent
+from hagoku.agents.types import SemanticType, ColumnSemantic, DataContext

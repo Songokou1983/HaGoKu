@@ -357,6 +357,6 @@ def _scout_description_is_meaningful_for_user(col_name: str, desc: str) -> bool:
     委托给 scout/agent.py 的 _description_is_user_facing_meaningful。
     纯字符串形状匹配，不涉及语义判断。
     """
-    from hagoku.agents.scout.agent import _description_is_user_facing_meaningful
+    from hagoku.agents.agent import _description_is_user_facing_meaningful
 
     return _description_is_user_facing_meaningful(col_name, desc)

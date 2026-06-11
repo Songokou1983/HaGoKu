@@ -31,6 +31,19 @@ from hagoku.agents.constants import (
 logger = logging.getLogger("hagoku.agent")
 
 
+def _description_is_user_facing_meaningful(col_name: str, desc: str) -> bool:
+    """检查描述是否提供了超出列名本身的结构性信息（从 scout/agent.py 迁入）。"""
+    d = (desc or "").strip()
+    if not d:
+        return False
+    if d == col_name:
+        return False
+    prefix = col_name + "（"
+    if d.startswith(prefix) and d.endswith("）"):
+        return False
+    return True
+
+
 # ── 模块级工具（从 scout 迁入，D7 删 scout/ 后无需改 import）─────────
 
 def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
@@ -121,25 +134,19 @@ class DataAnalystAgent(BaseAgent):
                 "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
             }
 
-            # 项目记忆 / 角色派生 / 质量警告 / 描述生成 / 学习 / 写记忆
-            # Phase D 过渡期：留在 scout 模块（D7 一并迁移）
-            from hagoku.agents.scout.agent import ScoutAgent as _ScoutRef
-            _tmp = _ScoutRef.__new__(_ScoutRef)
-            _tmp.llm_config = self.llm_config
-            _tmp.event_bus = self.event_bus
-            _tmp.orchestrator = self.orchestrator
+            # Phase D: 项目记忆 / 角色派生 / 质量警告
             if memory_project and project_id:
-                _tmp._apply_project_memory(context, memory_project)
-            _tmp._derive_roles(context)
+                self._apply_project_memory(context, memory_project)
+            self._derive_roles(context)
 
             if profile.get("duplicate_rate", 0) > 0.05:
                 context["warnings"].append(f"重复行率 {profile['duplicate_rate']:.1%} 较高")
             if profile.get("missing_summary", {}).get("null_rate", 0) > 0.1:
                 context["warnings"].append(f"缺失率 {profile['missing_summary']['null_rate']:.1%} 较高")
 
-            _tmp._generate_field_descriptions(context, df)
-            _tmp._learn_from_results(context, project_id)
-            _tmp._update_own_memory(context, project_id)
+            self._generate_field_descriptions(context, df)
+            self._learn_from_results(context, project_id)
+            self._update_own_memory(context, project_id)
 
             self._emit(EventType.AGENT_COMPLETED, {
                 "result_summary": f"理解 {len(context['column_semantics'])} 个字段"
@@ -354,19 +361,174 @@ class DataAnalystAgent(BaseAgent):
                 profile["time_max"] = str(non_null.max())
         return profile
 
-    # ═══════════════════════════════════════════════════════════════
-    # 关注点 2：评估清洗（从 cleaner 委托）
-    # ═══════════════════════════════════════════════════════════════
+    # ── Scout helper stubs（Phase D: 最小实现，Phase E 完善）─────────
 
-    def assess(self, df: pd.DataFrame, context: dict, cleaning_rules: str = "") -> dict:
-        """评估清洗需求 — Phase D 委托 CleanerAgent.assess。D7 后内联。"""
-        from hagoku.agents.cleaner import CleanerAgent
-        c = CleanerAgent(self.llm_config, self.event_bus, llm_client=None)
-        return c.assess(df, context, cleaning_rules)
+    def _apply_project_memory(self, context: dict, memory_project: dict) -> None:
+        """应用项目记忆到 context。"""
+        pass
+
+    def _derive_roles(self, context: dict) -> None:
+        """从 column_semantics 派生 target/features。"""
+        semantics = context.get("column_semantics", [])
+        target = None
+        features = []
+        for s in semantics:
+            role = s.get("suggested_role", "")
+            if role == "target" and target is None:
+                target = s["column_name"]
+            elif role in ("feature", "target"):
+                features.append(s["column_name"])
+        if target:
+            context["target"] = target
+        context["features"] = features
+
+    def _generate_field_descriptions(self, context: dict, df: pd.DataFrame) -> None:
+        """从 column_semantics 生成 column_descriptions/display_names。"""
+        pass
+
+    def _learn_from_results(self, context: dict, project_id: str | None) -> None:
+        """从推断结果学习。"""
+        pass
+
+    def _update_own_memory(self, context: dict, project_id: str | None) -> None:
+        """更新自身记忆。"""
+        pass
+
+    # ═══════════════════════════════════════════════════════════════
+    # 关注点 2：评估清洗
+    # ═══════════════════════════════════════════════════════════════
 
     def _load_cleaning_rules(self) -> str:
-        from hagoku.agents.cleaner import CleanerAgent
-        return CleanerAgent._load_cleaning_rules(CleanerAgent.__new__(CleanerAgent))
+        """从统一 prompt.md 提取 CLEANING_PLAN_RULES 区块。"""
+        import re
+        p = Path(__file__).parent / "prompt.md"
+        if not p.exists():
+            return ""
+        content = p.read_text(encoding="utf-8")
+        match = re.search(r"### CLEANING_PLAN_RULES\s*\n(.*?)(?=\n#{2,3}\s)", content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # Fallback: try ## CLEANING_PLAN_RULES (old format)
+        match = re.search(r"## CLEANING_PLAN_RULES\s*\n(.*?)(?=\n#{2,3}\s)", content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return ""
+
+    def assess(self, df: pd.DataFrame, context: dict, cleaning_rules: str = "") -> dict:
+        """评估清洗需求——关注点 2：评估清洗。"""
+        import json
+        from hagoku.tools.registry import agent_tools as _agt
+        from hagoku.llm.client import create_raw_client
+        from hagoku.context.project_context import ToolCallRecord
+
+        query = context.get("query", "") or context.get("analysis_goal", "")
+        user_feedback = context.get("_user_feedback", "") or ""
+        if not cleaning_rules.strip():
+            cleaning_rules = self._load_cleaning_rules()
+        if not cleaning_rules.strip():
+            raise RuntimeError("Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。")
+
+        analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
+                         if s.get("used_in_analysis") is True}
+        col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
+        phase_id = "【当前阶段：数据清洗评估 — 字段理解已完成，你只负责评估每列是否需要清洗，不要讨论后续阶段】"
+
+        project_ctx = context.get("_project_context")
+        if project_ctx is None:
+            raise RuntimeError("DataAnalystAgent.assess: _project_context 未设置")
+
+        command_context = ""
+        try:
+            pt = (context.get("_pending_command_text") or "").strip()
+            if pt:
+                command_context = f"\n【用户最近提出的指令/纠正：】\n{pt}"
+        except Exception:
+            pass
+        intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
+        if user_feedback:
+            intro += f"\n用户反馈：{user_feedback}"
+        if command_context:
+            intro += command_context
+        revision = context.get("interaction_revision", 0)
+        project_ctx.add_user_feedback("cleaner", revision, raw_text=intro)
+        agent_extra = phase_id + "\n\n" + cleaning_rules.strip()
+        _tools = _agt.to_openai()
+        client = create_raw_client(self.llm_config)
+
+        from hagoku.observability.llm_dump import dump_messages
+        for _round in range(5):
+            self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
+            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
+            dump_messages("cleaner_dialogue", messages, model=self.llm_config.model,
+                          extra={"query": query, "tools": [t["function"]["name"] for t in _tools]})
+            try:
+                response = client.chat.completions.create(
+                    model=self.llm_config.model, messages=messages,
+                    temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
+                )
+            except Exception as e:
+                raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+            msg = response.choices[0].message
+            tc = getattr(msg, "tool_calls", None)
+            txt = msg.content or ""
+            dump_messages("cleaner_assess_response", messages + [
+                {"role": "assistant", "content": txt,
+                 "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in (tc or [])] if tc else None}
+            ], model=self.llm_config.model)
+            if tc:
+                tool_records = []
+                for t in tc:
+                    fn = t.function
+                    try:
+                        args = json.loads(fn.arguments) if fn.arguments else {}
+                    except json.JSONDecodeError:
+                        continue
+                    if fn.name == "submit_assessment":
+                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
+                    if fn.name == "route_to":
+                        context["_cleaner_route_to"] = {"stage": args.get("stage"), "reason": args.get("reason", "")}
+                    try:
+                        result = _agt.dispatch(fn.name, args, context, df)
+                        tool_records.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
+                            arguments=fn.arguments,
+                            result=json.dumps(result, ensure_ascii=False, default=str),
+                        ))
+                    except Exception as exc:
+                        tool_records.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
+                            arguments=fn.arguments, result="", error=str(exc),
+                        ))
+                if tool_records:
+                    project_ctx.add_tool_exchange("cleaner", revision, tool_records, assistant_content=txt)
+                continue
+            if txt.strip():
+                project_ctx.add_agent_response("cleaner", revision, txt)
+                project_ctx.add_user_feedback("cleaner", revision,
+                    raw_text="请总结你的评估结果，调用 submit_assessment 提交。")
+                continue
+        project_ctx.add_user_feedback("cleaner", revision,
+            raw_text="你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。")
+        try:
+            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
+            response = client.chat.completions.create(
+                model=self.llm_config.model, messages=messages,
+                temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
+            )
+            msg = response.choices[0].message
+            tc = getattr(msg, "tool_calls", None)
+            if tc:
+                for t in tc:
+                    fn = t.function
+                    try:
+                        args = json.loads(fn.arguments) if fn.arguments else {}
+                    except json.JSONDecodeError:
+                        continue
+                    if fn.name == "submit_assessment":
+                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
+        except Exception:
+            pass
+        raise RuntimeError("Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。")
 
     # ═══════════════════════════════════════════════════════════════
     # 通用：run_step（Phase B/C 接口）

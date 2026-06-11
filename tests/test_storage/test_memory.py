@@ -21,7 +21,7 @@ from hagoku.storage.memory_backends import (
     SqliteMemoryBackend,
     YamlMemoryBackend,
 )
-from hagoku.agents.scout import ColumnSemantic, DataContext, SemanticType
+from hagoku.agents.types import ColumnSemantic, DataContext, SemanticType
 
 
 # ── Fixtures ──────────────────────────────────────────────────

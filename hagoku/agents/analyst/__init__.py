@@ -1,9 +1,5 @@
-"""
-Analyst Agent — 数理分析员
-
-职责：统计方法挖掘数据真相，每个结论有据可查
-"""
-
-from .agent import AnalysisResult, AnalystAgent
-
-__all__ = ["AnalystAgent", "AnalysisResult"]
+# Phase D shim — 旧 analyst agent 已合并到 DataAnalystAgent
+# 此模块仅保留兼容旧 import 路径，Phase E 删除
+from hagoku.agents.agent import DataAnalystAgent as AnalystAgent
+from hagoku.agents.agent import DataAnalystAgent
+AnalysisResult = type("AnalysisResult", (), {})

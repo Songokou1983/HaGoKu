@@ -82,13 +82,10 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
     # 首次评估（首波展示）
     assessment = context.get("_cleaner_assessment")
     if assessment is None:
-        from hagoku.agents.cleaner import CleanerAgent
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm)
-        cleaning_rules = cleaner._load_cleaning_rules()
+        cleaning_rules = self._agent._load_cleaning_rules()
         context["_user_feedback"] = user_input
-        assessment = cleaner.assess(df, context, cleaning_rules)
+        assessment = self._agent.assess(df, context, cleaning_rules)
         context["_cleaner_assessment"] = assessment
-        self._cleaner_agent = cleaner
         self._cleaner_dialog_open = True
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
             "cleaning_assessment": assessment,
@@ -97,17 +94,13 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
-    # 对话模式
-    if self._cleaner_agent is None:
-        from hagoku.agents.cleaner import CleanerAgent
-        self._cleaner_agent = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm)
-
+    # 对话模式 — Phase D: self._agent 由 orchestrator 保证已初始化
     if user_input:
         project_ctx = context.get("_project_context")
         if project_ctx:
             project_ctx.add_user_feedback("cleaner", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._cleaner_agent.run_step(context, df, user_input or "")
+    result = self._agent.run_step(context, df, user_input or "")
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
@@ -135,7 +128,7 @@ def _run_analyst_first_pass(self, context: dict) -> None:
     first_pass_text = ""
 
     for _round in range(max_rounds):
-        result = self._analyst_agent.run_step(context, self._df_clean)
+        result = self._agent.run_step(context, self._df_clean)
 
         if result.get("submit_analysis"):
             findings = result.get("findings")
@@ -215,10 +208,7 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
 
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
     """Analyst 对话阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
-    if self._analyst_agent is None:
-        from hagoku.agents.analyst import AnalystAgent
-        self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm)
-
+    # Phase D: self._agent 由 orchestrator 保证已初始化
     if not self._analyst_first_pass_done:
         _run_analyst_first_pass(self, context)
         self._analyst_first_pass_done = True
@@ -233,7 +223,7 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
         if project_ctx:
             project_ctx.add_user_feedback("analyst", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._analyst_agent.run_step(context, self._df_clean, user_input or "")
+    result = self._agent.run_step(context, self._df_clean, user_input or "")
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
@@ -258,19 +248,13 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
 
 def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple:
     """Reporter 阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
-    if self._reporter_agent is None:
-        from hagoku.agents.reporter import ReporterAgent
-        self._reporter_agent = ReporterAgent(
-            llm_config=self.config.llm, event_bus=self.event_bus,
-            llm_client=self.llm_raw,
-        )
-
+    # Phase D: self._agent 由 orchestrator 保证已初始化
     if user_input:
         project_ctx = context.get("_project_context")
         if project_ctx:
             project_ctx.add_user_feedback("reporter", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._reporter_agent.run_step(context, None, user_input or "")
+    result = self._agent.run_step(context, None, user_input or "")
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)

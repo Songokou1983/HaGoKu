@@ -39,8 +39,8 @@ def test_first_call_runs_assessment_and_opens_dialog():
     context = _setup_cleaner_context()
 
     fake = FakeCleanerAgent()
-    with patch("hagoku.agents.cleaner.CleanerAgent", return_value=fake):
-        result = orch._handle_cleaner_reply("评估", context)
+    orch._agent = fake
+    result = orch._handle_cleaner_reply("评估", context)
 
     assert result["status"] == "cleaner_review"
     assert orch._cleaner_dialog_open, "首次评估后应设置 _cleaner_dialog_open=True"
@@ -56,7 +56,7 @@ def test_second_call_uses_dialog_mode():
     context["_cleaner_assessment"] = {"summary": "已有评估", "columns": []}
 
     fake = FakeCleanerAgent()
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_messages = [{"role": "user", "content": "你好"}]
     orch._cleaner_dialog_open = True
 
@@ -83,7 +83,7 @@ def test_cleaner_route_to_analyst():
     context["_cleaner_assessment"] = {"summary": "done", "columns": []}
 
     fake = FakeCleanerAgent()
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_messages = [{"role": "user", "content": "可以了"}]
     orch._cleaner_dialog_open = True
 
@@ -110,7 +110,7 @@ def test_cleaner_confirmation_text_no_longer_triggers_switch():
     context["_cleaner_assessment"] = {"summary": "done", "columns": []}
 
     fake = FakeCleanerAgent()
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_dialog_open = True
 
     fake.run_step.return_value = {

@@ -96,24 +96,22 @@ class TestAnalystControlChannelLinks:
         orch = Orchestrator(HaGoKuConfig())
         orch._df_clean = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
         from hagoku.agents.analyst import AnalystAgent
-        orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-        orch._analyst_agent.llm_config = orch.config.llm
-        orch._analyst_agent.event_bus = orch.event_bus
-        orch._analyst_agent.prompt = "test"
-        orch._analyst_messages = [{"role": "user", "content": "test"}]
+        orch._agent = AnalystAgent.__new__(AnalystAgent)
+        orch._agent.llm_config = orch.config.llm
+        orch._agent.event_bus = orch.event_bus
+        orch._agent.prompt = "test"
         orch._analyst_first_pass_done = True
         return orch
 
     def test_route_to_reporter_triggers_switch(self, orch):
         """Analyst route_to(reporter) → switch"""
         step_result = {
-            "messages": orch._analyst_messages,
             "text": "ok",
             "submit_analysis": False,
             "findings": None,
             "route_to": {"stage": "reporter", "reason": "done"},
         }
-        orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+        orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("够了", {"query": "test"})
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -122,13 +120,12 @@ class TestAnalystControlChannelLinks:
     def test_submit_analysis_triggers_switch(self, orch):
         """Analyst submit_analysis → switch to reporter"""
         step_result = {
-            "messages": orch._analyst_messages,
             "text": "done",
             "submit_analysis": True,
             "findings": {"findings": [], "method_used": [], "summary": "ok"},
             "route_to": None,
         }
-        orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+        orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("提交", {"query": "test"})
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -137,13 +134,12 @@ class TestAnalystControlChannelLinks:
     def test_no_control_tool_stays(self, orch):
         """无控制工具调用 → 留在 analyst"""
         step_result = {
-            "messages": orch._analyst_messages + [{"role": "assistant", "content": "ok"}],
             "text": "ok",
             "submit_analysis": False,
             "findings": None,
             "route_to": None,
         }
-        orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+        orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("继续", {"query": "test"})
         assert not isinstance(result, tuple)
         assert result["status"] == "analyst_review"
@@ -180,7 +176,7 @@ class TestCleanerControlChannelLinks:
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"
-        orch._cleaner_agent = agent
+        orch._agent = agent
         orch._cleaner_messages = [{"role": "user", "content": "可以了"}]
         orch._cleaner_dialog_open = True
 
@@ -204,7 +200,7 @@ class TestCleanerControlChannelLinks:
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"
-        orch._cleaner_agent = agent
+        orch._agent = agent
         orch._cleaner_messages = [{"role": "user", "content": "重看字段"}]
         orch._cleaner_dialog_open = True
 
@@ -227,7 +223,7 @@ class TestCleanerControlChannelLinks:
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"
-        orch._cleaner_agent = agent
+        orch._agent = agent
         orch._cleaner_messages = [{"role": "user", "content": "讨论"}]
         orch._cleaner_dialog_open = True
 

@@ -109,7 +109,7 @@ agent_tools.register(Tool(
         "required": ["column", "by"],
     },
     handler=_handle_group_stats,
-    agents=["cleaner", "analyst"],  # 仅 Cleaner/Analyst
+    phase_tag=['评估清洗', '跑统计'],  # 仅 Cleaner/Analyst
 ))
 
 
@@ -166,7 +166,7 @@ agent_tools.register(Tool(
         "required": ["columns"],
     },
     handler=_handle_update_field_table,
-    agents=["scout", "cleaner", "analyst"],
+    phase_tag=['理解字段', '评估清洗', '跑统计'],
 ))
 
 # ═══════════════════════════════════════════════════════════════════
@@ -251,7 +251,7 @@ agent_tools.register(Tool(
         "required": ["column_name"],
     },
     handler=_handle_update_field_understanding,
-    agents=["scout"],
+    phase_tag=['理解字段'],
 ))
 
 agent_tools.register(Tool(
@@ -267,7 +267,7 @@ agent_tools.register(Tool(
         "required": [],
     },
     handler=_handle_update_field_role,
-    agents=["scout"],
+    phase_tag=['理解字段'],
 ))
 
 def _handle_update_assessment(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
@@ -304,7 +304,7 @@ agent_tools.register(Tool(
         "required": ["column"],
     },
     handler=_handle_update_assessment,
-    agents=["cleaner"],
+    phase_tag=['评估清洗'],
 ))
 
 agent_tools.register(Tool(
@@ -332,7 +332,7 @@ agent_tools.register(Tool(
         "required": ["summary", "columns"],
     },
     handler=lambda args, ctx, df: args,
-    agents=["cleaner"],
+    phase_tag=['评估清洗'],
 ))
 
 agent_tools.register(Tool(
@@ -347,7 +347,7 @@ agent_tools.register(Tool(
         "required": ["included_fields"],
     },
     handler=_handle_restrict_analysis_to,
-    agents=["scout"],
+    phase_tag=['理解字段'],
 ))
 
 
@@ -375,7 +375,7 @@ agent_tools.register(Tool(
         "required": ["method_name", "reasoning"],
     },
     handler=_handle_propose_method,
-    agents=["analyst"],
+    phase_tag=['跑统计'],
 ))
 
 
@@ -420,7 +420,7 @@ agent_tools.register(Tool(
         "required": ["question", "expected_format"],
     },
     handler=_handle_ask_user,
-    agents=["scout", "cleaner", "analyst", "reporter"],
+    phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
 ))
 
 
@@ -456,7 +456,7 @@ agent_tools.register(Tool(
         "required": ["findings", "method_used", "summary"],
     },
     handler=_handle_submit_analysis,
-    agents=["analyst"],
+    phase_tag=['跑统计'],
 ))
 
 
@@ -493,7 +493,7 @@ agent_tools.register(Tool(
         "required": ["findings", "method_used", "summary"],
     },
     handler=_handle_submit_first_pass,
-    agents=["analyst"],
+    phase_tag=['跑统计'],
 ))
 
 import numpy as _np
@@ -575,7 +575,7 @@ agent_tools.register(Tool(
         "required": ["test_type", "columns"],
     },
     handler=_handle_run_statistical_test,
-    agents=["analyst"],
+    phase_tag=['跑统计'],
 ))
 
 
@@ -606,7 +606,7 @@ agent_tools.register(Tool(
         "required": [],
     },
     handler=_handle_update_analysis_scope,
-    agents=["analyst"],
+    phase_tag=['跑统计'],
 ))
 
 
@@ -634,7 +634,7 @@ agent_tools.register(Tool(
         "required": ["column", "rule", "reason"],
     },
     handler=_handle_propose_cleaning_rule,
-    agents=["cleaner"],
+    phase_tag=['评估清洗'],
 ))
 
 
@@ -674,7 +674,7 @@ agent_tools.register(Tool(
         "required": ["column", "rule"],
     },
     handler=_handle_compare_before_after,
-    agents=["cleaner"],
+    phase_tag=['评估清洗'],
 ))
 
 
@@ -708,5 +708,5 @@ agent_tools.register(Tool(
         "required": ["reason"],
     },
     handler=_handle_route_to,
-    agents=["scout", "cleaner", "analyst", "reporter"],
+    phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
 ))

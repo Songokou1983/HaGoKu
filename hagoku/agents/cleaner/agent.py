@@ -35,7 +35,8 @@ _cconfig = CleaningConfig()
 from ...tools.data_io import load_data
 from ..base import BaseAgent
 from ..types import InteractionResult
-from . import knowledge as cleaner_knowledge
+# Phase D: knowledge.py 已迁移到 hagoku/memory/（D6），暂用空占位
+cleaner_knowledge = type('_KnowledgeStub', (), {'recall': lambda *a, **kw: [], 'learn': lambda *a, **kw: None})()
 
 
 class CleanerAgent(BaseAgent):

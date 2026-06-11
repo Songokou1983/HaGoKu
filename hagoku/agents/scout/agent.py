@@ -26,7 +26,8 @@ from ...tools.data_io import load_data
 from ...tools.profiling import generate_profile
 from ..base import BaseAgent
 from ..types import InteractionResult, build_submit_field_inference_schema
-from . import knowledge as scout_knowledge
+# Phase D: knowledge.py 已迁移到 hagoku/memory/（D6）
+scout_knowledge = type('_KStub', (), {})()
 
 # 模块级知识库配置（可通过 YAML 覆盖）
 _kconfig = KnowledgeConfig()

@@ -11,10 +11,10 @@ def _setup_analyst_agent_for_test(orch):
     """设置 mock AnalystAgent 用于 route_to 测试。"""
     from hagoku.agents.analyst import AnalystAgent
     orch._df_clean = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
-    orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-    orch._analyst_agent.llm_config = orch.config.llm
-    orch._analyst_agent.event_bus = orch.event_bus
-    orch._analyst_agent.prompt = "test prompt"
+    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test prompt"
     orch._analyst_messages = [{"role": "user", "content": "够了，去写报告吧"}]
     orch._analyst_first_pass_done = True
 
@@ -31,7 +31,7 @@ def test_route_to_reporter_triggers_switch():
         "findings": None,
         "route_to": {"stage": "reporter", "reason": "用户要求进入报告阶段"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("够了，去写报告吧", {"query": "test"})
 
@@ -53,7 +53,7 @@ def test_route_to_scout_triggers_switch():
         "findings": None,
         "route_to": {"stage": "scout", "reason": "字段理解可能有问题"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("方向不对，回去重看字段", {"query": "test"})
 
@@ -74,7 +74,7 @@ def test_route_to_cleaner_triggers_switch():
         "findings": None,
         "route_to": {"stage": "cleaner", "reason": "清洗方案需要调整"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("Cleaner 的清洗方案不对", {"query": "test"})
 
@@ -95,7 +95,7 @@ def test_route_to_without_stage_stays():
         "findings": None,
         "route_to": {"reason": "用户说再等等"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("再等等，我再看看", {"query": "test"})
 
@@ -116,7 +116,7 @@ def test_route_to_analyst_stays():
         "findings": None,
         "route_to": {"stage": "analyst", "reason": "继续"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("继续分析", {"query": "test"})
 
@@ -137,7 +137,7 @@ def test_route_to_and_other_tools_same_round():
         "findings": None,
         "route_to": {"stage": "reporter", "reason": "用户要求收尾"},
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("够了，去写报告", {"query": "test"})
 
@@ -158,7 +158,7 @@ def test_no_route_to_no_switch():
         "findings": None,
         "route_to": None,
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     result = orch._handle_analyst_reply("换 t 检验试试", {"query": "test"})
 

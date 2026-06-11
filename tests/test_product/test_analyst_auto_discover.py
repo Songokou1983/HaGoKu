@@ -40,10 +40,10 @@ def test_handle_analyst_reply_skips_first_pass_on_second_entry():
     orch._analyst_first_pass_done = True
 
     from hagoku.agents.analyst import AnalystAgent
-    orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-    orch._analyst_agent.llm_config = orch.config.llm
-    orch._analyst_agent.event_bus = orch.event_bus
-    orch._analyst_agent.prompt = "test"
+    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
 
     pc = ProjectContext(run_id="test", analysis_goal="测试")
     pc.add_user_feedback("analyst", 0, "首轮对话")
@@ -54,7 +54,7 @@ def test_handle_analyst_reply_skips_first_pass_on_second_entry():
         "submit_analysis": False,
         "findings": None,
     }
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     with patch(
         "hagoku.manager.llm_dispatch.reply_handlers._run_analyst_first_pass",

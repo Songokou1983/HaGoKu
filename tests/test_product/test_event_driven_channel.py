@@ -238,7 +238,7 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
              "analyst_focus": ["regression"], "target": "", "query": "分析", "reasoning": "",
              "llm_generated": True,
          }), \
-         patch("hagoku.agents.scout.ScoutAgent.run") as mock_scout_run, \
+         patch("hagoku.agents.agent.DataAnalystAgent.run_scout_phase") as mock_scout_run, \
          patch("hagoku.agents.cleaner.agent.CleanerAgent.assess") as mock_cleaner_assess:
         mock_parse.return_value = QueryIntent(intent_type="exploration", confidence="high")
         mock_cleaner_assess.return_value = {

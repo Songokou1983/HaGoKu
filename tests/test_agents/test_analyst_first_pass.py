@@ -53,10 +53,10 @@ def test_run_analyst_first_pass_with_submit_first_pass():
     orch = Orchestrator(HaGoKuConfig())
 
     from hagoku.agents.analyst import AnalystAgent
-    orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-    orch._analyst_agent.llm_config = orch.config.llm
-    orch._analyst_agent.event_bus = orch.event_bus
-    orch._analyst_agent.prompt = "test prompt"
+    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test prompt"
     orch._df_clean = None
 
     # 构造 context 含 ProjectContext（submit_first_pass 结果记录为 tool_exchange）
@@ -73,7 +73,7 @@ def test_run_analyst_first_pass_with_submit_first_pass():
     context = {"_project_context": pc, "query": "test"}
 
     step_result = _make_mock_step_result(text="首波分析完成")
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     rewrite_output = "[发现] 测试发现\n[统计依据] p=0.05\n[局限或解读] 样本小"
     with patch(
@@ -98,16 +98,16 @@ def test_run_analyst_first_pass_converges_when_no_tool_calls():
     orch = Orchestrator(HaGoKuConfig())
 
     from hagoku.agents.analyst import AnalystAgent
-    orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-    orch._analyst_agent.llm_config = orch.config.llm
-    orch._analyst_agent.event_bus = orch.event_bus
-    orch._analyst_agent.prompt = "test"
+    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
     orch._df_clean = None
 
     context = {"query": "test"}  # 无 _project_context → add_agent_response 不写（但首波分析仍运行）
 
     step_result = _make_mock_step_result(text="分析完成，没有发现异常")
-    orch._analyst_agent.run_step = MagicMock(return_value=step_result)
+    orch._agent.run_step = MagicMock(return_value=step_result)
 
     emits = []
     with patch.object(orch.event_bus, "emit", wraps=lambda et, ag, data=None: emits.append((et, ag, data))):

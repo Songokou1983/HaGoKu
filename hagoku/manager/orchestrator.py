@@ -11,7 +11,8 @@ from typing import Any
 from ..agents.analyst import AnalystAgent
 from ..agents.cleaner import CleanerAgent
 from ..agents.reporter import ReporterAgent
-from ..agents.scout import ScoutAgent
+from ..agents.scout import ScoutAgent  # Phase D: 过渡期保留，D5/D7 删
+from ..agents.agent import DataAnalystAgent
 from ..config import HaGoKuConfig
 from ..guardrails.statistical import StatisticalGuardrails
 from ..llm.client import create_raw_client, create_structured_llm_client
@@ -318,16 +319,8 @@ class Orchestrator(
         # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
         self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
 
-        # 初始化 Agent（Step 4：Scribe 类已删，agent 不再接收 scribe= 参数）
-        # 双层 LLM 策略：Scout/Cleaner/Reporter 用 quick，Analyst 用 deep
-        scout = ScoutAgent(self.config.llm, self.event_bus, orchestrator=self,
-                           llm_client=self.llm, channel_logger=self._channel_logger)
-        cleaner = CleanerAgent(self.config.llm, self.event_bus, orchestrator=self,
-                               llm_client=self.llm)
-        analyst = AnalystAgent(self.config.llm, self.event_bus, orchestrator=self,
-                               llm_client=self.llm)
-        reporter = ReporterAgent(llm_config=self.config.llm, event_bus=self.event_bus,
-                                 orchestrator=self, llm_client=self.llm_raw)
+        # Phase D: 唯一 DataAnalystAgent
+        self._agent = DataAnalystAgent(self.config.llm, self.event_bus, orchestrator=self, llm_client=self.llm)
 
         # Resume 支持
         df_clean = None
@@ -357,9 +350,9 @@ class Orchestrator(
                 # 3. Scout: 数据侦察
                 # 加载项目历史记忆，避免用户重复回答字段含义
                 memory_project = self.memory.build_memory_project(project_name) if self.memory else None
-                scout.memory_project = memory_project
-                result = scout.run(
-                    data_path, query, project_id=project_name, emit_completed=False,
+                self._agent.memory_project = memory_project
+                result = self._agent.run_scout_phase(
+                    data_path, query, project_id=project_name,
                     memory_project=memory_project,
                 )
                 context.update(result)

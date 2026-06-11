@@ -62,10 +62,10 @@ class TestAnalystTwoPhaseE2E:
         """完整剧本：首波→对话→route_to→Reporter"""
         analyst = MagicMock()
         from hagoku.agents.analyst import AnalystAgent
-        orch._analyst_agent = AnalystAgent.__new__(AnalystAgent)
-        orch._analyst_agent.llm_config = orch.config.llm
-        orch._analyst_agent.event_bus = orch.event_bus
-        orch._analyst_agent.prompt = "test"
+        orch._agent = AnalystAgent.__new__(AnalystAgent)
+        orch._agent.llm_config = orch.config.llm
+        orch._agent.event_bus = orch.event_bus
+        orch._agent.prompt = "test"
         # Phase B: ProjectContext 替代 _analyst_messages
         from hagoku.context.project_context import ProjectContext
         pc = ProjectContext(run_id="two_phase", analysis_goal="测试ROI")
@@ -73,7 +73,7 @@ class TestAnalystTwoPhaseE2E:
 
         # ── 剧本第 1 步：Cleaner → Analyst 首次进入 → 触发首波 ──
         # Mock run_step: LLM 调 submit_first_pass（首波完成信号）
-        orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
+        orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="首波完成", submit_first_pass=True,
         ))
 
@@ -104,7 +104,7 @@ class TestAnalystTwoPhaseE2E:
         assert user_entries[0].raw_user_text == "确认"
 
         # ── 剧本第 2 步：阶段 2 — 用户输入"换 t 检验试试" ──
-        orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
+        orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="已执行 t 检验，p=0.03",
         ))
         result2 = orch._handle_analyst_reply("换 t 检验试试", orch._context)
@@ -113,7 +113,7 @@ class TestAnalystTwoPhaseE2E:
         assert "p=0.03" in result2.get("message", "")
 
         # ── 剧本第 3 步：用户说"方向不对，回去重看字段" ──
-        orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
+        orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="好的，回到字段理解",
             route_to={"stage": "scout", "reason": "方向不对"},
         ))
@@ -128,7 +128,7 @@ class TestAnalystTwoPhaseE2E:
         orch._context = {"_project_context": pc2, "query": "测试ROI", "column_semantics": []}
 
         # 首波 mock
-        orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
+        orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="分析完成", submit_first_pass=True,
         ))
         with patch(
@@ -138,7 +138,7 @@ class TestAnalystTwoPhaseE2E:
             orch._handle_analyst_reply("", orch._context)
 
         # 阶段 2 — route_to(reporter)
-        orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
+        orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="好的，切换到报告",
             route_to={"stage": "reporter", "reason": "用户要求"},
         ))

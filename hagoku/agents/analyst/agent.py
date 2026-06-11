@@ -38,7 +38,8 @@ from ...tools.analysis import (
 from ...tools.power_analysis import power_ttest
 from ..base import BaseAgent
 from ..types import InteractionResult
-from . import knowledge as analyst_knowledge
+# Phase D: knowledge.py 已迁移到 hagoku/memory/（D6）
+analyst_knowledge = type('_KStub', (), {})()
 
 logger = logging.getLogger("hagoku.analyst")
 

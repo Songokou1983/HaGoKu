@@ -29,8 +29,8 @@ class Tool:
     description: str
     parameters: dict[str, Any]
     handler: Callable[..., Any]
-    agents: list[str] = field(default_factory=lambda: ["scout", "cleaner", "analyst", "reporter"])
-    # agents: 哪些 Agent 可用此工具。默认全部。
+    phase_tag: list[str] = field(default_factory=lambda: ["理解字段", "评估清洗", "跑统计", "写报告"])
+    # Phase D: phase_tag 替代 agents。仅作 LLM 自参考，不过滤工具。
 
 
 class AgentTools:
@@ -50,22 +50,29 @@ class AgentTools:
 
     @classmethod
     def list_for_agent(cls, agent: str) -> list[Tool]:
-        return [t for t in cls._tools.values() if agent in t.agents]
+        """Phase D: 不再按 agent 过滤——返回全部工具。agent 参数保留兼容旧调用。"""
+        return list(cls._tools.values())
 
     @classmethod
-    def to_openai(cls, agent: str) -> list[dict[str, Any]]:
-        """转为 OpenAI function calling 格式。"""
-        return [
-            {
+    def to_openai(cls, agent: str = "") -> list[dict[str, Any]]:
+        """Phase D: 返回全部工具（不再按 agent 过滤）。
+
+        phase_tag 作为 description 的一部分，让 LLM 知道工具的典型使用场景。
+        """
+        result: list[dict[str, Any]] = []
+        for t in cls._tools.values():
+            desc = t.description
+            if hasattr(t, 'phase_tag') and t.phase_tag:
+                desc = f"{desc}（通常在【{'/'.join(t.phase_tag)}】关注点使用）"
+            result.append({
                 "type": "function",
                 "function": {
                     "name": t.name,
-                    "description": t.description,
+                    "description": desc,
                     "parameters": t.parameters,
                 },
-            }
-            for t in cls.list_for_agent(agent)
-        ]
+            })
+        return result
 
     @classmethod
     def dispatch(

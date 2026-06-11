@@ -38,16 +38,15 @@ def test_cleaner_full_flow():
     }
 
     fake = FakeCleanerAgent()
-
-    with patch("hagoku.agents.cleaner.CleanerAgent", return_value=fake):
-        # Step 1: 首次进入 → 评估
-        result1 = orch._handle_cleaner_reply("评估", context)
-        assert result1["status"] == "cleaner_review"
-        assert orch._cleaner_dialog_open
-        assert context.get("_cleaner_assessment") is not None
+    orch._agent = fake
+    # Step 1: 首次进入 → 评估
+    result1 = orch._handle_cleaner_reply("评估", context)
+    assert result1["status"] == "cleaner_review"
+    assert orch._cleaner_dialog_open
+    assert context.get("_cleaner_assessment") is not None
 
     # Mock route_to 行为
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_messages = [{"role": "user", "content": "可以了"}]
     fake.run_step.return_value = {
         "messages": orch._cleaner_messages + [{"role": "assistant", "content": "好的"}],
@@ -78,7 +77,7 @@ def test_cleaner_user_challenges():
     }
 
     fake = FakeCleanerAgent()
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_messages = [{"role": "user", "content": "B列不应该洗"}]
     orch._cleaner_dialog_open = True
 
@@ -109,7 +108,7 @@ def test_cleaner_route_to_scout():
     }
 
     fake = FakeCleanerAgent()
-    orch._cleaner_agent = fake
+    orch._agent = fake
     orch._cleaner_messages = [{"role": "user", "content": "字段理解有问题"}]
     orch._cleaner_dialog_open = True
 

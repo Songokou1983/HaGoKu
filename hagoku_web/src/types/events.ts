@@ -16,6 +16,7 @@ export type EventType =
   | "data_artifact_created"
   | "user_input_requested"
   | "user_input_received"
+  | "tool_exchange"
   | "run_started"
   | "run_completed"
   | "run_failed";

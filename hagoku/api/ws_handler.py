@@ -137,6 +137,11 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
                 snapshot["field_review"] = field_review.get("field_review")
             except Exception:
                 pass
+        # Phase C: pending_ask_user（LLM ask_user 暂停状态恢复）
+        ask = ctx.get("_pending_ask_user")
+        if ask:
+            snapshot["pending_ask_user"] = ask
+
         # Cleaner 阶段
         if stage == "cleaner" and ctx:
             try:
@@ -322,11 +327,10 @@ async def ws_handler(ws: WebSocket) -> None:
                         await ws.send_json({"type": "error", "message": str(e)})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
-                # 清理整个 payload 中的 null 字节（与 analyze 命令一致）
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 user_text = payload.get("text", "").strip()
-                if not user_text:
-                    continue
+                # Phase C: 空 text 是合法信号（"让 LLM 再想想"），不再 skip
+                # R6 防护：连续 3 次空回复 → emit error（不兜底，显式失败，铁律 7）
                 orch = _shared_orchestrator
                 if orch is None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})

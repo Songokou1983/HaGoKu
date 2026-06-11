@@ -299,6 +299,16 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     if self._error:
         return {"status": "error", "message": str(self._error)}
 
+    # R6 防护：连续空回复死循环检测
+    if not text:
+        empty_count = getattr(self, '_empty_respond_count', 0) + 1
+        setattr(self, '_empty_respond_count', empty_count)
+        if empty_count >= 3:
+            self._error = RuntimeError("连续 3 次空回复，可能存在死循环。请刷新页面重试。")
+            return {"status": "error", "message": str(self._error)}
+    else:
+        setattr(self, '_empty_respond_count', 0)
+
     # Phase C: 注入 _current_stage 供 ask_user handler 使用
     ctx = getattr(self, '_context', None)
     if ctx is not None:

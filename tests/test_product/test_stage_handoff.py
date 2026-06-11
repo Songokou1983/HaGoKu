@@ -90,15 +90,14 @@ def test_下游_agent_实际注入_messages_history(agent_key):
         agent.event_bus = _FakeEventBus()
         agent._llm_client = _ReporterFakeClient()
         agent.role = "reporter"
+        agent.prompt = "test"
+        agent._context = {"_project_context": ctx_proj}  # Phase B: _call_llm_with_tools 需要
 
-        block = ctx_proj.build_prompt("reporter", context={})
-        system_prompt = "报告员"
-        system_prompt += "\n\n" + block["system_prefix"] + "\n\n" + block["upstream_summary"]
         try:
             agent._call_llm(
-                system=system_prompt,
+                system="报告员",
                 user="测试",
-                messages_history=block.get("messages_history", []),
+                messages_history=ctx_proj.build_prompt("reporter", context={}).get("messages_history", []),
             )
         except RuntimeError:
             pass

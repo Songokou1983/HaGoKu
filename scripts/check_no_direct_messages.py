@@ -20,8 +20,8 @@ WATCHED_DIRS = ["hagoku/agents", "hagoku/manager"]
 EXEMPT_FILES = {"hagoku/channel.py"}
 
 # 正则模式
-DIRECT_ASSIGN = re.compile(r'\bmessages\s*=\s*\[\s*\{\s*["\x27]role["\x27]')
-APPEND_ROLE = re.compile(r'\bmessages\s*\.\s*append\s*\(\s*\{')
+DIRECT_ASSIGN = re.compile(r'\b_?messages\s*(?::\s*list\[dict\])?\s*=\s*\[\s*\{\s*["\x27]role["\x27]')
+APPEND_ROLE = re.compile(r'\b_?messages\s*\.\s*append\s*\(\s*\{')
 
 
 def _is_exempt(filepath: str) -> bool:

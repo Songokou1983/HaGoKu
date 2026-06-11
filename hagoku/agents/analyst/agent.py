@@ -169,12 +169,6 @@ class AnalystAgent(BaseAgent):
 
         path.write_text(content, encoding="utf-8")
 
-    def _compose_system_messages(self, context: dict) -> list[dict]:
-        """[Phase B 兼容] 仍保留方法签名供过渡期，但不再使用。
-        所有 LLM 调用点已改为 project_ctx.to_messages_for_llm()。
-        """
-        return []
-
     def run_step(self, context: dict, df: pd.DataFrame | None = None, user_input: str = "") -> dict:
         """单步执行：跑 1 轮 LLM，处理 tool_calls。
 

@@ -67,9 +67,9 @@ def _build_analysis_purpose(self, context: dict[str, Any]) -> dict[str, Any]:
 def _get_upstream_summary(self, agent_name: str) -> str | None:
     """占位方法（Step 3 删 handover 通道后保留兼容）。
 
-    调用点（line 853）期望拿到上游 Agent 摘要注入下游 prompt。
+    调用点期望拿到上游 Agent 摘要注入下游 prompt。
     Step 4 决定：handover 通道彻底删除后，本方法返回 None 即可。
-    下游 Agent 拿不到额外摘要，但其 ctx 仍包含上游的完整数据（self._analyst_messages 等）。
+    下游 Agent 上下文由 ProjectContext.entries 统一管理。
     """
     return None
 

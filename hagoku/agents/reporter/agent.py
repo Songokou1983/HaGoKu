@@ -51,12 +51,6 @@ class ReporterAgent(BaseAgent):
         self._cleaning_summary: dict = {}
         self._pending_data: dict = {}
 
-    def _compose_system_messages(self, context: dict) -> list[dict]:
-        """[Phase B 兼容] 仍保留方法签名供过渡期，但不再使用。
-        所有 LLM 调用点已改为 project_ctx.to_messages_for_llm()。
-        """
-        return []
-
     def run_step(self, context: dict, df=None, user_input: str = "") -> dict:
         """单步执行：跑 1 轮 LLM，处理 tool_calls。
 
@@ -178,20 +172,16 @@ class ReporterAgent(BaseAgent):
         if self._llm_client is None:
             raise RuntimeError("ReporterAgent 没有 LLM 客户端")
 
-        # Phase B: 尝试走统一入口
+        # Phase B: 统一走 ProjectContext.to_messages_for_llm()
         ctx = getattr(self, '_context', {}) or {}
         project_ctx = ctx.get("_project_context")
-        if project_ctx:
-            agent_extra = getattr(self, 'prompt', '')
-            _messages = project_ctx.to_messages_for_llm(
-                "reporter", ctx, user,
-                agent_system_extra=agent_extra,
-            )
-        else:
-            _messages: list[dict] = [{"role": "system", "content": system}]
-            if messages_history:
-                _messages.extend(messages_history)
-            _messages.append({"role": "user", "content": user})
+        if project_ctx is None:
+            raise RuntimeError("Reporter._call_llm_with_tools: _project_context 未设置，信息通道断裂")
+        agent_extra = getattr(self, 'prompt', '')
+        _messages = project_ctx.to_messages_for_llm(
+            "reporter", ctx, user,
+            agent_system_extra=agent_extra,
+        )
 
         try:
             response = self._llm_client.chat.completions.create(

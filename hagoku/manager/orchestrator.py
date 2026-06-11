@@ -159,14 +159,11 @@ class Orchestrator(
         self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
-        self._analyst_messages: list[dict] = []
         self._analyst_agent: Any = None
         self._analyst_first_pass_done: bool = False
         self._cleaner_agent: Any = None
-        self._cleaner_messages: list[dict] = []
         self._cleaner_dialog_open: bool = False
         self._reporter_agent: Any = None
-        self._reporter_messages: list[dict] = []
         self._error: Exception | None = None
 
 
@@ -198,11 +195,9 @@ class Orchestrator(
         self._stage = ""
         self._df_clean = None
         self._df_raw = None
-        self._analyst_messages = []
         self._analyst_agent = None
         self._analyst_first_pass_done = False
         self._cleaner_agent = None
-        self._cleaner_messages = []
         self._cleaner_dialog_open = False
         self._error = None
 
@@ -305,7 +300,6 @@ class Orchestrator(
         self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
-        self._analyst_messages: list[dict] = []
         self._analyst_agent: Any = None
         self._error: Exception | None = None
 

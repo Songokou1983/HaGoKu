@@ -66,7 +66,10 @@ class TestAnalystTwoPhaseE2E:
         orch._analyst_agent.llm_config = orch.config.llm
         orch._analyst_agent.event_bus = orch.event_bus
         orch._analyst_agent.prompt = "test"
-        orch._analyst_messages = []
+        # Phase B: ProjectContext 替代 _analyst_messages
+        from hagoku.context.project_context import ProjectContext
+        pc = ProjectContext(run_id="two_phase", analysis_goal="测试ROI")
+        orch._context = {"_project_context": pc, "query": "测试ROI", "column_semantics": []}
 
         # ── 剧本第 1 步：Cleaner → Analyst 首次进入 → 触发首波 ──
         # Mock run_step: LLM 调 submit_first_pass（首波完成信号）
@@ -96,9 +99,9 @@ class TestAnalystTwoPhaseE2E:
         assert "[局限或解读]" in msg
 
         # 断言：用户尾话"确认"被保留为阶段 2 第一条用户消息
-        user_msgs = [m for m in orch._analyst_messages if m.get("role") == "user"]
-        assert len(user_msgs) >= 1
-        assert user_msgs[0]["content"] == "确认"
+        user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
+        assert len(user_entries) >= 1, f"用户尾话应写入 ProjectContext，实际: {pc.entries}"
+        assert user_entries[0].raw_user_text == "确认"
 
         # ── 剧本第 2 步：阶段 2 — 用户输入"换 t 检验试试" ──
         orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(
@@ -121,7 +124,8 @@ class TestAnalystTwoPhaseE2E:
 
         # ── 剧本第 4 步：模拟用户重进 Analyst（新会话），用户说"够了，去写报告" ──
         orch._analyst_first_pass_done = False  # 模拟重新进入
-        orch._analyst_messages = []
+        pc2 = ProjectContext(run_id="two_phase_v2", analysis_goal="测试ROI")
+        orch._context = {"_project_context": pc2, "query": "测试ROI", "column_semantics": []}
 
         # 首波 mock
         orch._analyst_agent.run_step = MagicMock(return_value=self._make_step_result(

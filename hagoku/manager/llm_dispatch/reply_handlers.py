@@ -114,7 +114,6 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         context["_cleaner_assessment"] = assessment
         # 保存 Cleaner agent 供后续对话使用
         self._cleaner_agent = cleaner
-        self._cleaner_messages = []
         self._cleaner_dialog_open = True
         # 通知前端展示清洗评估
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
@@ -132,10 +131,11 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         self._cleaner_agent = CleanerAgent(self.config.llm, self.event_bus, llm_client=self.llm)
 
     if user_input:
-        self._cleaner_messages.append({"role": "user", "content": user_input})
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            project_ctx.add_user_feedback("cleaner", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._cleaner_agent.run_step(self._cleaner_messages, context, df)
-    self._cleaner_messages = result["messages"]
+    result = self._cleaner_agent.run_step(context, df, user_input or "")
 
     # 优先判 route_to
     route_to = result.get("route_to")
@@ -166,32 +166,29 @@ def _run_analyst_first_pass(self, context: dict) -> None:
     first_pass_text = ""
 
     for _round in range(max_rounds):
-        result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
-        self._analyst_messages = result["messages"]
+        result = self._analyst_agent.run_step(context, self._df_clean)
+        # Phase B: agent 已内部写回 ProjectContext，不需外部持有 messages
 
         if result.get("submit_analysis"):
             findings = result.get("findings")
             break
 
-        # 检查本轮是否调了 submit_first_pass
-        if self._analyst_messages:
-            last_msg = self._analyst_messages[-1]
-            if last_msg.get("role") == "tool":
-                # tool 消息在上一条 assistant 之后 — 检查上一条 assistant 的 tool_calls
-                for i in range(len(self._analyst_messages) - 2, -1, -1):
-                    m = self._analyst_messages[i]
-                    if m.get("role") == "assistant" and m.get("tool_calls"):
-                        for tc in m["tool_calls"]:
-                            if tc.get("function", {}).get("name") == "submit_first_pass":
-                                # dispatch 结果在 tool 消息中
+        # Phase B: submit_first_pass 检测 —— 从 ProjectContext entries 读取最近的 tool_exchange
+        if findings is None:
+            project_ctx = context.get("_project_context")
+            if project_ctx:
+                for entry in reversed(project_ctx.entries):
+                    if entry.type == "tool_exchange" and entry.stage == "analyst":
+                        for tc in (entry.tool_calls or []):
+                            if tc.name == "submit_first_pass":
                                 try:
-                                    findings = _json.loads(last_msg.get("content", "{}"))
+                                    findings = _json.loads(tc.result) if tc.result else {}
                                 except (_json.JSONDecodeError, TypeError):
                                     findings = {}
                                 break
                         break
-            if findings is not None:
-                break
+        if findings is not None:
+            break
 
         # LLM 无 tool_calls 且无文本 → 收敛
         if not result.get("text") and not findings:
@@ -206,10 +203,9 @@ def _run_analyst_first_pass(self, context: dict) -> None:
         summary = first_pass_text
     else:
         summary = "首波自动分析完成。请提出你的问题或方向调整。"
-        self._analyst_messages.append({
-            "role": "assistant",
-            "content": "首波自动分析完成，等待用户输入。",
-        })
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            project_ctx.add_agent_response("analyst", 0, "首波自动分析完成，等待用户输入。")
 
     # emit 给前端
     self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {
@@ -271,22 +267,22 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
     if self._analyst_agent is None:
         from hagoku.agents.analyst import AnalystAgent
         self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm)
-        self._analyst_messages = []
 
     if not self._analyst_first_pass_done:
-        # 阶段 1：自动跑首波分析（不消耗用户输入）
         _run_analyst_first_pass(self, context)
         self._analyst_first_pass_done = True
-        # 用户首次进入时尾话保留，作为阶段 2 第一条用户消息
         if user_input:
-            self._analyst_messages.append({"role": "user", "content": user_input})
+            project_ctx = context.get("_project_context")
+            if project_ctx:
+                project_ctx.add_user_feedback("analyst", context.get("interaction_revision", 0), raw_text=user_input)
         return {"status": "analyst_review", "message": ""}
 
     if user_input:
-        self._analyst_messages.append({"role": "user", "content": user_input})
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            project_ctx.add_user_feedback("analyst", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_clean)
-    self._analyst_messages = result["messages"]
+    result = self._analyst_agent.run_step(context, self._df_clean, user_input or "")
 
     # 优先判 route_to：LLM 主动表达流程意图
     route_to = result.get("route_to")
@@ -311,13 +307,13 @@ def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple
             llm_config=self.config.llm, event_bus=self.event_bus,
             llm_client=self.llm_raw,
         )
-        self._reporter_messages = []
 
     if user_input:
-        self._reporter_messages.append({"role": "user", "content": user_input})
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            project_ctx.add_user_feedback("reporter", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._reporter_agent.run_step(self._reporter_messages, context)
-    self._reporter_messages = result["messages"]
+    result = self._reporter_agent.run_step(context, None, user_input or "")
 
     route_to = result.get("route_to")
     if route_to:

@@ -613,13 +613,25 @@ class ScoutAgent(BaseAgent):
         )
 
         try:
-            response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=build_messages(
+            # Phase B: 优先走 ProjectContext 统一入口
+            ctx = self._context or {}
+            project_ctx = ctx.get("_project_context")
+            if project_ctx:
+                agent_extra = system_prompt  # Scout 的字段推断指令
+                messages = project_ctx.to_messages_for_llm(
+                    "scout", context,
+                    f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
+                    agent_system_extra=agent_extra,
+                )
+            else:
+                messages = build_messages(
                     query=self._query or "",
                     user_input=f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
                     system_extra=system_prompt,
-                ),
+                )
+            response = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=messages,
                 temperature=SCOUT_INFER_TEMPERATURE,
                 max_tokens=SCOUT_INFER_MAX_TOKENS,
                 tools=[submit_tool],
@@ -1004,14 +1016,27 @@ class ScoutAgent(BaseAgent):
 | 字段名 | 理解名称 | 含义理解 | 分析角色 |
 | --- | --- | --- | --- |"""
 
-        client = self._create_llm_client()
-        response = client.chat.completions.create(
-            model=self.llm_config.model,
-            messages=build_messages(
+        # Phase B: 优先走 ProjectContext 统一入口
+        ctx = self._context or {}
+        project_ctx = ctx.get("_project_context")
+        messages: list[dict]
+        if project_ctx:
+            from hagoku.channel import build_messages
+            agent_extra = system_prompt
+            messages = project_ctx.to_messages_for_llm(
+                "scout", ctx, user_prompt,
+                agent_system_extra=agent_extra,
+            )
+        else:
+            messages = build_messages(
                 query=self._query or "",
                 user_input=user_prompt,
                 system_extra=system_prompt,
-            ),
+            )
+        client = self._create_llm_client()
+        response = client.chat.completions.create(
+            model=self.llm_config.model,
+            messages=messages,
             temperature=SCOUT_CONFIRM_TEMPERATURE,
             max_tokens=SCOUT_CONFIRM_MAX_TOKENS,
         )

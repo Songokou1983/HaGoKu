@@ -1,4 +1,4 @@
-"""CL-1: 验证 Cleaner run_step + _compose_system_messages"""
+"""CL-1: 验证 Cleaner run_step（Phase B 升级版）"""
 from unittest.mock import MagicMock, patch
 import json as _json
 import pandas as pd
@@ -21,16 +21,16 @@ def _make_mock_llm_response(content="", tool_calls=None):
     return resp
 
 
-def test_run_step_injects_system_prompt():
-    """断言 Cleaner run_step 注入 system prompt。"""
+def test_run_step_injects_prompt_md_into_system():
+    """Phase B: agent_system_extra（含 prompt.md）注入到 system 前缀。"""
     config = LLMConfig()
     bus = EventBus()
     agent = CleanerAgent(config, bus)
     assert agent.prompt, "prompt.md 应非空"
 
+    pc = ProjectContext(run_id="test", analysis_goal="测试清洗")
     df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
-    context = {}
-    messages = [{"role": "user", "content": "评估"}]
+    context = {"_project_context": pc, "query": "测试"}
 
     mock_resp = _make_mock_llm_response("评估完成")
     mock_client = MagicMock()
@@ -39,16 +39,15 @@ def test_run_step_injects_system_prompt():
     with patch("hagoku.llm.client.create_raw_client", return_value=mock_client):
         with patch("hagoku.tools.registry.agent_tools") as mock_agt:
             mock_agt.to_openai.return_value = []
-            result = agent.run_step(messages, context, df)
+            mock_agt.dispatch.return_value = {}
+            agent.run_step(context, df, "评估")
 
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     sent_messages = call_kwargs["messages"]
+    # 第一条应为 system（包含 prompt.md 内容）
     assert sent_messages[0]["role"] == "system"
-
-    # 返回的 messages 不含 system
-    returned = result["messages"]
-    roles = {m.get("role") for m in returned}
-    assert "system" not in roles
+    # prompt.md 内容在 system 消息里
+    assert "清洗" in sent_messages[0]["content"] or agent.prompt[:10] in sent_messages[0]["content"]
 
 
 def test_run_step_returns_submit_assessment():
@@ -58,9 +57,9 @@ def test_run_step_returns_submit_assessment():
     agent = CleanerAgent(config, bus)
     agent.prompt = "test"
 
+    pc = ProjectContext(run_id="test", analysis_goal="测试")
     df = pd.DataFrame({"A": [1]})
-    context = {}
-    messages = [{"role": "user", "content": "评估"}]
+    context = {"_project_context": pc}
 
     tc = MagicMock()
     tc.function.name = "submit_assessment"
@@ -74,14 +73,16 @@ def test_run_step_returns_submit_assessment():
         with patch("hagoku.tools.registry.agent_tools") as mock_agt:
             mock_agt.dispatch.return_value = {"summary": "ok", "columns": []}
             mock_agt.to_openai.return_value = []
-            result = agent.run_step(messages, context, df)
+            result = agent.run_step(context, df, "评估")
 
     assert result["submit_assessment"] is True
     assert result["assessment"] == {"summary": "ok", "columns": []}
+    # Phase B: messages 不再返回
+    assert "messages" not in result
 
 
 def test_run_step_injects_project_context():
-    """context 含 _project_context 时注入 upstream_summary。"""
+    """context 含 _project_context 时 system 消息含 analysis_goal。"""
     config = LLMConfig()
     bus = EventBus()
     agent = CleanerAgent(config, bus)
@@ -91,8 +92,7 @@ def test_run_step_injects_project_context():
                           snapshot={"target": "X", "features": [], "pending": []})
 
     df = pd.DataFrame({"X": [1, 2]})
-    context = {"_project_context": pc}
-    messages = [{"role": "user", "content": "评估"}]
+    context = {"_project_context": pc, "query": "清洗评估"}
 
     mock_resp = _make_mock_llm_response("ok")
     mock_client = MagicMock()
@@ -101,7 +101,8 @@ def test_run_step_injects_project_context():
     with patch("hagoku.llm.client.create_raw_client", return_value=mock_client):
         with patch("hagoku.tools.registry.agent_tools") as mock_agt:
             mock_agt.to_openai.return_value = []
-            agent.run_step(messages, context, df)
+            mock_agt.dispatch.return_value = {}
+            agent.run_step(context, df, "评估")
 
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     sent = call_kwargs["messages"]

@@ -99,16 +99,18 @@ def test_G7_StageHandlers_完整性(orch):
 
 
 def test_G8_analyst_run_step_正常返回(orch):
-    """G8: Analyst.run_step 正常处理 submit_analysis。"""
+    """G8: Analyst.run_step 正常处理 submit_analysis（Phase B 升级版）。"""
     from hagoku.agents.analyst.agent import AnalystAgent
+    from hagoku.context.project_context import ProjectContext
     import json
 
     agent = AnalystAgent.__new__(AnalystAgent)
     agent.llm_config = orch.config.llm
     agent.event_bus = orch.event_bus
+    agent.prompt = "test"
 
-    context = {"query": "test", "column_semantics": []}
-    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "分析"}]
+    pc = ProjectContext(run_id="test", analysis_goal="分析测试")
+    context = {"query": "test", "column_semantics": [], "_project_context": pc}
 
     # Mock LLM: 直接返回 submit_analysis
     mock_client = MagicMock()
@@ -129,11 +131,11 @@ def test_G8_analyst_run_step_正常返回(orch):
         with patch("hagoku.tools.registry.agent_tools") as mock_agt:
             mock_agt.dispatch.return_value = {"findings": [], "summary": "ok"}
             mock_agt.to_openai.return_value = []
-            result = agent.run_step(messages, context)
+            result = agent.run_step(context, None, "分析")
 
     assert result["submit_analysis"] is True
     assert "findings" in result
-    assert len(result["messages"]) >= 2  # system + user，assistant 在 submit_analysis break 前可能未追加
+    # Phase B: messages 不再返回（由 ProjectContext 内部管理）
 
 
 def test_G9_律8_route_to_触发(orch):

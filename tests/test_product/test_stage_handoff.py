@@ -124,23 +124,24 @@ def test_下游_agent_实际注入_messages_history(agent_key):
             else:
                 from hagoku.agents.analyst.agent import AnalystAgent
                 agent = AnalystAgent(LLMConfig(model="t"), event_bus=_FakeEventBus())
-                # run_step 的 messages 参数承载活跃对话历史；
-                # messages_history 由 build_prompt 返回但仅用于 resume，不注入 run_step
-                agent.run_step(
-                    messages=[
-                        {"role": "user", "content": anchor_a},
-                        {"role": "assistant", "content": "ok"},
-                        {"role": "user", "content": anchor_b},
+                agent.prompt = "test"
+                # Phase B: 对话历史写进 ProjectContext，run_step 只传 context + df + user_input
+                ctx_proj.add_user_feedback("analyst", 0, anchor_a)
+                ctx_proj.add_agent_response("analyst", 0, "ok")
+                ctx_proj.add_user_feedback("analyst", 1, anchor_b)
+                context_dict = {
+                    "_project_context": ctx_proj,
+                    "analysis_goal": "Gate",
+                    "query": "Gate",
+                    "column_semantics": [
+                        {"column_name": "X", "used_in_analysis": True, "display_name": "X",
+                         "role": "target", "needs_user_input": False},
                     ],
-                    context={
-                        "_project_context": ctx_proj,
-                        "analysis_goal": "Gate",
-                        "column_semantics": [
-                            {"column_name": "X", "used_in_analysis": True, "display_name": "X",
-                             "role": "target", "needs_user_input": False},
-                        ],
-                    },
+                }
+                agent.run_step(
+                    context=context_dict,
                     df=pd.DataFrame({"X": [1]}),
+                    user_input=anchor_b,
                 )
         except RuntimeError:
             pass

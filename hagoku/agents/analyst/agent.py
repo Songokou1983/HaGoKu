@@ -170,43 +170,19 @@ class AnalystAgent(BaseAgent):
         path.write_text(content, encoding="utf-8")
 
     def _compose_system_messages(self, context: dict) -> list[dict]:
-        """拼装 system prompt 头部消息。
-
-        包含：
-        1. prompt.md 内容（Analyst 角色定义、能力、工具使用说明）
-        2. ProjectContext 上下文（分析目标、字段状态、上游摘要）
-
-        每次调用重拼，不永久存储到对话历史中。
+        """[Phase B 兼容] 仍保留方法签名供过渡期，但不再使用。
+        所有 LLM 调用点已改为 project_ctx.to_messages_for_llm()。
         """
-        system_msgs: list[dict] = []
+        return []
 
-        # 1. prompt.md 作为第一条 system 消息
-        prompt = getattr(self, 'prompt', '')
-        if prompt:
-            system_msgs.append({"role": "system", "content": prompt})
+    def run_step(self, context: dict, df: pd.DataFrame | None = None, user_input: str = "") -> dict:
+        """单步执行：跑 1 轮 LLM，处理 tool_calls。
 
-        # 2. ProjectContext 上下文注入
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            ctx_block = project_ctx.build_prompt("analyst", context)
-            parts: list[str] = []
-            if ctx_block.get("system_prefix"):
-                parts.append(ctx_block["system_prefix"])
-            if ctx_block.get("upstream_summary"):
-                parts.append(ctx_block["upstream_summary"])
-            if parts:
-                system_msgs.append({"role": "system", "content": "\n\n".join(parts)})
-
-        return system_msgs
-
-    def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
-        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, findings or None)
-
-        messages 视为对话历史（仅含 user/assistant/tool 角色）；
-        每次调用前重新拼装 system prompt 头部，确保 LLM 不失明。
+        Phase B: messages 不再外部传入——由 project_ctx.to_messages_for_llm() 统一构建。
         """
         import json as _json
         from hagoku.tools.registry import agent_tools as _agt
+        from hagoku.context.project_context import ToolCallRecord
         from ...llm.client import create_raw_client
 
         if df is None:
@@ -214,25 +190,27 @@ class AnalystAgent(BaseAgent):
         client = create_raw_client(self.llm_config)
         _tools = _agt.to_openai("analyst")
 
-        # 拼装 system prompt 头部（每次重拼，不永久存储到 messages）
-        composed = self._compose_system_messages(context) + messages
+        project_ctx = context.get("_project_context")
+        if project_ctx is None:
+            raise RuntimeError("Analyst.run_step: _project_context 未设置，信息通道断裂")
 
-        # 确保至少有一条 user 消息（部分 API 如 MiniMax 要求非空 user content）
-        if not any(m.get("role") == "user" for m in composed):
-            intro = f"分析目标：{context.get('query', '') or context.get('analysis_goal', '数据分析')}"
-            composed.append({"role": "user", "content": intro})
+        agent_extra = getattr(self, 'prompt', '')
+        messages = project_ctx.to_messages_for_llm(
+            "analyst", context, user_input,
+            agent_system_extra=agent_extra,
+        )
 
         # ── LLM dump（CH-4 观察通道）──
         from ...observability.llm_dump import dump_messages
         dump_messages(
             "analyst_run_step",
-            composed,
+            messages,
             model=self.llm_config.model,
             extra={"tools": [t["function"]["name"] for t in _tools]},
         )
 
         resp = client.chat.completions.create(
-            model=self.llm_config.model, messages=composed,
+            model=self.llm_config.model, messages=messages,
             temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
         )
         msg = resp.choices[0].message
@@ -242,48 +220,49 @@ class AnalystAgent(BaseAgent):
         # ── Response dump ──
         dump_messages(
             "analyst_run_step_response",
-            composed + [{"role": "assistant", "content": txt,
+            messages + [{"role": "assistant", "content": txt,
              "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
                             for tc in (tc_list or [])] if tc_list else None}],
             model=self.llm_config.model,
         )
 
+        # 写回 ProjectContext
+        project_ctx.add_agent_response("analyst", context.get("interaction_revision", 0), txt or "(tool calls)")
+
         findings = None
         route_to_args = None
 
         if tc_list:
-            tool_results = []
+            tool_records = []
             for tc in tc_list:
                 fn = tc.function
                 try:
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
                     continue
-                result = _agt.dispatch(fn.name, args, context, df)
                 if fn.name == "submit_analysis":
-                    findings = result
+                    findings = _agt.dispatch(fn.name, args, context, df)
                     break
                 if fn.name == "route_to":
-                    route_to_args = result
-                tc_id = getattr(tc, "id", "") or ""
-                tool_results.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": _json.dumps(result, ensure_ascii=False, default=str),
-                })
-            if tool_results:
-                assistant_block = {"role": "assistant", "content": txt or None}
-                assistant_block["tool_calls"] = [
-                    {"id": getattr(tc, "id", ""), "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tc_list if getattr(tc, "function", None)
-                ]
-                messages.append(assistant_block)
-                messages.extend(tool_results)
-        elif txt:
-            messages.append({"role": "assistant", "content": txt})
+                    route_to_args = _agt.dispatch(fn.name, args, context, df)
+                try:
+                    result = _agt.dispatch(fn.name, args, context, df)
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(tc, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result=_json.dumps(result, ensure_ascii=False, default=str),
+                    ))
+                except Exception as exc:
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(tc, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result="", error=str(exc),
+                    ))
+            if tool_records:
+                project_ctx.add_tool_exchange("analyst", context.get("interaction_revision", 0), tool_records,
+                                              assistant_content=txt)
 
         return {
-            "messages": messages,
             "text": txt,
             "submit_analysis": findings is not None,
             "findings": findings,

@@ -102,43 +102,19 @@ class CleanerAgent(BaseAgent):
         path.write_text(content, encoding="utf-8")
 
     def _compose_system_messages(self, context: dict) -> list[dict]:
-        """拼装 system prompt 头部消息。
-
-        包含：
-        1. prompt.md 内容（Cleaner 角色定义、清洗规则）
-        2. ProjectContext 上下文（分析目标、字段状态、上游摘要）
-
-        每次调用重拼，不永久存储到对话历史中。
+        """[Phase B 兼容] 仍保留方法签名供过渡期，但不再使用。
+        所有 LLM 调用点已改为 project_ctx.to_messages_for_llm()。
         """
-        system_msgs: list[dict] = []
+        return []
 
-        # 1. prompt.md 作为第一条 system 消息
-        prompt = getattr(self, 'prompt', '')
-        if prompt:
-            system_msgs.append({"role": "system", "content": prompt})
+    def run_step(self, context: dict, df: pd.DataFrame | None = None, user_input: str = "") -> dict:
+        """单步执行：跑 1 轮 LLM，处理 tool_calls。
 
-        # 2. ProjectContext 上下文注入
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            ctx_block = project_ctx.build_prompt("cleaner", context)
-            parts: list[str] = []
-            if ctx_block.get("system_prefix"):
-                parts.append(ctx_block["system_prefix"])
-            if ctx_block.get("upstream_summary"):
-                parts.append(ctx_block["upstream_summary"])
-            if parts:
-                system_msgs.append({"role": "system", "content": "\n\n".join(parts)})
-
-        return system_msgs
-
-    def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
-        """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, assessment or None)
-
-        messages 视为对话历史（仅含 user/assistant/tool 角色）；
-        每次调用前重新拼装 system prompt 头部。
+        Phase B: messages 不再外部传入——由 project_ctx.to_messages_for_llm() 统一构建。
         """
         import json as _json
         from hagoku.tools.registry import agent_tools as _agt
+        from hagoku.context.project_context import ToolCallRecord
         from ...llm.client import create_raw_client
 
         if df is None:
@@ -146,70 +122,85 @@ class CleanerAgent(BaseAgent):
         client = create_raw_client(self.llm_config)
         _tools = _agt.to_openai("cleaner")
 
-        # 拼装 system prompt 头部（每次重拼）
-        composed = self._compose_system_messages(context) + messages
+        project_ctx = context.get("_project_context")
+        if project_ctx is None:
+            raise RuntimeError("Cleaner.run_step: _project_context 未设置，信息通道断裂")
 
-        # 确保至少有一条 user 消息
-        if not any(m.get("role") == "user" for m in composed):
-            query = context.get("query", "") or context.get("analysis_goal", "数据清洗")
-            composed.append({"role": "user", "content": f"分析目标：{query}"})
+        # 构建 messages（含 prompt.md + phase_id 等 agent 域指令）
+        phase_id = context.get("_phase_id", "")
+        cleaning_rules = context.get("_cleaning_rules", "")
+        agent_extra = (phase_id + "\n\n" + cleaning_rules).strip() if phase_id or cleaning_rules else getattr(self, 'prompt', '')
+        messages = project_ctx.to_messages_for_llm(
+            "cleaner", context, user_input,
+            agent_system_extra=agent_extra,
+        )
 
         # ── LLM dump ──
         from ...observability.llm_dump import dump_messages
-        from hagoku.channel import build_messages
         dump_messages(
             "cleaner_run_step",
-            composed,
+            messages,
             model=self.llm_config.model,
             extra={"tools": [t["function"]["name"] for t in _tools]},
         )
 
         resp = client.chat.completions.create(
-            model=self.llm_config.model, messages=composed,
+            model=self.llm_config.model, messages=messages,
             temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
         )
         msg = resp.choices[0].message
         txt = (msg.content or "").strip()
         tc_list = getattr(msg, "tool_calls", None)
 
-        dump_messages("cleaner_run_step_response", composed + [{"role": "assistant", "content": txt, "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}} for tc in (tc_list or [])] if tc_list else None}], model=self.llm_config.model)
+        dump_messages("cleaner_run_step_response", messages + [{"role": "assistant", "content": txt, "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}} for tc in (tc_list or [])] if tc_list else None}], model=self.llm_config.model)
+
+        # 写回 ProjectContext：agent response
+        project_ctx.add_agent_response("cleaner", context.get("interaction_revision", 0), txt or "(tool calls)")
+
+        # 处理 tool_calls（单轮）——也写回 ProjectContext
+        if tc_list:
+            tool_records = []
+            for t in tc_list:
+                fn = t.function
+                try:
+                    args = json.loads(fn.arguments) if fn.arguments else {}
+                except json.JSONDecodeError:
+                    continue
+                try:
+                    result = _agt.dispatch(fn.name, args, context, df)
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(t, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result=json.dumps(result, ensure_ascii=False, default=str),
+                    ))
+                except Exception as exc:
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(t, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result="", error=str(exc),
+                    ))
+            if tool_records:
+                project_ctx.add_tool_exchange("cleaner", context.get("interaction_revision", 0), tool_records)
 
         assessment = None
         route_to_args = None
 
+        # Phase B: tool dispatch 已在 tool_calls 处理块中完成（含 submit_assessment / route_to 检测）
+        # 此处只保留 submit_assessment / route_to 的检测逻辑
         if tc_list:
-            tool_results = []
             for tc in tc_list:
                 fn = tc.function
                 try:
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
                     continue
-                result = _agt.dispatch(fn.name, args, context, df)
                 if fn.name == "submit_assessment":
-                    assessment = result
+                    assessment = _agt.dispatch(fn.name, args, context, df)
                     break
                 if fn.name == "route_to":
-                    route_to_args = result
-                tc_id = getattr(tc, "id", "") or ""
-                tool_results.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": _json.dumps(result, ensure_ascii=False, default=str),
-                })
-            if tool_results:
-                assistant_block = {"role": "assistant", "content": txt or None}
-                assistant_block["tool_calls"] = [
-                    {"id": getattr(tc, "id", ""), "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tc_list if getattr(tc, "function", None)
-                ]
-                messages.append(assistant_block)
-                messages.extend(tool_results)
-        elif txt:
-            messages.append({"role": "assistant", "content": txt})
+                    route_to_args = _agt.dispatch(fn.name, args, context, df)
 
         return {
-            "messages": messages,
             "text": txt,
             "submit_assessment": assessment is not None,
             "assessment": assessment,
@@ -670,18 +661,15 @@ class CleanerAgent(BaseAgent):
                          if s.get("used_in_analysis") is True}
         col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
 
-        # 拼 messages：系统规则 + 对话历史 + 当前上下文
+        # Phase B: messages 由 project_ctx.to_messages_for_llm() 每轮重建
         phase_id = "【当前阶段：数据清洗评估 — Scout 已完成，你只负责评估每列是否需要清洗，不要讨论后续阶段】"
-        messages: list[dict[str, Any]] = [{"role": "system", "content": phase_id + "\n\n" + cleaning_rules.strip()}]
 
-        # ── ProjectContext 注入（阶段 3）──
+        # ── ProjectContext ──
         project_ctx = context.get("_project_context")
-        if project_ctx:
-            ctx_block = project_ctx.build_prompt("cleaner", context)
-            messages[0]["content"] += "\n\n" + ctx_block["system_prefix"] + "\n\n" + ctx_block["upstream_summary"]
-            messages.extend(ctx_block["messages_history"])  # 律 3
+        if project_ctx is None:
+            raise RuntimeError("Cleaner.assess: _project_context 未设置，信息通道断裂")
 
-        # ── 注入用户命令上下文（用户最近提出的指令/纠正）──
+        # 写入初始用户输入到 ProjectContext
         command_context = ""
         try:
             pt = (context.get("_pending_command_text") or "").strip()
@@ -689,37 +677,38 @@ class CleanerAgent(BaseAgent):
                 command_context = f"\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
         except Exception:
             pass
-
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
         if command_context:
             intro += command_context
-        messages.append({"role": "user", "content": intro})
+        revision = context.get("interaction_revision", 0)
+        project_ctx.add_user_feedback("cleaner", revision, raw_text=intro)
 
-        # 工具：从注册表拉，代码不加任何额外 tool
+        # agent 域指令
+        agent_extra = phase_id + "\n\n" + cleaning_rules.strip()
+
+        # 工具：从注册表拉
         from hagoku.tools.registry import agent_tools as _agt
+        from hagoku.context.project_context import ToolCallRecord
         _tools = _agt.to_openai("cleaner")
-
         client = create_raw_client(self.llm_config)
 
-        # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
+        # ── dump ──
         from ...observability.llm_dump import dump_messages
-        from hagoku.channel import build_messages
-        dump_messages(
-            "cleaner_dialogue",
-            messages,
-            model=self.llm_config.model,
-            extra={"query": query, "tools": [t["function"]["name"] for t in _tools]},
-        )
 
         for _round in range(5):
             self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
+
+            # 每轮重建 messages
+            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
+            dump_messages("cleaner_dialogue", messages, model=self.llm_config.model,
+                          extra={"query": query, "tools": [t["function"]["name"] for t in _tools]})
+
             try:
                 response = client.chat.completions.create(
-                    model=self.llm_config.model,
-                    messages=messages, temperature=0.0, max_tokens=2048,
-                    tools=_tools, tool_choice="auto",
+                    model=self.llm_config.model, messages=messages,
+                    temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
                 )
             except Exception as e:
                 raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
@@ -728,7 +717,6 @@ class CleanerAgent(BaseAgent):
             tc = getattr(msg, "tool_calls", None)
             txt = msg.content or ""
 
-            # ── Response dump ──
             dump_messages("cleaner_assess_response", messages + [
                 {"role": "assistant", "content": txt,
                  "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}}
@@ -736,6 +724,7 @@ class CleanerAgent(BaseAgent):
             ], model=self.llm_config.model)
 
             if tc:
+                tool_records = []
                 for t in tc:
                     fn = t.function
                     try:
@@ -745,7 +734,6 @@ class CleanerAgent(BaseAgent):
                         logging.getLogger("hagoku.cleaner").warning(
                             "Cleaner tool call JSON 截断: %s", fn.arguments[:100] if fn.arguments else "(empty)")
                         continue
-                    # tool_calls 已通过标准 OpenAI 协议追加到 messages，不再写 conv_history
                     if fn.name == "submit_assessment":
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
                     if fn.name == "route_to":
@@ -753,35 +741,39 @@ class CleanerAgent(BaseAgent):
                             "stage": args.get("stage"),
                             "reason": args.get("reason", ""),
                         }
-                    result = _agt.dispatch(fn.name, args, context, df)
-                    tc_id = getattr(t, "id", "") or ""
-                    messages.append({"role": "assistant", "content": txt, "tool_calls": [{
-                        "id": tc_id, "type": "function",
-                        "function": {"name": fn.name, "arguments": fn.arguments},
-                    }]})
-                    messages.append({"role": "tool", "tool_call_id": tc_id,
-                                     "content": json.dumps(result, ensure_ascii=False, default=str)})
+                    try:
+                        result = _agt.dispatch(fn.name, args, context, df)
+                        tool_records.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "",
+                            name=fn.name, arguments=fn.arguments,
+                            result=json.dumps(result, ensure_ascii=False, default=str),
+                        ))
+                    except Exception as exc:
+                        tool_records.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "",
+                            name=fn.name, arguments=fn.arguments,
+                            result="", error=str(exc),
+                        ))
+                if tool_records:
+                    project_ctx.add_tool_exchange("cleaner", revision, tool_records,
+                                                  assistant_content=txt)
                 continue
 
+            # 纯文本响应：写回 agent_response，引导 LLM 提交
             if txt.strip():
-                messages.append({"role": "assistant", "content": txt})
-                # 纯文本响应已追加到 messages，追加提示引导 LLM 调 submit_assessment
-                messages.append({
-                    "role": "user",
-                    "content": "请总结你的评估结果，调用 submit_assessment 提交。"
-                })
+                project_ctx.add_agent_response("cleaner", revision, txt)
+                project_ctx.add_user_feedback("cleaner", revision,
+                    raw_text="请总结你的评估结果，调用 submit_assessment 提交。")
                 continue
 
-        # 5 轮后仍未提交 → 最后尝试：显式要求 LLM 提交
-        messages.append({
-            "role": "user",
-            "content": "你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。"
-        })
+        # 5 轮后仍未提交 → 最后尝试
+        project_ctx.add_user_feedback("cleaner", revision,
+            raw_text="你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。")
         try:
+            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
             response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=messages, temperature=0.0, max_tokens=2048,
-                tools=_tools, tool_choice="auto",
+                model=self.llm_config.model, messages=messages,
+                temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
             )
             msg = response.choices[0].message
             tc = getattr(msg, "tool_calls", None)
@@ -1002,14 +994,25 @@ class CleanerAgent(BaseAgent):
             extra={"n_cols": len(column_list)},
         )
 
+        # Phase B: 走 to_messages_for_llm 统一入口
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            messages = project_ctx.to_messages_for_llm(
+                "cleaner", context,
+                f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```",
+                agent_system_extra=system_prompt,
+            )
+        else:
+            messages = build_messages(
+                query=payload.get("query", ""),
+                user_input=f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```",
+                system_extra=system_prompt,
+            )
+
         try:
             response = client.chat.completions.create(
                 model=self.llm_config.model,
-                messages=build_messages(
-                    query=payload.get("query", ""),
-                    user_input=f"请分析以下数据集的清洗需求：\n```json\n{json.dumps(payload, ensure_ascii=False, default=str)}\n```",
-                    system_extra=system_prompt,
-                ),
+                messages=messages,
                 temperature=0.0,
                 max_tokens=4096,
             )

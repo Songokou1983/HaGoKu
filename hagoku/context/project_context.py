@@ -15,16 +15,27 @@ from hagoku.observability.events import EventType
 
 
 @dataclass
+class ToolCallRecord:
+    """单次工具调用 + 结果的记录。"""
+    tool_call_id: str
+    name: str
+    arguments: str          # JSON 字符串
+    result: str             # 工具执行返回值（已 stringify）
+    error: str | None = None  # 工具执行失败时填错误信息（铁律 7 失败在场——不吞）
+
+
+@dataclass
 class ContextEntry:
     """一条上下文记录。追加式，不可删除。"""
 
-    type: Literal["goal", "agent_response", "user_feedback", "stage_transition"]
+    type: Literal["goal", "agent_response", "user_feedback", "stage_transition", "tool_exchange"]
     stage: str                     # scout / cleaner / analyst / reporter
     revision: int                  # 阶段内轮数，从 0 开始
     timestamp: str                 # ISO-8601
     content: str                   # 人类可读摘要
     raw_user_text: str | None = None    # 律 2：用户原话（type=user_feedback 时必填）
-    snapshot: dict[str, Any] | None = None  # type=agent_response 时附带
+    snapshot: dict[str, Any] | None = None  # type=agent_response / tool_exchange 时附带
+    tool_calls: list[ToolCallRecord] | None = None  # 仅 type="tool_exchange" 时填
 
 
 @dataclass
@@ -60,6 +71,16 @@ class ProjectContext:
                     "content": e.content,
                     "raw_user_text": e.raw_user_text,
                     "snapshot": e.snapshot,
+                    "tool_calls": [
+                        {
+                            "tool_call_id": tc.tool_call_id,
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                            "result": tc.result,
+                            "error": tc.error,
+                        }
+                        for tc in (e.tool_calls or [])
+                    ] if e.tool_calls else None,
                 }, ensure_ascii=False) + "\n")
 
     def add_entry(self, entry: ContextEntry) -> None:
@@ -110,6 +131,62 @@ class ProjectContext:
             timestamp=self._now(),
             content=content or f"进入 {stage} 阶段",
         ))
+
+    def add_tool_exchange(
+        self,
+        stage: str,
+        revision: int,
+        tool_calls: list[ToolCallRecord],
+        assistant_content: str = "",
+    ) -> None:
+        """记录一轮 assistant tool_calls + tool results。
+
+        序列化进 messages_history 时展开为 OpenAI 协议标准的两类 turn：
+          [{"role":"assistant", "content":..., "tool_calls":[...]},
+           {"role":"tool", "content":result, "tool_call_id":id}, ...]
+        """
+        summary_lines = []
+        if assistant_content:
+            summary_lines.append(assistant_content)
+        for tc in tool_calls:
+            line = f"→ 调用 {tc.name}({tc.arguments})"
+            if tc.error:
+                line += f"  ❌ 错误: {tc.error}"
+            else:
+                line += f"  ✓ {tc.result[:120]}"
+            summary_lines.append(line)
+        content_summary = "\n".join(summary_lines)
+
+        entry = ContextEntry(
+            type="tool_exchange",
+            stage=stage,
+            revision=revision,
+            timestamp=self._now(),
+            content=content_summary,
+            tool_calls=tool_calls,
+            snapshot={"assistant_pre_text": assistant_content} if assistant_content else None,
+        )
+        self.add_entry(entry)
+
+        # emit TOOL_EXCHANGE 事件给前端
+        if self._event_bus:
+            self._event_bus.emit("TOOL_EXCHANGE", stage, {
+                "stage": stage,
+                "revision": revision,
+                "timestamp": entry.timestamp,
+                "assistant_pre_text": assistant_content or None,
+                "tool_calls": [
+                    {
+                        "id": tc.tool_call_id,
+                        "name": tc.name,
+                        "arguments_summary": tc.arguments[:200],
+                        "result_summary": tc.error or tc.result[:200],
+                        "error": tc.error,
+                        "duration_ms": 0,
+                    }
+                    for tc in tool_calls
+                ],
+            })
 
     # ── 快照生成（律 5：从 column_semantics 实时派生，不平行存储）──
 
@@ -221,12 +298,69 @@ class ProjectContext:
                 messages_history.append({"role": "user", "content": e.raw_user_text or e.content})
             elif e.type == "agent_response":
                 messages_history.append({"role": "assistant", "content": e.content})
+            elif e.type == "tool_exchange":
+                oai_tool_calls = [
+                    {
+                        "id": tc.tool_call_id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for tc in (e.tool_calls or [])
+                ]
+                assist_turn: dict = {"role": "assistant", "tool_calls": oai_tool_calls}
+                pre_text = (e.snapshot or {}).get("assistant_pre_text", "")
+                if pre_text:
+                    assist_turn["content"] = pre_text
+                messages_history.append(assist_turn)
+                for tc in (e.tool_calls or []):
+                    messages_history.append({
+                        "role": "tool",
+                        "content": tc.error or tc.result,
+                        "tool_call_id": tc.tool_call_id,
+                    })
 
         return {
             "system_prefix": system_prefix,
             "upstream_summary": upstream_summary,
             "messages_history": messages_history,
         }
+
+    # ── LLM messages 统一入口 ──
+
+    def to_messages_for_llm(
+        self,
+        agent: str,
+        context: dict[str, Any],
+        user_input: str,
+        *,
+        agent_system_extra: str = "",
+    ) -> list[dict[str, Any]]:
+        """打通 ProjectContext → build_messages 的链路。
+
+        任何 agent 调 LLM 时，调这一个方法即可，禁止手动拼装。
+
+        agent_system_extra 用于注入 agent 自身的 prompt.md / phase_id / cleaning_rules 等
+        ——这些是 agent 域指令，与 ProjectContext 的 system_prefix（分析目标+字段状态）分开。
+        """
+        from hagoku.channel import build_messages
+
+        parts = self.build_prompt(agent, context)
+        # agent 域指令排最前，ProjectContext 拼装随后
+        system_full = agent_system_extra
+        if system_full and parts["system_prefix"]:
+            system_full += "\n\n"
+        system_full += parts["system_prefix"]
+        if parts["upstream_summary"]:
+            if system_full:
+                system_full += "\n\n"
+            system_full += parts["upstream_summary"]
+
+        return build_messages(
+            query=self.analysis_goal,
+            user_input=user_input,
+            history=parts["messages_history"],
+            system_extra=system_full,
+        )
 
     # ── EventBus 集成 ──
 
@@ -297,6 +431,16 @@ class ProjectContext:
                     "content": e.content,
                     "raw_user_text": e.raw_user_text,
                     "snapshot": e.snapshot,
+                    "tool_calls": [
+                        {
+                            "tool_call_id": tc.tool_call_id,
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                            "result": tc.result,
+                            "error": tc.error,
+                        }
+                        for tc in (e.tool_calls or [])
+                    ] if e.tool_calls else None,
                 }, ensure_ascii=False) + "\n")
 
     @classmethod
@@ -315,6 +459,19 @@ class ProjectContext:
                 if not line:
                     continue
                 d = _json.loads(line)
+                tool_calls_raw = d.get("tool_calls")
+                tool_calls = None
+                if tool_calls_raw:
+                    tool_calls = [
+                        ToolCallRecord(
+                            tool_call_id=tc["tool_call_id"],
+                            name=tc["name"],
+                            arguments=tc["arguments"],
+                            result=tc["result"],
+                            error=tc.get("error"),
+                        )
+                        for tc in tool_calls_raw
+                    ]
                 ctx.entries.append(ContextEntry(
                     type=d["type"],
                     stage=d["stage"],
@@ -323,5 +480,6 @@ class ProjectContext:
                     content=d["content"],
                     raw_user_text=d.get("raw_user_text"),
                     snapshot=d.get("snapshot"),
+                    tool_calls=tool_calls,
                 ))
         return ctx

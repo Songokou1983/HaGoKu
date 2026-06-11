@@ -7,3 +7,11 @@ repos:
         language: system
         files: ^hagoku/(agents|manager)/.*\.py$
         pass_filenames: true
+      - id: prompt-gate
+        name: prompt.md 修改时对比 gate corpus（git HEAD vs 工作区）
+        entry: .venv/bin/python scripts/ci/prompt_gate.py
+        language: system
+        files: ^hagoku/agents/prompt\.md$
+        pass_filenames: false
+        always_run: false
+        verbose: true

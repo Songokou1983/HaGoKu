@@ -8,6 +8,7 @@ export type PanelId =
   | "knowledge"
   | "kanban"
   | "settings"
+  | "lab"
   | "events"
   | "commands";
 

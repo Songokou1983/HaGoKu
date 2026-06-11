@@ -1,0 +1,22 @@
+{
+  "stage": "reporter_003",
+  "model": "test-model",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a data analyst. Focus: reporter."
+    },
+    {
+      "role": "user",
+      "content": "Analyze data: query #3"
+    },
+    {
+      "role": "assistant",
+      "content": "Response for reporter query #3."
+    }
+  ],
+  "extra": {
+    "query": "query #3",
+    "n_cols": 5
+  }
+}

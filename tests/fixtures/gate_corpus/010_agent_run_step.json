@@ -1,0 +1,22 @@
+{
+  "stage": "agent_run_step_009",
+  "model": "test-model",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a data analyst. Focus: agent_run_step."
+    },
+    {
+      "role": "user",
+      "content": "Analyze data: query #9"
+    },
+    {
+      "role": "assistant",
+      "content": "Response for agent_run_step query #9."
+    }
+  ],
+  "extra": {
+    "query": "query #9",
+    "n_cols": 5
+  }
+}

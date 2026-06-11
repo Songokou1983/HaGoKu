@@ -1,0 +1,22 @@
+{
+  "stage": "cleaner_assess_001",
+  "model": "test-model",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a data analyst. Focus: cleaner_assess."
+    },
+    {
+      "role": "user",
+      "content": "Analyze data: query #1"
+    },
+    {
+      "role": "assistant",
+      "content": "Response for cleaner_assess query #1."
+    }
+  ],
+  "extra": {
+    "query": "query #1",
+    "n_cols": 5
+  }
+}

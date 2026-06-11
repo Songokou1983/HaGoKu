@@ -1,0 +1,22 @@
+{
+  "stage": "scout_infer_000",
+  "model": "test-model",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a data analyst. Focus: scout_infer."
+    },
+    {
+      "role": "user",
+      "content": "Analyze data: query #0"
+    },
+    {
+      "role": "assistant",
+      "content": "Response for scout_infer query #0."
+    }
+  ],
+  "extra": {
+    "query": "query #0",
+    "n_cols": 5
+  }
+}

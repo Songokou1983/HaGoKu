@@ -39,6 +39,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HaGoKu Studio API", version="0.1.0", lifespan=lifespan)
 
+# Prompt Lab API（Phase E M2.1）
+from hagoku.api.prompt_lab import router as prompt_lab_router
+app.include_router(prompt_lab_router)
+
 # 环境区分：生产环境锁定 CORS，开发环境开放
 _hagoku_env = os.environ.get("HAGOKU_ENV", "").strip().lower()
 if _hagoku_env in ("production", "prod"):

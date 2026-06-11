@@ -6,6 +6,7 @@ import AnalyzePanel from "./panels/AnalyzePanel";
 import ReportPanel from "./panels/ReportPanel";
 import KnowledgePanel from "./panels/KnowledgePanel";
 import SettingsPanel from "./panels/SettingsPanel";
+import PromptLabPanel from "./panels/PromptLabPanel";
 import EventPanel from "./panels/EventPanel";
 import KanbanPanel from "./panels/KanbanPanel";
 import CommandsPanel from "./panels/CommandsPanel";
@@ -46,6 +47,7 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   kanban:    <KanbanPanel />,
   events:    <EventPanel />,
   settings:  <SettingsPanel />,
+  lab:       <PromptLabPanel />,
   commands:  <CommandsPanel />,
 };
 
@@ -58,6 +60,7 @@ const PANEL_ORDER: PanelId[] = [
   "commands",
   "kanban",
   "events",
+  "lab",
   "settings",
 ];
 

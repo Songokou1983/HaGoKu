@@ -235,10 +235,10 @@ class TestKbContent:
         from fastapi.testclient import TestClient
 
         client = TestClient(app)
-        r = client.get("/api/kb/content", params={"filename": "stats/ttest.md"})
+        r = client.get("/api/kb/content", params={"filename": "statistics/ttest.md"})
         assert r.status_code == 200
         data = r.json()
-        assert data["filename"] == "stats/ttest.md"
+        assert data["filename"] == "statistics/ttest.md"
         assert data.get("title")
         assert "<" in data.get("html", "")
 
@@ -253,5 +253,5 @@ class TestKbContent:
         from fastapi.testclient import TestClient
 
         client = TestClient(app)
-        r = client.get("/api/kb/content", params={"filename": "stats/nope.md"})
+        r = client.get("/api/kb/content", params={"filename": "statistics/nope.md"})
         assert r.status_code == 404

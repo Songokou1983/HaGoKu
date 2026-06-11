@@ -668,22 +668,26 @@ async def upload_project_file(project_name: str, file: UploadFile = File(...)):
     return {"name": filename, "path": str(dest), "size": len(content)}
 
 
-# ── GET /api/kb — 全局学术知识库（kb/_registry.yaml） ───────
-def _kb_registry_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "kb" / "_registry.yaml"
+# ── GET /api/kb — 学术方法库（memory/methods/） ───────────────
+def _methods_root() -> Path:
+    return Path(__file__).resolve().parent.parent / "memory" / "methods"
 
 
 def _kb_load_registry_entries() -> list[dict]:
-    import yaml
-
-    registry = _kb_registry_path()
-    if not registry.exists():
+    root = _methods_root()
+    if not root.exists():
         return []
-    try:
-        data = yaml.safe_load(registry.read_text(encoding="utf-8")) or {}
-        return list(data.get("entries", []))
-    except Exception:
-        return []
+    entries: list[dict] = []
+    for md in sorted(root.rglob("*.md")):
+        rel = str(md.relative_to(root)).replace("\\", "/")
+        first = md.read_text(encoding="utf-8").splitlines()[:1]
+        title = first[0].lstrip("# ").strip() if first else rel
+        entries.append({
+            "filename": rel,
+            "title": title,
+            "category": md.parent.name,
+        })
+    return entries
 
 
 def _kb_strip_frontmatter(raw: str) -> str:
@@ -709,14 +713,17 @@ async def get_kb_content(filename: str):
     if not fn or fn.startswith("/") or ".." in fn.split("/"):
         raise HTTPException(400, "Invalid filename")
 
+    if fn.startswith("stats/"):
+        fn = "statistics/" + fn[len("stats/"):]
+
+    methods_root = _methods_root()
     entries = _kb_load_registry_entries()
     allowed = {str(e.get("filename", "")).replace("\\", "/") for e in entries if e.get("filename")}
     if fn not in allowed:
         raise HTTPException(404, "Unknown knowledge file")
 
-    kb_root = Path(__file__).resolve().parent.parent / "kb"
-    path = (kb_root / fn).resolve()
-    kb_resolved = kb_root.resolve()
+    path = (methods_root / fn).resolve()
+    kb_resolved = methods_root.resolve()
     if not str(path).startswith(str(kb_resolved)) or not path.is_file():
         raise HTTPException(404, "File not found")
 

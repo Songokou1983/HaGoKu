@@ -39,8 +39,8 @@ def test_handle_analyst_reply_skips_first_pass_on_second_entry():
     orch._df_clean = pd.DataFrame({"A": [1, 2]})
     orch._analyst_first_pass_done = True
 
-    from hagoku.agents.analyst import AnalystAgent
-    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test"

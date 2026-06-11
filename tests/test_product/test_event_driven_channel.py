@@ -101,7 +101,7 @@ def test_G7_StageHandlers_完整性(orch):
 
 def test_G8_analyst_run_step_正常返回(orch):
     """G8: Analyst.run_step 正常处理 submit_analysis（Phase B 升级版）。"""
-    from hagoku.agents.analyst.agent import AnalystAgent
+    from hagoku.agents.agent import DataAnalystAgent as AnalystAgent
     from hagoku.context.project_context import ProjectContext
     import json
 

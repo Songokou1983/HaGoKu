@@ -52,8 +52,8 @@ def test_run_analyst_first_pass_with_submit_first_pass():
     """Phase B: submit_first_pass 检测从 ProjectContext entries 读取 tool_exchange。"""
     orch = Orchestrator(HaGoKuConfig())
 
-    from hagoku.agents.analyst import AnalystAgent
-    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test prompt"
@@ -97,8 +97,8 @@ def test_run_analyst_first_pass_converges_when_no_tool_calls():
     """LLM 不再调工具时应收敛。"""
     orch = Orchestrator(HaGoKuConfig())
 
-    from hagoku.agents.analyst import AnalystAgent
-    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test"

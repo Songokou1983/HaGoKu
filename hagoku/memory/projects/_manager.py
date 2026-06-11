@@ -19,8 +19,8 @@ import yaml
 from pydantic import BaseModel, Field
 
 import logging
-from .database import HaGoKuDB
-from .memory_backends import SqliteMemoryBackend, YamlMemoryBackend
+from hagoku.storage.database import HaGoKuDB
+from hagoku.storage.memory_backends import SqliteMemoryBackend, YamlMemoryBackend
 
 logger = logging.getLogger("hagoku")
 
@@ -176,6 +176,11 @@ class MemoryManager:
             seen[k] = e  # YAML 覆盖 SQLite
 
         return list(seen.values())
+
+    def clear_project_memory(self, project_id: str) -> None:
+        """清空项目记忆（SQLite memory 表）。"""
+        self._db.conn.execute("DELETE FROM memory WHERE project_id = ?", (project_id,))
+        self._db.conn.commit()
 
     def delete(self, project_id: str | None, category: str, key: str) -> bool:
         """删除记忆，双后端都删"""

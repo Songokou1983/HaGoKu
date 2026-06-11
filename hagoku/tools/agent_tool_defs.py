@@ -710,3 +710,5 @@ agent_tools.register(Tool(
     handler=_handle_route_to,
     phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
 ))
+
+import hagoku.tools.memory_tools  # noqa: F401,E402 — Phase E: 注册 memory 工具

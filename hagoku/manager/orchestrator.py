@@ -374,6 +374,8 @@ class Orchestrator(
                 interaction_revision = 0
                 # ── 注入 ProjectContext 到 context ──
                 context["_project_context"] = getattr(self, '_project_context', None)
+                context["_memory_manager"] = self.memory
+                context["_project_name"] = project_name
 
                 # 事件驱动：emit 字段表 + 保存状态 + 返回（不阻塞）
                 self._stage = "scout"

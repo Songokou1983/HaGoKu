@@ -27,11 +27,9 @@ for r in results:
 # S2: 工具调用 — cleaner assess
 print()
 print('=== S2: cleaner assess ===')
-from hagoku.agents.cleaner import CleanerAgent
-cleaner = CleanerAgent(cfg.llm, bus)
-rules = cleaner._load_cleaning_rules()
+rules = agent._load_cleaning_rules()
 ctx = {'_project_context': pc, 'query': query, 'column_semantics': results}
-assessment = cleaner.assess(df, ctx, rules)
+assessment = agent.assess(df, ctx, rules)
 print(f'  assessment: {assessment.get("summary","")[:80]}...')
 
 # S3: route_to — cleaner → analyst
@@ -39,7 +37,7 @@ print()
 print('=== S3: route_to cleaner→analyst ===')
 ctx['_cleaning_rules'] = rules
 ctx['_phase_id'] = '【当前阶段：数据清洗评估】'
-r = cleaner.run_step(ctx, df, '开始分析，可以进入分析阶段了')
+r = agent.run_step(ctx, df, '开始分析，可以进入分析阶段了')
 rt = r.get('route_to')
 sa = r.get('submit_assessment')
 print(f'  route_to: {rt.get("stage") if rt else "NONE"}')
@@ -48,12 +46,9 @@ print(f'  submit_assessment: {sa}')
 # S5: analyst run_step
 print()
 print('=== S5: analyst run_step ===')
-from hagoku.agents.analyst import AnalystAgent
-analyst = AnalystAgent(cfg.llm, bus)
-analyst.prompt = 'test'
 a_ctx = {'_project_context': pc, 'query': query, 'column_semantics': results}
-analyst._df = df
-ar = analyst.run_step(a_ctx, df, '用 t 检验分析 ROI 差异')
+agent._df = df
+ar = agent.run_step(a_ctx, df, '用 t 检验分析 ROI 差异')
 print(f'  text: {ar.get("text","")[:100]}')
 print(f'  submit_analysis: {ar.get("submit_analysis")}')
 

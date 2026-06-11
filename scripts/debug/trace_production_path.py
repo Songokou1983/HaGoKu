@@ -16,14 +16,14 @@ sys.path.insert(0, ".")
 from unittest.mock import MagicMock
 import pandas as pd
 from hagoku.config import HaGoKuConfig
-from hagoku.agents.scout.agent import ScoutAgent
+from hagoku.agents.agent import DataAnalystAgent
 
 # 清理代理
 for k in ['ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','all_proxy','http_proxy','https_proxy']:
     os.environ.pop(k, None)
 
 cfg = HaGoKuConfig()
-agent = ScoutAgent(cfg.llm, event_bus=MagicMock())
+agent = DataAnalystAgent(cfg.llm, event_bus=MagicMock())
 
 # 用户的实际分析目标
 QUERY = "分析店铺的变动趋势"

@@ -95,8 +95,8 @@ class TestAnalystControlChannelLinks:
     def orch(self):
         orch = Orchestrator(HaGoKuConfig())
         orch._df_clean = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
-        from hagoku.agents.analyst import AnalystAgent
-        orch._agent = AnalystAgent.__new__(AnalystAgent)
+        from hagoku.agents.agent import DataAnalystAgent
+        orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
         orch._agent.llm_config = orch.config.llm
         orch._agent.event_bus = orch.event_bus
         orch._agent.prompt = "test"
@@ -171,8 +171,8 @@ class TestCleanerControlChannelLinks:
     def test_route_to_analyst_triggers_switch(self, orch):
         """Cleaner route_to(analyst) → switch"""
         context = self._cleaner_context()
-        from hagoku.agents.cleaner.agent import CleanerAgent
-        agent = CleanerAgent.__new__(CleanerAgent)
+        from hagoku.agents.agent import DataAnalystAgent
+        agent = DataAnalystAgent.__new__(DataAnalystAgent)
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"
@@ -195,8 +195,8 @@ class TestCleanerControlChannelLinks:
     def test_route_to_scout_triggers_switch(self, orch):
         """Cleaner route_to(scout) → switch"""
         context = self._cleaner_context()
-        from hagoku.agents.cleaner.agent import CleanerAgent
-        agent = CleanerAgent.__new__(CleanerAgent)
+        from hagoku.agents.agent import DataAnalystAgent
+        agent = DataAnalystAgent.__new__(DataAnalystAgent)
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"
@@ -218,8 +218,8 @@ class TestCleanerControlChannelLinks:
     def test_no_route_to_stays_in_cleaner(self, orch):
         """无 route_to → 留在 cleaner"""
         context = self._cleaner_context()
-        from hagoku.agents.cleaner.agent import CleanerAgent
-        agent = CleanerAgent.__new__(CleanerAgent)
+        from hagoku.agents.agent import DataAnalystAgent
+        agent = DataAnalystAgent.__new__(DataAnalystAgent)
         agent.llm_config = orch.config.llm
         agent.event_bus = orch.event_bus
         agent.prompt = "test"

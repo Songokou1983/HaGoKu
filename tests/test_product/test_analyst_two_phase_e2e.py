@@ -61,8 +61,8 @@ class TestAnalystTwoPhaseE2E:
     def test_full_two_phase_e2e(self, orch):
         """完整剧本：首波→对话→route_to→Reporter"""
         analyst = MagicMock()
-        from hagoku.agents.analyst import AnalystAgent
-        orch._agent = AnalystAgent.__new__(AnalystAgent)
+        from hagoku.agents.agent import DataAnalystAgent
+        orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
         orch._agent.llm_config = orch.config.llm
         orch._agent.event_bus = orch.event_bus
         orch._agent.prompt = "test"

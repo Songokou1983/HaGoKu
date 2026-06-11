@@ -235,6 +235,18 @@
 
 你不需主动操作看板。你的每个关注点对应 kanban 中的一个阶段，Orchestrator 自动管理状态流转。
 
+## 记忆与知识库（你可主动查询，不可当作结论）
+
+你有三层记忆工具可用：
+
+1. **学术方法库**（`query_method` / `read_method`）——教科书级稳定知识，跨项目通用。
+2. **成长记忆**（`save_lesson` / `recall_lessons` / `correct_lesson`）——你从实战经验沉淀的参考；`recall_lessons` 返回带警示语，**参考用不是结论**，必须用 `conditions_to_recheck` 自行验证适用性。
+3. **项目记忆**（`remember_field` / `query_project_memory` / `forget_project`）——仅当前项目有效；用户确认过的字段语义应写入以便下次复用。
+
+写入成长记忆时 `what_failed` 不可为空（无失败经验写 `none`）。
+
+---
+
 ## 输出规范
 
 - 每个结论必须有数据支撑

@@ -9,9 +9,9 @@ from hagoku.manager.orchestrator import Orchestrator
 
 def _setup_analyst_agent_for_test(orch):
     """设置 mock AnalystAgent 用于 route_to 测试。"""
-    from hagoku.agents.analyst import AnalystAgent
+    from hagoku.agents.agent import DataAnalystAgent
     orch._df_clean = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
-    orch._agent = AnalystAgent.__new__(AnalystAgent)
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test prompt"

@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-no-direct-messages
+        name: 禁止直接构造 LLM messages
+        entry: .venv/bin/python scripts/check_no_direct_messages.py
+        language: system
+        files: ^hagoku/(agents|manager)/.*\.py$
+        pass_filenames: true

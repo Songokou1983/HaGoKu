@@ -63,7 +63,7 @@ def test_c2_cleaning_review_structured_empty_message():
 
 
 def test_c3_scout_user_natural_language_llm_driven():
-    """C3：自然语言纠错须经 LLM 理解后写入 column_descriptions（mock）。"""
+    """C3：自然语言纠错须经 LLM 理解后写入 column_descriptions（Phase B: tool_calls 路径）。"""
     from unittest.mock import MagicMock
     from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
 
@@ -73,7 +73,12 @@ def test_c3_scout_user_natural_language_llm_driven():
     }
     mock_llm = MagicMock()
     choice = MagicMock()
-    choice.message.content = '{"Code": "store number"}'
+    # Phase B: 使用 tool_calls 而非 JSON text fallback
+    tc = MagicMock()
+    tc.function.name = "update_field_understanding"
+    tc.function.arguments = '{"column_name": "Code", "description": "store number"}'
+    tc.id = "call_1"
+    choice.message.configure_mock(content="", tool_calls=[tc])
     resp = MagicMock()
     resp.choices = [choice]
     mock_llm.chat.completions.create.return_value = resp

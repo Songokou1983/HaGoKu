@@ -10,7 +10,6 @@ from ..payloads.scout_payload import (
     _known_scout_columns,
     _resolve_scout_column_token,
     _resolve_scout_column_token_with_context,
-    _try_parse_json,
 )
 
 # 律 3：多轮对话历史窗口
@@ -587,41 +586,8 @@ def _apply_scout_reply_with_llm(
             context.pop("_last_understanding_failure", None)
             return applied
 
-        # ── 无 tool_calls：尝试 JSON fallback（兼容旧模型）─────
-        if _raw_text:
-            parsed = _try_parse_json(_raw_text)
-            if isinstance(parsed, dict):
-                import json as _json
-
-                for col_t, val in parsed.items():
-                    c = _resolve_scout_column_token(col_t, columns)
-                    if not c or c in seen_col:
-                        continue
-                    seen_col.add(c)
-
-                    if isinstance(val, str):
-                        if val.strip():
-                            descs[c] = val.strip()
-                            applied.append(f"{c}←{val.strip()}")
-                            for s in semantics:
-                                if str(s.get("column_name", "")) == c:
-                                    s["needs_user_input"] = False
-                    elif isinstance(val, dict):
-                        d = str(val.get("description", "") or "").strip()
-                        dn = str(val.get("display_name", "") or "").strip()
-                        if d:
-                            descs[c] = d
-                            applied.append(f"{c}←{d}")
-                        if dn:
-                            display_names[c] = dn
-                            applied.append(f"{c}:[display]←{dn}")
-                        if d or dn:
-                            for s in semantics:
-                                if str(s.get("column_name", "")) == c:
-                                    s["needs_user_input"] = False
-                return applied
-
         # ── 律 7：LLM 未产生有效工具调用 → 写入未理解信号 ──
+        # Phase B: JSON fallback（兼容旧模型）已删除 — tool_calls 是唯一合法路径
         if raw and not applied:
             context["_last_understanding_failure"] = {
                 "raw_text": raw,

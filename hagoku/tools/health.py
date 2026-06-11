@@ -49,7 +49,7 @@ def check_llm_health(config: Any) -> LlmHealthReport:
 
     检查步骤：
       1. HTTP 可达性 (GET /models, timeout=5s)  → **阻塞**
-      2. 模型存在（model/model_quick/model_deep）→ **阻塞**
+      2. 模型存在（model）→ **阻塞**
       3. Chat completion 可用 ("ping")           → **阻塞**
       4. Token 速率 (< 5 tok/s → 警告)           → 警告
       5. JSON mode 可用性                         → 警告
@@ -60,8 +60,6 @@ def check_llm_health(config: Any) -> LlmHealthReport:
     base_url = config.llm.base_url.rstrip("/")
     api_key = (config.llm.api_key or "").strip()
     model = (config.llm.model or "").strip()
-    model_deep = (getattr(config.llm, "model_deep", "") or model).strip()
-    model_quick = (getattr(config.llm, "model_quick", "") or model).strip()
 
     headers = {"Authorization": f"Bearer {api_key}"} if api_key and api_key != "none" else {}
     report = LlmHealthReport()
@@ -145,7 +143,7 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                             available_models.add(mid)
 
                 missing_models = []
-                for label, m in [("model", model), ("model_quick", model_quick), ("model_deep", model_deep)]:
+                for label, m in [("model", model)]:
                     if m and m not in available_models:
                         missing_models.append(f"{label}={m}")
 
@@ -162,7 +160,7 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                     checks.append(HealthCheckResult(
                         ok=True,
                         name="2. 模型存在",
-                        detail=f"✅ {model} / {model_quick} / {model_deep} 均在列表中",
+                        detail=f"✅ {model} 在列表中",
                         suggestions=[],
                     ))
             except Exception as e:

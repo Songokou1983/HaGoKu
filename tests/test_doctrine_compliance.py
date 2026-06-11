@@ -246,7 +246,6 @@ def test_doctrine_无中文字符串if_elif分支链() -> None:
 _LLM_CALL_MARKERS = (
     "chat.completions.create",
     "create_raw_client",
-    "create_quick_client",
     "create_llm_client",
     "instructor",
     "llm_client",  # 参数名出现也算"通过外部传入 LLM"
@@ -326,7 +325,7 @@ _KNOWN_SEMANTIC_FUNC_VIOLATIONS: set[str] = {
 }
 
 _LLM_CALL_HINT_LINES = re.compile(
-    r"chat\.completions\.create|create_raw_client|create_quick_client"
+    r"chat\.completions\.create|create_raw_client"
 )
 
 

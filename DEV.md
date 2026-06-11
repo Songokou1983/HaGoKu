@@ -74,8 +74,6 @@ python3 scripts/clean_ui_changelog_backups.py --older-than 30 --apply
 | `HAGOKYU_LLM_BASE_URL` | LLM API 地址（OpenAI 兼容；勿与 `hagoku-api` 端口 8000 混淆） | —（用户配置） |
 | `HAGOKYU_LLM_API_KEY` | LLM API 密钥 | — |
 | `HAGOKYU_LLM_MODEL` | 模型名称（默认，所有 Agent 共用） | —（用户配置） |
-| `HAGOKYU_LLM_MODEL_DEEP` | 深度推理模型（Analyst、仲裁器） | 同 `HAGOKYU_LLM_MODEL` |
-| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout、Reporter、反思） | 同 `HAGOKYU_LLM_MODEL` |
 | `HAGOKYU_WORK_DIR` | 工作目录 | `~/.hagoku` |
 | `HAGOKYU_PROJECT_DIR` | 项目根目录（可选，覆盖默认 `~/.hagoku/projects`）；改后重启 `hagoku-api`；不设时报告用浏览器另存为即可带走 | — |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding API 地址 | —（用户配置） |
@@ -91,7 +89,7 @@ pipeline 启动前执行 `health.check_llm_health()`（`hagoku/tools/health.py`�
 | # | 检查项 | 失败级别 |
 |---|--------|---------|
 | 1 | HTTP 可达性 (`GET /models`) | **阻塞** |
-| 2 | 模型存在 (`model`/`model_quick`/`model_deep` 在列表中) | **阻塞** |
+| 2 | 模型存在 (`model` 在列表中) | **阻塞** |
 | 3 | Chat completion 可用性 (发 `"ping"` 验证返回) | **阻塞** |
 | 4 | Token 速率 (< 5 tok/s → 警告) | 警告 |
 | 5 | JSON mode 可用性 | 警告 |

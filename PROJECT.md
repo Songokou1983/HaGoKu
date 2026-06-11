@@ -23,7 +23,7 @@ HaGoKu Studio 追求统计分析深度：自动检验假设、报告效应量、
 > - 稀缺点：严肃统计 + 本地优先 + 小模型也能跑（旧：多 Agent 编排）
 > - 成长方式：加工具 / 加护栏维度（旧：加 Agent / 加律 / 加守门）
 >
-> **不变**：铁律 1 / 7 / 10 / 工作流刹车 / 统计护栏 / 双层 LLM / dump 通道 / 工具注册表 / 数据不出本机 —— 全部保留。
+> **不变**：铁律 1 / 7 / 10 / 工作流刹车 / 统计护栏 / dump 通道 / 工具注册表 / 数据不出本机 —— 全部保留。
 >
 > **6 Phase 改造路径与审核标准**：详见 [`docs/plans/2026-06-11-collapse-to-single-agent-brief.md`](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)。本文档以下章节描述**当前实现**，会随 Phase D 完成而重写。在此之前，"4 个 Agent"的描述仍是物理事实。
 
@@ -415,26 +415,6 @@ Cleaner 启动 → build_prompt("cleaner")
 > 设计规格：`docs/superpowers/specs/2026-05-30-project-context-memory-design.md`
 > 实现计划：`docs/superpowers/plans/2026-05-30-project-context-memory-plan.md`
 
-### 多模型分派
-
-HaGoKu 支持为不同 Agent 分配不同 LLM 模型，实现精度/速度的策略权衡：
-
-| 模型层级 | 配置变量 | 使用场景 | 默认 |
-|---------|---------|---------|------|
-| **默认模型** | `HAGOKYU_LLM_MODEL` | 所有 Agent 的基础模型（用户运行时通过设置功能选择） | `<用户配置>` |
-| **深度推理** | `HAGOKYU_LLM_MODEL_DEEP` | Analyst（假设检验/回归诊断）、仲裁器 | 复用默认模型 |
-| **快速模型** | `HAGOKYU_LLM_MODEL_QUICK` | Scout（字段语义）、Reporter（叙述生成）、QueryParser（意图解析） | 复用默认模型 |
-
-**分派策略**：
-- `create_deep_client()` → `model_deep or model`，使用 instructor 结构化输出
-- `create_quick_client()` → `model_quick or model`，使用 instructor 结构化输出（`max_tokens=8192`）
-- `create_raw_client()` → 原始 OpenAI 客户端（无 instructor 包装），用于 JSON mode 直接调用
-- `create_structured_llm_client()` → 默认 instructor 包装，用于 plan 生成等通用场景
-
-各 Agent 在调用 LLM 时显式选择模型：`model=self.llm_config.model_quick or self.llm_config.model`。
-
-> 实现：`hagoku/llm/client.py`、`hagoku/config.py`
-
 ### 分析计划生成
 
 用户查询到达后，系统通过 LLM 两阶段生成分析计划（pipeline 编排的决策依据）：
@@ -763,8 +743,6 @@ hagoku/
 | `HAGOKYU_LLM_BASE_URL` | LLM 服务地址（OpenAI 兼容协议，用户运行时配置） | `<用户配置>` |
 | `HAGOKYU_LLM_API_KEY` | API 密钥 | `none` |
 | `HAGOKYU_LLM_MODEL` | 默认模型名（用户运行时通过设置功能选择） | `<用户配置>` |
-| `HAGOKYU_LLM_MODEL_DEEP` | 深度推理（Analyst/仲裁器） | 同 `MODEL` |
-| `HAGOKYU_LLM_MODEL_QUICK` | 快速模型（Scout/Reporter） | 同 `MODEL` |
 | `HAGOKYU_EMBEDDING_BASE_URL` | Embedding 服务地址 | 空（须自行填写） |
 | `HAGOKYU_EMBEDDING_API_KEY` | Embedding API 密钥 | `none` |
 | `HAGOKYU_EMBEDDING_MODEL` | Embedding 模型名（用户运行时通过设置功能选择） | `<用户配置>` |

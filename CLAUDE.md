@@ -448,12 +448,6 @@ def test_scout_prompt_contains_ignore_role_instruction():
 
 ### 当前架构关键点（已实施的 P0 项）
 
-**双层 LLM（P0.3）**：通过 `HAGOKYU_LLM_MODEL_DEEP` / `HAGOKYU_LLM_MODEL_QUICK` 环境变量区分。
-- `llm_deep`：Analyst（假设检验/回归推理）、仲裁器（计划决策）
-- `llm_quick`：Scout（类型推断）、Cleaner（清洗决策）、Reporter（格式化渲染）
-- 工厂函数在 `hagoku/llm/client.py`：`create_deep_client()` / `create_quick_client()`
-- 回退逻辑：未设置 deep/quick 时复用 `HAGOKYU_LLM_MODEL`
-
 **结构化输出解析器（P1.2）**：`hagoku/guardrails/parsers.py`
 - `parse_pvalue()`、`parse_effect_size()`、`parse_conclusion_count()`、`parse_confidence_interval()`
 - `validate_analysis_output()` 综合 4 项检查

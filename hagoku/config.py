@@ -190,12 +190,6 @@ class HaGoKuConfig(BaseModel):
             config.embedding.api_key = v
         if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
-            config.llm.model_deep = v
-            config.llm.model_quick = v
-        # Meta LLM 独立配置
-            config.meta_llm.base_url = v
-            config.meta_llm.api_key = v
-            config.meta_llm.model = v
         return config
 
     def ensure_work_dir(self) -> None:

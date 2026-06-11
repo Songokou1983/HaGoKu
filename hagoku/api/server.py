@@ -204,14 +204,21 @@ async def get_config():
             "llm": {
                 "base_url": "",
                 "model": "",
-                "api_key_configured": false,
+                "api_key_configured": False,
             },
             "meta_llm": {
                 "base_url": "",
                 "model": "",
-                "api_key_configured": false,
+                "api_key_configured": False,
             },
         }
+
+
+class LlmConfigBody(BaseModel):
+    """OpenAI 兼容服务：网址 + 模型 + 密钥；写入 ~/.hagoku/.env。"""
+    model_config = ConfigDict(protected_namespaces=())
+    base_url: str
+    model: str
     api_key: str = ""
     sub_model: str = ""
     meta_base_url: str = ""
@@ -224,8 +231,7 @@ async def post_llm_config(req: LlmConfigBody):
     """
     将 LLM 连接参数写入 ~/.hagoku/.env（仅本机开发场景；生产环境应加鉴权或禁用）。
     已运行的 hagoku-api 进程仍使用旧环境变量，需重启后生效。
-    模型名称写入 HAGOKU_LLM_MODEL 与 HAGOKU_LLM_MODEL_DEEP；可选的「前面几步」模型名
-    写入 HAGOKU_LLM_MODEL_QUICK（留空则与上面相同）。
+    写入 HAGOKU_LLM_BASE_URL / HAGOKU_LLM_MODEL / HAGOKU_LLM_API_KEY。
     """
     path = _hagoku_dotenv_path()
     base_url = req.base_url.strip()

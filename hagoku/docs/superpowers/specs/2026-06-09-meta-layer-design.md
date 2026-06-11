@@ -1,5 +1,16 @@
 # HaGoKu Doctor — Meta 层设计（系统医生 + Prompt Lab 模拟器）
 
+> ⚠️ **本文档已被 [`docs/plans/2026-06-11-meta-layer-v2-brief.md`](../../../../docs/plans/2026-06-11-meta-layer-v2-brief.md) 替代**
+>
+> **替代原因**：2026-06-11 用户与架构审核方讨论 [`collapse brief`](../../../../docs/plans/2026-06-11-collapse-to-single-agent-brief.md)，确定从「4 Agent 协作 pipeline」收缩为「1 个数据分析师 + 工具箱」。
+> - 本 v5 设计的大部分功能是为了 watch "4 套 prompt 重拼是否被改坏"——collapse 改造后这个动作本身消失
+> - v5 没有考虑 collapse 引入的 ② 层 lesson 系统污染风险（v2 brief 补上）
+> - v5 ~1400 行实现降至 v2 ~1080 行（路径 B+）
+>
+> **本文档保留为决策演进记录**（铁律 -1 正向小步 / 不回滚原则）。新实施请按 v2 brief 执行。
+>
+> ---
+>
 > 状态：设计稿 v5 | 日期：2026-06-10 | 作者：用户 + AI
 
 ## v4→v5 changelog

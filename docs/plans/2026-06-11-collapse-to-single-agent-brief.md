@@ -82,8 +82,17 @@
 - ✅ 失败在场（铁律 7）—— 一字未动
 - ✅ 提示词修改慎重（铁律 10）—— 一字未动
 - ✅ 工作流刹车（铁律 -1 / -2 / -3 / -4）—— 一字未动
-- ✅ 统计护栏 / 双层 LLM / dump 通道 / 工具注册表 —— 全部保留
+- ✅ 统计护栏 / dump 通道 / 工具注册表 —— 全部保留
 - ✅ 数据不出本机 —— 一字未动
+- ✅ 知识/记忆体系**重组为清晰三层**（① 学术方法库 / ② Agent 成长记忆 / ③ 单项目记忆）—— 见 [`2026-06-11-memory-three-layer-brief.md`](2026-06-11-memory-three-layer-brief.md)
+
+### 1.5 已删 / 已简化（事实勘误，2026-06-11 对账）
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| **双层 LLM（deep / quick）** | ❌ commit `e262599` 已删 | 5 处残留待 Phase A 清理（见 §3 CO-A4）|
+| **Scribe** | ✅ 已删干净 | `hagoku/_scribe/` 不存在，仅 1 处历史注释 |
+| **Meta 层 v5（HaGoKu Doctor）** | ⚠️ 基建入仓但 Agent 未实现 | `create_meta_client / config.meta_llm / API 端点`保留；Agent 改由 [`2026-06-11-meta-layer-v2-brief.md`](2026-06-11-meta-layer-v2-brief.md) 重新设计（路径 B+）|
 
 **核心信条没动**，动的是「架构怎样落实信条」。当前架构是"嘴上信条对、手上没完全对"——重拼 prompt = 代码替 LLM 决定它看到什么 = 违背信条。本 brief 让架构与信条一致。
 
@@ -109,7 +118,7 @@
 | L1 | **每个 Phase（B/C/D）之间必须真 LLM 冒烟通过才能进下一个** | 不能只跑 mock；架构改造的行为差异只在真模型下显形 |
 | L2 | **铁律 -2 适用**：Phase B / C / D 每一步动手前必须先报告"改哪些文件、删哪些行"，得到用户许可才动 | 大改的不可逆点须二次确认 |
 | L3 | **铁律 -1 适用**：每个 Phase 都是正向修复，不准 `git revert`；删错了用户许可才能恢复 | 防止"出问题就回滚"的反射动作 |
-| L4 | **Phase D 之前 HaGoKu Doctor / Meta 层 / Prompt Lab 开发应暂停** | Doctor 是治标，B/C/D 是治本。先治本，再判断 Doctor 是否还需要 |
+| L4 | **Phase D 之前 Meta 层开发受限**：✅ 基建保留（`create_meta_client / config.meta_llm / API 端点`已入仓不动）；❌ Meta agent 实现不准动；❌ Prompt Lab Web 面板不准开始；❌ 原 v5 设计文档迭代暂停。Phase D 完成后按 [`2026-06-11-meta-layer-v2-brief.md`](2026-06-11-meta-layer-v2-brief.md) 实施 v2（路径 B+）| 治本先做，v2 路径已确定 |
 | L5 | **Phase D 的 prompt 起草受铁律 10 保护** | 必须配 dump 对比，不准凭"觉得"改 |
 | L6 | **每个 Phase 完成时必须交"律的减法"清单** | 没有减法 = Phase 没做到位。审核者按此验收 |
 | L7 | **统计护栏 / 数据 I/O / 可视化工具不允许在本 brief 内改动** | 它们是工具箱本身，不属于架构层；改它们另开 brief |
@@ -127,11 +136,13 @@
 | CO-A1 | 修 3 处 `hagoku/api/server.py` 错误：207/212 行 `false` → `False`；215-219 行孤悬字段移回新建的 `class LlmConfigBody(BaseModel)`；223 行 `req: LlmConfigBody` 确保引用得到 | `hagoku/api/server.py:207-223` | 当前 main 坏；POST /api/config/llm 100% 失败 |
 | CO-A2 | 删 `pyproject.toml` 中 `crewai>=0.100.0` 依赖 | `pyproject.toml:29` | `grep "from crewai" hagoku/` 全仓 0 命中，已是化石 |
 | CO-A3 | 同步 `docs/plans/doctrine-violations-cleanup.md` 与现状（5 处 LLM-except 历史违规已在白名单清空，文档仍描述"待修"） | `docs/plans/doctrine-violations-cleanup.md` | 标记 `[已闭环 2026-XX]`，不删原始描述 |
+| CO-A4 | **双层 LLM 残留清理**（commit `e262599` 已删主体，5 处残留待清）—— ① `hagoku/tools/health.py:52,63-64,148,165` 健康检查不再读 model_quick / model_deep；② `hagoku/config.py:193-194` 删 LLMConfig 的 model_deep / model_quick 退化字段；③ `hagoku/api/server.py:227-228` POST `/api/config/llm` docstring 删 HAGOKU_LLM_MODEL_DEEP/_QUICK 描述；④ `tests/test_doctrine_compliance.py:249,329` 守门正则删 `create_quick_client` 残留；⑤ PROJECT.md「多模型分派」段 + CLAUDE.md「双层 LLM」描述删除 | 5 处文件 | 已删主体的清账动作 |
 
 **Phase A 审核清单**：
 - [ ] `pytest tests/test_api/test_server.py::TestConfigEndpoints -q` 全绿
 - [ ] `grep -rn "crewai" hagoku/ pyproject.toml` 返回 0
 - [ ] `doctrine-violations-cleanup.md` 与代码 git diff 状态一致
+- [ ] `grep -rn "model_deep\|model_quick\|MODEL_DEEP\|MODEL_QUICK\|create_quick_client" hagoku/ tests/test_doctrine_compliance.py` 返回 0（docs/CODE_SEMANTIC_AUDIT.md 历史审计文档残留可保留）
 
 ---
 
@@ -186,14 +197,18 @@
 | CO-D4 | orchestrator 退化为「LLM 客户端管理 + tool dispatch + WebSocket 桥」 | `hagoku/manager/orchestrator.py` 709 → ~200 行 | -500 |
 | CO-D5 | UI 进度条改成按 chat 里的 phase tag 渲染 | `hagoku_web/src/panels/` 显示逻辑变 | 估 +50 / -100 |
 
+| CO-D6 | **Memory 三层重组**——`hagoku/kb/` 整迁到 `hagoku/memory/methods/`；`storage/memory.py` 重构到 `memory/projects/`；删 4 份 `agents/*/knowledge.py`；新建 `memory/lessons.jsonl` 骨架。详见 [`2026-06-11-memory-three-layer-brief.md`](2026-06-11-memory-three-layer-brief.md) §3 Phase D 内任务 | 多处文件迁移 | 与 D1-D5 同步 |
+
 **不动什么**：
 - 工具实现（统计 / 清洗 / 可视化都不动）
 - 统计护栏（guardrails 完整保留）
-- 双层 LLM 分派（deep / quick 仍按工具类型路由）
 - ProjectContext（Phase B 已升级，本 phase 直接复用）
+- Meta 层基建（`create_meta_client / config.meta_llm` 保留；Meta agent 由 v2 brief 接管）
 
 **Phase D 审核清单**：
 - [ ] 4 个旧 agent 目录删干净，`grep -rn "from hagoku.agents.scout\|cleaner\|analyst\|reporter" hagoku/` 返回 0
+- [ ] `hagoku/kb/` 目录消失；`grep -rn "from hagoku.kb" hagoku/` 返回 0
+- [ ] 4 份 `agents/*/knowledge.py` 全删
 - [ ] **真 LLM 冒烟**：用 `tests/fixtures/smoke_demo.csv` 跑 5 步剧本（首波收敛 / 工具调用 / 阶段切换 / 用户挑战 / 留下/跳转）全过
 - [ ] chat dump 是**物理上一条**（不再是 4 条拼起来）
 - [ ] 律的减法清单：律 3（同阶段多轮记忆）自动满足；律 9（重推断触发）作废；律 8 完全作废
@@ -209,6 +224,8 @@
 | CO-E1 | 审查 `tools/business.py` (905 行) / `tools/cleaning.py` (856 行) / `tools/reporting.py` (1130 行) 内部是否有"代码替 LLM 判断"的部分（铁律 1） | 持续，每次改 |
 | CO-E2 | 新分析方法（贝叶斯 / 时序分解 / 因果识别 / power 计算 / 元分析 …）→ 加 tool 注册，不加 agent | 用户提需求时 |
 | CO-E3 | 新护栏维度（共线性 / 多重比较 / 效应量 / 异常值 …）→ 新增维度 = 新 tool，让 LLM 主动调 | 用户提需求时 |
+| CO-E4 | **Memory 工具化**——新建 `hagoku/tools/memory_tools.py` 暴露 8 个工具（query_method / read_method / save_lesson / recall_lessons / correct_lesson / remember_field / query_project_memory / forget_project）。详见 [`memory brief`](2026-06-11-memory-three-layer-brief.md) §3 Phase E | Phase D 完成后立即 |
+| CO-E5 | **Meta 层 v2 启动**——按 [`2026-06-11-meta-layer-v2-brief.md`](2026-06-11-meta-layer-v2-brief.md) 实施 4 组件（Prompt Lab Web + LessonAuditor Agent + prompt_gate CI + 辅助 CLI）| Phase D 完成后立即 |
 
 **Phase E 审核标准（每次扩张）**：
 - 新功能 = 1 个 tool 注册 + 0 行 orchestrator 改动 + 0 行新律
@@ -292,7 +309,7 @@
 2. **Phase B / C / D 每一步动手前，开发者必须先报告"改哪些文件、删哪些行"，得到用户许可才动**（铁律 -2）
 3. **每个 Phase 都是正向修复，不准 `git revert`**；删错了用户许可才能恢复（铁律 -1）
 4. **Phase D 的 prompt 起草必须配 dump 对比**，不准凭"觉得"改（铁律 10）
-5. **Phase D 之前 Meta Doctor / Prompt Lab 设计暂停**——Doctor 治标，B/C/D 治本。Phase D 完成后重新评估 Doctor 是否还需要
+5. **Phase D 之前 Meta 层基建保留 / Agent 不准建 / Prompt Lab Web 不准开始** —— Phase D 完成后按 v2 brief 路径 B+ 启动（详见 §2.2 L4 修订版）
 6. **统计护栏 / 数据 I/O / 可视化工具的实现不在本 brief 改动范围**——它们是工具箱本身
 
 ---
@@ -309,7 +326,7 @@
 不会。Phase D 后 UI 进度条按 chat 里的 phase tag 渲染——用户视角上还是 4 段，只是底层是同一个 LLM 在切焦点。
 
 **Q4：HaGoKu Doctor 的工作全废了吗？**
-不全废。Doctor 设计文档（`2026-06-09-meta-layer-design.md`）里的 dump 完整性自检 / Prompt Lab 模拟器作为「chat 检查工具」依然有价值——但形态会大幅简化。Phase D 完成后重新评估保留范围。
+不全废，**重新设计为路径 B+**——详见 [`2026-06-11-meta-layer-v2-brief.md`](2026-06-11-meta-layer-v2-brief.md)。v2 保留用户 3 个原始需求（日常维护 / 提示词模拟 / 防过度拼装）+ 新增 ② 层 lesson 守护，**总实现量从 v5 的 ~1400 行降到 ~1080 行**。Phase D 完成后立即启动。原 v5 文档归档为决策历史。
 
 **Q5：宣传上失去"多 agent"标签会不会很被动？**
 不会，反而是机会。审核方判断：「多 agent」在 2026 已商品化（市面上 LLM 数据分析工具几乎全在说），技术圈反向走 1 agent + 强工具（Claude Code / Cursor / Cline / Aider）。新叙事「严肃统计 + 本地优先 + 1 个深度数据分析师」是**别人难抄的稀缺定位**。

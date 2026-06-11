@@ -1,10 +1,15 @@
-# Doctrine 违规清理 — 历史债务
-
-**触发**：`tests/test_doctrine_compliance.py` 上线时扫出 5 处「LLM 调用 except 块静默吞失败」
-**状态**：5 处违规已加入 `_KNOWN_LLM_EXCEPT_VIOLATIONS` 白名单豁免，CI 不阻塞。
-**目标**：按本文件逐一修复，每修一处从白名单移除。修完后白名单为空集，整套 doctrine 测试无豁免。
-
+# Doctrine 违规清理 — 历史债务（已完成）
+**状态（2026-06-11）**：5 处违规已全部解决。`_KNOWN_LLM_EXCEPT_VIOLATIONS` 白名单已为空集。
+**解决方式**：
+- 违规 1 + 2（`_plan_analysis_via_llm`）：函数随 Analyst 重构整体删除
+- 违规 3（`_call_llm_for_plan`）：已改为 `raise RuntimeError`，见 `hagoku/manager/orchestrator.py:501-504`
+- 违规 4（`_try_generate_phase_llm`）：函数已删除
+- 违规 5（`_llm_understand_field_update`）：函数已删除
+此文件保留作为历史记录，记录"5 处隐性兜底如何被识别并清理"的过程。
+后续若再发现类似违规，按 `CLAUDE.md` 铁律 7（失败在场律）处理。
 ---
+## 原始违规上下文（保留以备审查）
+[以下原文不动，保留 20260601 写下的诊断记录供后续 AI 学习"如何识别隐性兜底"]
 
 ## 为何这 5 处是违规
 

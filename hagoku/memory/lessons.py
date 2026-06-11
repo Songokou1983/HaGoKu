@@ -65,6 +65,22 @@ class LessonStore:
             f.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
         return entry.id
 
+    def count_lessons(self) -> int:
+        """统计 lesson 条数（不含 schema 行）。"""
+        if not self.path.exists():
+            return 0
+        count = 0
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith('{"_schema"'):
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            count += 1
+        return count
+
     def recall(self, context_query: str, top_k: int = 3) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []

@@ -76,14 +76,11 @@ def _handle_save_lesson(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict
         )
     except ValueError as e:
         return {"error": str(e)}
-    # M3补: 每 10 条自动触发 LessonAuditor
-    try:
-        count = len(store._load_lessons()) if hasattr(store, '_load_lessons') else sum(1 for _ in open(store.path) if _.strip())
-        if count % 10 == 0:
-            from hagoku.agents.lesson_auditor.agent import on_lesson_written
-            on_lesson_written(count)
-    except Exception:
-        pass
+    # M3补: 每 10 条自动触发 LessonAuditor（计数不含 schema 行）
+    count = store.count_lessons()
+    if count > 0 and count % 10 == 0:
+        from hagoku.agents.lesson_auditor.agent import on_lesson_written
+        on_lesson_written(count)
     return {"lesson_id": lid}
 
 

@@ -186,23 +186,22 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
         "用中文输出。"
     )
     user_content = _json.dumps(findings, ensure_ascii=False, default=str)
-    rewrite_msgs = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user_content},
-    ]
-    dump_messages("analyst_rewrite_summary", rewrite_msgs, model=self.config.llm.model)
+    messages = build_messages(query=user_content, user_input=user_content, system_extra=system)
+    dump_messages("analyst_rewrite_summary", messages, model=self.config.llm.model)
 
     client = create_raw_client(self.config.llm)
     resp = client.chat.completions.create(
         model=self.config.llm.model,
-        messages=build_messages(query=user_content, user_input=user_content, system_extra=system),
+        messages=messages,
         temperature=0.3,
         max_tokens=2048,
     )
     result = (resp.choices[0].message.content or "").strip()
-    dump_messages("analyst_rewrite_summary_response",
-                  rewrite_msgs + [{"role": "assistant", "content": result}],
-                  model=self.config.llm.model)
+    dump_messages(
+        "analyst_rewrite_summary_response",
+        messages + [{"role": "assistant", "content": result}],
+        model=self.config.llm.model,
+    )
     return result
 
 

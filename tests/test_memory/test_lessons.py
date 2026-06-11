@@ -57,3 +57,13 @@ def test_lessons_jsonl_append_only():
         lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     assert len(lines) == 2
     assert {lines[0]["id"], lines[1]["id"]} == {id1, id2}
+
+
+def test_count_lessons_excludes_schema_line():
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lessons.jsonl"
+        path.write_text('{"_schema": "LessonEntry", "version": 1}\n', encoding="utf-8")
+        store = LessonStore(path=path)
+        assert store.count_lessons() == 0
+        store.save(scenario="a", what_worked="b", what_failed="none", lesson="c")
+        assert store.count_lessons() == 1

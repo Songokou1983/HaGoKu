@@ -246,29 +246,29 @@ class DataAnalystAgent(BaseAgent):
         self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
 
         from hagoku.observability.llm_dump import dump_messages
-        dump_messages(
-            "agent_infer_field_semantics",
-            [{"role": "system", "content": system_prompt},
-             {"role": "user", "content": "请分析以下数据集的字段语义：\n```json\n" + user_prompt_str + "\n```"}],
-            model=self.llm_config.model,
-            extra={"query": query, "tools": ["submit_field_inference"]},
-        )
 
         try:
             ctx = self._context or {}
             project_ctx = ctx.get("_project_context")
+            user_content = f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```"
             if project_ctx:
                 messages = project_ctx.to_messages_for_llm(
                     "scout", {"query": query, "column_semantics": []},
-                    f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
+                    user_content,
                     agent_system_extra=system_prompt,
                 )
             else:
                 messages = build_messages(
                     query=query or "",
-                    user_input=f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```",
+                    user_input=user_content,
                     system_extra=system_prompt,
                 )
+            dump_messages(
+                "agent_infer_field_semantics",
+                messages,
+                model=self.llm_config.model,
+                extra={"query": query, "tools": ["submit_field_inference"]},
+            )
             response = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=messages,
@@ -288,8 +288,8 @@ class DataAnalystAgent(BaseAgent):
         tc = tool_calls or []
         dump_messages(
             "agent_infer_field_semantics_response",
-            [{"role": "assistant", "content": raw_text,
-              "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in tc]}],
+            messages + [{"role": "assistant", "content": raw_text,
+              "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in tc] if tc else None}],
             model=self.llm_config.model,
         )
 

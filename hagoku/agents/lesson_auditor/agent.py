@@ -86,11 +86,9 @@ class LessonAuditor:
         report = self.review_batch()
         report.report_type = "monthly"
         report.trend_summary = f"本月新增 {len(recent)} 条 lesson，总 {len(lessons)} 条"
-        # LLM 审核（可选，meta_llm 不可用时跳过）
-        try:
-            report.trend_summary = self._llm_audit(recent, lessons) or report.trend_summary
-        except Exception as e:
-            logger.warning("LLM audit skipped: %s", e)
+        llm_summary = self._llm_audit(recent, lessons)
+        if llm_summary:
+            report.trend_summary = llm_summary
         return report
 
     def _llm_audit(self, recent: list[dict], all_lessons: list[dict]) -> str | None:

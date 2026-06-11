@@ -29,19 +29,7 @@ HaGoKu Studio 追求统计分析深度：自动检验假设、报告效应量、
 
 > 💡 当前通道设计在 ~30B+ 模型上验证稳定。随着技术进步，7B 级已退化为玩具级别——幻觉率高、指令遵循弱，不是 HaGoKu 的目标运行环境。如果你在用小模型遇到「字段全选」「角色乱判」等问题，换个稍大的模型通常就解决了。
 >
-> **最近大改**（2026-06-10）：
-> - 通道修复：`scout_reply.py` 删除 170 行 prompt 拼装代码，直传分析目标+对话历史+用户原话
-> - 铁律 11（通道优先律）：LLM 行为异常第一步查通道不准改提示词
-> - HaGoKu Doctor 设计：Meta 层系统医生 + Prompt Lab 模拟器（[设计文档](docs/superpowers/specs/2026-06-09-meta-layer-design.md)）
-> - 通道守门（Phase 0）：`build_messages()` 通道函数，禁止代码筛选 LLM 看到的信息
->
-> **前次大改**（2026-06-02 ~ 06-03，17 commits / 22 files / +1877 -377）：
-> - 架构层 P0+P1 全部清零（铁律 2 失守修复、字段语义同步链闭环、业务阈值硬编码移除）
-> - 守门测试扫描范围 5→9 子目录，CI 不再假绿
-> - Scout 知识库不再存取字段名（字段语义归 LLM + 项目记忆）
-> - 重推断参数传反修复 + 控制流不再阻塞用户跳转
-> - 清洗评估防死循环（LLM 不调 submit_assessment → 兜底 raise）
-> - `clear-history` 不清除知识库（知识库存分析经验，不存字段名）
+> **Phase A-D 已完成（2026-06-11）**：4 agent 合 1，prompt 单点化，阶段切换 LLM 化，Meta v2 四组件。[详见](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)
 
 ---
 
@@ -182,71 +170,7 @@ hagoku/tools/
 
 ## 通道完备性十律
 
-「代码边界」给出了禁令（"不许做语义判断"），但禁令不足以保证 LLM 真的收到信息。以下十条是**正向契约**——代码必须主动做的事；缺一条即视为通道残缺，B 类语义漏水的源头由此封死。
-
-### 律 1：意图穿透律（🔴 全局上下文）
-
-> 用户的研究意图（`query` / `analysis_goal` / `research_question`）是项目级全局上下文，必须出现在**每一个 Agent 每一次 LLM 调用**的 system 或 user prompt 里。代码不得以"prompt 已经很长了"为由省略。
-
-**检验**：任何 Agent 调用 LLM 时，若 prompt 中未注入意图字符串，视为通道残缺。配套契约测试断言。
-
-### 律 2：原话不可销毁律（🔴 审计追溯）
-
-> 用户每次自然语言输入必须以 `{raw_text, stage, revision, timestamp}` 结构化形式保留在 run 状态中，直至对应的 LLM tool_call 完成并被验证落地。
-
-代码可以解析它、转译它、路由它，但**不得在落地前丢弃原文**。任何"拼接进 `query` 字符串后即丢弃 raw"的实现都是违规。
-
-### 律 3：同阶段多轮记忆律（🔴 跨轮一致性）
-
-> 同一 Agent 在同一暂停点的多轮交互必须以 message list 形式累积。每轮 LLM 调用的输入必须包含「前 N-1 轮 LLM 输出 + 用户对每轮的回应 + 本轮新 context」。
-
-**多轮交互 ≠ 重复的单点调用。** LLM 第二轮必须知道自己第一轮说过什么，以及用户为什么反对。
-
-### 律 4：工具 schema 覆盖完备律（🔴 表达通路）
-
-> 每个 LLM 工具的参数必须覆盖该阶段所有可被用户合理表达的状态变更维度。新增维度（如新增"是否参与分析"）时，必须在工具 schema 中同步开口。
-
-**检验**：列出该阶段用户可能说的 10 种纠正措辞，每一种都能在工具参数中找到落点。否则工具 schema 残缺，LLM 听懂了也无路可写。
-
-### 律 5：状态层单一权威律（🔴 物理一致性）
-
-> 每个语义概念（如"字段语义"）必须有唯一的权威数据结构（Single Source of Truth）；其它视图（display map / role map / target list）必须从权威结构派生，禁止平行存储。
-
-工具 tool_call 必须写权威结构；派生视图由代码（或读取时）自动重算。**反例**：当前 `column_semantics` / `column_descriptions` / `column_display_names` / `target+features` / `variable_roles` 平行存储字段语义，用户改一处其它不跟，下游 Agent 看到矛盾状态。
-
-### 律 6：信息抵达正向断言（🔴 可验证性）
-
-> 除禁止式刹车外，必须配备正向断言：
-> - 用户每次输入后，测试断言 LLM 在下一次调用中接收到了该原话（mock 录回 + 断言 prompt 包含 `raw_text`）。
-> - 跨阶段意图（`query`）必须有测试断言它出现在每个 Agent 调用 prompt 中。
-
-不通过即视为通道断裂。**「代码看起来合规」不等于「信息到了」**——这是 B 类漏水永远在禁止式审查盲区的根因。
-
-### 律 7：语义不确定可见化律（🟡 用户感知）
-
-> 当 LLM 对用户输入未产生任何工具调用、或产出参数为空时，**必须**在 UI 层显式告知用户"系统未理解你的输入，请换一种说法"，不得静默继续。
-
-`logging.warning` 只对开发者可见，不算履行此义务。失败处理章节的"两路径"应扩为三路径：LLM 异常 / 通道失败 / **语义未理解**。
-
-### 律 8：控制通道律（🟡 LLM 控制权）
-
-> 通道 = **信息通道 + 控制通道**。信息通道送语义（用户 ↔ LLM）；控制通道送 LLM 的流程决策（`done_with_stage` / `stay_in_stage` / `route_to` / `request_more_user_input`）作为 tool_calls。
-
-LLM 不仅能管语义，也必须能管"下一步去哪 / 是否再问用户"。流程顺序由代码硬接管而 LLM 无表达出口的情形，是通道断裂的另一面。
-
-### 律 9：重推断触发律（🟡 影响面同步）
-
-> 当用户的纠正影响"角色 / 参与分析 / target / feature 归属"等结构性维度时，代码必须触发 Agent 重新跑一次 inference（带累积修正作为输入），而非仅打字段级补丁。
-
-哪些维度属"结构性"由 Agent 在工具 schema 中标注（如 `triggers_reinference: true`）。**反例**：用户说"目标变量应该是 Y"，只改了 `target` 字段，但 `column_semantics[i].suggested_role` 仍是旧值。
-
-### 律 10：当前优先律（🟡 记忆破封）
-
-> 当前 run 中用户的明确纠正始终覆盖项目历史记忆；历史记忆只用于**首次推断阶段的初始化**。一旦用户在本 run 纠正过字段 X，历史记忆对 X 失效，新值写回记忆。
-
-**反例**：项目记忆里写"Inc1=收入"，下次 run 自动覆盖用户当前纠正"Inc1=销售额"，用户感觉"刚才说的没用"。
-
-### 律 11：配置中性律（🟡 文档脱敏）
+> **Phase D 后**：单 agent + 单 chat（ProjectContext）+ `to_messages_for_llm()` 统一入口已物理保证律 1-6/8-10 自动满足。律 11（配置中性）保留为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
 
 > 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过 `hagoku-ui` 设置功能选择的，不是项目真理。
 
@@ -275,145 +199,15 @@ grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留�
 
 ## 防退化机制
 
-代码接管语义理解往往不是初始设计，而是在测试/迭代中为快速解决问题逐步渗入的。以下四重刹车防止这一退化——前三条是**禁止式**（不许做什么），第四条是**正向式**（必须能验证做到了什么）。
-
-### 刹车 1：禁止正则覆盖区（代码级）
-
-涉及用户输入处理、字段语义更新的代码区域顶部，有明确的分隔注释标记 `# ==== CHANNEL ZONE: 禁止正则/if-else 语义分支 ====`。该区域内禁止出现：
-- 中文字符串匹配（`"是"` `"代表"` `"表示"` `"意为"` 等自然语言动词）
-- `if/elif` 链枚举语义模式
-
-出现即违规。
-
-> **当前通道区域**：
-> - **意图解析**（`query_parser.py`）：已彻底 LLM 化。`QueryParser.parse()` 通过 LLM structured output（`PlanRequestFields` schema）输出 `{intent, analysis_type, research_question}`，代码仅做 schema 校验和传输。无正则、无关键词枚举。
-> - **字段理解**（`orchestrator.py`）：`_apply_scout_reply_with_llm`（function calling 模式，LLM 通过 `update_field_understanding` 工具自主决定更新内容）与 `apply_scout_user_field_reply_to_context`（机械执行层，将 tool_calls 结果写入 context）。
-> - **分布判断**（Scout Agent）：Shape analysis 已由 LLM 完成，不再有硬编码的倍数阈值（`maxv > q75v * 10` 等）。
-> - **工具 description**：`_SCOUT_FIELD_UPDATE_TOOLS` 内的中文字符串是 function calling 工具的 `description`（供 LLM 理解工具用途），不属于代码硬匹配。
-
-### 刹车 2：回归契约（测试级）
-
-测试验证 LLM 确实收到了包含用户原话的请求。若代码绕过 LLM 调用，mock 收不到请求，测试失败。不关心代码怎么实现，只验证通道是否完整。
-
-```bash
-# 核心契约：用户输入 → LLM 收到完整上下文 → 返回更新 JSON → 代码机械应用
-pytest tests/test_product/test_agent_interaction_contract.py -q
-```
-
-### 刹车 3：审查清单（流程级）
-
-审查时扫中文字面量：涉及用户输入解析/字段语义更新的代码区域若新增中文字符串匹配或 if-else 语义分支 → 拒绝合并，改为补通道。
-
-```bash
-# 审查命令：在通道区域内检查中文硬匹配
-grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/agents/scout/agent.py
-grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.py
-```
-
-### 刹车 4：信息抵达正向断言（契约级，正向式）
-
-前三条刹车是禁止式——它们能拦住"显式越权"，但拦不住"代码看起来合规、信息悄悄丢失"。刹车 4 用正向断言补上这个盲区，落实「通道完备性十律」中的律 1、律 2、律 6。
-
-**断言对象**：
-
-1. **意图穿透**（律 1）：每个 Agent 的每一次 LLM 调用，prompt 必须包含 `query` / `research_question` 字符串。
-2. **原话抵达**（律 2、律 6）：用户在任意暂停点的回复 `raw_text`，必须出现在下一次 LLM 调用的 prompt（system/user/tool messages 任一）中。
-3. **多轮历史**（律 3）：同一暂停点的第 N 轮 LLM 调用，messages 必须包含前 N-1 轮的 assistant/user turn。
-
-**实现位置**：`tests/test_product/test_information_arrival.py`（新增），使用 mock 录回工具断言上述三条契约。
-
-```bash
-# 正向契约：用户原话 + 分析意图 + 多轮历史均抵达 LLM
-pytest tests/test_product/test_information_arrival.py -q
-```
-
-**违反即等同于通道断裂**——即使代码无任何正则/中文匹配，只要信息没抵达就视为退化。
+> **Phase D 后**：单 agent + `to_messages_for_llm()` + pre-commit hook 已物理拦截所有 4 类退化。信息抵达契约（`tests/test_product/test_information_arrival.py`）持续守门。
 
 ---
 
-## Agent 角色设计
+## Agent
 
-| Agent | 职责 | LLM 参与 |
-|-------|------|---------|
-| 🔍 **Scout** | 数据画像 + 字段语义推断 | LLM 做语义分析 |
-| 🧹 **Cleaner** | 数据清洗 + 缺失机制检验 | LLM 决策清洗策略 |
-| 📊 **Analyst** | 假设检验 + 回归分析 + 模型诊断 | **对话式分析**（LLM 自由探索数据，多轮对话，调 `submit_analysis` 结束） |
-| 📝 **Reporter** | 双轨 HTML 报告渲染 | LLM 生成叙述 |
+**Phase D 后：唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 关注点工作（理解字段/评估清洗/跑统计/写报告），通过 `route_to` 自主切换。统一 prompt（`hagoku/agents/prompt.md`，256 行）。27 工具全集可见。
 
-> **架构变更（2026-06-06）**：原 Scribe（记录+知识调度+看板维护）已简化为 Orchestrator 内部 kanban 状态机。4 通道文件（process_log.md / context.md / handover_notes.md）已删，`_scribe/` 目录已删。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段 + commit `d2772dd`。
-
-### Analyst 对话式分析（2026-06-02 重构）
-
-**旧设计**：Manager 生成分析计划（JSON）→ Analyst 按计划执行 → 返回结果。计划生成和执行的职责分裂，Analyst 被动执行。
-
-**新设计**：Analyst 以对话方式自由探索数据。不再依赖外部计划——LLM 自己看数据、调统计工具、向用户提问、提议分析方法。准备好后调 `submit_analysis` 提交发现。
-
-核心变化：
-- **对话循环**：最多 30 轮自由对话，LLM 自主决定何时调工具、何时提问、何时结束
-- **4 个工具**：`propose_method`（提议方法）、`ask_user`（向用户提问）、`run_statistical_test`（跑统计）、`submit_analysis`（提交发现结束）
-- **护栏后移**：`guardrails.check` 从 Analyst 内部移到 orchestrator（`_check_mandatory_guardrails`），编排层统一负责
-- **plan/phase 参数废弃**：`analyst.run()` 签名保留兼容但不再使用（病理 F-054）
-
-返回结构：`{findings: [...], method_used: [...], summary: "..."}`，orchestrator 从此读取。
-
-### ProjectContext — 统一上下文记忆系统
-
-一次分析 run 内，所有 Agent 共享同一个追加式上下文日志。从用户提交分析目标到最终报告生成，每一次 Agent 响应和用户反馈都按时间序记录。每个 Agent 调 LLM 时，自动获得：分析目标 + 当前字段状态 + 本阶段对话历史 + 上游阶段摘要。不再是各 Agent 各自维护零散的 `_session_messages` / `_conversation_history`。
-
-#### 数据模型
-
-```
-ProjectContext (追加式，只增不改)
-├── analysis_goal: "分析各渠道ROI"
-└── entries: [
-    {type: goal,           content: "分析各渠道ROI"},
-    {type: agent_response, stage: scout,  snapshot: {fields: [...], target: null}},
-    {type: user_feedback,  stage: scout,  raw: "Code是店铺编号"},
-    {type: agent_response, stage: scout,  snapshot: {fields: [Code→店铺编号, ...]}},
-    {type: stage_transition, from: scout, to: cleaner},
-    {type: agent_response, stage: cleaner, snapshot: {...}},
-    ...
-]
-```
-
-每条 `agent_response` 附带从 `column_semantics` 实时派生的状态快照（律 5：不平行存储）。每条 `user_feedback` 保留用户原话直到对应 tool_call 落地（律 2）。
-
-#### 与现有组件的关系
-
-```
-EventBus (已有)
-  ├── Orchestrator (内联 kanban)  → kanban.db
-  └── ProjectContext (新增)        → entries 追加 + build_prompt()
-```
-
-`ProjectContext` 是 EventBus 的被动消费者——监听 `AGENT_STARTED` / `AGENT_COMPLETED` / `USER_INPUT_RECEIVED`，自动追加 entries，不做任何流程控制。
-
-| 组件 | 位置 | 职责 |
-|------|------|------|
-| **ProjectContext** | `hagoku/context/project_context.py` | 统一上下文日志：追加 entries + `build_prompt(agent)` 拼装上下文 |
-| **ContextEntry** | 同上 | 单条记录：`type` / `stage` / `revision` / `raw_user_text` / `snapshot` |
-| **build_prompt()** | 同上 | 为 Agent 拼装 `system_prefix`（分析目标+字段状态+命令上下文）+ `history_context`（阶段对话历史） |
-| **Orchestrator 内联 kanban** | `hagoku/manager/orchestrator.py` | kanban.db 状态机（Step 4 从原 Scribe 内联） |
-| **MemoryManager** | `hagoku/storage/memory.py` | 不变——管跨 run 结构化知识，与 ProjectContext 互补不重叠 |
-
-#### 工作流
-
-```
-用户提交分析目标 → ProjectContext 记录 goal entry
-Scout 初始分析 → AGENT_COMPLETED → 追加 agent_response + snapshot
-用户纠正 → USER_INPUT_RECEIVED → 追加 user_feedback（含 raw_user_text）
-    → Agent 调 LLM 前：build_prompt("scout")
-        system_prefix: 分析目标 + 当前字段状态 + 命令上下文
-        history_context: 本阶段所有 user_feedback + agent_response
-    → LLM 看到完整来龙去脉
-Cleaner 启动 → build_prompt("cleaner")
-    system_prefix: 分析目标 + 当前字段状态
-    history_context: Scout 阶段快照（结构化摘要）+ Cleaner 阶段对话
-```
-
-> 实现：`hagoku/context/project_context.py`、`hagoku/manager/orchestrator.py`
-> 设计规格：`docs/superpowers/specs/2026-05-30-project-context-memory-design.md`
-> 实现计划：`docs/superpowers/plans/2026-05-30-project-context-memory-plan.md`
+ProjectContext 持有唯一 chat；`to_messages_for_llm()` 统一 LLM 调用入口。
 
 ### 分析计划生成
 

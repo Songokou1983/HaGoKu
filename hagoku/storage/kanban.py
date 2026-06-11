@@ -287,7 +287,21 @@ class KanbanDB:
     # ── 状态流转 ───────────────────────────────────────────
 
     def block_task(self, task_id: str, reason: str, actor: str = "system") -> bool:
-        """running/ready → blocked"""
+        """[Phase C 起 deprecated] agent 不应直接调 block_task。
+
+        阶段控制权已交给 LLM——LLM 调 ask_user 工具表达暂停意图，
+        orchestrator 据此 emit USER_INPUT_REQUESTED。kanban 块状态由
+        UI 层根据事件流自行计算，不再由 agent 写入。
+
+        保留此方法仅为 orchestrator._on_event 在收到 USER_INPUT_REQUESTED
+        后同步 kanban 用（让旧 KanbanPanel REST 调用仍能看到 blocked 状态）。
+        """
+        import warnings
+        warnings.warn(
+            "kanban.block_task 应仅由 orchestrator._on_event 间接调用，"
+            "agent 不应直接调。Phase C 之后将彻底移除。",
+            DeprecationWarning, stacklevel=2
+        )
         task = self.get_task(task_id)
         if not task or task["status"] not in {"running", "ready"}:
             return False
@@ -302,7 +316,12 @@ class KanbanDB:
         return True
 
     def unblock_task(self, task_id: str, actor: str = "system") -> bool:
-        """blocked → ready"""
+        """[Phase C 起 deprecated] 同 block_task。"""
+        import warnings
+        warnings.warn(
+            "kanban.unblock_task 应仅由 orchestrator 事件桥调用。",
+            DeprecationWarning, stacklevel=2
+        )
         task = self.get_task(task_id)
         if not task or task["status"] != "blocked":
             return False

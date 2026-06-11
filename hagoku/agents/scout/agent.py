@@ -260,7 +260,7 @@ class ScoutAgent(BaseAgent):
         开始 Scout 交互。
 
         流程：加载数据 → 推断语义 → 确认字段 → 写记忆 → 询问下一步
-        每次暂停都会 block_task() 等用户确认。
+        Phase C: 暂停由 LLM ask_user 工具触发，不再由 agent 调 kanban。
         """
         self._data_path = data_path
         self._query = query
@@ -327,9 +327,7 @@ class ScoutAgent(BaseAgent):
             # 需要用户确认的字段
             uncertain = [s for s in context["column_semantics"] if s.get("needs_user_input")]
             if uncertain:
-                # block 看板，等用户确认
-                if self.orchestrator:
-                    self.orchestrator.block_task("scout", "等用户确认字段含义")
+                # Phase C: 暂停由 LLM ask_user 触发，不再调 kanban
                 self._emit(EventType.AGENT_THINKING, {"thought": f"识别 {len(uncertain)} 个字段需确认，正在生成确认消息..."})
 
                 # 用 LLM 生成完整确认消息（传入所有字段，不只是 uncertain）
@@ -408,9 +406,7 @@ class ScoutAgent(BaseAgent):
         if comments:
             self._context["user_comments"] = comments
 
-        # 解除 block，继续看板任务
-        if self.orchestrator:
-            self.orchestrator.unblock_task("scout")
+        # Phase C: kanban 由 orchestrator 事件桥同步，agent 不再直调
 
         # 写记忆
         self._update_own_memory(self._context, project_id)
@@ -432,9 +428,7 @@ class ScoutAgent(BaseAgent):
             f"{len(uncertain)} 个需后续关注"
         )
 
-        # block，等用户确认进入下一步
-        if self.orchestrator:
-            self.orchestrator.block_task("scout", "等用户确认进入清洗阶段")
+        # Phase C: 暂停由 LLM ask_user 触发
         self._emit(EventType.AGENT_COMPLETED, {"result_summary": summary})
 
         return self._pause(

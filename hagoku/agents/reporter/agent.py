@@ -594,8 +594,7 @@ class ReporterAgent(BaseAgent):
         # 先让 LLM 生成预览（headline + 摘要）
         n_sig = sum(1 for r in results if r.get("significance") == "significant")
 
-        if self.orchestrator:
-            self.orchestrator.block_task("reporter", "等用户确认生成报告")
+        # Phase C: 暂停由 LLM ask_user 触发
 
         return self._pause(
             phase="confirm_report",
@@ -624,12 +623,10 @@ class ReporterAgent(BaseAgent):
 
         confirmed = user_input.get("confirmed", True)
         if not confirmed:
-            if self.orchestrator:
-                self.orchestrator.unblock_task("reporter")
+            # Phase C: kanban 由事件桥同步
             return self._done("done", "报告生成已取消", {})
 
-        if self.orchestrator:
-            self.orchestrator.unblock_task("reporter")
+        # Phase C: kanban 由事件桥同步
 
         data = self._pending_data
 

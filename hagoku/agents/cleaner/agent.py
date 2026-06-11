@@ -463,9 +463,7 @@ class CleanerAgent(BaseAgent):
             self._phase = "confirm_strategy"
 
             if operations:
-                # block，等用户确认策略
-                if self.orchestrator:
-                    self.orchestrator.block_task("cleaner", "等用户确认清洗策略")
+                # Phase C: 暂停由 LLM ask_user 触发，不再调 kanban
                 return self._pause(
                     phase="confirm_strategy",
                     message=f"检测到 {len(operations)} 个潜在清洗操作，请确认：",
@@ -522,9 +520,7 @@ class CleanerAgent(BaseAgent):
             if col and strategy:
                 final_ops[col] = strategy
 
-        # 解除 block
-        if self.orchestrator:
-            self.orchestrator.unblock_task("cleaner")
+        # Phase C: kanban 由事件桥同步
 
         df = self._df
         context = self._context or {}
@@ -574,9 +570,7 @@ class CleanerAgent(BaseAgent):
             f"影响率 {self._report.impact_rate:.1%}" if self._report else ""
         )
 
-        # block，等用户确认进入下一步
-        if self.orchestrator:
-            self.orchestrator.block_task("cleaner", "等用户确认进入分析阶段")
+        # Phase C: 暂停由 LLM ask_user 触发
         self._emit(EventType.AGENT_COMPLETED, {"result_summary": summary})
 
         return self._pause(

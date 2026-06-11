@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -25,5 +26,10 @@ export default defineConfig({
   // `vite preview` 不走 server.proxy；不配则 /api 打到预览进程本身，列表请求易挂死
   preview: {
     proxy: { ...API_PROXY },
+  },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: [],
   },
 })

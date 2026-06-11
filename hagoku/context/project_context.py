@@ -170,7 +170,7 @@ class ProjectContext:
 
         # emit TOOL_EXCHANGE 事件给前端
         if self._event_bus:
-            self._event_bus.emit("TOOL_EXCHANGE", stage, {
+            self._event_bus.emit(EventType.TOOL_EXCHANGE, stage, {
                 "stage": stage,
                 "revision": revision,
                 "timestamp": entry.timestamp,

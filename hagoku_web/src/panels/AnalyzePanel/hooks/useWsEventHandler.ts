@@ -2,15 +2,29 @@ import { useEffect } from "react";
 import type { AgentKey, AgentRunState } from "../types";
 import type { ConvoMessage } from "../types";
 import { uid } from "../utils";
-import { resolveAgentKey, parsePauseInteractionRevision, parseFieldReview, parseCleaningAssessment, parseCleaningReview, parseAnalystReview } from "../parsers";
-import { formatScoutUserInputFactLine, formatStageProceedFactLine } from "../utils";
+import {
+  resolveAgentKey,
+  parsePauseInteractionRevision,
+  parseFieldReview,
+  parseCleaningAssessment,
+  parseCleaningReview,
+  parseAnalystReview,
+} from "../parsers";
+import {
+  formatScoutUserInputFactLine,
+  formatStageProceedFactLine,
+} from "../utils";
 import { guardrailsRunCompletedInfo } from "../../../utils/wsGuardrails";
 
 interface WsEventDeps {
   batch: any[];
   setMessages: React.Dispatch<React.SetStateAction<ConvoMessage[]>>;
-  setAgentStates: React.Dispatch<React.SetStateAction<Record<AgentKey, AgentRunState>>>;
-  setAgentElapsed: React.Dispatch<React.SetStateAction<Record<AgentKey, number>>>;
+  setAgentStates: React.Dispatch<
+    React.SetStateAction<Record<AgentKey, AgentRunState>>
+  >;
+  setAgentElapsed: React.Dispatch<
+    React.SetStateAction<Record<AgentKey, number>>
+  >;
   agentStartTimes: React.MutableRefObject<Record<string, number>>;
   setWaitingAgent: React.Dispatch<React.SetStateAction<AgentKey | null>>;
   setPhase: React.Dispatch<React.SetStateAction<any>>;
@@ -25,7 +39,10 @@ interface WsEventDeps {
   setGuardrailsBlocked: React.Dispatch<React.SetStateAction<boolean>>;
   setBlockedRunId: React.Dispatch<React.SetStateAction<string | null>>;
   setResultReportUrl: React.Dispatch<React.SetStateAction<string | null>>;
-  replySnapshotRef: React.MutableRefObject<{ agent: AgentKey; gate: boolean } | null>;
+  replySnapshotRef: React.MutableRefObject<{
+    agent: AgentKey;
+    gate: boolean;
+  } | null>;
   replyInputRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   waitinAgent: AgentKey | null;
   gateOpen: boolean;
@@ -36,31 +53,52 @@ interface WsEventDeps {
   activeAnalystReviewId: string | null;
   activeAnalystReviewRevision: number;
   currentProject: string | null;
+  /** CO-15: thinking text callback — agent_thinking goes here, not ConvoFeed */
+  onThinking?: (text: string | null) => void;
+  /** CO-16: reply pending state setter */
+  setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useWsEventHandler(deps: WsEventDeps) {
   const {
-    batch, setMessages, setAgentStates, setAgentElapsed,
-    agentStartTimes, setWaitingAgent, setPhase,
-    setActiveFieldReviewId, setActiveFieldReviewRevision,
-    setFieldReviewScrollNonce, setActiveCleaningReviewId,
-    setActiveCleaningReviewRevision, setActiveAnalystReviewId,
-    setActiveAnalystReviewRevision, setGateOpen,
-    setGuardrailsBlocked, setBlockedRunId, setResultReportUrl,
-    replySnapshotRef, replyInputRef,
-    activeFieldReviewId, activeFieldReviewRevision,
-    activeCleaningReviewId, activeCleaningReviewRevision,
-    activeAnalystReviewId, activeAnalystReviewRevision,
+    batch,
+    setMessages,
+    setAgentStates,
+    setAgentElapsed,
+    agentStartTimes,
+    setWaitingAgent,
+    setPhase,
+    setActiveFieldReviewId,
+    setActiveFieldReviewRevision,
+    setFieldReviewScrollNonce,
+    setActiveCleaningReviewId,
+    setActiveCleaningReviewRevision,
+    setActiveAnalystReviewId,
+    setActiveAnalystReviewRevision,
+    setGateOpen,
+    setGuardrailsBlocked,
+    setBlockedRunId,
+    setResultReportUrl,
+    replySnapshotRef,
+    replyInputRef,
+    activeFieldReviewId,
+    activeFieldReviewRevision,
+    activeCleaningReviewId,
+    activeCleaningReviewRevision,
+    activeAnalystReviewId,
+    activeAnalystReviewRevision,
     currentProject,
+    onThinking,
+    setReplyPending,
   } = deps;
 
   useEffect(() => {
     if (batch.length === 0) return;
     for (const msg of batch) {
+      // ── state_snapshot ──────────────────────────────────────────
       if (msg.type === "state_snapshot") {
         const snap = (msg as any).data;
         if (!snap) continue;
-        // 恢复阶段
         if (snap.stage) {
           setPhase("running");
         }
@@ -72,7 +110,13 @@ export function useWsEventHandler(deps: WsEventDeps) {
             setActiveFieldReviewId(wfId);
             setMessages((prev) => [
               ...prev,
-              { id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview: fr },
+              {
+                id: wfId,
+                role: "workflow",
+                text: "",
+                timestamp: new Date().toISOString(),
+                fieldReview: fr,
+              },
             ]);
             setActiveFieldReviewRevision(0);
             setFieldReviewScrollNonce((n: number) => n + 1);
@@ -88,7 +132,13 @@ export function useWsEventHandler(deps: WsEventDeps) {
             setActiveCleaningReviewId(cid);
             setMessages((prev) => [
               ...prev,
-              { id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview: cr },
+              {
+                id: cid,
+                role: "workflow",
+                text: "",
+                timestamp: new Date().toISOString(),
+                cleaningReview: cr,
+              },
             ]);
             setActiveCleaningReviewRevision(0);
           }
@@ -99,12 +149,37 @@ export function useWsEventHandler(deps: WsEventDeps) {
         if (snap.analyst_message) {
           setMessages((prev) => [
             ...prev,
-            { id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() },
+            {
+              id: uid(),
+              role: "agent",
+              text: snap.analyst_message,
+              timestamp: new Date().toISOString(),
+            },
           ]);
           setWaitingAgent("analyst");
           setGateOpen(true);
         }
-        // Agent 状态设为运行中
+        // CO-14: 恢复 pending ask_user
+        if (snap.pending_ask_user) {
+          const ask = snap.pending_ask_user;
+          if (ask.question && ask.expected_format) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "workflow",
+                text: "",
+                timestamp: new Date().toISOString(),
+                askUser: {
+                  question: ask.question,
+                  expected_format: ask.expected_format,
+                  options: ask.options,
+                },
+              },
+            ]);
+          }
+        }
+        // Agent 状态恢复
         const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
         const doneIdx = agentOrder.indexOf(snap.stage);
         const states: Record<string, string> = {};
@@ -117,19 +192,34 @@ export function useWsEventHandler(deps: WsEventDeps) {
         setAgentStates(states as any);
         continue;
       }
+
+      // ── ack ─────────────────────────────────────────────────────
       if (msg.type === "ack" && msg.cmd === "respond") {
         replySnapshotRef.current = null;
+        // CO-16: 清除 replyPending
+        setReplyPending?.(false);
         continue;
       }
+
+      // ── error ───────────────────────────────────────────────────
       if (msg.type === "error") {
-        const detail = typeof msg.message === "string" ? msg.message.trim() : "";
+        const detail =
+          typeof msg.message === "string" ? msg.message.trim() : "";
         const iso = new Date().toISOString();
         setMessages((prev) => [
           ...prev,
-          { id: uid(), role: "system", text: detail || "服务器返回错误", timestamp: iso },
+          {
+            id: uid(),
+            role: "system",
+            text: detail || "服务器返回错误",
+            timestamp: iso,
+          },
         ]);
+        setReplyPending?.(false);
         const snap = replySnapshotRef.current;
-        const recoverable = /No agent is waiting|No active orchestrator/i.test(detail);
+        const recoverable = /No agent is waiting|No active orchestrator/i.test(
+          detail,
+        );
         if (recoverable && snap) {
           setWaitingAgent(snap.agent);
           setGateOpen(snap.gate);
@@ -137,47 +227,146 @@ export function useWsEventHandler(deps: WsEventDeps) {
         }
         continue;
       }
+
       if (msg.type === "event" && msg.data) {
         const d = msg.data;
-        const agentKey = resolveAgentKey(d.agent);
+        // CO-05: Pipeline 兜底 — agent_started 无 agent 时回退
+        let agentKey: AgentKey | null = resolveAgentKey(d.agent);
+        if (d.event_type === "agent_started" && !d.agent) {
+          agentKey = "scout"; // fallback per CO-05/CO-26
+        }
 
+        // ── agent lifecycle ──────────────────────────────────────
         if (d.event_type === "agent_started" && agentKey) {
           agentStartTimes.current[agentKey] = Date.now();
           setAgentStates((prev) => ({ ...prev, [agentKey]: "running" }));
+          // clear thinking on new agent start
+          onThinking?.(null);
         }
         if (d.event_type === "agent_completed" && agentKey) {
-          const elapsed = Math.round((Date.now() - (agentStartTimes.current[agentKey] ?? Date.now())) / 1000);
+          const elapsed = Math.round(
+            (Date.now() - (agentStartTimes.current[agentKey] ?? Date.now())) /
+              1000,
+          );
           setAgentStates((prev) => ({ ...prev, [agentKey]: "done" }));
           setAgentElapsed((prev) => ({ ...prev, [agentKey]: elapsed }));
+          onThinking?.(null);
         }
         if (d.event_type === "agent_failed" && agentKey) {
           setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
+          onThinking?.(null);
           const detail = (d.data as Record<string, unknown>)?.error;
           if (typeof detail === "string" && detail.trim()) {
             setMessages((prev) => [
               ...prev,
-              { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp },
+              {
+                id: uid(),
+                role: "system",
+                text: detail.trim(),
+                timestamp: d.timestamp,
+              },
             ]);
           }
         }
 
+        // ── CO-15: agent_thinking → ThinkingStrip, NOT ConvoFeed ──
         if (d.event_type === "agent_thinking") {
           const raw = (d.data as Record<string, unknown> | undefined)?.thought;
-          if (typeof raw === "string") {
-            const t = raw.trim();
-            if (t) {
-              const short = t.length > 220 ? `${t.slice(0, 217)}…` : t;
-              setMessages((prev) => [
-                ...prev,
-                { id: uid(), role: "system", text: short, timestamp: d.timestamp },
-              ]);
-            }
+          if (typeof raw === "string" && raw.trim()) {
+            onThinking?.(raw.trim());
           }
         }
 
+        // ── CO-13: tool_exchange → ConvoFeed tool block ───────────
+        if (d.event_type === "tool_exchange") {
+          const data = (d.data ?? {}) as Record<string, unknown>;
+          const toolCalls = data.tool_calls as any[] | undefined;
+          if (toolCalls && toolCalls.length > 0) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "agent",
+                text: "",
+                timestamp: d.timestamp,
+                toolExchange: {
+                  stage: (data.stage as string) || d.agent || "",
+                  tool_calls: toolCalls.map((tc: any) => ({
+                    id: tc.id || uid(),
+                    name: tc.name || "",
+                    arguments_summary: tc.arguments_summary,
+                    result_summary: tc.result_summary,
+                    error: tc.error,
+                    duration_ms: tc.duration_ms,
+                  })),
+                  assistant_pre_text:
+                    (data.assistant_pre_text as string) || null,
+                },
+              },
+            ]);
+          }
+        }
+
+        // ── CO-19: agent_stream_delta → 增量渲染 ──────────────────
+        if (d.event_type === "agent_stream_delta") {
+          const data = (d.data ?? {}) as Record<string, unknown>;
+          const streamId = (data.stream_id as string) || "";
+          const delta = (data.delta as string) || "";
+          if (streamId && delta) {
+            setMessages((prev) => {
+              // Find last streaming message with matching streamId
+              const lastIdx = prev.length - 1;
+              if (
+                lastIdx >= 0 &&
+                prev[lastIdx].streaming &&
+                prev[lastIdx].streamId === streamId
+              ) {
+                // Append delta to existing streaming message
+                return prev.map((m, i) =>
+                  i === lastIdx
+                    ? { ...m, text: m.text + delta, timestamp: d.timestamp }
+                    : m,
+                );
+              }
+              // Create new streaming message
+              return [
+                ...prev,
+                {
+                  id: uid(),
+                  role: "agent",
+                  text: delta,
+                  timestamp: d.timestamp,
+                  streaming: true,
+                  streamId,
+                },
+              ];
+            });
+          }
+        }
+
+        // ── CO-19: agent_stream_end → 结束流式 ────────────────────
+        if (d.event_type === "agent_stream_end") {
+          const data = (d.data ?? {}) as Record<string, unknown>;
+          const streamId = (data.stream_id as string) || "";
+          if (streamId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.streaming && m.streamId === streamId
+                  ? { ...m, streaming: false, streamId: undefined }
+                  : m,
+              ),
+            );
+          }
+        }
+
+        // ── reporter completed ────────────────────────────────────
         if (d.agent === "reporter" && d.event_type === "agent_completed") {
           const data = d.data as Record<string, unknown>;
-          const elapsed = Math.round((Date.now() - (agentStartTimes.current["reporter"] ?? Date.now())) / 1000);
+          const elapsed = Math.round(
+            (Date.now() -
+              (agentStartTimes.current["reporter"] ?? Date.now())) /
+              1000,
+          );
           if (data?.skipped === true) {
             setAgentStates((prev) => ({ ...prev, reporter: "skipped" }));
             setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
@@ -186,34 +375,72 @@ export function useWsEventHandler(deps: WsEventDeps) {
           } else {
             setAgentStates((prev) => ({ ...prev, reporter: "done" }));
             setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
-            const proj = data?.project_name as string ?? currentProject ?? "default";
+            const proj =
+              (data?.project_name as string) ?? currentProject ?? "default";
             setResultReportUrl(`/api/reports/${proj}`);
             setWaitingAgent(null);
             setPhase("done");
           }
         }
 
+        // ── user_input_requested ──────────────────────────────────
         if (d.event_type === "user_input_requested") {
           setGateOpen(false);
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
-          const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
+          const gatePayload = dataObj.gate as
+            | { phase?: string; prompt?: string }
+            | undefined;
           const fr = parseFieldReview(dataObj.field_review);
           const ca = parseCleaningAssessment(dataObj.cleaning_assessment);
           const cr = parseCleaningReview(dataObj.cleaning_review);
           const ar = parseAnalystReview(dataObj.analyst_review);
           const incRev = parsePauseInteractionRevision(dataObj);
           const incomingRevision = incRev !== null ? incRev : Infinity;
+
+          // Detect pure ask: has question+expected_format, no review tables
+          const askQuestion = dataObj.question as string | undefined;
+          const askFmt = dataObj.expected_format as string | undefined;
+          const isPureAsk =
+            !!askQuestion &&
+            !!askFmt &&
+            !fr &&
+            !cr &&
+            !ar &&
+            !gatePayload &&
+            !dataObj.field_review &&
+            !dataObj.cleaning_review &&
+            !dataObj.analyst_review;
+
+          if (isPureAsk) {
+            // CO-14: pure ask → AskUserPrompt
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "workflow",
+                text: "",
+                timestamp: d.timestamp,
+                askUser: {
+                  question: askQuestion,
+                  expected_format: askFmt,
+                  options: dataObj.options as string[] | undefined,
+                },
+              },
+            ]);
+          }
+
+          // Field review handling (existing)
           if (fr) {
             const patchInPlace =
-              activeFieldReviewId !== null
-              && (
-                incomingRevision === activeFieldReviewRevision
-                || incomingRevision > activeFieldReviewRevision
-              );
+              activeFieldReviewId !== null &&
+              (incomingRevision === activeFieldReviewRevision ||
+                incomingRevision > activeFieldReviewRevision);
             if (patchInPlace) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m,
+                  m.id === activeFieldReviewId
+                    ? { ...m, fieldReview: fr, timestamp: d.timestamp }
+                    : m,
                 ),
               );
             } else {
@@ -221,25 +448,36 @@ export function useWsEventHandler(deps: WsEventDeps) {
               setActiveFieldReviewId(wfId);
               setMessages((prev) => [
                 ...prev,
-                { id: wfId, role: "workflow", text: "", timestamp: d.timestamp, fieldReview: fr },
+                {
+                  id: wfId,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  fieldReview: fr,
+                },
               ]);
             }
             setActiveFieldReviewRevision(incomingRevision);
             setFieldReviewScrollNonce((n) => n + 1);
-          } else if (!gatePayload && !cr && !ar) {
+          } else if (!gatePayload && !cr && !ar && !isPureAsk) {
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);
             setFieldReviewScrollNonce(0);
           }
+
+          // Cleaning review
           if (cr) {
             const patchCleaning =
-              activeCleaningReviewId !== null
-              && incRev !== null
-              && (incRev === activeCleaningReviewRevision || incRev > activeCleaningReviewRevision);
+              activeCleaningReviewId !== null &&
+              incRev !== null &&
+              (incRev === activeCleaningReviewRevision ||
+                incRev > activeCleaningReviewRevision);
             if (patchCleaning) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === activeCleaningReviewId ? { ...m, cleaningReview: cr, timestamp: d.timestamp } : m,
+                  m.id === activeCleaningReviewId
+                    ? { ...m, cleaningReview: cr, timestamp: d.timestamp }
+                    : m,
                 ),
               );
             } else {
@@ -247,7 +485,13 @@ export function useWsEventHandler(deps: WsEventDeps) {
               setActiveCleaningReviewId(cid);
               setMessages((prev) => [
                 ...prev,
-                { id: cid, role: "workflow", text: "", timestamp: d.timestamp, cleaningReview: cr },
+                {
+                  id: cid,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  cleaningReview: cr,
+                },
               ]);
             }
             if (incRev !== null) setActiveCleaningReviewRevision(incRev);
@@ -255,26 +499,42 @@ export function useWsEventHandler(deps: WsEventDeps) {
             setActiveCleaningReviewId(null);
             setActiveCleaningReviewRevision(-1);
           }
+
+          // Cleaning assessment
           if (ca) {
             const cid = uid();
-            const colLines = ca.columns.map((c) =>
-              `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "清洗" : "不清洗"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.reason}</td></tr>`
-            ).join("");
+            const colLines = ca.columns
+              .map(
+                (c) =>
+                  `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${c.column}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "清洗" : "不清洗"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${c.reason}</td></tr>`,
+              )
+              .join("");
             const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">原因</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
             setMessages((prev) => [
               ...prev,
-              { id: cid, role: "agent", text: ca.summary, html: `<p><strong>${ca.summary}</strong></p>${tableHtml}`, timestamp: d.timestamp } as ConvoMessage,
+              {
+                id: cid,
+                role: "agent",
+                text: ca.summary,
+                html: `<p><strong>${ca.summary}</strong></p>${tableHtml}`,
+                timestamp: d.timestamp,
+              } as ConvoMessage,
             ]);
           }
+
+          // Analyst review
           if (ar) {
             const patchAnalyst =
-              activeAnalystReviewId !== null
-              && incRev !== null
-              && (incRev === activeAnalystReviewRevision || incRev > activeAnalystReviewRevision);
+              activeAnalystReviewId !== null &&
+              incRev !== null &&
+              (incRev === activeAnalystReviewRevision ||
+                incRev > activeAnalystReviewRevision);
             if (patchAnalyst) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === activeAnalystReviewId ? { ...m, analystReview: ar, timestamp: d.timestamp } : m,
+                  m.id === activeAnalystReviewId
+                    ? { ...m, analystReview: ar, timestamp: d.timestamp }
+                    : m,
                 ),
               );
             } else {
@@ -282,7 +542,13 @@ export function useWsEventHandler(deps: WsEventDeps) {
               setActiveAnalystReviewId(aid);
               setMessages((prev) => [
                 ...prev,
-                { id: aid, role: "workflow", text: "", timestamp: d.timestamp, analystReview: ar },
+                {
+                  id: aid,
+                  role: "workflow",
+                  text: "",
+                  timestamp: d.timestamp,
+                  analystReview: ar,
+                },
               ]);
             }
             if (incRev !== null) setActiveAnalystReviewRevision(incRev);
@@ -290,45 +556,69 @@ export function useWsEventHandler(deps: WsEventDeps) {
             setActiveAnalystReviewId(null);
             setActiveAnalystReviewRevision(-1);
           }
+
+          // Gate prompt
           if (gatePayload) {
             setGateOpen(true);
-            const prompt = typeof gatePayload.prompt === "string" ? gatePayload.prompt.trim() : "";
+            const prompt =
+              typeof gatePayload.prompt === "string"
+                ? gatePayload.prompt.trim()
+                : "";
             if (prompt) {
               const gateId = uid();
               setMessages((prev) => [
                 ...prev,
-                { id: gateId, role: "workflow", text: prompt, timestamp: d.timestamp },
+                {
+                  id: gateId,
+                  role: "workflow",
+                  text: prompt,
+                  timestamp: d.timestamp,
+                },
               ]);
             }
           }
+
+          // Agent message text
           const raw = dataObj.message;
           const agentMsg = typeof raw === "string" ? raw.trim() : "";
           if (agentMsg) {
             setMessages((prev) => [
               ...prev,
-              { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp },
+              {
+                id: uid(),
+                role: "agent",
+                text: agentMsg,
+                timestamp: d.timestamp,
+              },
             ]);
           }
+
           const pausedAgent = resolveAgentKey(d.agent) ?? "scout";
           setWaitingAgent(pausedAgent);
           setPhase("running");
           setTimeout(() => replyInputRef.current?.focus(), 100);
         }
 
+        // ── user_input_received ───────────────────────────────────
         if (d.event_type === "user_input_received") {
           const inner = (d.data ?? {}) as Record<string, unknown>;
           if (agentKey === "scout") {
             const hasNewFields =
-              "parse_applied_count" in inner
-              || "columns_still_needing_input" in inner
-              || "pure_confirm" in inner;
+              "parse_applied_count" in inner ||
+              "columns_still_needing_input" in inner ||
+              "pure_confirm" in inner;
             let line = "";
             if (hasNewFields) {
               line = formatScoutUserInputFactLine(inner);
             } else {
               const applied = inner.applied_field_updates;
               const lines = Array.isArray(applied)
-                ? applied.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "")
+                ? applied.filter(
+                    (x): x is string =>
+                      typeof x === "string" &&
+                      x !== null &&
+                      (x as string).trim() !== "",
+                  )
                 : [];
               if (lines.length > 0) {
                 line = `字段理解写入: ${lines.join("；")}`;
@@ -337,47 +627,92 @@ export function useWsEventHandler(deps: WsEventDeps) {
             if (line) {
               setMessages((prev) => [
                 ...prev,
-                { id: uid(), role: "system", text: line, timestamp: d.timestamp },
+                {
+                  id: uid(),
+                  role: "system",
+                  text: line,
+                  timestamp: d.timestamp,
+                },
               ]);
             }
-          } else if (agentKey === "cleaner" && typeof inner.proceed_accepted === "boolean") {
+          } else if (
+            agentKey === "cleaner" &&
+            typeof inner.proceed_accepted === "boolean"
+          ) {
             setMessages((prev) => [
               ...prev,
-              { id: uid(), role: "system", text: formatStageProceedFactLine("清洗", inner), timestamp: d.timestamp },
+              {
+                id: uid(),
+                role: "system",
+                text: formatStageProceedFactLine("清洗", inner),
+                timestamp: d.timestamp,
+              },
             ]);
-          } else if (agentKey === "analyst" && typeof inner.proceed_accepted === "boolean") {
+          } else if (
+            agentKey === "analyst" &&
+            typeof inner.proceed_accepted === "boolean"
+          ) {
             setMessages((prev) => [
               ...prev,
-              { id: uid(), role: "system", text: formatStageProceedFactLine("统计", inner), timestamp: d.timestamp },
+              {
+                id: uid(),
+                role: "system",
+                text: formatStageProceedFactLine("统计", inner),
+                timestamp: d.timestamp,
+              },
             ]);
           }
         }
 
+        // ── run_completed ─────────────────────────────────────────
         if (d.event_type === "run_completed") {
           const runPayload = (d.data ?? {}) as Record<string, unknown>;
           if (runPayload.cancelled === true) {
             setWaitingAgent(null);
-            setActiveFieldReviewId(null); setActiveFieldReviewRevision(-1); setFieldReviewScrollNonce(0);
-            setActiveCleaningReviewId(null); setActiveCleaningReviewRevision(-1);
-            setActiveAnalystReviewId(null); setActiveAnalystReviewRevision(-1);
+            setActiveFieldReviewId(null);
+            setActiveFieldReviewRevision(-1);
+            setFieldReviewScrollNonce(0);
+            setActiveCleaningReviewId(null);
+            setActiveCleaningReviewRevision(-1);
+            setActiveAnalystReviewId(null);
+            setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
             setPhase("setup");
-            setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
-            setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-            setResultReportUrl(null); setGuardrailsBlocked(false); setBlockedRunId(null);
+            setAgentStates({
+              scout: "idle",
+              cleaner: "idle",
+              analyst: "idle",
+              reporter: "idle",
+            });
+            setAgentElapsed({
+              scout: 0,
+              cleaner: 0,
+              analyst: 0,
+              reporter: 0,
+            });
+            setResultReportUrl(null);
+            setGuardrailsBlocked(false);
+            setBlockedRunId(null);
+            setReplyPending?.(false);
+            onThinking?.(null);
             continue;
           }
           const gr = guardrailsRunCompletedInfo({
-            event_type: d.event_type, agent: d.agent,
+            event_type: d.event_type,
+            agent: d.agent,
             data: d.data as Record<string, unknown> | undefined,
           });
           if (gr.guardrailsBlocked) {
             setGuardrailsBlocked(true);
             if (gr.runId) setBlockedRunId(gr.runId);
             setWaitingAgent(null);
-            setActiveFieldReviewId(null); setActiveFieldReviewRevision(-1); setFieldReviewScrollNonce(0);
-            setActiveCleaningReviewId(null); setActiveCleaningReviewRevision(-1);
-            setActiveAnalystReviewId(null); setActiveAnalystReviewRevision(-1);
+            setActiveFieldReviewId(null);
+            setActiveFieldReviewRevision(-1);
+            setFieldReviewScrollNonce(0);
+            setActiveCleaningReviewId(null);
+            setActiveCleaningReviewRevision(-1);
+            setActiveAnalystReviewId(null);
+            setActiveAnalystReviewRevision(-1);
             setGateOpen(false);
             setPhase("done");
           }

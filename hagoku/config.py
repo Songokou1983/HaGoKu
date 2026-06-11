@@ -33,6 +33,7 @@ class LLMConfig(BaseModel):
         )
     temperature: float = 0.6  # 生成温度
     max_tokens: int = 8192  # 最大 token 数
+    stream_enabled: bool = True  # 流式输出开关（CO-21）；false 时回退 batch emit 整段 message
 
 class MetaLLMConfig(BaseModel):
     """HaGoKu Doctor 独立 LLM 配置。全部留空则复用 pipeline LLM。"""

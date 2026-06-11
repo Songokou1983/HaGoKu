@@ -20,24 +20,40 @@ import {
   List,
   X,
   BookOpenCheck,
+  FlaskConical,
 } from "lucide-react";
+
+type NavSection = "work" | "ref" | "ops" | "dev";
 
 interface NavItem {
   id: PanelId;
   title: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
+  section: NavSection;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "projects",  title: "项目",   Icon: FolderKanban },
-  { id: "analyze",   title: "分析",   Icon: BarChart3 },
-  { id: "report",    title: "报告",   Icon: FileText },
-  { id: "knowledge", title: "知识库", Icon: BookOpen },
-  { id: "commands",  title: "命令指引", Icon: BookOpenCheck },
-  { id: "kanban",    title: "看板",   Icon: List },
-  { id: "events",    title: "运行日志", Icon: Activity },
-  { id: "settings",  title: "设置",   Icon: Settings },
+  // ── 工作区 ──
+  { id: "projects",  title: "项目",   Icon: FolderKanban,  section: "work" },
+  { id: "analyze",   title: "分析",   Icon: BarChart3,     section: "work" },
+  { id: "report",    title: "报告",   Icon: FileText,      section: "work" },
+  // ── 参考 ──
+  { id: "knowledge", title: "知识库", Icon: BookOpen,      section: "ref" },
+  { id: "commands",  title: "命令指引", Icon: BookOpenCheck, section: "ref" },
+  // ── 运行 ──
+  { id: "kanban",    title: "看板",   Icon: List,          section: "ops" },
+  { id: "events",    title: "运行日志", Icon: Activity,     section: "ops" },
+  // ── 开发者 ──
+  { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
+  { id: "settings",  title: "设置",   Icon: Settings,      section: "dev" },
 ];
+
+const SECTION_LABELS: Record<NavSection, string> = {
+  work: "工作区",
+  ref:  "参考",
+  ops:  "运行",
+  dev:  "开发者",
+};
 
 const PANEL_MAP: Record<PanelId, ReactNode> = {
   projects:  <ProjectPanel />,
@@ -128,7 +144,7 @@ export default function App() {
         {/* Logo */}
         <div className="px-4 py-3 border-b border-app-border shrink-0">
           <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu Studio</div>
-          <div className="text-ui-xs text-app-text-muted mt-0.5">多 Agent 数据分析</div>
+          <div className="text-ui-xs text-app-text-muted mt-0.5">数据分析师 · 专业工具箱</div>
         </div>
 
         {/* Current project indicator */}
@@ -152,11 +168,19 @@ export default function App() {
           )}
         </div>
 
-        {/* Nav items */}
+        {/* Nav items with section headers */}
         <nav className="flex-1 py-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ id, title, Icon }) => {
+          {NAV_ITEMS.reduce<ReactNode[]>((acc, { id, title, Icon, section }, i) => {
+            const prev = i > 0 ? NAV_ITEMS[i - 1] : null;
+            if (!prev || prev.section !== section) {
+              acc.push(
+                <div key={`hdr-${section}`} className="px-3 pt-3 pb-1 text-ui-xs text-app-text-muted/60 font-medium uppercase tracking-wider select-none">
+                  {SECTION_LABELS[section]}
+                </div>,
+              );
+            }
             const isActive = activeView === id;
-            return (
+            acc.push(
               <button
                 key={id}
                 onClick={() => setActiveView(id)}
@@ -168,9 +192,10 @@ export default function App() {
               >
                 <Icon size={15} />
                 <span>{title}</span>
-              </button>
+              </button>,
             );
-          })}
+            return acc;
+          }, [])}
         </nav>
 
         {/* System status */}

@@ -42,6 +42,13 @@ class EventType(Enum):
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
 
+    # Tool exchange 事件（CO-12）
+    TOOL_EXCHANGE = "tool_exchange"
+
+    # Stream 事件（CO-18）
+    AGENT_STREAM_DELTA = "agent_stream_delta"
+    AGENT_STREAM_END = "agent_stream_end"
+
     # System 事件
     HEALTH_CHECK = "health_check"
 

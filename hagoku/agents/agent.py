@@ -105,6 +105,9 @@ class DataAnalystAgent(BaseAgent):
         from hagoku.tools.data_io import load_data
         from hagoku.tools.profiling import generate_profile
 
+        # CO-26: 设置 role 供 Pipeline 兜底（agent_started 无 agent 时前端回退用）
+        self.role = "scout"
+
         self._emit(EventType.AGENT_STARTED, {"goal": "理解数据字段和质量问题"})
         try:
             df = load_data(data_path)
@@ -456,21 +459,58 @@ class DataAnalystAgent(BaseAgent):
         client = create_raw_client(self.llm_config)
 
         from hagoku.observability.llm_dump import dump_messages
+        use_stream = getattr(self.llm_config, "stream_enabled", True)
         for _round in range(5):
             self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
             messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
             dump_messages("cleaner_dialogue", messages, model=self.llm_config.model,
                           extra={"query": query, "tools": [t["function"]["name"] for t in _tools]})
-            try:
-                response = client.chat.completions.create(
-                    model=self.llm_config.model, messages=messages,
-                    temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
-                )
-            except Exception as e:
-                raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
-            msg = response.choices[0].message
-            tc = getattr(msg, "tool_calls", None)
-            txt = msg.content or ""
+
+            # CO-18: 流式路径 vs batch 回退
+            txt = ""
+            tc = None
+            if use_stream:
+                from hagoku.llm.client import stream_chat_completion
+                stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
+                full_text = ""
+                final_tool_calls_raw: list[dict] = []
+                for chunk in stream_chat_completion(
+                    client, self.llm_config.model, messages,
+                    temperature=0.0, max_tokens=2048, tools=_tools,
+                ):
+                    if chunk["type"] == "delta":
+                        full_text += chunk["content"]
+                        self._emit(EventType.AGENT_STREAM_DELTA, {
+                            "stream_id": stream_id, "delta": chunk["content"],
+                            "agent": "cleaner",
+                        })
+                    elif chunk["type"] == "end":
+                        full_text = chunk.get("content", full_text)
+                        final_tool_calls_raw = chunk.get("tool_calls") or []
+                        self._emit(EventType.AGENT_STREAM_END, {
+                            "stream_id": stream_id, "agent": "cleaner",
+                        })
+                txt = full_text
+                if final_tool_calls_raw:
+                    class _FakeTCC:
+                        def __init__(self, d):
+                            self.id = d.get("id", "")
+                            self.function = type("Fcc", (), {
+                                "name": d.get("function", {}).get("name", ""),
+                                "arguments": d.get("function", {}).get("arguments", ""),
+                            })()
+                    tc = [_FakeTCC(tc) for tc in final_tool_calls_raw]
+            else:
+                try:
+                    response = client.chat.completions.create(
+                        model=self.llm_config.model, messages=messages,
+                        temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
+                    )
+                except Exception as e:
+                    raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
+                msg = response.choices[0].message
+                tc = getattr(msg, "tool_calls", None)
+                txt = msg.content or ""
             dump_messages("cleaner_assess_response", messages + [
                 {"role": "assistant", "content": txt,
                  "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in (tc or [])] if tc else None}
@@ -570,13 +610,51 @@ class DataAnalystAgent(BaseAgent):
         dump_messages("agent_run_step", messages, model=self.llm_config.model,
                       extra={"tools": [t["function"]["name"] for t in _tools]})
 
-        resp = client.chat.completions.create(
-            model=self.llm_config.model, messages=messages,
-            temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
-        )
-        msg = resp.choices[0].message
-        txt = (msg.content or "").strip()
-        tc_list = getattr(msg, "tool_calls", None)
+        # CO-18: 流式路径 vs batch 回退
+        use_stream = getattr(self.llm_config, "stream_enabled", True)
+        txt = ""
+        tc_list = None
+
+        if use_stream:
+            from hagoku.llm.client import stream_chat_completion
+            stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
+            full_text = ""
+            final_tool_calls_raw: list[dict] = []
+            for chunk in stream_chat_completion(
+                client, self.llm_config.model, messages,
+                temperature=0.3, max_tokens=4096, tools=_tools,
+            ):
+                if chunk["type"] == "delta":
+                    full_text += chunk["content"]
+                    self._emit(EventType.AGENT_STREAM_DELTA, {
+                        "stream_id": stream_id, "delta": chunk["content"],
+                        "agent": "analyst",
+                    })
+                elif chunk["type"] == "end":
+                    full_text = chunk.get("content", full_text)
+                    final_tool_calls_raw = chunk.get("tool_calls") or []
+                    self._emit(EventType.AGENT_STREAM_END, {
+                        "stream_id": stream_id, "agent": "analyst",
+                    })
+            txt = full_text.strip()
+            # 将 stream 收集的 tool_calls 还原为 OpenAI 对象形式供后续 dispatch
+            if final_tool_calls_raw:
+                class _FakeTC:
+                    def __init__(self, d):
+                        self.id = d.get("id", "")
+                        self.function = type("F", (), {
+                            "name": d.get("function", {}).get("name", ""),
+                            "arguments": d.get("function", {}).get("arguments", ""),
+                        })()
+                tc_list = [_FakeTC(tc) for tc in final_tool_calls_raw]
+        else:
+            resp = client.chat.completions.create(
+                model=self.llm_config.model, messages=messages,
+                temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
+            )
+            msg = resp.choices[0].message
+            txt = (msg.content or "").strip()
+            tc_list = getattr(msg, "tool_calls", None)
 
         dump_messages("agent_run_step_response",
             messages + [{"role": "assistant", "content": txt,

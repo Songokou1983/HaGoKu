@@ -16,6 +16,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
+import { focusLabel } from "../constants/focusAreas";
 
 // ── 类型定义 ──────────────────────────────────────────────────────
 interface FastCommand {
@@ -324,7 +325,7 @@ function StageRefCard({ stage }: { stage: StageRefCommands }) {
       >
         <span className={stage.stageColor}>{stage.stageIcon}</span>
         <span className="text-ui-sm font-medium text-app-text flex-1">
-          {stage.agent}
+          {focusLabel(stage.agent.toLowerCase())}
         </span>
         <span className="text-ui-xs text-app-text-muted">{stage.stage}</span>
         {expanded ? (
@@ -434,7 +435,7 @@ export default function CommandsPanel() {
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <Keyboard size={14} className="text-app-success" />
-            <span className="text-ui-sm font-medium text-app-text">分阶段命令指引</span>
+            <span className="text-ui-sm font-medium text-app-text">各关注点可用命令</span>
           </div>
           <div className="space-y-2">
             {STAGE_REF_COMMANDS.map((stage) => (

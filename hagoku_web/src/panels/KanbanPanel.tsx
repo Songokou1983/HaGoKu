@@ -14,6 +14,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
+import { focusLabel } from "../constants/focusAreas";
 
 interface KanbanTask {
   id: string;
@@ -37,12 +38,11 @@ interface KanbanComment {
   created_at: string;
 }
 
-const AGENT_LABELS: Record<string, string> = {
-  Scout: "侦察员",
-  Cleaner: "清洗员",
-  Analyst: "分析员",
-  Reporter: "报告员",
-};
+function agentLabel(agent: string): string {
+  // Kanban uses capitalized agent names; map to lowercase stage keys
+  const key = agent.toLowerCase();
+  return focusLabel(key);
+}
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
   triage: { icon: <Circle size={12} />, label: "待分配", color: "text-app-text-muted" },
@@ -66,7 +66,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function TaskCard({ task }: { task: KanbanTask }) {
   const [expanded, setExpanded] = useState(false);
-  const agentLabel = AGENT_LABELS[task.agent] || task.agent;
+  const agentDisplayLabel = agentLabel(task.agent);
   const hasComments = task.comments && task.comments.length > 0;
 
   return (
@@ -76,7 +76,7 @@ function TaskCard({ task }: { task: KanbanTask }) {
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-ui-xs font-mono text-app-accent shrink-0">{task.agent}</span>
           <span className="text-ui-xs text-app-text-muted shrink-0">·</span>
-          <span className="text-ui-xs text-app-text-muted shrink-0">{agentLabel}</span>
+          <span className="text-ui-xs text-app-text-muted shrink-0">{agentDisplayLabel}</span>
         </div>
         <StatusBadge status={task.status} />
       </div>
@@ -144,7 +144,7 @@ function PipelineIndicator({ tasks }: { tasks: KanbanTask[] }) {
         const isDone = status === "done";
         const isRunning = status === "running";
         const isBlocked = status === "blocked";
-        const label = AGENT_LABELS[agent] || agent;
+        const label = agentLabel(agent);
 
         return (
           <div key={agent} className="flex items-center gap-1.5">

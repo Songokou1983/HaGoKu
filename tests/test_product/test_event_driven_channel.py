@@ -107,6 +107,7 @@ def test_G8_analyst_run_step_正常返回(orch):
 
     agent = AnalystAgent.__new__(AnalystAgent)
     agent.llm_config = orch.config.llm
+    agent.llm_config.stream_enabled = False  # 测试走 batch 路径
     agent.event_bus = orch.event_bus
     agent.prompt = "test"
 

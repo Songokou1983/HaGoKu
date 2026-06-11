@@ -84,6 +84,29 @@ export interface ConvoMessage {
   fieldReview?: FieldReviewPayload;
   cleaningReview?: CleaningReviewPayload;
   analystReview?: AnalystReviewPayload;
+  /** CO-13: tool_exchange payload for ToolExchangeTurn rendering */
+  toolExchange?: {
+    stage: string;
+    tool_calls: Array<{
+      id: string;
+      name: string;
+      arguments_summary?: string;
+      result_summary?: string;
+      error?: string | null;
+      duration_ms?: number;
+    }>;
+    assistant_pre_text?: string | null;
+  };
+  /** CO-14: ask_user payload for AskUserPrompt rendering */
+  askUser?: {
+    question: string;
+    expected_format: string;
+    options?: string[];
+  };
+  /** CO-19: whether this message is still being streamed */
+  streaming?: boolean;
+  /** CO-19: stream_id for delta merging */
+  streamId?: string;
 }
 
 export interface ProjectFile {

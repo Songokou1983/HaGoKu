@@ -10,11 +10,14 @@ httpx transport。每个客户端持有独立的 HTTPTransport，禁用代理以
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Any, Generator
 
 import httpx
 
 from ..config import LLMConfig
+
+logger = logging.getLogger("hagoku.llm")
 
 
 def _create_http_client() -> httpx.Client:
@@ -170,4 +173,89 @@ async def chat_completion(
     return {
         "content": choice.message.content or "",
         "role": choice.message.role,
+    }
+
+
+def stream_chat_completion(
+    client: Any,
+    model: str,
+    messages: list[dict[str, Any]],
+    *,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    tools: list[dict[str, Any]] | None = None,
+) -> Generator[dict[str, Any], None, None]:
+    """同步流式 chat completion 生成器（CO-18）。
+
+    每次 yield 一个 dict，类型为 "delta" 或 "end" 或 "error"。
+    - delta: {"type": "delta", "content": str}  — 逐 token 文本增量
+    - tool_call: {"type": "tool_call", "tool_calls": [...]} — 流结束时的完整 tool_calls
+    - end: {"type": "end", "content": str, "tool_calls": [...]} — 流结束，完整内容
+    - error: {"type": "error", "message": str} — 流式失败（铁律 7：不静默兜底）
+
+    Args:
+        client: 已创建的 OpenAI 客户端（同步）
+        model: 模型名称
+        messages: 消息列表
+        temperature: 生成温度
+        max_tokens: 最大 token 数
+        tools: 可选工具列表
+    """
+    full_content = ""
+    final_tool_calls: list[dict[str, Any]] = []
+
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice="auto" if tools else None,
+            stream=True,
+        )
+    except Exception as e:
+        raise RuntimeError(f"LLM 流式请求失败：{e}") from e
+
+    tool_call_buffers: dict[int, dict[str, Any]] = {}
+
+    try:
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta is None:
+                continue
+
+            # 文本增量
+            if delta.content:
+                full_content += delta.content
+                yield {"type": "delta", "content": delta.content}
+
+            # 工具调用增量（缓冲，流结束后统一 emit）
+            if delta.tool_calls:
+                for tc_delta in delta.tool_calls:
+                    idx = tc_delta.index
+                    if idx not in tool_call_buffers:
+                        tool_call_buffers[idx] = {
+                            "id": tc_delta.id or "",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    buf = tool_call_buffers[idx]
+                    if tc_delta.id:
+                        buf["id"] = tc_delta.id
+                    if tc_delta.function:
+                        if tc_delta.function.name:
+                            buf["function"]["name"] += tc_delta.function.name
+                        if tc_delta.function.arguments:
+                            buf["function"]["arguments"] += tc_delta.function.arguments
+    except Exception as e:
+        raise RuntimeError(f"LLM 流式中断：{e}") from e
+
+    # 整理 tool_calls
+    final_tool_calls = [
+        tool_call_buffers[i] for i in sorted(tool_call_buffers.keys())
+    ]
+    yield {
+        "type": "end",
+        "content": full_content,
+        "tool_calls": final_tool_calls if final_tool_calls else None,
     }

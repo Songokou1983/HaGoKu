@@ -1,11 +1,12 @@
 import { Loader2, CheckCircle2, X, ShieldAlert, Clock, Search, Sparkles, BarChart2, FileText } from "lucide-react";
 import type { AgentKey, AgentRunState } from "./types";
+import { focusLabel, focusDesc } from "../../constants/focusAreas";
 
 const PIPELINE_AGENTS = [
-  { key: "scout" as const,    label: "Scout",    icon: Search,    desc: "理解数据" },
-  { key: "cleaner" as const,  label: "Cleaner",  icon: Sparkles,  desc: "清洗数据" },
-  { key: "analyst" as const,  label: "Analyst",  icon: BarChart2, desc: "统计分析" },
-  { key: "reporter" as const, label: "Reporter", icon: FileText,  desc: "生成报告" },
+  { key: "scout" as const,    icon: Search, },
+  { key: "cleaner" as const,  icon: Sparkles, },
+  { key: "analyst" as const,  icon: BarChart2, },
+  { key: "reporter" as const, icon: FileText, },
 ];
 
 export function PipelineBar({ states, elapsed }: {
@@ -44,8 +45,8 @@ export function PipelineBar({ states, elapsed }: {
                 : <Clock size={13} className="opacity-40" />}
               <Icon size={12} />
             </div>
-            <span className="text-ui-xs font-medium">{agent.label}</span>
-            <span className="text-ui-xs opacity-60">{agent.desc}</span>
+            <span className="text-ui-xs font-medium">{focusLabel(agent.key)}</span>
+            <span className="text-ui-xs opacity-60">{focusDesc(agent.key)}</span>
             {secs > 0 && (
               <span className="text-ui-xs opacity-50">{secs}s</span>
             )}

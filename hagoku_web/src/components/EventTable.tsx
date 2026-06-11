@@ -1,6 +1,7 @@
 import { EmptyState } from "./EmptyState";
 import { WifiOff } from "lucide-react";
 import type { EventType } from "../types/events";
+import { focusLabel } from "../constants/focusAreas";
 
 export interface EventEntry {
   id: string;
@@ -49,8 +50,8 @@ function EventRow({ entry }: { entry: EventEntry }) {
       <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
         {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
       </td>
-      <td className={`px-3 py-0.5 whitespace-nowrap ${gr ? "text-app-warning" : agentColor}`}>
-        {entry.agent}
+      <td className={`px-3 py-0.5 whitespace-nowrap ${gr ? "text-app-warning" : agentColor}`} title={entry.agent}>
+        {focusLabel(entry.agent)}
       </td>
       <td className={`px-3 py-0.5 whitespace-nowrap ${eventCls}`}>
         {eventLabel}

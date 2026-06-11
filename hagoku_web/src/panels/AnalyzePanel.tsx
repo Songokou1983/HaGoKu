@@ -288,16 +288,16 @@ export default function AnalyzePanel() {
             onAskReply={submitUserReply}
           />
 
-          {/* CO-16: reply pending processing bar */}
-          {replyPending && !sess.waitingAgent && (
+          {/* CO-16: reply pending processing bar — shown after user sends reply */}
+          {replyPending && (
             <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 shrink-0 text-ui-xs text-app-text-muted">
               <Loader2 size={13} className="animate-spin text-app-accent" />
               <span>分析师正在处理你的回复…</span>
             </div>
           )}
 
-          {/* Agent reply input — shown when any agent is waiting */}
-          {sess.waitingAgent && (
+          {/* Agent reply input — shown when agent is waiting AND not pending */}
+          {sess.waitingAgent && !replyPending && (
             <div className="shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
               {/* Quick action buttons */}
               {cleanerCleaningReviewOpen && (

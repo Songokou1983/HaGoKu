@@ -1,8 +1,13 @@
 ---
 title: t 检验选择指南
-category: stats
+category: statistics
 tags: [t检验, 独立样本, 配对样本, 单样本, 假设检验]
 summary: 独立样本 t 检验 vs 配对样本 t 检验 vs 单样本 t 检验的选择逻辑
+tools:
+  - check_test_assumptions
+  - run_statistical_test
+  - assess_statistical_power
+  - required_sample_size
 ---
 
 # t 检验选择指南

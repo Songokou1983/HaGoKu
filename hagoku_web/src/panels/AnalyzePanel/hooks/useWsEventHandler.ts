@@ -90,6 +90,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
     currentProject,
     onThinking,
     setReplyPending,
+    waitinAgent,
   } = deps;
 
   useEffect(() => {
@@ -206,8 +207,9 @@ export function useWsEventHandler(deps: WsEventDeps) {
         const detail =
           typeof msg.message === "string" ? msg.message.trim() : "";
         const iso = new Date().toISOString();
+        // CO-21: 清除残留的流式光标
         setMessages((prev) => [
-          ...prev,
+          ...prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
           {
             id: uid(),
             role: "system",
@@ -233,7 +235,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
         // CO-05: Pipeline 兜底 — agent_started 无 agent 时回退
         let agentKey: AgentKey | null = resolveAgentKey(d.agent);
         if (d.event_type === "agent_started" && !d.agent) {
-          agentKey = "scout"; // fallback per CO-05/CO-26
+          agentKey = resolveAgentKey(waitinAgent ?? "scout") ?? "scout";
         }
 
         // ── agent lifecycle ──────────────────────────────────────
@@ -255,6 +257,10 @@ export function useWsEventHandler(deps: WsEventDeps) {
         if (d.event_type === "agent_failed" && agentKey) {
           setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
           onThinking?.(null);
+          // CO-21: 清除残留的流式光标
+          setMessages((prev) =>
+            prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+          );
           const detail = (d.data as Record<string, unknown>)?.error;
           if (typeof detail === "string" && detail.trim()) {
             setMessages((prev) => [

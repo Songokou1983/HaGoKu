@@ -1,8 +1,13 @@
 ---
 title: 回归分析指南
-category: stats
+category: statistics
 tags: [回归, 线性回归, 逻辑回归, 系数, R方, 预测]
 summary: 线性回归 vs 逻辑回归的选择，系数解读，模型评估指标
+tools:
+  - run_statistical_test
+  - diagnose_regression
+  - check_test_assumptions
+  - assess_statistical_power
 ---
 
 # 回归分析指南

@@ -72,6 +72,9 @@ export default function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // 流式输出
+  const [streamEnabled, setStreamEnabled] = useState(true);
+
   // 测试连接
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testMessage, setTestMessage] = useState<string | null>(null);
@@ -94,6 +97,9 @@ export default function SettingsPanel() {
           const n = normalizeLlmFromApi(raw);
           const metaFromApi = (d.meta_llm as any)?.model || "";
           setMetaModel(metaFromApi);
+          // CO-21: 读 stream_enabled
+          const streamFromApi = (raw as any).stream_enabled;
+          if (typeof streamFromApi === "boolean") setStreamEnabled(streamFromApi);
           setLlm(formFromNormalized(n));
           if (distinct) {
             setAdvancedLlmOpen(true);
@@ -357,6 +363,64 @@ export default function SettingsPanel() {
             </button>
           </div>
           {testMessageMeta && <div className={`text-ui-xs leading-relaxed px-2 py-1.5 rounded border mt-2 ${testStatusMeta === "ok" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-app-error/30 bg-app-error/10 text-app-error"}`}><span>{testMessageMeta}</span>{testTimeMeta && <span className="ml-2 opacity-70">&mdash; {testStatusMeta === "ok" ? "成功" : "失败"} {testTimeMeta}</span>}</div>}
+        </div>
+
+        {/* CO-21: 流式输出开关 */}
+        <div className="border-t border-app-border/50 pt-4 mt-2">
+          <h3 className="text-ui-sm font-medium text-app-text mb-3 flex items-center gap-1.5">
+            <SlidersHorizontal size={14} className="text-app-accent" />
+            对话体验
+          </h3>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={streamEnabled}
+              onChange={async (e) => {
+                const v = e.target.checked;
+                setStreamEnabled(v);
+                setSaveError(null);
+                setSaving(true);
+                try {
+                  const r = await fetch("/api/config/llm", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      base_url: llm.base_url.trim(),
+                      model: llm.main_model.trim(),
+                      api_key: apiKeyInput.trim(),
+                      stream_enabled: v,
+                    }),
+                  });
+                  if (!r.ok) throw new Error(`保存失败 (${r.status})`);
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2000);
+                } catch (err: unknown) {
+                  setSaveError(err instanceof Error ? err.message : "保存失败");
+                  setStreamEnabled(!v); // 回退
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              className="w-4 h-4 rounded border-app-border bg-app-bg-secondary
+                text-app-accent focus:ring-app-accent cursor-pointer"
+            />
+            <div>
+              <span className="text-ui-sm text-app-text">流式输出</span>
+              <span className={`ml-2 text-ui-xs ${streamEnabled ? "text-app-success" : "text-app-text-muted"}`}>
+                {streamEnabled ? "已开启" : "已关闭"}
+              </span>
+            </div>
+          </label>
+          <p className="text-ui-xs text-app-text-muted mt-2 leading-relaxed">
+            {streamEnabled
+              ? "分析对话逐字流式出字，提供即时反馈。关闭后整段返回，等待稍长但兼容性更好。"
+              : "整段返回分析结果，不支持逐字流式。如果你的 LLM 不支持 SSE 流式，保持关闭。需要即时反馈请开启。"}
+          </p>
+          {saved && (
+            <p className="text-ui-xs text-app-success mt-1 flex items-center gap-1">
+              <CheckCircle2 size={12} /> 已保存
+            </p>
+          )}
         </div>
       </div>
     </div>

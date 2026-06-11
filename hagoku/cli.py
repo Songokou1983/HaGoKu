@@ -398,70 +398,63 @@ def config_cmd(reset: bool) -> None:
 
 
 @cli.command(name="methods")
-@click.option("--tag", "-t", default=None, help="按标签过滤 (statistical/business)")
+@click.option("--tag", "-t", default=None, help="按关注点过滤 (理解字段/评估清洗/跑统计/写报告)")
 def list_methods(tag: str | None) -> None:
-    """查看所有可用的分析方法
+    """查看所有可用的 Agent 工具
 
-    HaGoKu Studio 支持的分析方法分为两类：
+    HaGoKu Studio 的工具按关注点分类：
 
-    统计方法 — 数学上严格，每个结论都经过检验
-      t 检验、ANOVA、Mann-Whitney、卡方、相关、回归
-
-    商业方法 — 回答业务问题
-      ROI/ROAS、LTV/CAC、回本周期、NPV/IRR、归因、漏斗
-
-    新增方法：放入 ~/.hagoku/plugins/*_plugin.py，HaGoKu Studio 自动加载
+    探查(4)     get_column_stats, get_sample_rows, list_columns, group_stats
+    字段(3)     update_field_table, update_field_understanding, update_field_role
+    清洗(6)     submit_assessment, update_assessment, propose_cleaning_rule,
+                compare_before_after, detect_outliers, detect_missing_pattern, suggest_cleaning
+    统计(10+)   run_statistical_test, check_test_assumptions, assess_statistical_power, ...
+    业务(7)     calc_roi, calc_roas, calc_ltv, calc_cac, calc_ltv_cac_ratio,
+                funnel_analysis, attribution_analysis
+    可视化(1)   create_plot
+    流程(2)     ask_user, route_to
+    记忆(8)     query_method, read_method, save_lesson, ...
     """
-    from .tools import load_plugins
+    from .tools.registry import agent_tools
 
-    reg = load_plugins()
-
-    click.echo("📊 HaGoKu Studio 分析方法")
-    click.echo(f"   共 {reg.summary()['total_methods']} 个内置方法")
-    click.echo("   插件目录: ~/.hagoku/plugins/*_plugin.py")
+    tools = agent_tools.list_for_agent("")
+    click.echo("📊 HaGoKu Studio Agent 工具")
+    click.echo(f"   共 {len(tools)} 个注册工具")
     click.echo()
 
     if tag:
-        methods = [m for m in reg.list_all() if tag in m.tags]
-        click.echo(f"  [{tag}] 标签 ({len(methods)} 个):")
+        tools = [t for t in tools if tag in (t.phase_tag or [])]
+        click.echo(f"  关注点 [{tag}] ({len(tools)} 个):")
     else:
-        # 按标签分组展示
+        # 按关注点分组
+        from collections import defaultdict
+        by_phase = defaultdict(list)
+        for t in tools:
+            for ph in (t.phase_tag or []):
+                if ph not in by_phase:
+                    by_phase[ph] = []
+                by_phase[ph].append(t.name)
+
         tag_groups = {
-            "statistical": "📈 统计方法",
-            "business": "💰 商业方法",
-            "financial": "💵 财务分析",
-            "comparison": "🔬 对比分析",
-            "regression": "📉 回归分析",
-            "correlation": "🔗 相关分析",
-            "causal": "⚡ 因果推断",
-            "user": "👤 用户分析",
-            "growth": "📈 增长分析",
-            "attribution": "🎯 归因分析",
-            "funnel": "🔽 漏斗分析",
-            "advertising": "📢 广告分析",
+            "理解字段": "🔍 理解字段",
+            "评估清洗": "🧹 评估清洗",
+            "跑统计": "📊 跑统计",
+            "写报告": "📝 写报告",
         }
-        shown_tags = set()
-        for method in reg.list_all():
-            for t in method.tags:
-                if t not in shown_tags:
-                    label = tag_groups.get(t, f"  [{t}]")
-                    click.echo(f"  {label}:")
-                    shown_tags.add(t)
-                    break
+        for phase, label in tag_groups.items():
+            names = by_phase.get(phase, [])
+            if names:
+                click.echo(f"  {label} ({len(names)}):")
+                for n in sorted(names):
+                    click.echo(f"    • {n}")
 
         click.echo()
-        click.echo("  方法列表:")
-        methods = reg.list_all()
 
-    for m in methods:
-        tags_str = ", ".join(m.tags) if m.tags else "无标签"
-        click.echo(f"   • {m.name:<20} {tags_str}")
-        if m.description:
-            desc = m.description.split("\n")[0][:60]
-            click.echo(f"     {desc}")
+    for t in sorted(tools, key=lambda t: t.name):
+        desc = t.description.split("\n")[0][:80]
+        click.echo(f"   • {t.name:<30} {desc}")
 
     click.echo()
-    click.echo("  💡 新增方法：在 ~/.hagoku/plugins/ 放入 *_plugin.py 文件")
 
 
 @cli.command(name="doctor")

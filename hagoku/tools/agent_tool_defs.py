@@ -496,87 +496,7 @@ agent_tools.register(Tool(
     phase_tag=['跑统计'],
 ))
 
-import numpy as _np
-from scipy import stats as _scipy_stats
 
-def _handle_run_statistical_test(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    test_type = str(args.get("test_type", "")).strip()
-    columns = list(args.get("columns") or [])
-    if not test_type or not columns or _df is None:
-        return {"error": "test_type 和 columns 必填，且需要 DataFrame"}
-
-    try:
-        if test_type == "ttest" and len(columns) >= 2:
-            a = _df[columns[0]].dropna().astype(float)
-            b = _df[columns[1]].dropna().astype(float)
-            stat, p = _scipy_stats.ttest_ind(a, b)
-            return {"test": "ttest", "statistic": float(stat), "p_value": float(p)}
-        elif test_type == "anova":
-            groups = [_df[c].dropna().astype(float) for c in columns if c in _df.columns]
-            if len(groups) >= 2:
-                stat, p = _scipy_stats.f_oneway(*groups)
-                return {"test": "anova", "statistic": float(stat), "p_value": float(p)}
-        elif test_type == "pearson_r" and len(columns) >= 2:
-            a = _df[columns[0]].dropna().astype(float)
-            b = _df[columns[1]].dropna().astype(float)
-            mask = a.notna() & b.notna()
-            r, p = _scipy_stats.pearsonr(a[mask], b[mask])
-            return {"test": "pearson_r", "statistic": float(r), "p_value": float(p)}
-        elif test_type == "spearman_r" and len(columns) >= 2:
-            a = _df[columns[0]].dropna().astype(float)
-            b = _df[columns[1]].dropna().astype(float)
-            mask = a.notna() & b.notna()
-            r, p = _scipy_stats.spearmanr(a[mask], b[mask])
-            return {"test": "spearman_r", "statistic": float(r), "p_value": float(p)}
-        elif test_type == "chi2" and len(columns) >= 2:
-            import pandas as _pd
-            a = _df[columns[0]].dropna()
-            b = _df[columns[1]].dropna()
-            ct = _pd.crosstab(a, b)
-            stat, p, dof, _ = _scipy_stats.chi2_contingency(ct)
-            return {"test": "chi2", "statistic": float(stat), "p_value": float(p), "dof": int(dof)}
-        elif test_type == "linear_regression" and len(columns) >= 2:
-            import statsmodels.api as _sm
-            import pandas as _pd
-            X = _sm.add_constant(_df[columns[1:]].dropna().astype(float))
-            y = _df[columns[0]].loc[X.index].dropna().astype(float)
-            X = X.loc[y.index]
-            model = _sm.OLS(y, X).fit()
-            return {
-                "test": "linear_regression",
-                "r_squared": float(model.rsquared),
-                "params": {str(k): float(v) for k, v in model.params.items()},
-                "p_values": {str(k): float(v) for k, v in model.pvalues.items()},
-            }
-        elif test_type == "trend_decomposition" and columns:
-            s = _df[columns[0]].dropna().astype(float)
-            w = min(7, max(1, len(s) // 4))
-            trend = s.rolling(window=w, center=True).mean()
-            return {
-                "test": "trend_decomposition",
-                "column": columns[0],
-                "trend_mean": float(trend.mean()) if not trend.isna().all() else None,
-                "detrended_std": float((s - trend).std()) if not trend.isna().all() else None,
-            }
-        return {"error": f"不支持或参数不足: {test_type}"}
-    except Exception as e:
-        return {"error": str(e)}
-
-agent_tools.register(Tool(
-    name="run_statistical_test",
-    description="执行统计检验。可用类型：ttest, anova, chi2, pearson_r, spearman_r, linear_regression, trend_decomposition",
-    parameters={
-        "type": "object",
-        "properties": {
-            "test_type": {"type": "string", "enum": ["ttest", "anova", "chi2", "pearson_r", "spearman_r", "linear_regression", "trend_decomposition"]},
-            "columns": {"type": "array", "items": {"type": "string"}, "description": "列名（第一个通常是目标变量）"},
-            "params": {"type": "object", "description": "额外参数"},
-        },
-        "required": ["test_type", "columns"],
-    },
-    handler=_handle_run_statistical_test,
-    phase_tag=['跑统计'],
-))
 
 
 agent_tools.register(Tool(
@@ -712,3 +632,7 @@ agent_tools.register(Tool(
 ))
 
 import hagoku.tools.memory_tools  # noqa: F401,E402 — Phase E: 注册 memory 工具
+import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
+import hagoku.tools.biz_tools     # noqa: F401  — CO-T12～T18: 业务指标
+import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强
+import hagoku.tools.viz_tools     # noqa: F401  — CO-T22: 可视化

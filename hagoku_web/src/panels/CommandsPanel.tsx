@@ -65,7 +65,7 @@ const FAST_COMMANDS: FastCommand[] = [
       "/goal 帮助我对比不同地区的客户转化率",
       "/goal 我想找出影响用户流失的关键因素",
     ],
-    stage: "Scout / 全局",
+    stage: "理解字段 / 全局",
   },
   {
     id: "rename",
@@ -80,7 +80,7 @@ const FAST_COMMANDS: FastCommand[] = [
       "/rename inc1 → 店铺收入, inc2 → 店铺积分",
       "/rename bos1 → 店铺费用1, bos2 → 店铺费用2, bos3 → 店铺费用3",
     ],
-    stage: "Scout",
+    stage: "理解字段",
   },
   {
     id: "use",
@@ -94,7 +94,7 @@ const FAST_COMMANDS: FastCommand[] = [
       "/use 店铺, 收入, 日期",
       "/use Period, inc1, bos1, bos2",
     ],
-    stage: "Scout",
+    stage: "理解字段",
   },
   {
     id: "confirm",
@@ -260,7 +260,7 @@ const FAQ_ITEMS: FAQItem[] = [
   },
   {
     q: "命令在哪个阶段可用？",
-    a: "/goal、/confirm、/how 全阶段可用。/rename 和 /use 主要在 Scout（字段阶段）使用，但 /rename 在其他阶段也可用。",
+    a: "/goal、/confirm、/how 全阶段可用。/rename 和 /use 主要在理解字段阶段使用，但 /rename 在其他阶段也可用。",
   },
   {
     q: "输入命令后，LLM 还会问我问题吗？",

@@ -1,8 +1,10 @@
 ---
 title: 多重比较校正
-category: stats
+category: statistics
 tags: [多重比较, Bonferroni, FDR, 假阳性, 校正]
 summary: 多次检验为什么要校正，Bonferroni / FDR 适用场景
+tools:
+  - correct_multiple_comparisons
 ---
 
 # 多重比较校正

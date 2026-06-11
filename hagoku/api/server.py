@@ -196,6 +196,7 @@ async def get_config():
                 "base_url": cfg.llm.base_url or "",
                 "model": m,
                 "api_key_configured": api_key_configured,
+                "stream_enabled": cfg.llm.stream_enabled,
             },
             "meta_llm": {
                 "base_url": cfg.meta_llm.base_url or "",
@@ -219,12 +220,13 @@ async def get_config():
 
 
 class LlmConfigBody(BaseModel):
-    """OpenAI 兼容服务：网址 + 模型 + 密钥；写入 ~/.hagoku/.env。"""
+    """OpenAI 兼容服务：网址 + 模型 + 密钥 + 流式开关；写入 ~/.hagoku/.env。"""
     model_config = ConfigDict(protected_namespaces=())
     base_url: str
     model: str
     api_key: str = ""
     sub_model: str = ""
+    stream_enabled: bool | None = None
     meta_base_url: str = ""
     meta_model: str = ""
     meta_api_key: str = ""
@@ -253,6 +255,9 @@ async def post_llm_config(req: LlmConfigBody):
             _dotenv_set(path, "HAGOKU_META_LLM_API_KEY", req.meta_api_key.strip())
         if req.api_key.strip():
             _dotenv_set(path, "HAGOKU_LLM_API_KEY", req.api_key.strip())
+        # CO-21: stream_enabled 持久化
+        if req.stream_enabled is not None:
+            _dotenv_set(path, "HAGOKU_LLM_STREAM_ENABLED", "true" if req.stream_enabled else "false")
         # 重新加载 .env 到当前进程，让后续请求立即使用新配置
         from dotenv import load_dotenv, dotenv_values
         load_dotenv(path, override=True)
@@ -677,6 +682,52 @@ def _methods_root() -> Path:
     return Path(__file__).resolve().parent.parent / "memory" / "methods"
 
 
+def _kb_parse_frontmatter(raw: str) -> dict:
+    """解析 YAML frontmatter，返回 {title, summary, category, tags, tools, ...}。"""
+    if not raw.startswith("---"):
+        return {}
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    try:
+        import yaml
+        return yaml.safe_load(parts[1]) or {}
+    except Exception:
+        pass
+    # 降级：手动解析 key: value + multi-line list
+    result: dict = {}
+    lines = parts[1].splitlines()
+    current_key: str | None = None
+    current_list: list = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("- ") and current_key:
+            item = line[2:].strip().strip('"').strip("'")
+            current_list.append(item)
+            continue
+        if current_key and current_list:
+            result[current_key] = current_list
+            current_key = None
+            current_list = []
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if val.startswith("[") and val.endswith("]"):
+                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(",")]
+                result[key] = val
+            elif val:
+                result[key] = val
+            else:
+                current_key = key
+                current_list = []
+    if current_key and current_list:
+        result[current_key] = current_list
+    return result
+
+
 def _kb_load_registry_entries() -> list[dict]:
     root = _methods_root()
     if not root.exists():
@@ -684,12 +735,22 @@ def _kb_load_registry_entries() -> list[dict]:
     entries: list[dict] = []
     for md in sorted(root.rglob("*.md")):
         rel = str(md.relative_to(root)).replace("\\", "/")
-        first = md.read_text(encoding="utf-8").splitlines()[:1]
-        title = first[0].lstrip("# ").strip() if first else rel
+        raw = md.read_text(encoding="utf-8")
+        fm = _kb_parse_frontmatter(raw)
+
+        # 优先使用 frontmatter title，其次从 # 标题提取
+        title = fm.get("title", "")
+        if not title:
+            first = raw.splitlines()[:1]
+            title = first[0].lstrip("# ").strip() if first else rel
+
         entries.append({
             "filename": rel,
             "title": title,
-            "category": md.parent.name,
+            "summary": fm.get("summary", ""),
+            "category": fm.get("category", md.parent.name),
+            "tags": fm.get("tags", []),
+            "tools": fm.get("tools", []),
         })
     return entries
 

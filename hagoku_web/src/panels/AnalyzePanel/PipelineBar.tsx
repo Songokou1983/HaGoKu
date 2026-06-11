@@ -20,7 +20,7 @@ export function PipelineBar({ states, elapsed }: {
         const Icon = agent.icon;
         const secs = elapsed[agent.key];
         const colorClass =
-          state === "running" ? "bg-app-accent/15 border-app-accent text-app-accent" :
+          state === "running" ? "bg-app-accent/15 border-app-accent text-app-accent ring-1 ring-app-accent" :
           state === "done"    ? "bg-app-success/10 text-app-success" :
           state === "error"   ? "bg-app-error/10 text-app-error" :
           state === "skipped" ? "bg-app-warning/10 text-app-warning" :

@@ -191,6 +191,9 @@ class HaGoKuConfig(BaseModel):
             config.embedding.api_key = v
         if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
+        # CO-21: stream_enabled from env
+        if (v := os.getenv("HAGOKU_LLM_STREAM_ENABLED")) is not None:
+            config.llm.stream_enabled = v.strip().lower() in ("true", "1", "yes")
         return config
 
     def ensure_work_dir(self) -> None:

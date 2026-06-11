@@ -1,8 +1,12 @@
 ---
 title: 方差分析（ANOVA）
-category: stats
+category: statistics
 tags: [anova, 多组比较, F检验, 方差分析, post-hoc]
 summary: 单因素/双因素 ANOVA 的选择条件，以及 post-hoc 检验的必要性
+tools:
+  - check_test_assumptions
+  - run_statistical_test
+  - correct_multiple_comparisons
 ---
 
 # 方差分析（ANOVA）

@@ -1,8 +1,12 @@
 ---
 title: 统计功效与样本量（Power Analysis）
-category: stats
+category: statistics
 tags: [power, 功效, 样本量, 效应量, 检验力]
 summary: 为什么分析前要做功效分析，如何计算所需样本量
+tools:
+  - assess_statistical_power
+  - required_sample_size
+  - interpret_nonsignificant
 ---
 
 # 统计功效与样本量（Power Analysis）

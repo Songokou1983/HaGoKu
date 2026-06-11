@@ -24,13 +24,59 @@ def _memory_manager(ctx: dict):
     raise RuntimeError("项目记忆工具需在分析 pipeline 内调用（_memory_manager 未设置）")
 
 
+def _parse_fm(raw: str) -> dict:
+    """解析 YAML frontmatter。支持单行 key: val 和 multi-line list。"""
+    if not raw.startswith("---"):
+        return {}
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    result: dict = {}
+    lines = parts[1].splitlines()
+    current_key: str | None = None
+    current_list: list = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        # 多行列表项: "  - value"
+        if line.startswith("- ") and current_key:
+            item = line[2:].strip().strip('"').strip("'")
+            current_list.append(item)
+            continue
+        # 保存上一个 key 的列表
+        if current_key and current_list:
+            result[current_key] = current_list
+            current_key = None
+            current_list = []
+        # key: value 行
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if val.startswith("[") and val.endswith("]"):
+                # 内联列表: [a, b, c]
+                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(",")]
+                result[key] = val
+            elif val:
+                result[key] = val
+            else:
+                # 空值 → 可能是多行列表的开始
+                current_key = key
+                current_list = []
+    # 保存最后的列表
+    if current_key and current_list:
+        result[current_key] = current_list
+    return result
+
+
 def _handle_query_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dict:
     question = str(args.get("question", "") or "").strip()
     scope = args.get("scope")
     if not question:
         return {"error": "question 不能为空"}
     tokens = [t.lower() for t in question.split() if len(t) > 1]
-    matches: list[dict[str, str]] = []
+    matches: list[dict] = []
     for md in sorted(_METHODS_ROOT.rglob("*.md")):
         rel = str(md.relative_to(_METHODS_ROOT))
         if scope:
@@ -38,15 +84,30 @@ def _handle_query_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> di
                 continue
         text = md.read_text(encoding="utf-8")
         blob = text.lower()
+
+        # 匹配全文 token
         if tokens and not any(t in blob for t in tokens):
             continue
-        summary = ""
-        for line in text.splitlines():
-            line = line.strip()
-            if line and not line.startswith("#"):
-                summary = line[:200]
-                break
-        matches.append({"path": rel, "summary": summary or rel})
+
+        # 解析 frontmatter
+        fm = _parse_fm(text)
+
+        # 摘要：优先 frontmatter summary，其次正文首段
+        summary = fm.get("summary", "")
+        if not summary:
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith("---"):
+                    summary = line[:200]
+                    break
+
+        matches.append({
+            "path": rel,
+            "summary": summary or rel,
+            "title": fm.get("title", ""),
+            "category": fm.get("category", ""),
+            "tags": fm.get("tags", []),
+        })
     return {"matches": matches[:10], "count": len(matches)}
 
 
@@ -59,7 +120,17 @@ def _handle_read_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dic
         return {"error": "非法路径"}
     if not target.is_file():
         return {"error": f"方法文档不存在: {path}"}
-    return {"path": path, "content": target.read_text(encoding="utf-8")}
+    raw = target.read_text(encoding="utf-8")
+    fm = _parse_fm(raw)
+    return {
+        "path": path,
+        "content": raw,
+        "title": fm.get("title", ""),
+        "summary": fm.get("summary", ""),
+        "category": fm.get("category", ""),
+        "tags": fm.get("tags", []),
+        "tools": fm.get("tools", []),
+    }
 
 
 def _handle_save_lesson(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
@@ -166,7 +237,7 @@ def _register_memory_tools() -> None:
             },
             "required": ["question"],
         }, _handle_query_method, _common_phase),
-        ("read_method", "读取方法库 markdown 全文", {
+        ("read_method", "读取方法库 markdown 全文，返回 frontmatter 中的 tools 列表方便 LLM 读完后直接调工具", {
             "type": "object",
             "properties": {"path": {"type": "string"}},
             "required": ["path"],

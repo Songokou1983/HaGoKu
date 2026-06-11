@@ -1,4 +1,5 @@
 import type { CleaningReviewPayload } from "./types";
+import { focusLabel } from "../../constants/focusAreas";
 
 export function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
   const pct = `${(100 * data.impact_rate).toFixed(1)}%`;
@@ -13,7 +14,7 @@ export function CleaningReviewTable({ data }: { data: CleaningReviewPayload }) {
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-1">
-        <div className="font-medium text-app-text">Cleaner</div>
+        <div className="font-medium text-app-text">{focusLabel("cleaner")}</div>
         <div className="text-app-text-muted">
           {rowLine} · {qual}偏差 {data.bias_risk} · {data.n_ops} 条 · 删行影响率{" "}
           <abbr

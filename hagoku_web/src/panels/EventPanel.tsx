@@ -76,7 +76,7 @@ export default function EventPanel() {
           <p className="text-ui-xs text-app-text-muted">
             {connectionStatus === "idle"
               ? "正在连接服务器，建立后即可接收实时日志。"
-              : "分析运行时，每个 Agent 的工作进展会实时显示在这里。"}
+              : "分析运行时，各阶段的工作进展会实时显示在这里。"}
           </p>
         </div>
       )}

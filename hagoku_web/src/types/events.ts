@@ -17,6 +17,8 @@ export type EventType =
   | "user_input_requested"
   | "user_input_received"
   | "tool_exchange"
+  | "agent_stream_delta"
+  | "agent_stream_end"
   | "run_started"
   | "run_completed"
   | "run_failed";

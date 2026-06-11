@@ -179,8 +179,8 @@ class CleanerAgent(BaseAgent):
         assessment = None
         route_to_args = None
 
-        # Phase B: tool dispatch 已在 tool_calls 处理块中完成（含 submit_assessment / route_to 检测）
-        # 此处只保留 submit_assessment / route_to 的检测逻辑
+        # Phase C: route_to 优先于 submit_assessment（LLM 可能同时调两者）
+        # 阶段切换走 route_to，评估结果走 submit_assessment——两者可共存
         if tc_list:
             for tc in tc_list:
                 fn = tc.function
@@ -188,11 +188,10 @@ class CleanerAgent(BaseAgent):
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
                     continue
-                if fn.name == "submit_assessment":
-                    assessment = _agt.dispatch(fn.name, args, context, df)
-                    break
                 if fn.name == "route_to":
                     route_to_args = _agt.dispatch(fn.name, args, context, df)
+                elif fn.name == "submit_assessment":
+                    assessment = _agt.dispatch(fn.name, args, context, df)
 
         return {
             "text": txt,

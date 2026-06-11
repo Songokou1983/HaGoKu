@@ -380,24 +380,47 @@ agent_tools.register(Tool(
 
 
 def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
+    """处理 LLM 的 ask_user 调用——触发暂停信号写入 context。
+
+    orchestrator/reply_handlers 检测到 context["_pending_ask_user"] 后：
+      1. emit USER_INPUT_REQUESTED 事件（payload 含 question/options/expected_format）
+      2. 设置 _stage 仍为当前阶段（不切换）
+      3. respond() 返回，等待 WS 收到用户回复后再走一轮
+    """
+    pending = {
         "question": args.get("question", ""),
         "options": args.get("options", []),
+        "expected_format": args.get("expected_format", "free_text"),
+        "asked_by_stage": ctx.get("_current_stage", "unknown"),
     }
+    ctx["_pending_ask_user"] = pending
+    return pending
 
 agent_tools.register(Tool(
     name="ask_user",
-    description="向用户提问，需要用户方向性决策时使用。调用后会暂停等待用户回复。普通分析陈述用纯文本输出。如果你提供 options，前端渲染为可点击按钮。",
+    description=(
+        "向用户提问并暂停等待回复。**调用此工具会让 pipeline 进入暂停状态，等用户在 UI 回复**。\n"
+        "适用场景：你需要用户做方向性决策（如『要不要把 outlier 移除』），单靠数据无法判断。\n"
+        "不适用：你只是想说一段话——那直接输出文本即可，不要用此工具。"
+    ),
     parameters={
         "type": "object",
         "properties": {
             "question": {"type": "string", "description": "问题文本"},
-            "options": {"type": "array", "items": {"type": "string"}, "description": "可选回复项"},
+            "options": {
+                "type": "array", "items": {"type": "string"},
+                "description": "可选回复项（让用户从中选）；若开放问题不传"
+            },
+            "expected_format": {
+                "type": "string",
+                "enum": ["choice", "free_text", "yes_no"],
+                "description": "期望回复格式——UI 据此渲染单选/输入框/确认按钮"
+            },
         },
-        "required": ["question"],
+        "required": ["question", "expected_format"],
     },
     handler=_handle_ask_user,
-    agents=["analyst"],
+    agents=["scout", "cleaner", "analyst", "reporter"],
 ))
 
 
@@ -668,14 +691,21 @@ def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
 
 agent_tools.register(Tool(
     name="route_to",
-    description="表达流程意图。不传 stage 留在当前阶段（继续对话）；传 stage 切换阶段（scout/cleaner/analyst/reporter）",
+    description=(
+        "声明你接下来要去哪里。三种用法：\n"
+        "1. 切换阶段 → 传 stage（scout/cleaner/analyst/reporter），表示『本阶段我做完了，去下一个』\n"
+        "2. 留在当前阶段 → 不传 stage，表示『我还有话要说，继续这条对话』\n"
+        "3. 提前结束 → 传 stage='reporter'，跳过中间阶段直接收尾\n"
+        "\n"
+        "这是你控制 pipeline 流向的唯一方式——代码不再用任何关键词（如『确认』『继续』）替你判断。"
+    ),
     parameters={
         "type": "object",
         "properties": {
             "stage": {"type": "string", "enum": ["scout", "cleaner", "analyst", "reporter"]},
-            "reason": {"type": "string", "description": "切换原因"},
+            "reason": {"type": "string", "description": "切换原因——告诉用户和后续 AI 为什么走这条路"},
         },
-        "required": [],
+        "required": ["reason"],
     },
     handler=_handle_route_to,
     agents=["scout", "cleaner", "analyst", "reporter"],

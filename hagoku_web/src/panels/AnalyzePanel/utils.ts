@@ -1,3 +1,8 @@
+/** 简易唯一 ID */
+export function uid(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 /** 文件大小格式化 */
 export function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

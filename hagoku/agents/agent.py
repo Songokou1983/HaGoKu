@@ -398,23 +398,7 @@ class DataAnalystAgent(BaseAgent):
     # 关注点 2：评估清洗
     # ═══════════════════════════════════════════════════════════════
 
-    def _load_cleaning_rules(self) -> str:
-        """从统一 prompt.md 提取 CLEANING_PLAN_RULES 区块。"""
-        import re
-        p = Path(__file__).parent / "prompt.md"
-        if not p.exists():
-            return ""
-        content = p.read_text(encoding="utf-8")
-        match = re.search(r"### CLEANING_PLAN_RULES\s*\n(.*?)(?=\n#{2,3}\s)", content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        # Fallback: try ## CLEANING_PLAN_RULES (old format)
-        match = re.search(r"## CLEANING_PLAN_RULES\s*\n(.*?)(?=\n#{2,3}\s)", content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return ""
-
-    def assess(self, df: pd.DataFrame, context: dict, cleaning_rules: str = "") -> dict:
+    def assess(self, df: pd.DataFrame, context: dict) -> dict:
         """评估清洗需求——关注点 2：评估清洗。"""
         import json
         from hagoku.tools.registry import agent_tools as _agt
@@ -423,15 +407,10 @@ class DataAnalystAgent(BaseAgent):
 
         query = context.get("query", "") or context.get("analysis_goal", "")
         user_feedback = context.get("_user_feedback", "") or ""
-        if not cleaning_rules.strip():
-            cleaning_rules = self._load_cleaning_rules()
-        if not cleaning_rules.strip():
-            cleaning_rules = "评估每列是否需要清洗。调用 submit_assessment 提交评估结果。"
 
         analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
                          if s.get("used_in_analysis") is True}
         col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
-        phase_id = "【当前阶段：数据清洗评估 — 字段理解已完成，你只负责评估每列是否需要清洗，不要讨论后续阶段】"
 
         project_ctx = context.get("_project_context")
         if project_ctx is None:
@@ -451,7 +430,7 @@ class DataAnalystAgent(BaseAgent):
             intro += command_context
         revision = context.get("interaction_revision", 0)
         project_ctx.add_user_feedback("cleaner", revision, raw_text=intro)
-        agent_extra = phase_id + "\n\n" + cleaning_rules.strip()
+        agent_extra = "【当前阶段：数据清洗评估】调用 submit_assessment 提交评估结果。"
         _tools = _agt.to_openai()
         client = create_raw_client(self.llm_config)
 

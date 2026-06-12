@@ -84,9 +84,8 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
     # 首次评估（首波展示）
     assessment = context.get("_cleaner_assessment")
     if assessment is None:
-        cleaning_rules = self._agent._load_cleaning_rules()
         context["_user_feedback"] = user_input
-        assessment = self._agent.assess(df, context, cleaning_rules)
+        assessment = self._agent.assess(df, context)
         context["_cleaner_assessment"] = assessment
         self._cleaner_dialog_open = True
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {

@@ -27,7 +27,7 @@ class FakeCleanerAgent:
     def _load_cleaning_rules(self):
         return "test rules"
 
-    def assess(self, df, context, rules):
+    def assess(self, df, context):
         return {"summary": "评估完成", "columns": []}
 
 

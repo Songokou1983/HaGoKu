@@ -41,6 +41,9 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     _try_parse_json,
     scout_field_review_pause_payload,
     scout_user_input_received_payload,
+    derive_display_names,
+    derive_descriptions,
+    sync_legacy_dicts,
 )
 
 from .payloads.cleaner_payload import (  # noqa: F401
@@ -497,8 +500,10 @@ class Orchestrator(
         if not self.memory or not applied_scout or not context:
             return
 
-        descs: dict[str, Any] = context.get("column_descriptions", {}) or {}
-        display_names: dict[str, Any] = context.get("column_display_names", {}) or {}
+        # 收口双写：从 column_semantics 派生（唯一权威）
+        from hagoku.manager.payloads.scout_payload import derive_descriptions, derive_display_names
+        descs: dict[str, Any] = derive_descriptions(context)
+        display_names: dict[str, Any] = derive_display_names(context)
         new_descs: dict[str, str] = {}
         new_dnames: dict[str, str] = {}
 

@@ -10,6 +10,9 @@ from ..payloads.scout_payload import (
     _known_scout_columns,
     _resolve_scout_column_token,
     _resolve_scout_column_token_with_context,
+    derive_display_names,
+    derive_descriptions,
+    sync_legacy_dicts,
 )
 def apply_scout_user_field_reply_to_context(
     context: dict[str, Any],
@@ -438,8 +441,10 @@ def _apply_scout_reply_with_llm(
     if not columns or not raw:
         return []
 
-    descs: dict[str, Any] = context.setdefault("column_descriptions", {})
-    display_names: dict[str, Any] = context.setdefault("column_display_names", {})
+    # 收口双写：descs/display_names 从 column_semantics 派生（只读视图）
+    # 写入统一走 column_semantics，写完后调 sync_legacy_dicts 同步旧字典
+    descs: dict[str, Any] = derive_descriptions(context)
+    display_names: dict[str, Any] = derive_display_names(context)
     semantics = context.get("column_semantics") or []
     applied: list[str] = []
     seen_col: set[str] = set()
@@ -657,51 +662,39 @@ def _apply_scout_reply_with_llm(
                 ev_raw = str(args.get("evidence", "") or "").strip()
 
                 # 对每个解析到的列应用相同的更新（支持范围展开如 Bos1-3）
+                # 收口双写：所有写入只走 column_semantics，循环结束后统一 sync_legacy_dicts
                 for c in resolved:
                     if c in seen_col:
                         continue
                     seen_col.add(c)
 
                     updated = False
-                    if d_raw:
-                        descs[c] = d_raw
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["description"] = d_raw
-                                break
-                        applied.append(f"{c}←{d_raw}")
-                        updated = True
-                    if dn_raw:
-                        display_names[c] = dn_raw
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["display_name"] = dn_raw
-                                break
-                        applied.append(f"{c}:[display]←{dn_raw}")
-                        updated = True
-                    if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["suggested_role"] = role_raw
-                                s["role"] = role_raw  # 律 5：同步 role
-                                applied.append(f"{c}:[role]←{role_raw}")
-                                updated = True
-                    if uia is not None:
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["used_in_analysis"] = bool(uia)
-                                applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
-                                updated = True
-                    if ev_raw:
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["evidence"] = ev_raw
-                                break
-                    if updated:
-                        for s in semantics:
-                            if str(s.get("column_name", "")) == c:
-                                s["needs_user_input"] = False
-                                s["confirmed_by_user"] = True  # 用户自由文本纠正的字段标记为已确认
+                    for s in semantics:
+                        if str(s.get("column_name", "")) != c:
+                            continue
+                        if d_raw:
+                            s["description"] = d_raw
+                            applied.append(f"{c}←{d_raw}")
+                            updated = True
+                        if dn_raw:
+                            s["display_name"] = dn_raw
+                            applied.append(f"{c}:[display]←{dn_raw}")
+                            updated = True
+                        if role_raw and role_raw in ("target", "feature", "identifier", "ignore"):
+                            s["suggested_role"] = role_raw
+                            s["role"] = role_raw  # 律 5：同步 role
+                            applied.append(f"{c}:[role]←{role_raw}")
+                            updated = True
+                        if uia is not None:
+                            s["used_in_analysis"] = bool(uia)
+                            applied.append(f"{c}:[used_in_analysis]←{bool(uia)}")
+                            updated = True
+                        if ev_raw:
+                            s["evidence"] = ev_raw
+                        if updated:
+                            s["needs_user_input"] = False
+                            s["confirmed_by_user"] = True  # 用户自由文本纠正标记为已确认
+                        break
 
             if unhandled:
                 context["_last_understanding_failure"] = {
@@ -728,6 +721,8 @@ def _apply_scout_reply_with_llm(
                 context["_last_llm_reply"] = _raw_text
             else:
                 context.pop("_last_llm_reply", None)
+            # 收口双写：所有 column_semantics 写入完成后同步旧字典
+            sync_legacy_dicts(context)
             return applied
 
         # ── 律 7：LLM 未产生有效工具调用 → 写入未理解信号 ──
@@ -745,6 +740,7 @@ def _apply_scout_reply_with_llm(
             context["_last_llm_reply"] = _raw_text
         else:
             context.pop("_last_llm_reply", None)
+        sync_legacy_dicts(context)
         return applied
 
     except Exception as e:

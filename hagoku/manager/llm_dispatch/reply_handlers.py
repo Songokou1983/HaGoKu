@@ -56,6 +56,35 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
     if applied and self.memory:
         self._persist_scout_field_updates(self._project_name, applied, context)
 
+    # _pending_reinference 消费：restrict_analysis_to 后字段集合变化，需重推断角色
+    if context.pop("_pending_reinference", None):
+        semantics = context.get("column_semantics") or []
+        participating = [
+            str(s.get("column_name", ""))
+            for s in semantics
+            if s.get("used_in_analysis") is True and s.get("column_name")
+        ]
+        # 如果 context 里的 target 不在参与字段里，清空 target 让 LLM 重推断
+        current_target = context.get("target", "")
+        if current_target and current_target not in participating:
+            context.pop("target", None)
+            context.pop("features", None)
+        # 把当前字段参与状态注入一次 LLM 调用，触发角色重推断
+        try:
+            _reinfer_prompt = (
+                f"字段参与分析的范围已更新，现在参与分析的字段是：{', '.join(participating)}。"
+                "请根据这些字段和分析目标，重新推断各字段的角色（target/feature/identifier）。"
+            )
+            apply_scout_user_field_reply_to_context(
+                context, _reinfer_prompt,
+                llm_client=self.llm_raw,
+                llm_model=self.config.llm.model,
+                event_bus=self.event_bus,
+                stream_enabled=getattr(self.config.llm, "stream_enabled", True),
+            )
+        except RuntimeError:
+            pass  # 重推断失败不阻断主流程，字段参与状态已正确更新
+
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
     if ask:

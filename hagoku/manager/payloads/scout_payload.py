@@ -85,9 +85,9 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     cols = context.get("column_semantics") or []
     if not cols:
         return {"message": "共 0 列 — 无法生成字段表。", "field_review": None}
-    # 律 5：优先从 column_semantics 取，兜底旧 dict
-    descs = context.get("column_descriptions") or {}
-    display_names = context.get("column_display_names") or {}
+    # 收口双写：从 column_semantics 派生（唯一权威），旧字典只作兜底
+    descs = derive_descriptions(context)
+    display_names = derive_display_names(context)
     profiles = context.get("_column_profiles") or {}
     n_rows = context.get("n_rows", "?")
     n_c = len(cols)
@@ -123,7 +123,12 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     # 分析涉及字段摘要
     target = context.get("target")
     features = context.get("features") or []
-    variable_roles = context.get("variable_roles") or {}
+    # 从 column_semantics 实时派生 variable_roles（不依赖旧字典）
+    variable_roles = {
+        str(s.get("column_name", "")): str(s.get("suggested_role", ""))
+        for s in cols
+        if s.get("column_name") and s.get("suggested_role")
+    }
     ignored_cols = [
         s.get("column_name") for s in cols
         if str(s.get("suggested_role", "")).strip() in ("ignore", "identifier")
@@ -162,6 +167,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _known_scout_columns(context: dict[str, Any]) -> list[str]:
+    """从 column_semantics（唯一权威）取列名列表。旧 column_descriptions 不再用于补充。"""
     out: list[str] = []
     seen: set[str] = set()
     for s in context.get("column_semantics") or []:
@@ -169,12 +175,71 @@ def _known_scout_columns(context: dict[str, Any]) -> list[str]:
         if n and n not in seen:
             out.append(n)
             seen.add(n)
-    for k in (context.get("column_descriptions") or {}).keys():
-        kn = str(k).strip()
-        if kn and kn not in seen:
-            out.append(kn)
-            seen.add(kn)
     return out
+
+
+def derive_display_names(context: dict[str, Any]) -> dict[str, str]:
+    """从 column_semantics 派生 display_name 字典（只读视图，不写回 context）。
+
+    收口规则：display_name 的权威来源是 column_semantics[*].display_name。
+    旧 column_display_names 字典仍可作为初始化兜底（历史兼容），但写入只走 column_semantics。
+    """
+    result: dict[str, str] = {}
+    # 先从旧字典取（兼容历史项目记忆加载路径）
+    for col, dn in (context.get("column_display_names") or {}).items():
+        if dn and str(dn).strip():
+            result[str(col)] = str(dn).strip()
+    # 用 column_semantics 覆盖（权威）
+    for s in context.get("column_semantics") or []:
+        col = str(s.get("column_name", "")).strip()
+        dn = str(s.get("display_name", "") or "").strip()
+        if col and dn:
+            result[col] = dn
+    return result
+
+
+def derive_descriptions(context: dict[str, Any]) -> dict[str, str]:
+    """从 column_semantics 派生 description 字典（只读视图，不写回 context）。
+
+    收口规则：description 的权威来源是 column_semantics[*].description。
+    旧 column_descriptions 字典仍可作为初始化兜底（历史兼容），但写入只走 column_semantics。
+    """
+    result: dict[str, str] = {}
+    # 先从旧字典取（兼容历史）
+    for col, desc in (context.get("column_descriptions") or {}).items():
+        if desc and str(desc).strip():
+            result[str(col)] = str(desc).strip()
+    # 用 column_semantics 覆盖（权威）
+    for s in context.get("column_semantics") or []:
+        col = str(s.get("column_name", "")).strip()
+        desc = str(s.get("description", "") or "").strip()
+        if col and desc:
+            result[col] = desc
+    return result
+
+
+def sync_legacy_dicts(context: dict[str, Any]) -> None:
+    """将 column_semantics 的最新状态同步回旧字典（保持向后兼容）。
+
+    调用时机：任何对 column_semantics 做完写入后调用一次，确保旧路径不脏。
+    这是收口双写状态的过渡桥梁——未来旧字典彻底退场后此函数可删除。
+    """
+    descs: dict[str, str] = {}
+    dnames: dict[str, str] = {}
+    for s in context.get("column_semantics") or []:
+        col = str(s.get("column_name", "")).strip()
+        if not col:
+            continue
+        desc = str(s.get("description", "") or "").strip()
+        dn = str(s.get("display_name", "") or "").strip()
+        if desc:
+            descs[col] = desc
+        if dn:
+            dnames[col] = dn
+    if descs:
+        context["column_descriptions"] = descs
+    if dnames:
+        context["column_display_names"] = dnames
 
 def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
     """将用户或 LLM 给出的字段标识解析为真实列名。
@@ -238,13 +303,9 @@ def _resolve_scout_column_token_with_context(
     if token in dn_to_col:
         return [dn_to_col[token]]
 
-    # 5. description 包含匹配
-    descs = descriptions or {}
-    for c in columns:
-        desc = str(descs.get(c, "") or "")
-        if desc and token in desc:
-            return [c]
-
+    # 注意：description 包含匹配（子串）已删除。
+    # 原因：子串匹配在多个字段描述含相同词时会产生随机结果，且与工具文档
+    # "必须传精确名"的要求矛盾。LLM 传不精确名时走 _last_understanding_failure。
     return []
 
 def _expand_column_range(token: str, columns: list[str]) -> list[str]:

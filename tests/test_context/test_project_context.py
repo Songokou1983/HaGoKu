@@ -34,26 +34,6 @@ class TestProjectContext:
         assert ctx.entries[0].raw_user_text == "第一轮"
         assert ctx.entries[1].raw_user_text == "第二轮"
 
-    def test_build_prompt_system_prefix_has_goal(self, ctx):
-        """律 1：analysis_goal 永远在 system_prefix 首行。"""
-        result = ctx.build_prompt("scout", {"column_semantics": []})
-        assert "分析ROI" in result["system_prefix"]
-
-    def test_build_prompt_system_prefix_has_field_state(self, ctx):
-        """system_prefix 包含从 column_semantics 派生的字段状态。"""
-        context = {
-            "column_semantics": [
-                {"column_name": "Code", "display_name": "店铺编号", "suggested_role": "feature", "used_in_analysis": True, "needs_user_input": False},
-                {"column_name": "Period", "display_name": "周次", "suggested_role": "identifier", "used_in_analysis": False, "needs_user_input": True},
-            ],
-            "target": "Revenue",
-            "features": ["Code"],
-        }
-        result = ctx.build_prompt("scout", context)
-        assert "Code(店铺编号): 参与  role=feature" in result["system_prefix"]
-        assert "Period(周次): 不参与  role=identifier" in result["system_prefix"]
-        assert "待确认字段: Period" in result["system_prefix"]
-
     def test_build_prompt_history_context_includes_current_stage(self, ctx):
         """messages_history 包含当前阶段的 user_feedback + agent_response。"""
         ctx.add_user_feedback(stage="scout", revision=1, raw_text="Code是店铺编号")
@@ -65,26 +45,18 @@ class TestProjectContext:
         assert msgs[0]["role"] == "user" and "Code是店铺编号" in msgs[0]["content"]
         assert msgs[1]["role"] == "assistant" and "已更新" in msgs[1]["content"]
 
-    def test_build_prompt_history_context_excludes_other_stages_dialog(self, ctx):
-        """上游阶段的对话细节不出现在当前阶段的 messages_history 中（仅保留 snapshot 摘要）。"""
+    def test_build_prompt_history_context_includes_cross_stage_dialog(self, ctx):
+        """上下文保真律：跨阶段的对话也必须出现在 messages_history 中。"""
         ctx.add_user_feedback(stage="scout", revision=1, raw_text="Code是店铺编号")
         ctx.add_agent_response(stage="scout", revision=1, content="已更新", snapshot={"target": "Revenue", "features": ["Code"], "pending": []})
 
         result = ctx.build_prompt("cleaner", {"column_semantics": []})
-        # upstream 对话细节不在 messages_history 中
+        # 跨阶段对话必须在 messages_history 中
+        found = False
         for msg in result["messages_history"]:
-            assert "Code是店铺编号" not in msg["content"]
-        # 但 upstream_summary 包含 stage 名
-        assert "scout" in result["upstream_summary"]
-
-    def test_build_prompt_with_command_context(self, ctx):
-        """_pending_command_text 应出现在 system_prefix 中。"""
-        context = {
-            "column_semantics": [],
-            "_pending_command_text": "/goal 改为分析利润趋势",
-        }
-        result = ctx.build_prompt("scout", context)
-        assert "分析利润趋势" in result["system_prefix"]
+            if "Code是店铺编号" in msg.get("content", ""):
+                found = True
+        assert found, "跨阶段用户原话应在 messages_history 中"
 
     def test_snapshot_derived_from_column_semantics(self, ctx):
         """律 5：snapshot 从 column_semantics 实时派生，不平行存储。"""
@@ -102,10 +74,8 @@ class TestProjectContext:
     def test_empty_context_does_not_crash(self, ctx):
         """空 context → build_prompt 正常返回，不抛异常。"""
         result = ctx.build_prompt("scout", {})
-        assert "system_prefix" in result
         assert "messages_history" in result
-        assert "upstream_summary" in result
-        assert "分析ROI" in result["system_prefix"]
+        assert result["messages_history"] == []
 
     # ── _derive_snapshot 边界测试 ──
 
@@ -168,7 +138,6 @@ class TestProjectContext:
     def test_build_prompt_with_no_entries_history_is_empty(self, ctx):
         result = ctx.build_prompt("scout", {"column_semantics": []})
         assert result["messages_history"] == []
-        assert result["upstream_summary"] == ""
 
 
 class TestProjectContextEventBus:

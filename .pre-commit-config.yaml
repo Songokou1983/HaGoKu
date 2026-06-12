@@ -7,6 +7,7 @@ repos:
         language: system
         files: ^hagoku/(agents|manager)/.*\.py$
         pass_filenames: true
+
       - id: prompt-gate
         name: prompt.md 修改时对比 gate corpus（git HEAD vs 工作区）
         entry: .venv/bin/python scripts/ci/prompt_gate.py
@@ -14,4 +15,20 @@ repos:
         files: ^hagoku/agents/prompt\.md$
         pass_filenames: false
         always_run: false
+        verbose: true
+
+      - id: prompt-law-check
+        name: "铁律 10/11：prompt 修改前置检查（禁止预设业务结论）"
+        entry: .venv/bin/python scripts/ci/prompt_law_check.py
+        language: system
+        files: ^hagoku/(agents/.*/prompt\.md|llm/prompts\.py)$
+        pass_filenames: true
+        verbose: true
+
+      - id: prompt-law-check
+        name: "铁律 10/11：prompt 修改前置检查（禁止预设业务结论）"
+        entry: .venv/bin/python scripts/ci/prompt_law_check.py
+        language: system
+        files: ^hagoku/(agents/.*/prompt\.md|llm/prompts\.py)$
+        pass_filenames: true
         verbose: true

@@ -499,14 +499,15 @@ def test_meta_LLMSpy录制功能正常():
 
 # ── ProjectContext 信息抵达正向断言（律 1/2/3/6）─────────────────────────
 
-def test_project_context_injects_goal_to_prompt():
-    """律 1 + 律 6：build_prompt 的 system_prefix 首行必须包含 analysis_goal。"""
+def test_project_context_stores_analysis_goal():
+    """律 1：ProjectContext 存储 analysis_goal，to_messages_for_llm 将其作为 query 传入。"""
     from hagoku.context.project_context import ProjectContext
 
     ctx = ProjectContext(run_id="test", analysis_goal="分析销售趋势")
-    result = ctx.build_prompt("scout", {"column_semantics": []})
-    first_line = result["system_prefix"].strip().split("\n")[0]
-    assert "分析销售趋势" in first_line, f"system_prefix 首行不含分析目标: {first_line}"
+    assert ctx.analysis_goal == "分析销售趋势"
+    msgs = ctx.to_messages_for_llm("scout", {"column_semantics": []}, "请分析")
+    # query 作为第一条 user message
+    assert any("分析销售趋势" in m.get("content", "") for m in msgs), "分析目标应在 messages 中"
 
 
 def test_project_context_preserves_user_raw_text():

@@ -24,13 +24,6 @@ from ..tools.data_io import save_data
 
 from .command_parser import parse as parse_command, ParsedCommand
 
-# ── 规则引擎 ──────────────────────────────────────────────────
-
-# WebSocket「重置 / 取消」暂停时使用的哨兵（用户正常回复不会使用此串）
-# 律 3：多轮对话历史窗口 — 注入轮数 vs 持久化轮数（1 轮 = user + assistant 两条消息）
-_CONV_HISTORY_INJECT_TURNS = 3   # 注入到 LLM prompt 的最近轮数
-_CONV_HISTORY_KEEP_TURNS = 10    # context 中保留的最近轮数
-
 # ── CH-5 拆分：从子模块重导出，保持外部 import 路径不变 ─────────
 
 from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 外部测试导入

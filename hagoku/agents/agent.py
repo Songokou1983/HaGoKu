@@ -527,6 +527,15 @@ class DataAnalystAgent(BaseAgent):
                     except json.JSONDecodeError:
                         continue
                     if fn.name == "submit_assessment":
+                        # 上下文保真律：submit_assessment 也必须记录到 ProjectContext
+                        result = _agt.dispatch(fn.name, args, context, df)
+                        tool_records.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
+                            arguments=fn.arguments,
+                            result=json.dumps(result, ensure_ascii=False, default=str),
+                        ))
+                        if tool_records:
+                            project_ctx.add_tool_exchange("cleaner", revision, tool_records, assistant_content=txt)
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
                     if fn.name == "route_to":
                         context["_cleaner_route_to"] = {"stage": args.get("stage"), "reason": args.get("reason", "")}
@@ -568,6 +577,13 @@ class DataAnalystAgent(BaseAgent):
                     except json.JSONDecodeError:
                         continue
                     if fn.name == "submit_assessment":
+                        result = _agt.dispatch(fn.name, args, context, df)
+                        tr = ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
+                            arguments=fn.arguments,
+                            result=json.dumps(result, ensure_ascii=False, default=str),
+                        )
+                        project_ctx.add_tool_exchange("cleaner", revision, [tr])
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
         except Exception:
             pass

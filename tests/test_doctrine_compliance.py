@@ -674,3 +674,140 @@ def test_doctrine_无_conversation_history_残留():
         f"_conversation_history 残留（应退役）:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 守门 7：提示词层禁止预设业务结论（铁律 11）
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 铁律 1 限制的是代码层硬编码，但实现者经常把"硬编码"搬到提示词里——
+# 在 prompt.md / prompts.py / system_extra 字符串中写明:
+#   "你必须把这个字段判断为 target"
+#   "如果用户说 X，你应该理解成 Y"
+#   "只关注以下字段：A, B, C"
+# 这类句子替 LLM 做业务判断，和代码里的 if-elif 本质相同，但更难被代码扫描发现。
+#
+# 合法 vs 违规判断标准：
+#   合法：告诉 LLM 当前阶段、数据背景、工具用法、输出格式
+#   违规：替 LLM 预设业务结论（字段角色、用户意图解读、分析方法选择）
+#
+# 白名单：prompt.md 中用于"解释角色定义"的合法描述（不是结论，是背景）
+_PROMPT_FILES = [
+    HAGOKU_ROOT / "agents" / "prompt.md",
+    HAGOKU_ROOT / "agents" / "analyst" / "prompt.md",
+    HAGOKU_ROOT / "agents" / "scout" / "prompt.md",
+    HAGOKU_ROOT / "agents" / "cleaner" / "prompt.md",
+    HAGOKU_ROOT / "agents" / "reporter" / "prompt.md",
+    HAGOKU_ROOT / "llm" / "prompts.py",
+]
+
+# 违规模式：替 LLM 预设业务结论的命令式指令
+_PROMPT_VERDICT_PATTERNS: list[tuple[str, str]] = [
+    # 强制性字段角色分配（"你必须把 X 判断为 target"）
+    (r"你必须(?:把|将).{0,20}判(?:断|定)为", "强制性字段角色分配"),
+    # 强制性用户意图解读（"如果用户说 X，你应该理解成 Y"）
+    (r"如果用户(?:说|提到|输入).{0,30}你(?:应该|必须)(?:理解成|判断为|视为)", "强制性意图解读"),
+    # 预设分析方法选择（"遇到 X 问题必须用 Y 方法"）
+    (r"遇到.{0,20}(?:问题|情况|场景).{0,10}必须(?:用|使用|选择)", "预设分析方法"),
+    # 禁止性字段过滤（"不要分析/不要关注 X 字段"——代码应通过 used_in_analysis 控制，不应写死在 prompt）
+    (r"不(?:要|能|许|可以)(?:分析|关注|考虑).{0,20}(?:字段|列|变量)", "禁止性字段过滤"),
+    # 强制性数值阈值结论（"p 值小于 0.05 就必须下结论 X"——阈值解释是 LLM 的活）
+    (r"p\s*[值值]\s*[<＜]\s*0\.\d+\s*(?:就|则)(?:必须|应该|要)", "强制性数值阈值结论"),
+    # 用户输入直接映射（"用户说'收入'就等于字段 X"——字段映射是 LLM 的活）
+    (r"用户说.{0,15}就等于.{0,15}字段", "用户输入直接映射"),
+    # 强制保留/排除特定字段名（直接命名真实业务字段）
+    (r"(?:只(?:分析|关注|保留)|排除|忽略)\s+[\u4e00-\u9fa5A-Za-z_]{2,}(?:\s*[、,，]\s*[\u4e00-\u9fa5A-Za-z_]{2,}){2,}", "强制字段集合"),
+]
+
+# 白名单：这些句式在 prompt 里属于"角色/阶段说明"，不是业务结论
+_PROMPT_VERDICT_WHITELIST = [
+    "关注点",   # "关注点 1: 理解字段" 是阶段说明，不是结论
+    "##",       # 章节标题行
+    "例如",     # 举例说明
+    "比如",     # 举例说明
+    "示例",     # 示例行
+    "三要素",   # 分析框架说明
+    "tool_call",  # 工具调用说明
+]
+
+# 已知合规例外（历史 prompt 中确认合规的片段）
+_PROMPT_VERDICT_KNOWN_OK: set[str] = set()
+
+
+def _read_prompt_files() -> list[tuple[Path, str]]:
+    """读取所有需要审计的 prompt 文件。"""
+    result = []
+    for p in _PROMPT_FILES:
+        if p.exists():
+            result.append((p, p.read_text(encoding="utf-8")))
+    # 同时扫描 agents/ 下所有 prompt.md
+    for p in (HAGOKU_ROOT / "agents").rglob("prompt.md"):
+        if p not in [f for f, _ in result]:
+            result.append((p, p.read_text(encoding="utf-8")))
+    return result
+
+
+def test_doctrine_提示词层禁止预设业务结论() -> None:
+    """守门 7（铁律 11）：扫描所有 prompt.md 和 prompts.py，检测是否替 LLM 预设了业务结论。
+
+    合法：阶段定义、工具说明、输出格式要求、分析目标背景
+    违规：强制性字段角色分配、强制性意图解读、禁止性字段过滤、预设分析方法
+
+    提示词层的硬编码比代码层更隐蔽——因为写提示词的人通常认为"这只是在引导模型"，
+    实际上是在替模型做语义判断，破坏了上下文驱动的核心原则。
+    """
+    violations: list[str] = []
+
+    for path, content in _read_prompt_files():
+        for lineno, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+            # 跳过空行、注释行、白名单行
+            if not stripped:
+                continue
+            if any(wl in stripped for wl in _PROMPT_VERDICT_WHITELIST):
+                continue
+
+            for pattern, desc in _PROMPT_VERDICT_PATTERNS:
+                m = re.search(pattern, stripped)
+                if not m:
+                    continue
+                key = f"{path.name}:{lineno}"
+                if key in _PROMPT_VERDICT_KNOWN_OK:
+                    continue
+                ctx_snippet = stripped[:120]
+                violations.append(f"{path.relative_to(HAGOKU_ROOT)}:{lineno}  [{desc}] {ctx_snippet}")
+
+    assert not violations, (
+        "\n违反【铁律 11 — 提示词层禁止预设业务结论】\n"
+        "提示词里可以说：当前阶段是什么、工具怎么用、输出格式要求\n"
+        "提示词里不能说：字段必须是 X 角色、用户说 A 就等于 B、不要分析 C 字段\n"
+        "如何修复：删掉该结论式指令，改为向 LLM 提供背景信息，让它自行判断\n"
+        "若确认该行合规，加入 _PROMPT_VERDICT_KNOWN_OK 白名单并附注释说明原因\n"
+        "  ----  违规位置  ----\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_meta_提示词违规探测器自检() -> None:
+    """元测试：确保守门 7 的正则探测器能识别典型违规，且不误报合法 prompt 内容。"""
+    bad_cases = [
+        ("你必须把这个字段判断为 target", "强制性字段角色分配"),
+        ("如果用户说收入，你应该理解成 Inc1 字段", "强制性意图解读"),
+        ("不要分析 BU 字段，这个字段不重要", "禁止性字段过滤"),
+        ("遇到分组对比问题必须用 t-test 方法", "预设分析方法"),
+    ]
+    for text, desc in bad_cases:
+        matched = any(re.search(p, text) for p, _ in _PROMPT_VERDICT_PATTERNS)
+        assert matched, f"守门 7 探测器失效：未识别违规案例「{text}」（{desc}）"
+
+    ok_cases = [
+        "## 关注点 1: 理解字段",
+        "你的任务是理解每个字段的业务含义",
+        "输出格式：调用 update_field_understanding 工具",
+        "分析目标：{query}",
+        "当前字段状态：{fields}",
+        "每条结论必须包含 [发现] / [统计依据] / [局限或解读] 三要素",
+    ]
+    for text in ok_cases:
+        matched = any(re.search(p, text) for p, _ in _PROMPT_VERDICT_PATTERNS)
+        assert not matched, f"守门 7 探测器误报：合法 prompt 内容「{text}」被错误标记为违规"

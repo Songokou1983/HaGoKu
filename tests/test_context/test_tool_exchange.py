@@ -105,8 +105,7 @@ class TestToMessagesForLlm:
     def test_minimal_to_messages_for_llm(self, ctx):
         """空 context、空 history 的最简调用。"""
         msgs = ctx.to_messages_for_llm("scout", {"column_semantics": []}, "请分析")
-        assert len(msgs) >= 2  # system_prefix (含 analysis_goal) + user_input
-        assert msgs[0]["role"] == "system"
+        assert len(msgs) >= 2  # query + user_input
         assert "分析ROI" in msgs[0]["content"]
 
     def test_to_messages_for_llm_with_user_feedback(self, ctx):
@@ -114,23 +113,23 @@ class TestToMessagesForLlm:
         ctx.add_user_feedback("scout", 0, "Code是店铺编号")
         ctx.add_agent_response("scout", 0, "已更新 Code 为店铺编号")
         msgs = ctx.to_messages_for_llm("scout", {"column_semantics": []}, "再看看 Period")
-        # system + query + user_feedback + agent_response + user_input = 5
-        assert len(msgs) == 5
+        # query + user_feedback + agent_response + user_input = 4 (无 system 消息时)
+        assert len(msgs) == 4
         # history[0] = user feedback
-        assert msgs[2]["role"] == "user"
-        assert msgs[2]["content"] == "Code是店铺编号"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"] == "Code是店铺编号"
 
     def test_to_messages_for_llm_with_tool_exchange(self, ctx):
         """带 tool_exchange 历史时，展开为标准协议。"""
         tc = ToolCallRecord("c1", "get_stats", '{"col":"Revenue"}', "mean=100.5")
         ctx.add_tool_exchange("analyst", 0, [tc])
         msgs = ctx.to_messages_for_llm("analyst", {"column_semantics": []}, "继续")
-        # system + query + assistant(tool_calls) + tool(result) + user_input = 5
-        assert len(msgs) == 5
-        assert msgs[2]["role"] == "assistant"
-        assert "tool_calls" in msgs[2]
-        assert msgs[3]["role"] == "tool"
-        assert msgs[3]["tool_call_id"] == "c1"
+        # query + assistant(tool_calls) + tool(result) + user_input = 4 (无 system 消息时)
+        assert len(msgs) == 4
+        assert msgs[1]["role"] == "assistant"
+        assert "tool_calls" in msgs[1]
+        assert msgs[2]["role"] == "tool"
+        assert msgs[2]["tool_call_id"] == "c1"
 
 
 class TestToolExchangePersistence:

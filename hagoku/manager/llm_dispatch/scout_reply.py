@@ -11,10 +11,6 @@ from ..payloads.scout_payload import (
     _resolve_scout_column_token,
     _resolve_scout_column_token_with_context,
 )
-
-# 律 3：多轮对话历史窗口
-_CONV_HISTORY_INJECT_TURNS = 3
-
 def apply_scout_user_field_reply_to_context(
     context: dict[str, Any],
     user_reply: str,

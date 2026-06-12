@@ -27,6 +27,15 @@ export function formatScoutUserInputFactLine(inner: Record<string, unknown>): st
   return "";
 }
 
+/** 阶段推进事实行 */
+export function formatStageProceedFactLine(
+  stage: string,
+  inner: Record<string, unknown>,
+): string {
+  const reason = typeof inner.proceed_reason === "string" ? inner.proceed_reason : "";
+  return reason ? `进入${stage}阶段：${reason}` : `进入${stage}阶段`;
+}
+
 /** 将后端 applied_field_updates 转为用户可读摘要 */
 export function formatScoutAppliedUpdates(applied: string[]): string {
   const parts: string[] = [];

@@ -1,3 +1,10 @@
+/** 文件大小格式化 */
+export function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** 由后端 `user_input_received` 结构化字段拼一条事实行（随状态变化，非固定话术库） */
 export function formatScoutUserInputFactLine(inner: Record<string, unknown>): string {
   const failure = inner.understanding_failure as { raw_text?: string } | null | undefined;

@@ -151,6 +151,10 @@ class DataAnalystAgent(BaseAgent):
             self._learn_from_results(context, project_id)
             self._update_own_memory(context, project_id)
 
+            # 收口双写初始化：首次推断完成后同步旧字典，不等待用户第一次纠正
+            from hagoku.manager.payloads.scout_payload import sync_legacy_dicts
+            sync_legacy_dicts(context)
+
             self._emit(EventType.AGENT_COMPLETED, {
                 "result_summary": f"理解 {len(context['column_semantics'])} 个字段"
             })
@@ -383,8 +387,13 @@ class DataAnalystAgent(BaseAgent):
         context["features"] = features
 
     def _generate_field_descriptions(self, context: dict, df: pd.DataFrame) -> None:
-        """从 column_semantics 生成 column_descriptions/display_names。"""
-        pass
+        """从 column_semantics 同步旧字典（column_descriptions / column_display_names）。
+
+        收口双写的初始化桥梁：Scout 首次推断完成后立刻调用，确保旧路径不为空，
+        无需等待用户第一次纠正才触发 sync_legacy_dicts。
+        """
+        from hagoku.manager.payloads.scout_payload import sync_legacy_dicts
+        sync_legacy_dicts(context)
 
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
         """从推断结果学习。"""

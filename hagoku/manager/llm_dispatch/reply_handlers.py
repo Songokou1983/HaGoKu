@@ -82,8 +82,14 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
                 event_bus=self.event_bus,
                 stream_enabled=getattr(self.config.llm, "stream_enabled", True),
             )
-        except RuntimeError:
-            pass  # 重推断失败不阻断主流程，字段参与状态已正确更新
+        except RuntimeError as _reinfer_err:
+            # 重推断失败：写入 _last_understanding_failure 让用户可见，不静默吞掉
+            context["_last_understanding_failure"] = {
+                "raw_text": context.get("_scout_last_user_raw", ""),
+                "model_reply_text": f"字段范围已更新，但角色重推断失败：{_reinfer_err}。请手动确认字段角色。",
+                "had_tool_calls": False,
+                "stage": "scout_reinference",
+            }
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)

@@ -318,10 +318,12 @@ async def ws_handler(ws: WebSocket) -> None:
                 else:
                     try:
                         orch.request_cancel()
+                        with _analysis_busy_lock:
+                            _analysis_in_progress = False
                         await ws.send_json({
                             "type": "ack",
                             "cmd": "cancel_analysis",
-                            "message": "已请求中止分析",
+                            "message": "已中止分析",
                         })
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})

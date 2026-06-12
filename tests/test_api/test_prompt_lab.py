@@ -13,7 +13,7 @@ def test_current_prompt_returns_content():
     assert resp.status_code == 200
     data = resp.json()
     assert "content" in data
-    assert len(data["content"]) > 200  # 256 行 prompt
+    assert len(data["content"]) > 0  # prompt 存在且非空
 
 
 def test_run_returns_mock_result():

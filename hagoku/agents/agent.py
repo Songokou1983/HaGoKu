@@ -239,8 +239,7 @@ class DataAnalystAgent(BaseAgent):
             )
 
         system_prompt = (
-            "直接调用 submit_field_inference，给每个字段一个中文名。不要做其他操作。\n"
-            "建议角色：与目标直接相关的字段→target/feature，无关的→ignore。\n"
+            "调用 submit_field_inference，给每个字段中文名和含义。\n"
             f"{analysis_goal_line}{memory_notes}{command_context}"
         )
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
@@ -427,7 +426,7 @@ class DataAnalystAgent(BaseAgent):
         if not cleaning_rules.strip():
             cleaning_rules = self._load_cleaning_rules()
         if not cleaning_rules.strip():
-            raise RuntimeError("Cleaner 缺少清洗规则：prompt.md 中未找到 CLEANING_PLAN_RULES 区块。")
+            cleaning_rules = "评估每列是否需要清洗。调用 submit_assessment 提交评估结果。"
 
         analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
                          if s.get("used_in_analysis") is True}

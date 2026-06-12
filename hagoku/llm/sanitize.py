@@ -3,16 +3,10 @@ from __future__ import annotations
 
 import re
 
-# 用拼接避免部分编辑器/管道吞掉 XML 形标签
-_THINK_ALT_OPEN = chr(60) + "think" + chr(62)
-_THINK_ALT_CLOSE = chr(60) + "/" + "think" + chr(62)
-
 _THINK_PATTERNS = (
-    re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE),
-    re.compile(
-        re.escape(_THINK_ALT_OPEN) + r".*?" + re.escape(_THINK_ALT_CLOSE),
-        re.DOTALL | re.IGNORECASE,
-    ),
+    re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*reasoning\s*>.*?<\s*/\s*reasoning\s*>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*thinking\s*>.*?<\s*/\s*thinking\s*>", re.DOTALL | re.IGNORECASE),
 )
 
 

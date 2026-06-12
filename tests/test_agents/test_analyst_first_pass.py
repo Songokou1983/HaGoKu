@@ -94,7 +94,8 @@ def test_run_analyst_first_pass_with_submit_first_pass():
 
 
 def test_run_analyst_first_pass_converges_when_no_tool_calls():
-    """LLM 不再调工具时应收敛。"""
+    """首波无 findings 时必须失败在场（铁律 7）。"""
+    import pytest
     orch = Orchestrator(HaGoKuConfig())
 
     from hagoku.agents.agent import DataAnalystAgent
@@ -104,18 +105,14 @@ def test_run_analyst_first_pass_converges_when_no_tool_calls():
     orch._agent.prompt = "test"
     orch._df_clean = None
 
-    context = {"query": "test"}  # 无 _project_context → add_agent_response 不写（但首波分析仍运行）
+    context = {"query": "test"}
 
     step_result = _make_mock_step_result(text="分析完成，没有发现异常")
     orch._agent.run_step = MagicMock(return_value=step_result)
 
-    emits = []
-    with patch.object(orch.event_bus, "emit", wraps=lambda et, ag, data=None: emits.append((et, ag, data))):
-        from hagoku.manager.llm_dispatch.reply_handlers import _run_analyst_first_pass
+    from hagoku.manager.llm_dispatch.reply_handlers import _run_analyst_first_pass
+    with pytest.raises(RuntimeError, match="首波自动分析未产生有效统计发现"):
         _run_analyst_first_pass(orch, context)
-
-    user_events = [e for e in emits if e[0] == EventType.USER_INPUT_REQUESTED]
-    assert len(user_events) >= 1, "即使无 findings 也应收敛并 emit"
 
 
 def test_rewrite_as_written_summary_no_fabrication():

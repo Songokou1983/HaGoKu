@@ -160,7 +160,7 @@ def test_律1_scout首次推断_分析意图抵达LLM():
         response_factory=lambda messages: _make_tool_call_response(
             '{"columns": [{"name": "Inc1", "inferred_type": "numeric"}, '
             '{"name": "Period", "inferred_type": "ordinal"}]}',
-            function_name="infer_column_semantics",
+            function_name="submit_field_inference",
         )
     )
 

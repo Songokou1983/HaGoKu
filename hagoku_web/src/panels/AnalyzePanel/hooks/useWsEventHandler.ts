@@ -12,6 +12,7 @@ import {
 } from "../parsers";
 import {
   formatScoutUserInputFactLine,
+  formatScoutAppliedUpdates,
   formatStageProceedFactLine,
 } from "../utils";
 import { guardrailsRunCompletedInfo } from "../../../utils/wsGuardrails";
@@ -627,7 +628,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
                   )
                 : [];
               if (lines.length > 0) {
-                line = `字段理解写入: ${lines.join("；")}`;
+                line = formatScoutAppliedUpdates(lines);
               }
             }
             if (line) {

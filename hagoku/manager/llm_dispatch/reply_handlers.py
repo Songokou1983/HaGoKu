@@ -39,6 +39,8 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
             context, user_input,
             llm_client=self.llm_raw,
             llm_model=self.config.llm.model,
+            event_bus=self.event_bus,
+            stream_enabled=getattr(self.config.llm, "stream_enabled", True),
         )
     except RuntimeError as e:
         context["_last_understanding_failure"] = {
@@ -157,13 +159,11 @@ def _run_analyst_first_pass(self, context: dict) -> None:
 
     if findings:
         summary = _rewrite_as_written_summary(self, findings)
-    elif first_pass_text:
-        summary = first_pass_text
     else:
-        summary = "首波自动分析完成。请提出你的问题或方向调整。"
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            project_ctx.add_agent_response("analyst", 0, "首波自动分析完成，等待用户输入。")
+        raise RuntimeError(
+            "首波自动分析未产生有效统计发现（findings 为空）。"
+            "请确认字段「参与分析」标记正确，并查看 ~/.hagoku/llm_dumps/ 诊断。"
+        )
 
     self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {
         "message": summary,

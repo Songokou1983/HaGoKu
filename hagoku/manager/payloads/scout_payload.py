@@ -349,6 +349,11 @@ def scout_user_input_received_payload(
             if isinstance(uf, dict)
             else None
         ),
+        "parse_hint": (
+            str(uf.get("model_reply_text", "") or "").strip()
+            if isinstance(uf, dict) and uf.get("model_reply_text")
+            else None
+        ),
     }
 
 def _scout_description_is_meaningful_for_user(col_name: str, desc: str) -> bool:

@@ -284,8 +284,8 @@ class DataAnalystAgent(BaseAgent):
             raise RuntimeError(f"字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
 
         raw_text = response.choices[0].message.content or ""
-        import re as _re
-        raw_text = _re.sub(r"<think>.*?</think>", "", raw_text, flags=_re.DOTALL).strip()
+        from hagoku.llm.sanitize import strip_llm_think
+        raw_text = strip_llm_think(raw_text)
         tool_calls = response.choices[0].message.tool_calls
 
         tc = tool_calls or []
@@ -299,27 +299,25 @@ class DataAnalystAgent(BaseAgent):
         results: list[dict] = []
         if tool_calls:
             for t in tool_calls:
-                if t.function.name == "submit_field_inference":
-                    try:
-                        args = _json.loads(t.function.arguments)
-                        for col_data in args.get("columns", []):
-                            col_data["column_name"] = col_data.get("name", col_data.get("column_name", ""))
-                            col_data.setdefault("used_in_analysis", True)
-                            col_data.setdefault("needs_user_input", col_data.get("confidence", 1.0) < 0.8)
-                            results.append(col_data)
-                    except (_json.JSONDecodeError, TypeError):
-                        pass
-        if not results:
-            try:
-                parsed = _json.loads(raw_text)
-                if isinstance(parsed, dict) and "columns" in parsed:
-                    for col_data in parsed["columns"]:
+                if t.function.name != "submit_field_inference":
+                    raise RuntimeError(
+                        f"字段推断失败：LLM 调用了未注册工具 {t.function.name!r}，"
+                        "期望 submit_field_inference。请重试或检查模型是否支持 tool calling。"
+                    )
+                try:
+                    args = _json.loads(t.function.arguments)
+                    for col_data in args.get("columns", []):
                         col_data["column_name"] = col_data.get("name", col_data.get("column_name", ""))
                         col_data.setdefault("used_in_analysis", True)
                         col_data.setdefault("needs_user_input", col_data.get("confidence", 1.0) < 0.8)
                         results.append(col_data)
-            except (_json.JSONDecodeError, TypeError):
-                pass
+                except (_json.JSONDecodeError, TypeError) as e:
+                    raise RuntimeError(f"字段推断失败：submit_field_inference 参数无法解析：{e}") from e
+        if not results:
+            raise RuntimeError(
+                "字段推断失败：LLM 未返回有效的 submit_field_inference 结果。"
+                "请查看 ~/.hagoku/llm_dumps/ 中 agent_infer_field_semantics 记录。"
+            )
 
         return results
 
@@ -471,26 +469,31 @@ class DataAnalystAgent(BaseAgent):
             tc = None
             if use_stream:
                 from hagoku.llm.client import stream_chat_completion
+                from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
                 stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
                 full_text = ""
+                safe_emitted = 0
                 final_tool_calls_raw: list[dict] = []
                 for chunk in stream_chat_completion(
                     client, self.llm_config.model, messages,
                     temperature=0.0, max_tokens=2048, tools=_tools,
                 ):
                     if chunk["type"] == "delta":
-                        full_text += chunk["content"]
-                        self._emit(EventType.AGENT_STREAM_DELTA, {
-                            "stream_id": stream_id, "delta": chunk["content"],
-                            "agent": "cleaner",
-                        })
+                        full_text, delta, safe_emitted = stream_safe_append(
+                            full_text, chunk["content"], safe_emitted,
+                        )
+                        if delta:
+                            self._emit(EventType.AGENT_STREAM_DELTA, {
+                                "stream_id": stream_id, "delta": delta,
+                                "agent": "cleaner",
+                            })
                     elif chunk["type"] == "end":
                         full_text = chunk.get("content", full_text)
                         final_tool_calls_raw = chunk.get("tool_calls") or []
                         self._emit(EventType.AGENT_STREAM_END, {
                             "stream_id": stream_id, "agent": "cleaner",
                         })
-                txt = full_text
+                txt = strip_llm_think(full_text)
                 if final_tool_calls_raw:
                     class _FakeTCC:
                         def __init__(self, d):
@@ -617,26 +620,32 @@ class DataAnalystAgent(BaseAgent):
 
         if use_stream:
             from hagoku.llm.client import stream_chat_completion
+            from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
+            safe_emitted = 0
             final_tool_calls_raw: list[dict] = []
+            agent_key = context.get("_current_phase") or "analyst"
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
                 temperature=0.3, max_tokens=4096, tools=_tools,
             ):
                 if chunk["type"] == "delta":
-                    full_text += chunk["content"]
-                    self._emit(EventType.AGENT_STREAM_DELTA, {
-                        "stream_id": stream_id, "delta": chunk["content"],
-                        "agent": "analyst",
-                    })
+                    full_text, delta, safe_emitted = stream_safe_append(
+                        full_text, chunk["content"], safe_emitted,
+                    )
+                    if delta:
+                        self._emit(EventType.AGENT_STREAM_DELTA, {
+                            "stream_id": stream_id, "delta": delta,
+                            "agent": agent_key,
+                        })
                 elif chunk["type"] == "end":
                     full_text = chunk.get("content", full_text)
                     final_tool_calls_raw = chunk.get("tool_calls") or []
                     self._emit(EventType.AGENT_STREAM_END, {
-                        "stream_id": stream_id, "agent": "analyst",
+                        "stream_id": stream_id, "agent": agent_key,
                     })
-            txt = full_text.strip()
+            txt = strip_llm_think(full_text).strip()
             # 将 stream 收集的 tool_calls 还原为 OpenAI 对象形式供后续 dispatch
             if final_tool_calls_raw:
                 class _FakeTC:
@@ -653,7 +662,8 @@ class DataAnalystAgent(BaseAgent):
                 temperature=0.3, max_tokens=4096, tools=_tools, tool_choice="auto",
             )
             msg = resp.choices[0].message
-            txt = (msg.content or "").strip()
+            from hagoku.llm.sanitize import strip_llm_think
+            txt = strip_llm_think((msg.content or "")).strip()
             tc_list = getattr(msg, "tool_calls", None)
 
         dump_messages("agent_run_step_response",

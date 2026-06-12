@@ -48,7 +48,8 @@ function normalizeLlmFromApi(raw: Record<string, unknown>): LlmConfigPayload {
   const base_url = typeof raw.base_url === "string" ? raw.base_url : "";
   const api_key_configured = typeof raw.api_key_configured === "boolean" ? raw.api_key_configured : false;
   const model = typeof raw.model === "string" ? raw.model : "";
-  return { base_url, main_model: model, sub_model: "", api_key_configured };
+  const sub_model = typeof raw.sub_model === "string" ? raw.sub_model : "";
+  return { base_url, main_model: model, sub_model, api_key_configured };
 }
 
 function formFromNormalized(n: LlmConfigPayload): LlmFormState {
@@ -101,13 +102,14 @@ export default function SettingsPanel() {
           const streamFromApi = (raw as any).stream_enabled;
           if (typeof streamFromApi === "boolean") setStreamEnabled(streamFromApi);
           setLlm(formFromNormalized(n));
+          const distinct = !!(n.sub_model && n.sub_model.trim()) || !!metaFromApi;
           if (distinct) {
             setAdvancedLlmOpen(true);
-            setSubModelQuick(n.sub_model.trim());
+            setSubModelQuick(n.sub_model.trim() || metaFromApi);
           } else {
             setSubModelQuick("");
             try {
-              setAdvancedLlmOpen(localStorage.getItem("") === "1");
+              setAdvancedLlmOpen(localStorage.getItem("hagoku_advanced_llm_open") === "1");
             } catch {
               setAdvancedLlmOpen(false);
             }
@@ -255,6 +257,7 @@ export default function SettingsPanel() {
       if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
         setLlm(formFromNormalized(n));
+        const distinct = !!(n.sub_model && n.sub_model.trim());
         if (distinct) {
           setAdvancedLlmOpen(true);
           setSubModelQuick(n.sub_model.trim());

@@ -22,6 +22,8 @@ def apply_scout_user_field_reply_to_context(
     llm_client: Any = None,
     llm_model: str = "",
     channel_logger: Any = None,
+    event_bus: Any = None,
+    stream_enabled: bool = True,
 ) -> list[str]:
     """
     将用户在 Scout 字段核对暂停点的说明写入 context（column_descriptions、needs_user_input）。
@@ -50,12 +52,26 @@ def apply_scout_user_field_reply_to_context(
             "Scout 字段理解失败：LLM client 未初始化。\n"
             "请检查 LLM 配置（base_url / api_key / model）是否正确。"
         )
-    return _apply_scout_reply_with_llm(context, raw, columns, llm_client, llm_model, channel_logger)
+    return _apply_scout_reply_with_llm(
+        context, raw, columns, llm_client, llm_model, channel_logger,
+        event_bus=event_bus, stream_enabled=stream_enabled,
+    )
 
 def _get_scout_tools() -> list[dict[str, Any]]:
-    """从全局工具注册表获取 Scout Agent 可用的工具。"""
+    """Scout 阶段工具全集（与注册表一致）；执行路径见工具循环内的 dispatch。"""
     from ...tools.registry import agent_tools
+
     return agent_tools.to_openai("scout")
+
+
+_SCOUT_INLINE_TOOL_NAMES = frozenset({
+    "update_field_understanding",
+    "update_field_role",
+    "update_field_table",
+    "restrict_analysis_to",
+    "route_to",
+    "ask_user",
+})
 
 _SCOUT_FIELD_UPDATE_TOOLS = [  # 保持向后兼容，逐步迁移到 _get_scout_tools()
     {
@@ -279,42 +295,62 @@ def _apply_role_update(
             roles["target"] = new_target
         context["variable_roles"] = roles
 
+def _resolve_token_to_columns(
+    token: str,
+    columns: list[str],
+    display_names: dict[str, Any],
+) -> list[str]:
+    """单个 token → 列名：仅精确列名或精确 display_name 匹配（不做前缀展开）。"""
+    t = (token or "").strip()
+    if not t:
+        return []
+    if t in columns:
+        return [t]
+    dn_to_col: dict[str, str] = {}
+    for c in columns:
+        dv = str(display_names.get(c, "") or "").strip()
+        if dv:
+            dn_to_col[dv] = c
+    if t in dn_to_col:
+        return [dn_to_col[t]]
+    return []
+
+
+def _resolve_tokens_strict(
+    tokens: list[str],
+    columns: list[str],
+    display_names: dict[str, Any],
+    descriptions: dict[str, Any] | None = None,
+) -> tuple[list[str], list[str]]:
+    """机械映射 token→列名：任一 token 无法解析则记入 failed，不部分应用补集。"""
+    resolved: list[str] = []
+    failed: list[str] = []
+    descs = descriptions or {}
+    for t in tokens:
+        t = (t or "").strip()
+        if not t:
+            continue
+        cols = _resolve_scout_column_token_with_context(t, columns, display_names, descs)
+        if not cols:
+            failed.append(t)
+        else:
+            for c in cols:
+                if c not in resolved:
+                    resolved.append(c)
+    return resolved, failed
+
+
 def _resolve_to_column_names(
     tokens: list[str],
     columns: list[str],
     display_names: dict[str, Any],
     descriptions: dict[str, Any],
 ) -> list[str]:
-    """把用户给的业务名 / 列名混合 token 映射为真实列名。
-
-    优先级：精确列名 > display_name 完全匹配 > 列名前缀。
-    无映射的 token 静默丢弃（由律 7 在外层判定空集时报「未理解」）。
-
-    纯机械运算，不涉及语义判断。**不做 description 子串匹配** — 那是 LLM 的职责。
-    LLM 应在工具参数中传精确列名或 display_name，代码只做确定性查找。
-    """
-    col_set = set(columns)
-    dn_to_col: dict[str, str] = {}
-    for c in columns:
-        dv = str(display_names.get(c, "") or "").strip()
-        if dv:
-            dn_to_col[dv] = c
-    out: list[str] = []
-    for t in tokens:
-        t = (t or "").strip()
-        if not t:
-            continue
-        if t in col_set:
-            out.append(t)
-            continue
-        if t in dn_to_col:
-            out.append(dn_to_col[t])
-            continue
-        # 列名前缀匹配（如「Inc」→ Inc1,Inc2,Inc3）
-        rl = t.lower()
-        matched = [c for c in columns if c.lower().startswith(rl)]
-        out.extend(matched)
-    return list(dict.fromkeys(out))  # 去重保序
+    """把用户给的业务名 / 列名混合 token 映射为真实列名（兼容旧调用）。"""
+    resolved, failed = _resolve_tokens_strict(tokens, columns, display_names, descriptions)
+    if failed:
+        return []
+    return resolved
 
 def _apply_restrict_analysis_to(
     context: dict[str, Any],
@@ -337,13 +373,25 @@ def _apply_restrict_analysis_to(
         return
 
     keep_raw = list(args.get("included_fields") or [])
-    if not keep_raw:
+    keep_tokens = [str(t).strip() for t in keep_raw if str(t).strip()]
+    if not keep_tokens:
         return
 
-    descs: dict[str, Any] = context.get("column_descriptions", {}) or {}
     dnames: dict[str, Any] = context.get("column_display_names", {}) or {}
-    resolved = _resolve_to_column_names(keep_raw, columns, dnames, descs)
-    if not resolved:
+    descs: dict[str, Any] = context.get("column_descriptions", {}) or {}
+    resolved, failed = _resolve_tokens_strict(keep_tokens, columns, dnames, descs)
+    if failed or not resolved:
+        context["_last_understanding_failure"] = {
+            "raw_text": str(context.get("_scout_last_user_raw") or ""),
+            "model_reply_text": (
+                "未能将以下内容对应到数据列："
+                + "、".join(failed or keep_tokens)
+                + "。请使用原始列名（如 Period、Inc1）或字段表中已确认的中文名称。"
+            ),
+            "had_tool_calls": True,
+            "stage": "scout_field_review",
+            "unmapped_fields": failed or keep_tokens,
+        }
         return
 
     keep_set: set[str] = set(resolved)
@@ -372,6 +420,9 @@ def _apply_scout_reply_with_llm(
     llm_client: Any,
     llm_model: str,
     channel_logger: Any = None,
+    *,
+    event_bus: Any = None,
+    stream_enabled: bool = True,
 ) -> list[str]:
     """
     LLM 作为字段理解的唯一引擎，通过 function calling 主动更新字段信息。
@@ -396,25 +447,28 @@ def _apply_scout_reply_with_llm(
     semantics = context.get("column_semantics") or []
     applied: list[str] = []
     seen_col: set[str] = set()
+    context["_scout_last_user_raw"] = raw
 
-    # ── 通道：build_messages() 只追加不筛选 ──
-    query_raw = context.get("query", "") or ""
+    # ── 通道：ProjectContext.to_messages_for_llm → 分析目标 + 字段表 + 多轮历史 + 用户原话 ──
     project_ctx = context.get("_project_context")
+    if project_ctx is not None:
+        messages = project_ctx.to_messages_for_llm("scout", context, raw)
+    else:
+        from hagoku.context.project_context import ProjectContext
 
-    from hagoku.channel import build_messages
-
-    history = project_ctx.build_prompt("scout", context)["messages_history"] if project_ctx else None
-    messages = build_messages(
-        query=query_raw,
-        user_input=raw,
-        history=history,
-    )
+        goal = (context.get("query") or "").strip()
+        ephemeral = ProjectContext(
+            run_id=str(context.get("run_id") or "scout"),
+            analysis_goal=goal,
+        )
+        messages = ephemeral.to_messages_for_llm("scout", context, raw)
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError
     try:
         if channel_logger:
-            channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(query_raw) if query_raw else 0, phase="field_reply")
+            goal = (context.get("query") or "").strip()
+            channel_logger.log("scout", "llm_call", model=llm_model, prompt_len=len(goal), phase="field_reply")
 
         # ── LLM dump（诊断用，HAGOKU_DUMP_LLM=1 才生效）──
         from ...observability.llm_dump import dump_messages
@@ -425,18 +479,76 @@ def _apply_scout_reply_with_llm(
             extra={"query": context.get("query", ""), "tools": [t["function"]["name"] for t in _get_scout_tools()]},
         )
 
-        resp = llm_client.chat.completions.create(
-            model=llm_model,
-            messages=messages,
-            temperature=0.1,
-            tools=_get_scout_tools(),
-            tool_choice="auto",
-            max_tokens=8192,
-        )
+        _tools = _get_scout_tools()
+        _raw_text = ""
+        tool_calls = None
 
-        msg = resp.choices[0].message
-        tool_calls = getattr(msg, "tool_calls", None)
-        _raw_text = (msg.content or "").strip()
+        def _batch_llm_call() -> None:
+            nonlocal _raw_text, tool_calls
+            from hagoku.llm.sanitize import strip_llm_think
+            resp = llm_client.chat.completions.create(
+                model=llm_model,
+                messages=messages,
+                temperature=0.1,
+                tools=_tools,
+                tool_choice="auto",
+                max_tokens=8192,
+            )
+            msg = resp.choices[0].message
+            tool_calls = getattr(msg, "tool_calls", None)
+            _raw_text = strip_llm_think((msg.content or "").strip())
+
+        if stream_enabled and event_bus is not None:
+            from datetime import datetime, timezone
+            from hagoku.llm.client import stream_chat_completion
+            from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
+            from hagoku.observability.events import EventType
+
+            try:
+                stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
+                full_text = ""
+                safe_emitted = 0
+                final_tool_calls_raw: list[dict] = []
+                got_end = False
+                for chunk in stream_chat_completion(
+                    llm_client, llm_model, messages,
+                    temperature=0.1, max_tokens=8192, tools=_tools,
+                ):
+                    if chunk["type"] == "delta":
+                        full_text, delta, safe_emitted = stream_safe_append(
+                            full_text, chunk["content"], safe_emitted,
+                        )
+                        if delta:
+                            event_bus.emit(EventType.AGENT_STREAM_DELTA, "scout", {
+                                "stream_id": stream_id, "delta": delta, "agent": "scout",
+                            })
+                    elif chunk["type"] == "end":
+                        got_end = True
+                        full_text = chunk.get("content", full_text)
+                        final_tool_calls_raw = chunk.get("tool_calls") or []
+                        event_bus.emit(EventType.AGENT_STREAM_END, "scout", {
+                            "stream_id": stream_id, "agent": "scout",
+                        })
+                    elif chunk["type"] == "error":
+                        raise RuntimeError(chunk.get("message", "Scout 字段理解流式调用失败"))
+                if not got_end:
+                    raise RuntimeError("Scout 流式响应未结束")
+                _raw_text = strip_llm_think(full_text)
+                if final_tool_calls_raw:
+                    class _FakeTC:
+                        def __init__(self, d: dict):
+                            self.id = d.get("id", "")
+                            self.function = type("Fn", (), {
+                                "name": d.get("function", {}).get("name", ""),
+                                "arguments": d.get("function", {}).get("arguments", ""),
+                            })()
+                    tool_calls = [_FakeTC(tc) for tc in final_tool_calls_raw]
+                if not tool_calls and not _raw_text:
+                    _batch_llm_call()
+            except Exception:
+                _batch_llm_call()
+        else:
+            _batch_llm_call()
 
         # ── Response dump ──
         dump_messages(
@@ -454,26 +566,14 @@ def _apply_scout_reply_with_llm(
                 channel_logger.log("scout", "field_updated", tool=fn, args=fa)
 
         # ── 追加本轮响应到 session 上下文 ──
-        import re as _re2
-        _think_match = _re2.search(r"<think>(.*?)</think>", _raw_text or "", _re2.DOTALL)
-        if _think_match and channel_logger:
-            channel_logger.log("scout", "llm_reasoning", think=_think_match.group(1).strip())
-        # 过滤 think 标签，防止泄露到前端
-        _raw_text = _re2.sub(r"<think>.*?</think>", "", _raw_text or "", flags=_re2.DOTALL).strip()
+        from hagoku.llm.sanitize import strip_llm_think
 
-        assistant_turn = _raw_text or ""
-        if tool_calls and isinstance(tool_calls, list):
-            tc_parts = []
-            for tc in tool_calls:
-                fn = tc.function.name if hasattr(tc, "function") else ""
-                fa = tc.function.arguments if hasattr(tc, "function") else "{}"
-                tc_parts.append(f"{fn}({fa})")
-            assistant_turn = "[调用] " + "; ".join(tc_parts)
-            if _raw_text:
-                assistant_turn += " " + _raw_text
+        _raw_text = strip_llm_think(_raw_text or "")
+
         # ── 处理 LLM 的工具调用（主路径）──────────────────────
         if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
-            import json as _json
+
+            unhandled: list[str] = []
 
             for tc in tool_calls:
                 # 兼容 OpenAI SDK 的 ToolCall 对象和 dict
@@ -514,9 +614,34 @@ def _apply_scout_reply_with_llm(
                         "stage": args.get("stage"),
                         "reason": args.get("reason", ""),
                     }
+                    applied.append("[route_to]")
+                    continue
+
+                if func_name == "ask_user":
+                    from ...tools.registry import agent_tools
+                    try:
+                        args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+                    except (_json.JSONDecodeError, TypeError):
+                        continue
+                    agent_tools.dispatch("ask_user", args, context, None)
+                    applied.append("[ask_user]")
                     continue
 
                 if func_name != "update_field_understanding":
+                    if func_name in _SCOUT_INLINE_TOOL_NAMES:
+                        continue
+                    from ...tools.registry import agent_tools
+                    try:
+                        args = _json.loads(func_args_str) if isinstance(func_args_str, str) else func_args_str
+                    except (_json.JSONDecodeError, TypeError):
+                        unhandled.append(func_name)
+                        continue
+                    df = context.get("_dataframe")
+                    result = agent_tools.dispatch(func_name, args, context, df)
+                    if isinstance(result, dict) and result.get("error"):
+                        unhandled.append(func_name)
+                    else:
+                        applied.append(f"[tool]{func_name}")
                     continue
 
                 try:
@@ -582,8 +707,31 @@ def _apply_scout_reply_with_llm(
                                 s["needs_user_input"] = False
                                 s["confirmed_by_user"] = True  # 用户自由文本纠正的字段标记为已确认
 
-            # 成功时清除上次的未理解信号
-            context.pop("_last_understanding_failure", None)
+            if unhandled:
+                context["_last_understanding_failure"] = {
+                    "raw_text": raw,
+                    "model_reply_text": (
+                        f"字段阶段不支持工具 {', '.join(unhandled)}。"
+                        "请直接说明列名或中文名，或确认字段表后进入下一步。"
+                    ),
+                    "had_tool_calls": True,
+                    "stage": "scout_field_review",
+                }
+
+            if applied and not context.get("_last_understanding_failure"):
+                context.pop("_last_understanding_failure", None)
+            elif not applied and not context.get("_last_understanding_failure"):
+                context["_last_understanding_failure"] = {
+                    "raw_text": raw,
+                    "model_reply_text": _raw_text or "未能更新字段表，请换一种说法。",
+                    "had_tool_calls": True,
+                    "stage": "scout_field_review",
+                }
+
+            if _raw_text:
+                context["_last_llm_reply"] = _raw_text
+            else:
+                context.pop("_last_llm_reply", None)
             return applied
 
         # ── 律 7：LLM 未产生有效工具调用 → 写入未理解信号 ──
@@ -591,15 +739,16 @@ def _apply_scout_reply_with_llm(
         if raw and not applied:
             context["_last_understanding_failure"] = {
                 "raw_text": raw,
-                "model_reply_text": _raw_text or "",
+                "model_reply_text": _raw_text or "未能理解你的说明，请换一种说法。",
                 "had_tool_calls": bool(tool_calls),
                 "stage": "scout_field_review",
             }
-        else:
+        elif applied and not context.get("_last_understanding_failure"):
             context.pop("_last_understanding_failure", None)
-        # ── LLM 文本回复原样保留 ──
-        if _raw_text and _raw_text.strip():
-            context["_last_llm_reply"] = _raw_text.strip()
+        if _raw_text:
+            context["_last_llm_reply"] = _raw_text
+        else:
+            context.pop("_last_llm_reply", None)
         return applied
 
     except Exception as e:

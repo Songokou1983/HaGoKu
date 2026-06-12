@@ -43,6 +43,12 @@ def test_G2_Scout_handler_空输入_返回字段表(orch):
 def test_G3_Scout_handler_纯确认_切Cleaner(orch):
     """Phase C: 确认词不再触发切换——LLM route_to 是唯一入口。
     用户说"继续"但 LLM 没调 route_to → 留在 scout。"""
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = ""
+    orch._agent.run_step = MagicMock(return_value={})
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "used_in_analysis": True},
@@ -178,16 +184,19 @@ def test_G10_律2_raw_text_跨_respond_保留(orch):
         "column_display_names": {},
     }
     orch._context = context
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = ""
+    orch._agent.run_step = MagicMock(return_value={})
 
-    # 第一次纠正（mock LLM 会处理，实际调 apply_scout_user_field_reply_to_context）
     result1 = orch._handle_scout_reply("A是收入", context)
     assert result1["status"] == "scout_review" or isinstance(result1, tuple)
 
-    # 第二次纠正
     result2 = orch._handle_scout_reply("A的单位是万元", context)
     assert result2["status"] == "scout_review" or isinstance(result2, tuple)
 
-    # handler 被调了 2 次，状态应一致
     assert "field_review" in result1 if isinstance(result1, dict) else True
 
 

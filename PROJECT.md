@@ -366,8 +366,7 @@ ProjectContext 持有唯一 chat；`to_messages_for_llm()` 统一 LLM 调用入�
 **Schema 定义**（`llm/plan_schema.py`）：
 - `LLMPlanResponse`（Pydantic）：`plan_name`、`agents`、`analyst_focus`（7 种可选）、`target`、`query`、`reasoning`
 - 默认探索焦点：`["regression", "hypothesis_test", "correlation"]`
-- LLM 失败兜底：`QueryIntent(intent_type="exploration")`  
-  ⚠️ **已知违规**：此 fallback 违反铁律 2（LLM 失败不准默认值兜底），见 `docs/plans/doctrine-violations-cleanup.md`。当前实现在 `query_parser.py:61-63`，待修复后移除此文档描述。
+- LLM 失败兜底：已修复（2026-06-11 doctrine-violations-cleanup）。`parse_query()` 在 LLM 不可达时 raise RuntimeError。
 
 **Prompt 模板**（`llm/prompts.py`）：
 - 系统 prompt：定义分析规划师角色、决策依据、6 种分析类型描述、决策规则

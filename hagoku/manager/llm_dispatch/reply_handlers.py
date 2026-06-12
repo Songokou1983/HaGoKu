@@ -6,7 +6,6 @@ from typing import Any
 from ..payloads.scout_payload import (
     scout_field_review_pause_payload,
 )
-from .scout_reply import apply_scout_user_field_reply_to_context
 from ...observability.events import EventType
 
 # ═══════════════════════════════════════════════════════════════
@@ -18,13 +17,10 @@ from ...observability.events import EventType
 
 
 def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Scout 阶段用户回复处理 — Phase C: LLM 驱动的阶段切换与暂停。
+    """Scout 阶段用户回复处理 — 通道直达。
 
-    决策路径（按优先级）：
-    1. 空输入 → 补发字段表（首次展示 / 重连恢复）
-    2. LLM 调了 ask_user → emit USER_INPUT_REQUESTED，留在 scout
-    3. LLM 调了 route_to(stage=X) → switch X
-    4. 其他 → 留在 scout（LLM 已通过 run_step 写入字段更新）
+    用户输入 → 对话历史 → LLM 自己看、自己决定。
+    代码不截流，不单独调 LLM 解析。和 reporter handler 同模式。
     """
     # 空输入 = 首次展示字段表（不调 LLM，纯 UI 事件）
     if not user_input or not user_input.strip():
@@ -33,63 +29,12 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
         return {"status": "scout_review", "message": "", "field_review": scout_msg.get("field_review")}
 
-    # 调 LLM 处理用户输入
-    try:
-        applied = apply_scout_user_field_reply_to_context(
-            context, user_input,
-            llm_client=self.llm_raw,
-            llm_model=self.config.llm.model,
-            event_bus=self.event_bus,
-            stream_enabled=getattr(self.config.llm, "stream_enabled", True),
-        )
-    except RuntimeError as e:
-        context["_last_understanding_failure"] = {
-            "raw_text": user_input, "stage": "scout_field_review", "reason": str(e),
-        }
-        scout_msg = scout_field_review_pause_payload(context)
-        scout_msg["_scout_error"] = str(e)
-        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
-        return {"status": "scout_review", "message": str(e), "field_review": scout_msg.get("field_review")}
+    # 用户输入进对话历史，LLM 自己处理
+    project_ctx = context.get("_project_context")
+    if project_ctx:
+        project_ctx.add_user_feedback("scout", context.get("interaction_revision", 0), raw_text=user_input)
 
-    # 持久化成功的字段更新
-    if applied and self.memory:
-        self._persist_scout_field_updates(self._project_name, applied, context)
-
-    # _pending_reinference 消费：restrict_analysis_to 后字段集合变化，需重推断角色
-    if context.pop("_pending_reinference", None):
-        semantics = context.get("column_semantics") or []
-        participating = [
-            str(s.get("column_name", ""))
-            for s in semantics
-            if s.get("used_in_analysis") is True and s.get("column_name")
-        ]
-        # 如果 context 里的 target 不在参与字段里，清空 target 让 LLM 重推断
-        current_target = context.get("target", "")
-        if current_target and current_target not in participating:
-            context.pop("target", None)
-            context.pop("features", None)
-        # 把当前字段参与状态注入一次 LLM 调用，触发角色重推断
-        try:
-            _reinfer_prompt = (
-                f"字段参与分析的范围已更新，现在参与分析的字段是：{', '.join(participating)}。"
-                "请根据这些字段和分析目标，重新推断各字段的角色（target/feature/identifier）。"
-            )
-            apply_scout_user_field_reply_to_context(
-                context, _reinfer_prompt,
-                llm_client=self.llm_raw,
-                llm_model=self.config.llm.model,
-                event_bus=self.event_bus,
-                stream_enabled=getattr(self.config.llm, "stream_enabled", True),
-            )
-        except RuntimeError as _reinfer_err:
-            # 重推断失败：写入 _last_understanding_failure 让用户可见，不静默吞掉
-            context["_last_understanding_failure"] = {
-                "raw_text": context.get("_scout_last_user_raw", ""),
-                "model_reply_text": f"字段范围已更新，但角色重推断失败：{_reinfer_err}。请手动确认字段角色。",
-                "had_tool_calls": False,
-                "stage": "scout_reinference",
-            }
+    result = self._agent.run_step(context, self._df_raw, user_input)
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
@@ -97,10 +42,12 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
         return ("stay", None)
 
-    # Phase C: route_to 切换（唯一阶段切换入口）
-    route = context.pop("_scout_route_to", None)
-    if route and route.get("stage") and route["stage"] != "scout":
-        return ("switch", route["stage"], {"_route_reason": route.get("reason", "")})
+    # Phase C: route_to 切换
+    route_to = result.get("route_to")
+    if route_to:
+        target = route_to.get("stage")
+        if target and target != "scout":
+            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
     # 留在 scout：展示更新后的字段表
     scout_msg = scout_field_review_pause_payload(context)

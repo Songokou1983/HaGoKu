@@ -52,13 +52,9 @@ from .payloads.cleaner_payload import (  # noqa: F401
     cleaning_review_pause_payload,
 )
 
-from .llm_dispatch.scout_reply import (  # noqa: F401
+from .llm_dispatch.scout_reply import (  # noqa: F401 — 测试通过 orchestrator 导入（函数仍存在，通道不再调用）
     _SCOUT_FIELD_UPDATE_TOOLS,
-    _apply_role_update,
-    _apply_restrict_analysis_to,
     _apply_scout_reply_with_llm,
-    _get_scout_tools,
-    _resolve_to_column_names,
     apply_scout_user_field_reply_to_context,
 )
 

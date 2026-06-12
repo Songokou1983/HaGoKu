@@ -35,11 +35,19 @@ class TestScoutControlChannelLinks:
             "query": "分析收入趋势",
         }
 
+    def _setup_scout_agent(self, orch, route_to_result=None):
+        """设置 orch._agent，mock run_step 返回指定 route_to。"""
+        from hagoku.agents.agent import DataAnalystAgent
+        orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+        orch._agent.llm_config = orch.config.llm
+        orch._agent.event_bus = orch.event_bus
+        orch._agent.prompt = ""
+        orch._agent.run_step = MagicMock(return_value={"route_to": route_to_result} if route_to_result else {})
+
     def test_route_to_cleaner_triggers_switch(self, orch):
         """LLM route_to(stage="cleaner") → _handle_scout_reply 返回 ("switch", "cleaner")"""
         context = self._scout_context()
-        mock_resp = self._make_route_to_response("cleaner", "done")
-        orch._llm_raw = self._make_client(mock_resp)
+        self._setup_scout_agent(orch, {"stage": "cleaner", "reason": "done"})
         result = orch._handle_scout_reply("可以进入清洗了", context)
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -48,8 +56,7 @@ class TestScoutControlChannelLinks:
     def test_route_to_reporter_triggers_switch(self, orch):
         """LLM route_to(stage="reporter") → switch to reporter"""
         context = self._scout_context()
-        mock_resp = self._make_route_to_response("reporter", "直接报告")
-        orch._llm_raw = self._make_client(mock_resp)
+        self._setup_scout_agent(orch, {"stage": "reporter", "reason": "直接报告"})
         result = orch._handle_scout_reply("直接去报告", context)
         assert isinstance(result, tuple)
         assert result[0] == "switch"
@@ -58,9 +65,9 @@ class TestScoutControlChannelLinks:
     def test_route_to_scout_stays(self, orch):
         """LLM route_to(stage="scout") → 留在 scout"""
         context = self._scout_context()
-        mock_resp = self._make_route_to_response("scout", "stay")
-        orch._llm_raw = self._make_client(mock_resp)
+        self._setup_scout_agent(orch, {"stage": "scout", "reason": "stay"})
         result = orch._handle_scout_reply("继续字段理解", context)
+        # scout 的 route_to(scout) 不触发切换，因为 target==current
         assert not isinstance(result, tuple), f"stage=scout 不应切换"
 
     @staticmethod

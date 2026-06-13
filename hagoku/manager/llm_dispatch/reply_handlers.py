@@ -283,6 +283,10 @@ def respond(self, user_input: dict) -> dict[str, Any]:
         return {"status": "error", "message": f"未知阶段: {self._stage}"}
 
     handler = getattr(self, handler_name)
+    # 律 1+律 2：用户最新指令注入 _pending_command_text，供下一阶段首轮 LLM 调用
+    # （infer_field_semantics / assess 读取此字段注入 prompt）
+    if ctx is not None and text:
+        ctx["_pending_command_text"] = text
     result = handler(text, self._context)
 
     # 律 2：raw_text 写入 ProjectContext

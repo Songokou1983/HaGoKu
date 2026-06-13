@@ -164,9 +164,8 @@ class DataAnalystAgent(BaseAgent):
         except FileNotFoundError:
             self._emit(EventType.AGENT_FAILED, {"error": "数据文件未找到"})
             return {"error": "数据文件未找到"}
-        except Exception as e:
-            self._emit(EventType.AGENT_FAILED, {"error": str(e)})
-            return {"error": str(e)}
+        # 其他异常（包括 LLM 不可达的 RuntimeError）不捕获，直接传播
+        # 让调用方感知失败——Iron Law 7：失败在场
 
     def infer_field_semantics(
         self,
@@ -223,7 +222,7 @@ class DataAnalystAgent(BaseAgent):
             if pt:
                 command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
         except Exception:
-            pass
+            logger.warning("提取 _pending_command_text 失败，用户指令未能注入 prompt", exc_info=True)
 
         _schema = build_submit_field_inference_schema()
         submit_tool = {
@@ -431,7 +430,7 @@ class DataAnalystAgent(BaseAgent):
             if pt:
                 command_context = f"\n【用户最近提出的指令/纠正：】\n{pt}"
         except Exception:
-            pass
+            logger.warning("assess() 提取 _pending_command_text 失败，用户指令未能注入", exc_info=True)
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
@@ -572,9 +571,10 @@ class DataAnalystAgent(BaseAgent):
                         )
                         project_ctx.add_tool_exchange("cleaner", revision, [tr])
                         return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
-        except Exception:
-            pass
-        raise RuntimeError("Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。")
+        except Exception as e:
+            raise RuntimeError(
+                "Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。"
+            ) from e
 
     # ═══════════════════════════════════════════════════════════════
     # 通用：run_step（Phase B/C 接口）

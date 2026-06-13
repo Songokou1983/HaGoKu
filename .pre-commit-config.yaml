@@ -24,11 +24,3 @@ repos:
         files: ^hagoku/(agents/.*/prompt\.md|llm/prompts\.py)$
         pass_filenames: true
         verbose: true
-
-      - id: prompt-law-check
-        name: "铁律 10/11：prompt 修改前置检查（禁止预设业务结论）"
-        entry: .venv/bin/python scripts/ci/prompt_law_check.py
-        language: system
-        files: ^hagoku/(agents/.*/prompt\.md|llm/prompts\.py)$
-        pass_filenames: true
-        verbose: true

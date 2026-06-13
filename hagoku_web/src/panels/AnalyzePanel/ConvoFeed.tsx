@@ -5,6 +5,7 @@ import { CleaningReviewTable } from "./CleaningReviewTable";
 import { AnalystReviewTable } from "./AnalystReviewTable";
 import { ToolExchangeTurn } from "../../components/ToolExchangeTurn";
 import { AskUserPrompt } from "../../components/AskUserPrompt";
+import { sanitizeHtml } from "../../utils/sanitize";
 
 export function ConvoFeed({
   messages,
@@ -125,7 +126,7 @@ export function ConvoFeed({
                 }`}
             >
               {m.html ? (
-                <span dangerouslySetInnerHTML={{ __html: m.html }} />
+                <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(m.html) }} />
               ) : (
                 <>
                   {m.text}

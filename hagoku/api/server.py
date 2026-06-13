@@ -18,6 +18,7 @@ for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", 
 
 from hagoku.api.ws_handler import ws_handler
 from hagoku.api.middleware import ApiAuthMiddleware
+from hagoku.services.kb_content import parse_frontmatter, strip_frontmatter, load_registry_entries
 
 
 @asynccontextmanager
@@ -317,6 +318,8 @@ async def test_llm_connection(req: LlmTestBody):
         # strip 可能残留的引号
         api_key = api_key.strip().strip("'").strip('"')
         client = OpenAI(base_url=base_url, api_key=api_key or "none", timeout=15.0)
+        # 连通性测试：用最小 messages 验证 API 可达、密钥有效、模型存在
+        # 此处不通过 build_messages() 是因为这是基础设施测试而非业务分析流程
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": "ping"}],
@@ -683,84 +686,18 @@ def _methods_root() -> Path:
 
 
 def _kb_parse_frontmatter(raw: str) -> dict:
-    """解析 YAML frontmatter，返回 {title, summary, category, tags, tools, ...}。"""
-    if not raw.startswith("---"):
-        return {}
-    parts = raw.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    try:
-        import yaml
-        return yaml.safe_load(parts[1]) or {}
-    except Exception:
-        pass
-    # 降级：手动解析 key: value + multi-line list
-    result: dict = {}
-    lines = parts[1].splitlines()
-    current_key: str | None = None
-    current_list: list = []
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("- ") and current_key:
-            item = line[2:].strip().strip('"').strip("'")
-            current_list.append(item)
-            continue
-        if current_key and current_list:
-            result[current_key] = current_list
-            current_key = None
-            current_list = []
-        if ":" in line:
-            key, _, val = line.partition(":")
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if val.startswith("[") and val.endswith("]"):
-                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(",")]
-                result[key] = val
-            elif val:
-                result[key] = val
-            else:
-                current_key = key
-                current_list = []
-    if current_key and current_list:
-        result[current_key] = current_list
-    return result
+    """→ hagoku.services.kb_content.parse_frontmatter"""
+    return parse_frontmatter(raw)
 
 
 def _kb_load_registry_entries() -> list[dict]:
-    root = _methods_root()
-    if not root.exists():
-        return []
-    entries: list[dict] = []
-    for md in sorted(root.rglob("*.md")):
-        rel = str(md.relative_to(root)).replace("\\", "/")
-        raw = md.read_text(encoding="utf-8")
-        fm = _kb_parse_frontmatter(raw)
-
-        # 优先使用 frontmatter title，其次从 # 标题提取
-        title = fm.get("title", "")
-        if not title:
-            first = raw.splitlines()[:1]
-            title = first[0].lstrip("# ").strip() if first else rel
-
-        entries.append({
-            "filename": rel,
-            "title": title,
-            "summary": fm.get("summary", ""),
-            "category": fm.get("category", md.parent.name),
-            "tags": fm.get("tags", []),
-            "tools": fm.get("tools", []),
-        })
-    return entries
+    """→ hagoku.services.kb_content.load_registry_entries"""
+    return load_registry_entries(_methods_root())
 
 
 def _kb_strip_frontmatter(raw: str) -> str:
-    if raw.startswith("---"):
-        parts = raw.split("---", 2)
-        if len(parts) >= 3:
-            return parts[2].strip()
-    return raw.strip()
+    """→ hagoku.services.kb_content.strip_frontmatter"""
+    return strip_frontmatter(raw)
 
 
 @app.get("/api/kb")

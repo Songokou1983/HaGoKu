@@ -11,6 +11,7 @@ import {
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { PanelHeader } from "../components/PanelHeader";
 import { EmptyState } from "../components/EmptyState";
+import { sanitizeHtml } from "../utils/sanitize";
 
 interface KbEntry {
   title: string;
@@ -228,7 +229,7 @@ export default function KnowledgePanel() {
               <div className="px-2 py-2 bg-app-status-error text-app-error text-ui-sm rounded mb-2">{detailError}</div>
             )}
             {!detailLoading && !detailError && detailHtml && (
-              <article className="kb-detail-html" dangerouslySetInnerHTML={{ __html: detailHtml }} />
+              <article className="kb-detail-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detailHtml) }} />
             )}
           </div>
         </>

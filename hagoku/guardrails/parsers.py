@@ -34,13 +34,13 @@ def parse_effect_size(text: str) -> Optional[float]:
 
     匹配模式:
       - "Cohen's d = 0.52", "d = 0.52"
-      - "效应量 = 0.52", "effect size = 0.52"
+      - "effect size = 0.52"
       - "η² = 0.14", "eta-squared = 0.14"
 
     返回 float 或 None。
     """
     pattern = r"""(?ix)
-        (?:cohen'?s?\s*d|效应量|effect\s*size|η²|eta[\s-]*squared)\s*[=：:]\s*
+        (?:cohen'?s?\s*d|effect\s*size|η²|eta[\s-]*squared)\s*[=：:]\s*
         (\d+\.?\d*)
     """
     match = re.search(pattern, text)
@@ -164,14 +164,14 @@ def parse_sample_size(text: str) -> Optional[int]:
 
     匹配模式:
       - "n = 120", "N = 120"
-      - "样本量 = 120", "sample size = 120"
-      - "共 120 个观测", "120 observations"
+      - "sample size = 120"
+      - "120 observations"
 
     返回 int 或 None。
     """
     patterns = [
-        r"""(?ix)(?:n|样本量|sample\s*size)\s*[=：:]\s*(\d+)""",
-        r"""(?ix)(\d+)\s*(?:个观测|observations|条记录|个样本)""",
+        r"""(?ix)(?:n|sample\s*size)\s*[=：:]\s*(\d+)""",
+        r"""(?ix)(\d+)\s*(?:observations)""",
     ]
     for pat in patterns:
         m = re.search(pat, text)

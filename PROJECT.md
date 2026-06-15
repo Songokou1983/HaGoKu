@@ -94,15 +94,15 @@ HaGoKu Studio 由三个要素构成。代码只负责壳子（运行环境）、
 
 ### Scope 引导式分析（2026-06-03 设计阶段）
 
-字段理解阶段产出 scope（分析范围：target + features + excluded），注入下游所有 Agent 的 system prompt。Scope 是**引导性的**——全表始终对 LLM 可见，scope 告诉 LLM "优先关注这些"，用户随时可解锁新维度。
+字段理解阶段产出 scope（分析范围：target + features + excluded），注入后续关注点的上下文。Scope 是**引导性的**——全表始终对 LLM 可见，scope 告诉 LLM "优先关注这些"，用户随时可解锁新维度。
 
 详见 `docs/superpowers/specs/2026-06-03-scope-guided-analysis-design.md`。
 
-### 工具与流程：给 Agent 用，不给代码用
+### 工具与流程：给 LLM 用，不给代码用
 
-代码提供工具和流程，**Agent 决定用不用、怎么用**。
+代码提供工具和流程，**LLM 决定用不用、怎么用**。
 
-HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，代码提供的是工位、工具、电话线。用户走进工作室，跟合伙人们直接沟通需求。没有人在用户和合伙人之间自作主张。**
+HaGoKu Studio 的核心隐喻：**LLM 是工作室的资深分析师，代码提供的是工位、工具、电话线。用户走进工作室，跟分析师直接沟通需求。没有人在用户和分析师之间自作主张。**
 
 **示例对比**：
 
@@ -115,13 +115,13 @@ HaGoKu Studio 的核心隐喻：**每个 Agent 是工作室的资深合伙人，
 
 **检验标准**：如果一段代码的语义产出（字段含义、方法选择、报告叙述）可以被删除且不影响最终结果（因为 LLM 会产生同样的产出），那这段代码就是硬写——应删除。
 
-**保底的正确姿势**：保底不是"代码替 LLM 完成任务"，而是"代码提供备选通道让 LLM 重试"。例如：快速 LLM 失败 → 切换深度 LLM 重试 → 仍失败 → 保留原样，通知用户。
+**保底的正确姿势**：保底不是"代码替 LLM 完成任务"，而是"保留原样，通知用户"。LLM 失败 → 保留原 context 不变 → 报告用户 → 用户决定重试或调整。
 
-**关于模板**：表格列结构、报告章节、分析方法签名——这些都是"办公用品"，由代码定义供 Agent 使用。代码定义**形状**，Agent 填写**内容**。
+**关于模板**：表格列结构、报告章节、分析方法签名——这些都是"办公用品"，由代码定义供 LLM 使用。代码定义**形状**，LLM 填写**内容**。
 
 ### 全局工具注册表
 
-HaGoKu 有一个**项目级工具注册表**（`hagoku/tools/registry.py`），所有 Agent 共享。代码只做三件事：注册工具签名、执行工具调用、返回结果。LLM 决定调哪个、什么时候调。
+HaGoKu 有一个**项目级工具注册表**（`hagoku/tools/registry.py`）。代码只做三件事：注册工具签名、执行工具调用、返回结果。LLM 决定调哪个、什么时候调。
 
 ```
 hagoku/tools/
@@ -132,19 +132,19 @@ hagoku/tools/
 
 **新增工具只需在 `agent_tool_defs.py` 加一个 `Tool(...)` 注册**，指定 `phase_tag=["理解字段","评估清洗"]` 标注典型关注点。Phase D 后 27 工具全集对 LLM 可见。
 
-**已注册工具**（7 个）：
+**已注册工具**（7 个，Phase D 后全集对 LLM 可见）：
 
-| 工具 | 可用 Agent | 用途 |
+| 工具 | 典型关注点 | 用途 |
 |------|----------|------|
-| `get_column_stats` | 全部 | 获取某列统计量（min/q25/median/q75/max/mean） |
-| `get_sample_rows` | 全部 | 获取某列抽样值 |
-| `list_columns` | 全部 | 列出所有列名和类型 |
+| `get_column_stats` | 通用 | 获取某列统计量（min/q25/median/q75/max/mean） |
+| `get_sample_rows` | 通用 | 获取某列抽样值 |
+| `list_columns` | 通用 | 列出所有列名和类型 |
 | `group_stats` | 评估清洗, 跑统计 | 按某列分组查看另一列统计 |
 | `update_field_understanding` | 理解字段 | 更新字段中文名/含义 |
 | `update_field_role` | 理解字段 | 设置 target/features/ignored |
 | `restrict_analysis_to` | 理解字段 | 限定参与分析的字段 |
 
-**检验标准**（律 4 延伸）：新增 Agent 能力时，若要在 prompt 里手写 JSON 格式让 LLM 输出 → 说明缺工具，应在注册表补。
+**检验标准**：新增能力时，若要在 prompt 里手写 JSON 格式让 LLM 输出 → 说明缺工具，应在注册表补。
 
 ---
 
@@ -285,13 +285,13 @@ hagoku/tools/
 
 ### 参考长度
 
-HaGoKu 的 prompt.md 在 2026-06-12 重构后为 ~500 字节。长度本身不是目标——但如果超过 2000 字节，检查是否写了不可写清单里的内容。
+HaGoKu 的 prompt.md 当前 ~3KB / 74 行。长度本身不是目标——但如果增长到超出当前 2 倍，检查是否写了不可写清单里的内容。
 
 ---
 
-## 通道完备性十律
+## 配置中性（原「通道完备性十律」，已由架构自动满足）
 
-> **Phase D 后**：单 agent + 单 chat（ProjectContext）+ `to_messages_for_llm()` 统一入口已物理保证律 1-6/8-10 自动满足。律 11（配置中性）保留为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
+> **Phase D 后**：单 agent + 单 chat（ProjectContext）+ `to_messages_for_llm()` 统一入口已物理保证原律 1-6/8-10 自动满足。仅保留配置中性（铁律 9）作为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
 
 > 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过 `hagoku-ui` 设置功能选择的，不是项目真理。
 
@@ -350,7 +350,7 @@ grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留�
 
 ## Agent
 
-**Phase D 后：唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 关注点工作（理解字段/评估清洗/跑统计/写报告），通过 `route_to` 自主切换。统一 prompt（`hagoku/agents/prompt.md`，256 行）。27 工具全集可见。
+**唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 关注点工作（理解字段/评估清洗/跑统计/写报告），通过 `route_to` 自主切换。统一 prompt（`hagoku/agents/prompt.md`，74 行）。27 工具全集可见。
 
 ProjectContext 持有唯一 chat；`to_messages_for_llm()` 统一 LLM 调用入口。
 
@@ -397,35 +397,28 @@ ProjectContext 持有唯一 chat；`to_messages_for_llm()` 统一 LLM 调用入�
 
 ---
 
-## 知识系统
+## 知识系统（三层 Memory）
 
-```
-Layer 1: kb/  领域知识（手写，低频更新）
-Layer 2: agent/knowledge.yaml  方法经验（手动维护，V2 计划自动积累）
-Layer 3: LLM 自由发挥（前两层无匹配时兜底）
-```
-
-### 知识向量存储
-
-每个 Agent 配备双层知识系统，实现语义检索和人工维护的有机结合：
-
-| 层 | 文件 | 内容 | 操作方式 |
-|---|------|------|---------|
-| **三层 Memory** | `hagoku/memory/` | ① 学术方法 ② 成长经验（lessons.jsonl）③ 项目记忆（MemoryManager） | Phase D 重组 |
+| 层 | 存储 | 内容 | 生命周期 |
+|---|------|------|--------|
+| ① 学术方法库 | `hagoku/memory/methods/` | 教科书级统计方法知识 | 手动维护，低频更新 |
+| ② 成长记忆 | `hagoku/memory/lessons.jsonl` | 实战经验（LLM 通过 `save_lesson` 工具积累） | 跨项目持久 |
+| ③ 项目记忆 | MemoryManager (SQLite) | 当前项目字段定义、用户纠正 | `clear-history` 时清除 |
+| 兜底 | LLM 自由发挥 | 前两层无匹配时由 LLM 自行推导 | 无持久化 |
 
 > 实现：`hagoku/memory/`、`hagoku/tools/memory_tools.py`（8 工具注册）
 
 
 ---
 
-## 看板协作
+## 看板（UI 显示对象）
 
-Agent 间不直接对话，通过看板交换信息：
+`kanban.db` 在 Phase C 后降级为 UI 进度显示对象，不再参与流程控制。阶段切换由 LLM 通过 `route_to` 工具自主决定。
 
 ```
 ~/.hagoku/projects/{project}/
-├── kanban.db       ← SQLite 看板
-├── context.md      ← 项目上下文（所有 Agent 共享读取）
+├── kanban.db       ← SQLite（UI 进度条数据源）
+├── context.md      ← 项目上下文
 ├── data/           ← 数据制品 (Parquet)
 ├── runs/           ← 分析运行记录
 └── progress.yaml   ← 项目记忆
@@ -490,7 +483,7 @@ HaGoKu 中失败只有三条路径，不做任何「降级到次优路径」的�
 > - `tools/` 工具函数签名与返回值约定
 > - 任一环节抛非 LLM 类异常（`ValueError` / `TypeError` / `FileNotFoundError` 等）均属通道异常
 
-### 路径 3：语义未理解（律 7）
+### 路径 3：语义未理解（铁律 7）
 
 LLM 收到了用户输入但未产生任何有效工具调用（tool_calls 为空、或参数全空、或工具调度结果与用户原话明显无关）——属于第三类失败，**必须显式反馈给用户**，不得静默继续。
 
@@ -513,22 +506,10 @@ LLM 收到了用户输入但未产生任何有效工具调用（tool_calls 为�
 |---------|---------|------|
 | **A. 抛 RuntimeError** | LLM 不可达 / 模型返回完全无法解析（非语义失败） | `raise RuntimeError("LLM 不可达，请检查配置")` → 走路径 1 |
 | **B. 写未理解信号** | LLM 调用成功但未产生有效工具调用 | `ctx["_last_understanding_failure"] = {raw_text, model_reply, ...}` 然后 `return []` → 走路径 3 |
-| **C. 透传给下游** | LLM 给出部分工具调用但语义不完整 | 已落地的部分写权威结构，未落地的留空，由下游 Agent 或下一轮交互补 |
+| **C. 透传给下一轮** | LLM 给出部分工具调用但语义不完整 | 已落地的部分写权威结构，未落地的留空，由下一轮交互补 |
 | **D. 拒绝写入** | LLM 给出的参数与用户原话明显矛盾 | 不写权威结构，等同情况 B（写未理解信号） |
 
-**禁止动作**（违反零硬编码原则的常见伪装）：
-
-- ❌ `except: return None` / `except: return []` — 静默吞掉失败
-- ❌ `if not result: result = default_value` — 默认值兜底
-- ❌ `if user_input in ["收入", "营收", "销售额"]: ...` — 关键词列表
-- ❌ `re.search(r"收入|营收|销售", text)` — 中文语义正则
-- ❌ 函数名含 `_infer_` / `_detect_` / `_classify_` 但内部无 LLM 调用 — 假装 LLM 实则规则
-- ❌ 用 LLM 调用包一层缓存，缓存 miss 时走规则路径 — 隐性降级
-
-**铁律**：当你（实现者）拿不准要不要加一段判断逻辑时，问自己一句——
-> *"这段代码做的判断，能不能用一句中文写成 prompt 让 LLM 做？"*
->
-> 如果能，就是 LLM 的活——LLM 拿到分析目标和数据后自己会判断。代码只负责把分析目标和数据送到 prompt 里，不替它写结论。
+**禁止动作**：详见 `CLAUDE.md` 触发词速查表。核心原则：代码做的判断若能用一句中文写成 prompt 让 LLM 做，就是 LLM 的活——代码只负责把信息送到 LLM，不替它写结论。
 
 ---
 
@@ -583,12 +564,12 @@ HaGoKu Studio 全程透明，用户坐副驾驶位：
 ```
 hagoku/
 ├── llm/              # LLM 客户端 (OpenAI-compatible)
-├── manager/          # 编排器（计划生成 + 调度 + 降级）
-├── agents/           # 4 个 Agent（scout/cleaner/analyst/reporter）+ base/types/constants
-├── kb/               # 领域知识库（Layer 1）
+├── manager/          # 编排器（LLM 客户端管理 + tool dispatch + WebSocket 桥）
+├── agents/           # 唯一 DataAnalystAgent + prompt.md + base/types/constants
+├── memory/           # 三层记忆（学术方法 / 成长经验 / 项目记忆）
 ├── tools/            # 分析工具集（插件架构）
 ├── guardrails/       # 统计护栏 + 输出解析
-├── storage/          # 持久化（kanban/project/artifact/database/memory）
+├── storage/          # 持久化（kanban/project/artifact/database）
 ├── observability/    # 事件总线 + 终端显示
 ├── api/              # FastAPI + WebSocket
 └── devtools/         # 交互场景模拟

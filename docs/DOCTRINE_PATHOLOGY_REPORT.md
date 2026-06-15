@@ -1,5 +1,7 @@
-# Doctrine Pathology Report
+# Doctrine Pathology Report（历史归档）
 
+> **归档说明**（2026-06-14）：本文件为 Phase A-D 之前的历史病理日志，保留作为决策历史参考。Phase D（4 agent 合 1）完成后，大部分 finding 已由架构自动闭环。新审计另起文件。
+>
 > **历史快照**（2026-06-05）：本文件记录当时状态。**2026-06-06 Scribe 类已删除**，报告中"Scribe 缺失"等病理观察已被 Scribe 删除动作直接闭环。详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段。
 
 > **报告人**：doctrine 病理学家（评估 AI，只读不写）

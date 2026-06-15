@@ -72,7 +72,7 @@ LLM 失败 → `raise RuntimeError` 让用户看见。禁止 except 兜底/默�
 | `if intent == "预测"` / 中文 if-elif | 1 零硬编码 |
 | `["收入","营收"]` / `re.search(r"收入\|销售")` | 1 零硬编码 |
 | 文档写 `Qwen`/`MiniMax`/`localhost:8000` | 9 配置中性 |
-| `@lru_cache` 装饰 LLM 调用 | 6 行为中性（保留） |
+| `@lru_cache` 装饰 LLM 调用 | 禁止——LLM 调用必须实时，缓存 = 隐性降级 |
 | prompt 里出现「必须判断为」/「应该理解成」/「不要分析」 | 11 提示词层禁止预设结论 |
 | 测试不绿 → 在 prompt 里写死答案 | 11 提示词层禁止预设结论 |
 | 架构重构后 `to_messages_for_llm()` 输出变短 | 上下文保真律 — 纠正不可丢失 |

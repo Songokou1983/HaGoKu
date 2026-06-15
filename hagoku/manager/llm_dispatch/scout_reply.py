@@ -25,6 +25,8 @@ def apply_scout_user_field_reply_to_context(
     stream_enabled: bool = True,
 ) -> list[str]:
     """
+    [DEPRECATED — Phase D] 生产通道已迁入 agent.py + reply_handlers.py。
+    仅保留供测试文件验证通道契约。
     将用户在 Scout 字段核对暂停点的说明写入 context（column_descriptions、needs_user_input）。
 
     **核心设计：LLM 作为字段理解的唯一引擎。** 用户的自然语言说明（如"Code 代表店铺编号"）
@@ -294,26 +296,6 @@ def _apply_role_update(
             roles["target"] = new_target
         context["variable_roles"] = roles
 
-def _resolve_token_to_columns(
-    token: str,
-    columns: list[str],
-    display_names: dict[str, Any],
-) -> list[str]:
-    """单个 token → 列名：仅精确列名或精确 display_name 匹配（不做前缀展开）。"""
-    t = (token or "").strip()
-    if not t:
-        return []
-    if t in columns:
-        return [t]
-    dn_to_col: dict[str, str] = {}
-    for c in columns:
-        dv = str(display_names.get(c, "") or "").strip()
-        if dv:
-            dn_to_col[dv] = c
-    if t in dn_to_col:
-        return [dn_to_col[t]]
-    return []
-
 
 def _resolve_tokens_strict(
     tokens: list[str],
@@ -338,18 +320,6 @@ def _resolve_tokens_strict(
                     resolved.append(c)
     return resolved, failed
 
-
-def _resolve_to_column_names(
-    tokens: list[str],
-    columns: list[str],
-    display_names: dict[str, Any],
-    descriptions: dict[str, Any],
-) -> list[str]:
-    """把用户给的业务名 / 列名混合 token 映射为真实列名（兼容旧调用）。"""
-    resolved, failed = _resolve_tokens_strict(tokens, columns, display_names, descriptions)
-    if failed:
-        return []
-    return resolved
 
 def _apply_restrict_analysis_to(
     context: dict[str, Any],
@@ -424,6 +394,9 @@ def _apply_scout_reply_with_llm(
     stream_enabled: bool = True,
 ) -> list[str]:
     """
+    [DEPRECATED — Phase D] 生产通道已迁入 agent.py:run_step()。
+    仅保留供测试文件验证通道契约（information_arrival / scout_user_reply_apply 等）。
+
     LLM 作为字段理解的唯一引擎，通过 function calling 主动更新字段信息。
 
     **核心设计**：

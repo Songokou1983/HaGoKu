@@ -65,7 +65,7 @@ def test_c2_cleaning_review_structured_empty_message():
 def test_c3_scout_user_natural_language_llm_driven():
     """C3：自然语言纠错须经 LLM 理解后写入 column_descriptions（Phase B: tool_calls 路径）。"""
     from unittest.mock import MagicMock
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx = {
         "column_semantics": [{"column_name": "Code", "needs_user_input": True}],

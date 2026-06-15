@@ -52,12 +52,8 @@ from .payloads.cleaner_payload import (  # noqa: F401
     cleaning_review_pause_payload,
 )
 
-from .llm_dispatch.scout_reply import (  # noqa: F401 — 测试通过 orchestrator 导入（函数仍存在，通道不再调用）
-    _SCOUT_FIELD_UPDATE_TOOLS,
-    _apply_scout_reply_with_llm,
-    apply_scout_user_field_reply_to_context,
-)
-
+# Phase D 后：scout_reply 函数不再被生产通道调用，仅保留供测试。
+# 测试文件应从 hagoku.manager.llm_dispatch.scout_reply 直接导入。
 
 from .llm_dispatch.plan_generation import (  # noqa: F401
     _build_analysis_purpose,

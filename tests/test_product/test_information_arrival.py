@@ -83,7 +83,7 @@ class LLMSpy:
 
 def test_律2_scout字段纠错_用户原话抵达LLM():
     """用户原话 raw 必须出现在 _apply_scout_reply_with_llm 发给 LLM 的 messages 中。"""
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx: dict[str, Any] = {
         "query": "分析每个店铺的收入增长趋势",
@@ -105,7 +105,7 @@ def test_律2_scout字段纠错_用户原话抵达LLM():
 
 def test_律1_scout字段纠错_分析意图抵达LLM():
     """context.query（分析意图）必须出现在 _apply_scout_reply_with_llm 的 LLM messages 中。"""
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     intent = "分析每个店铺的收入增长趋势"
     ctx: dict[str, Any] = {
@@ -125,7 +125,7 @@ def test_律1_scout字段纠错_分析意图抵达LLM():
 
 def test_律1_scout字段纠错_空意图时不强制抵达():
     """若 context.query 为空，律 1 不约束（无意图可送）；不应抛错也不该假装注入。"""
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx: dict[str, Any] = {
         "query": "",
@@ -149,12 +149,18 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     import pandas as pd
     from hagoku.agents.agent import DataAnalystAgent as ScoutAgent  # Phase D
     from hagoku.config import HaGoKuConfig
+    from hagoku.context.project_context import ProjectContext
 
     df = pd.DataFrame({"Inc1": [100, 200, 300], "Period": [1, 2, 3]})
     intent = "分析每个店铺收入的增长趋势"
 
     cfg = HaGoKuConfig()
     agent = ScoutAgent(cfg.llm, event_bus=MagicMock())
+    # P1-1 修复后，infer_field_semantics 必须通过 ProjectContext.to_messages_for_llm()
+    agent._context = {
+        "_project_context": ProjectContext(run_id="test_intent", analysis_goal=intent),
+        "query": intent,
+    }
 
     spy = LLMSpy(
         response_factory=lambda messages: _make_tool_call_response(
@@ -206,7 +212,7 @@ def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     ProjectContext 接管后：messages = [system_prefix, *messages_history, user_raw]。
     messages_history 由 ProjectContext.entries 派生，第 2 轮应包含第 1 轮的交互。
     """
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
     from hagoku.context.project_context import ProjectContext
 
     ctx: dict[str, Any] = {
@@ -277,7 +283,7 @@ def _make_real_scene_context() -> dict[str, Any]:
 
 def test_真实场景_律1律2_意图与原话均抵达LLM():
     """test0526 现行犯：分析意图 + 用户原话都进入 LLM messages（信息通道无残缺）。"""
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
     spy = LLMSpy()  # 默认 response：空 tool_calls，模拟 LLM 在复杂任务上"放弃"
@@ -296,7 +302,7 @@ def test_真实场景_律4_工具覆盖补集排除():
       - restrict_analysis_to(column_names) 让 LLM 列出参与列，代码自动算补集
       - 同时 update_field_role(ignored=[...]) 作为备选路径
     """
-    from hagoku.manager.orchestrator import _SCOUT_FIELD_UPDATE_TOOLS
+    from hagoku.manager.llm_dispatch.scout_reply import _SCOUT_FIELD_UPDATE_TOOLS
 
     tool_names = [t["function"]["name"] for t in _SCOUT_FIELD_UPDATE_TOOLS]
 
@@ -321,7 +327,7 @@ def test_真实场景_律7_LLM未理解时返回空():
 
     代码不做加工——LLM 没产出 = applied 空，前端展示 LLM 原文（空）。
     """
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
     spy = LLMSpy()
@@ -335,7 +341,7 @@ def test_真实场景_律2_用户原话保存到context():
 
     修复后：USER_INPUT_RECEIVED 事件 → ProjectContext._on_event → add_user_feedback。
     """
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
     from hagoku.context.project_context import ProjectContext
     from hagoku.observability.event_bus import EventBus
     from hagoku.observability.events import EventType
@@ -373,7 +379,7 @@ def test_真实场景_restrict_analysis_to_e2e():
 
     验证律 4（工具覆盖）+ 律 9（重推断触发）的完整执行路径。
     """
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
     # 模拟 LLM 正确理解用户意图，调用 restrict_analysis_to
@@ -438,7 +444,7 @@ def test_真实场景_restrict_analysis_to_业务名解析():
     LLM 应传字段表中的完整中文名，代码做精确 display_name 映射。
     描述子串匹配已删除（太宽，会把「店铺」命中所有含「店铺」描述的行）。
     """
-    from hagoku.manager.orchestrator import _apply_scout_reply_with_llm
+    from hagoku.manager.llm_dispatch.scout_reply import _apply_scout_reply_with_llm
 
     ctx = _make_real_scene_context()
     # display_name 是第二列的中文名（精确匹配通道）

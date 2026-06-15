@@ -178,7 +178,6 @@ class DataAnalystAgent(BaseAgent):
         Phase D: 整体搬迁，不重写。D7 删 scout/ 后此方法独立存在。
         """
         from hagoku.llm.client import create_raw_client
-        from hagoku.channel import build_messages
         from hagoku.agents.types import build_submit_field_inference_schema
 
         # 构建每列的 profile 摘要
@@ -263,10 +262,9 @@ class DataAnalystAgent(BaseAgent):
                     agent_system_extra=system_prompt,
                 )
             else:
-                messages = build_messages(
-                    query=query or "",
-                    user_input=user_content,
-                    system_extra=system_prompt,
+                raise RuntimeError(
+                    "infer_field_semantics: _project_context 未设置，无法构造 messages。"
+                    " 请检查 understand_data → _init_context 是否正确初始化了 ProjectContext。"
                 )
             dump_messages(
                 "agent_infer_field_semantics",

@@ -52,8 +52,9 @@ from .payloads.cleaner_payload import (  # noqa: F401
     cleaning_review_pause_payload,
 )
 
-# Phase D 后：scout_reply 函数不再被生产通道调用，仅保留供测试。
-# 测试文件应从 hagoku.manager.llm_dispatch.scout_reply 直接导入。
+# Phase D 后：scout_reply 功能已迁入 agent.py + reply_handlers.py。
+# 旧的 scout_reply.py 已删除。测试函数已迁移至 tests/helpers/scout_reply_legacy.py。
+# 生产不再依赖任何 scout_reply 模块。
 
 from .llm_dispatch.plan_generation import (  # noqa: F401
     _build_analysis_purpose,

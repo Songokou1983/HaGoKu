@@ -426,3 +426,142 @@ def _scout_description_is_meaningful_for_user(col_name: str, desc: str) -> bool:
     from hagoku.agents.agent import _description_is_user_facing_meaningful
 
     return _description_is_user_facing_meaningful(col_name, desc)
+
+
+# ── Scout 字段更新工具 schema（Phase D 后仅测试引用）────────────────────
+# 原在 scout_reply.py（已删除），迁移至此供测试验证工具契约
+
+_SCOUT_FIELD_UPDATE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "update_field_understanding",
+            "description": (
+                "更新一个字段的中文名称（display_name）和/或业务含义理解（description）。"
+                "当用户通过对话说明了某个字段的含义或中文名称时，主动调用此工具来更新字段表格。"
+                "如果用户的说明一次覆盖多个字段，请多次调用此工具，每次更新一个字段。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column_name": {
+                        "type": "string",
+                        "description": (
+                            "要更新的字段。可以使用原始列名（如 Inc1）、业务名/中文名"
+                            "（如「店铺收入」），或范围记号（如「Bos1-3」表示 Bos1,Bos2,Bos3）。"
+                            "代码会自动映射到真实列名并展开范围。"
+                        ),
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "description": (
+                            "字段的中文业务名称，简短（≤8字），面向业务同事。"
+                            "例如：'店铺编号'、'销售额'、'周次'。"
+                            "仅当用户在对话中明确提到了中文简称／名称时才填写此项。"
+                            "如果用户只是解释了含义但未给中文名，则不填此字段。"
+                        ),
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": (
+                            "字段的业务含义理解，自然语言一句话，必须基于 display_name 扩展。"
+                            "例如 display_name='店铺编号' → description='唯一标识每个门店的数字编号'。"
+                            "禁止直接把用户原话中的短标签（如'产品编码'）填入此字段——"
+                            "短标签属于 display_name，description 必须是对短标签的业务展开说明。"
+                            "如果用户只给了一个短标签（如只说'Code叫店铺编号'），"
+                            "则 description 应为该标签的自然扩展（如'用于唯一标识每个店铺的数字编码'），"
+                            "不要留空，也不要与 display_name 相同。"
+                        ),
+                    },
+                    "suggested_role": {
+                        "type": "string",
+                        "enum": ["target", "feature", "identifier", "ignore"],
+                        "description": (
+                            "该字段在分析中的建议角色。请基于用户的分析目的和对话上下文主动推断。"
+                            "target: 分析要预测/解释的目标变量（因变量）。"
+                            "feature: 用于解释目标的特征变量（自变量）。"
+                            "identifier: 非分析维度的标识列（如编码、ID、序号）。"
+                            "ignore: 明确不参与分析的字段。"
+                            "如果无法确定则不填此字段。"
+                        ),
+                    },
+                    "used_in_analysis": {
+                        "type": "boolean",
+                        "description": (
+                            "该字段是否参与本次分析。根据字段中文名和分析目标自行判断——"
+                            "纠正中文名不代表该字段要参与。\n"
+                            "例如分析「收入趋势」，字段中文名含「费用」→ 必须设为false，不管有没有间接关系。"
+                        ),
+                    },
+                },
+                "required": ["column_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_field_role",
+            "description": (
+                "当用户指定或修正了分析涉及的核心字段角色时，调用此工具来更新分析目标。"
+                "例如用户说「目标变量应该是 B 而不是 A」← 更新 target 和 features。"
+                "又或者用户说「这些字段才是核心分析字段：销售额、店龄、客流量」← 更新 features。"
+                "角色包括：target（目标变量，唯一）、feature（特征变量，多个）、"
+                "identifier（标识列）、ignore（分析不涉及）。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "description": "目标变量（因变量/Y 变量）的字段名，唯一。如果用户未提及则不设置。",
+                    },
+                    "features": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "特征变量（自变量/X 变量）的字段名列表。如果用户未提及则不设置。",
+                    },
+                    "ignored": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "用户明确说不参与分析的字段名列表。",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restrict_analysis_to",
+            "description": (
+                "当用户用「只有 X、Y、Z 参与分析」「我只关心 A 和 B」等**包含集**语义"
+                "限定参与分析的字段时调用此工具。"
+                "代码会自动把未列出的字段 used_in_analysis 设为 false，无需你计算补集。"
+                "字段标识**必须使用精确列名**（如 Code/Inc1）或**字段表第二列中的完整中文名**"
+                "（如「店铺编号」「店铺收入」），代码会做精确映射。"
+                "**不要传缩写或部分匹配词**（如用户说「店铺」但你看到的字段表第二列写的是「店铺编号」→ 传「店铺编号」）。"
+                "调用此工具后，系统会自动触发重推断以同步角色分配。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "included_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "用户明确希望参与分析的字段，列名或业务名均可。"
+                            "代码会自动将业务名映射到真实列名并对补集做排除。"
+                        ),
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "你为何这样理解用户原话的简要说明（可选，便于审计）。",
+                    },
+                },
+                "required": ["included_fields"],
+            },
+        },
+    },
+]

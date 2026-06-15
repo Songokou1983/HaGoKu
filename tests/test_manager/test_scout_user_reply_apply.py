@@ -8,7 +8,7 @@ LLM 通过 function calling（tool_calls）主动更新字段信息。
 import json as _json
 from unittest.mock import MagicMock
 
-from hagoku.manager.llm_dispatch.scout_reply import (
+from tests.helpers.scout_reply_legacy import (
     _apply_scout_reply_with_llm,
     apply_scout_user_field_reply_to_context,
 )

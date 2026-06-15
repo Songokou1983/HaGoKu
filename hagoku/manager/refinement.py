@@ -169,6 +169,7 @@ class RefinementParser:
         )
 
         try:
+            # EXEMPT: 辅助 LLM — 反馈解析（tool_choice 模式），非主对话通道
             response = client.chat.completions.create(
                 model=config.model,
                 messages=build_messages(
@@ -182,7 +183,7 @@ class RefinementParser:
                 tool_choice={"type": "function", "function": {"name": "submit_refinement"}},
             )
         except Exception:
-            # 如果 tool_choice 要求严格但模型不支持，回退到自由调用
+            # EXEMPT: 辅助 LLM — 反馈解析（回退模式，无 tool_choice），非主对话通道
             response = client.chat.completions.create(
                 model=config.model,
                 messages=build_messages(
@@ -241,6 +242,7 @@ class RefinementParser:
             refine_type="unknown",
             confidence="low",
             guidance=(
+                "⚠️ 我暂时未能理解你的意图。\n\n"
                 "💡 我支持以下调整：\n"
                 "   • 「只看XX」— 缩小数据范围\n"
                 "   • 「换成XX指标」— 换分析指标\n"

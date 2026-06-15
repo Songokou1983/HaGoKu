@@ -105,6 +105,7 @@ class LessonAuditor:
             "total_count": len(all_lessons),
             "duplicates": len(self._compute_duplicates(all_lessons)),
         }
+        # EXEMPT: Meta LLM — Lesson 审计，非主对话通道
         messages = build_messages(
             query="lesson audit",
             user_input=_json.dumps(payload, ensure_ascii=False, default=str),

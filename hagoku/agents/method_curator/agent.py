@@ -238,6 +238,7 @@ class MethodCurator:
             ],
             "registered_tools": sorted(registered),
         }
+        # EXEMPT: Meta LLM — 方法库审计，非主对话通道
         messages = build_messages(
             query="method audit",
             user_input=_json.dumps(payload, ensure_ascii=False, default=str),

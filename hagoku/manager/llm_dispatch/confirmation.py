@@ -16,6 +16,7 @@ def _llm_classify_confirmation(self, user_input: str, context: dict) -> dict:
         from hagoku.channel import build_messages
 
         client = create_raw_client(self.config.llm)
+        # EXEMPT: 辅助 LLM — 用户确认分类，非主对话通道
         response = client.chat.completions.create(
             model=self.config.llm.model,
             messages=build_messages(

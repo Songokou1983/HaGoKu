@@ -256,6 +256,7 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
 """
 
     history = req.history or []
+    # EXEMPT: 辅助 LLM — Doctor 维护对话，非主分析通道
     messages = build_messages(
         query="HaGoKu Doctor 维护对话",
         user_input=req.message,

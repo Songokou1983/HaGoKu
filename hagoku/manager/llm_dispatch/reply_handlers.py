@@ -167,6 +167,7 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
         "用中文输出。"
     )
     user_content = _json.dumps(findings, ensure_ascii=False, default=str)
+    # EXEMPT: 辅助 LLM — 统计 findings → 书面摘要转换，无状态数据变换，非对话延续
     messages = build_messages(query=user_content, user_input=user_content, system_extra=system)
     dump_messages("analyst_rewrite_summary", messages, model=self.config.llm.model)
 

@@ -431,6 +431,7 @@ class Orchestrator(
             from hagoku.channel import build_messages
 
             intent_context = self._build_intent_context(query, parsed_intent)
+            # EXEMPT: 辅助 LLM — 分析计划生成，非主对话通道
             messages = build_messages(
                 query=query,
                 user_input=PLAN_GENERATION_USER.format(query=intent_context),
@@ -475,73 +476,6 @@ class Orchestrator(
             raise RuntimeError(
                 f"Manager LLM 计划生成失败：LLM 不可达，请检查配置。原始错误: {e}"
             ) from e
-
-    def _persist_scout_field_updates(
-        self,
-        project_name: str,
-        applied_scout: list[str],
-        context: dict[str, Any],
-    ) -> None:
-        """
-        将用户在 Scout 字段核对中的字段理解回复持久化到项目记忆。
-
-        从 `applied_scout`（如 "Code←店铺编号"）中提取字段名与含义，
-        通过 MemoryManager.persist_field_descriptions() 写入 SQLite + YAML。
-        下次同一项目分析时，这些字段理解会被重新加载，避免重复询问。
-        """
-        if not self.memory or not applied_scout or not context:
-            return
-
-        # 收口双写：从 column_semantics 派生（唯一权威）
-        from hagoku.manager.payloads.scout_payload import derive_descriptions, derive_display_names
-        descs: dict[str, Any] = derive_descriptions(context)
-        display_names: dict[str, Any] = derive_display_names(context)
-        new_descs: dict[str, str] = {}
-        new_dnames: dict[str, str] = {}
-
-        # 只持久化用户确认过的字段（律 10）：跳过 LLM 初始推断的
-        confirmed_cols = {
-            str(s.get("column_name", ""))
-            for s in context.get("column_semantics", [])
-            if s.get("confirmed_by_user")
-        }
-
-        for a in applied_scout:
-            if not a or "←" not in a:
-                continue
-            # 格式: "col←desc" 或 "col:[display]←中文名"
-            col_part, _, val = a.partition("←")
-            col = col_part.strip()
-            val = val.strip()
-            if not col or not val:
-                continue
-
-            # 不持久化 used_in_analysis 和 role（当次分析特有，非字段描述）
-            if ':[used_in_analysis]' in col or ':[role]' in col:
-                continue
-
-            # 跳过非用户确认的字段（律 10）
-            pure_col = col.replace(":[display]", "").strip() if ":[display]" in col else col
-            if pure_col not in confirmed_cols:
-                continue
-
-            if col.endswith(":[display]"):
-                col = col.replace(":[display]", "").strip()
-                new_dnames[col] = val
-            else:
-                new_descs[col] = val
-
-        # 补充 context 中已有的 column_descriptions（不上覆盖的应用字段）
-        full_descs: dict[str, str] = {}
-        for col, d in descs.items():
-            if isinstance(d, str) and d.strip():
-                full_descs[str(col)] = str(d).strip()
-        full_descs.update(new_descs)
-
-        if full_descs:
-            self.memory.persist_field_descriptions(
-                project_name, full_descs, column_display_names=new_dnames,
-            )
 
     def _on_event(self, event) -> None:
         """统一事件处理器，Step 4 仅处理 3 个影响 kanban 状态的事件。"""
@@ -641,44 +575,3 @@ class Orchestrator(
         if not task:
             return False
         return self.kanban.unblock_task(task["id"])
-
-    def _save_field_descriptions(
-        self,
-        project_name: str,
-        corrections: dict[str, dict[str, str]],
-    ) -> None:
-        """保存用户确认的字段描述到 memory/progress.yaml"""
-        if not corrections:
-            return
-
-        if self.output_mgr is None:
-            self.output_mgr = OutputManager(self.config.output, project_name)
-
-        try:
-            # 构建 schema 更新
-            schema_file = self.output_mgr.project_dir / "progress.yaml"
-            import yaml
-
-            # 读取现有 schema
-            schema_data: dict[str, Any] = {}
-            if schema_file.exists():
-                with open(schema_file, "r", encoding="utf-8") as f:
-                    schema_data = yaml.safe_load(f) or {}
-
-            if "columns" not in schema_data:
-                schema_data["columns"] = {}
-
-            # 更新 columns
-            for col, info in corrections.items():
-                if col not in schema_data["columns"]:
-                    schema_data["columns"][col] = {}
-                schema_data["columns"][col]["description"] = f"{info['chinese_name']}（{info['business_meaning']}）"
-
-            # 写回 progress.yaml
-            schema_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(schema_file, "w", encoding="utf-8") as f:
-                yaml.dump(schema_data, f, allow_unicode=True, default_flow_style=False)
-
-        except Exception as e:
-            # 保存失败不影响主流程，只打印警告
-            print(f"   ⚠️ 保存字段描述失败: {e}")

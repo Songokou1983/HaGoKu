@@ -94,6 +94,7 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
 
     response = client.chat.completions.create(
         model=config.model,
+        # EXEMPT: 辅助 LLM — 意图解析，非主对话通道
         messages=build_messages(
             query=query,
             user_input=f"用户问题：{query}{hints_text}",

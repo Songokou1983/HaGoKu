@@ -111,6 +111,7 @@ def _handle_mandatory_violations(
         client = create_raw_client(llm_config)
         response = client.chat.completions.create(
             model=llm_config.model,
+            # EXEMPT: 辅助 LLM — 护栏风险分析，非主对话通道
             messages=build_messages(
                 query=risk_prompt,
                 user_input=risk_prompt,
@@ -120,6 +121,7 @@ def _handle_mandatory_violations(
             max_tokens=1024,
         )
         risk_analysis = response.choices[0].message.content or ""
+    # 豁免铁律 7：risk_analysis 是增值段，核心护栏报告（violation_summary）是代码产出的事实数据，不依赖 LLM
     except Exception as e:
         logger.warning(f"LLM 风险分析失败，使用默认护栏报告: {e}")
         risk_analysis = (

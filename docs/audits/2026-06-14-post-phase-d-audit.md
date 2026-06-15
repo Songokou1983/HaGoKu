@@ -2,7 +2,7 @@
 
 > **审计人**：Cascade（AI 审核方）
 > **审计范围**：Phase A-D 完成后代码和文档的一致性、架构承诺兑现度、隐性问题
-> **测试状态**：601 passed, 0 failures（doctrine + information_arrival + 全套回归）
+> **测试状态**：650 passed, 0 failures（2026-06-15 全量回归）
 
 ---
 
@@ -153,7 +153,7 @@ PROJECT.md §提示词写作规范说"prompt.md 在 2026-06-12 重构后为 ~500
 | `grep -rn "crewai" hagoku/ pyproject.toml` | ✅ 0 命中 |
 | `pytest tests/test_doctrine_compliance.py` | ✅ 14 passed |
 | `pytest tests/test_product/test_information_arrival.py` | ✅ 15 passed |
-| `pytest` 全套 | ✅ 601 passed, 0 failures |
+| `pytest` 全套 | ✅ 650 passed, 0 failures（2026-06-15） |
 | 铁律 7 在主路径 (`agent.py`) | ✅ 所有 except → raise RuntimeError |
 | `to_messages_for_llm()` 在 `agent.py:assess()` / `run_step()` | ✅ 正确使用 |
 | `route_to` 阶段切换 LLM 化 | ✅ `prompt.md` 明确声明，`agent.py` 机械执行 |
@@ -166,21 +166,22 @@ PROJECT.md §提示词写作规范说"prompt.md 在 2026-06-12 重构后为 ~500
 
 | 优先级 | Finding | 动作 | 估工 |
 |--------|---------|------|------|
-| **P1** | #1 build_messages fallback | 删 else 分支，改 raise | 15 min |
-| **P1** | #3 scout_reply.py 死代码 | 审计 + 删减 | 2-4h |
+| ~~**P1**~~ | ~~#1 build_messages fallback~~ | ~~删 else 分支，改 raise~~ | ✅ 2026-06-15 已修复 |
+| ~~**P1**~~ | ~~#3 scout_reply.py 死代码~~ | ~~审计 + 删减~~ | ✅ 2026-06-15 DEPRECATED 标注 + 死函数删除 + orchestrator 解耦 |
 | **P2** | #1 辅助 LLM 白名单标注 | 加 `# EXEMPT` 注释 + pre-commit 白名单 | 30 min |
 | **P2** | #2 pipeline_helpers 铁律 7 | 加豁免注释 | 5 min |
 | **P2** | #1 reply_handlers 摘要重写 | 迁移到 `to_messages_for_llm` 或标注 | 1h |
 | **P3** | #4 unknown_intent 文案 | 加 ⚠️ 前缀 | 5 min |
 | **P3** | #5 phase_tag 注入 tool description | `to_openai()` 追加后缀 | 30 min |
 | **P3** | #6 orchestrator 行数对账 | 审计死代码 | 1-2h |
-| **P3** | #7 prompt.md 长度描述 | PROJECT.md 数字修正 | 5 min |
+| ~~**P3**~~ | ~~#7 prompt.md 长度描述~~ | ~~PROJECT.md 数字修正~~ | ✅ 2026-06-14 已修正 |
+| **P3** | #8 scout_reply.py 彻底删除 | 测试迁移到 agent.py 路径后删除整个文件 | 后续 |
 
 ---
 
 ## 转发开发者时的注意事项
 
-1. **P1 项必须修完才能进 Phase E**——否则"物理唯一入口"的架构承诺是空话
+1. ~~**P1 项必须修完才能进 Phase E**~~ ✅ 已完成（2026-06-15）
 2. **P2 项本周处理**——标注 + 小改，不影响功能
 3. **P3 项可排入下周**——改善质量但不阻塞
 4. 修复后三组测试必跑：

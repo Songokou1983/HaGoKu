@@ -269,6 +269,7 @@ class ToolCurator:
             "prompt_tools": sorted(prompt_tools),
             "method_tools": sorted(method_tools),
         }
+        # EXEMPT: Meta LLM — 工具箱审计，非主对话通道
         messages = build_messages(
             query="tool audit",
             user_input=_json.dumps(payload, ensure_ascii=False, default=str),

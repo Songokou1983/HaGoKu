@@ -169,7 +169,7 @@ def derive_target_features(
 def derive_variable_roles(column_semantics: list[dict[str, Any]]) -> dict[str, str]:
     """从 column_semantics 派生 variable_roles 映射。"""
     return {
-        str(s.get("column_name", "")): str(s.get("role") or s.get("suggested_role", "feature"))
+        str(s.get("column_name", "")): str(s.get("role") or s.get("suggested_role") or "")
         for s in column_semantics
     }
 
@@ -322,7 +322,7 @@ class DataContext:
             if isinstance(s, ColumnSemantic):
                 column_semantics.append(s)
             elif isinstance(s, dict):
-                inferred_type = s.get("inferred_type", "unknown")
+                inferred_type = s.get("inferred_type") or "unknown"
                 if isinstance(inferred_type, str):
                     try:
                         inferred_type = SemanticType(inferred_type)
@@ -333,8 +333,8 @@ class DataContext:
                     inferred_type=inferred_type,
                     confidence=s.get("confidence", 0.0),
                     evidence=s.get("evidence", ""),
-                    needs_user_input=s.get("needs_user_input", False),
-                    suggested_role=s.get("suggested_role", "feature"),
+                    needs_user_input=s.get("needs_user_input"),
+                    suggested_role=s.get("suggested_role"),
                     user_override=s.get("user_override"),
                 ))
         return cls(column_semantics=column_semantics, **data)

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useWorkspaceStore } from "../stores/workspace";
+import { useWebSocket } from "../hooks/useWebSocket";
 import { PanelHeader } from "../components/PanelHeader";
 import { focusLabel } from "../constants/focusAreas";
 
@@ -219,6 +220,22 @@ export default function KanbanPanel() {
   useEffect(() => {
     fetchKanban();
   }, [fetchKanban]);
+
+  // 监听 WebSocket 事件自动刷新看板
+  const { onMessage } = useWebSocket();
+  useEffect(() => {
+    return onMessage((msg: Record<string, unknown>) => {
+      const type = msg.type as string;
+      if (
+        type === "agent_started" ||
+        type === "agent_completed" ||
+        type === "agent_failed" ||
+        type === "tool_called"
+      ) {
+        fetchKanban();
+      }
+    });
+  }, [onMessage, fetchKanban]);
 
   if (!currentProject) {
     return (

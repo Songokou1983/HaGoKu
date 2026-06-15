@@ -1,4 +1,4 @@
-"""Memory 三层工具 — 注册到 agent_tools（Phase E CO-E4）。"""
+"""Memory 三层工具 — 注册到 agent_tools（Phase E CO-E4 ✅）。"""
 
 from __future__ import annotations
 

@@ -41,6 +41,9 @@ LLM 失败 → `raise RuntimeError` 让用户看见。禁止 except 兜底/默�
 #### 刹车 B — 提示词 PR 必须附 dump 对比
 改 prompt.md / system_prompt / tool description → PR body 含改前/改后 dump。
 
+#### 刹车 C — 禁止代码层语义默认值
+`setdefault("used_in_analysis", ...)` / `.get("suggested_role", "feature")` / `.get("needs_user_input", False)` → 全禁。LLM 没给的值代码不准填。`test_doctrine_compliance.py::test_doctrine_无代码层语义默认值` 守门。
+
 ### 铁律 11 — 提示词层禁止预设业务结论
 
 > **漏洞转移防线**：铁律 1 限制了代码层，但 AI 实现者在代码层被限制后，容易把同样的"替 LLM 做判断"转移到提示词里。表面合规，实质违规。
@@ -69,6 +72,14 @@ LLM 失败 → `raise RuntimeError` 让用户看见。禁止 except 兜底/默�
 | 触发 | 铁律 |
 |------|------|
 | `except: return []` / `except: return None` | 7 失败在场 |
+| `if intent == "预测"` / 中文 if-elif | 1 零硬编码 |
+| `["收入","营收"]` / `re.search(r"收入\|销售")` | 1 零硬编码 |
+| `setdefault("used_in_analysis", True)` / `.get("suggested_role", "feature")` | 1 零硬编码 — 语义默认值 |
+| 文档写 `Qwen`/`MiniMax`/`localhost:8000` | 9 配置中性 |
+| `@lru_cache` 装饰 LLM 调用 | 禁止——LLM 调用必须实时，缓存 = 隐性降级 |
+| prompt 里出现「必须判断为」/「应该理解成」/「不要分析」 | 11 提示词层禁止预设结论 |
+| 测试不绿 → 在 prompt 里写死答案 | 11 提示词层禁止预设结论 |
+| 架构重构后 `to_messages_for_llm()` 输出变短 | 上下文保真律 — 纠正不可丢失 |
 | `if intent == "预测"` / 中文 if-elif | 1 零硬编码 |
 | `["收入","营收"]` / `re.search(r"收入\|销售")` | 1 零硬编码 |
 | 文档写 `Qwen`/`MiniMax`/`localhost:8000` | 9 配置中性 |

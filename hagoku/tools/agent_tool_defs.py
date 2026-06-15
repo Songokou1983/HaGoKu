@@ -174,11 +174,45 @@ agent_tools.register(Tool(
 # ═══════════════════════════════════════════════════════════════════
 
 def _handle_update_field_understanding(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """更新字段的中文名和含义。这个 handler 只返回结果，实际写入由 orchestrator 完成。"""
+    """更新字段的中文名和含义，同步写入 column_semantics 使字段表即时更新。"""
+    col = str(args.get("column_name", ""))
+    dn = str(args.get("display_name", ""))
+    desc = str(args.get("description", ""))
+    role = str(args.get("suggested_role", ""))
+    used = args.get("used_in_analysis")
+    evidence = str(args.get("evidence", ""))
+
+    semantics = ctx.get("column_semantics", [])
+    updated = False
+    for sem in semantics:
+        sn = str(sem.get("column_name", ""))
+        if sn == col or sem.get("display_name") == col or sem.get("chinese_name") == col:
+            if dn:
+                sem["display_name"] = dn
+                sem["chinese_name"] = dn
+            if desc:
+                sem["description"] = desc
+            if role:
+                sem["suggested_role"] = role
+            if used is not None:
+                sem["used_in_analysis"] = bool(used)
+            if evidence:
+                sem["evidence"] = evidence
+            updated = True
+
+    if not updated:
+        semantics.append({
+            "column_name": col,
+            "display_name": dn or col,
+            "chinese_name": dn or col,
+            "description": desc,
+        })
+
     return {
-        "updated": args.get("column_name", ""),
-        "display_name": args.get("display_name", ""),
-        "description": args.get("description", ""),
+        "updated": col,
+        "display_name": dn,
+        "description": desc,
+        "synced_to_table": updated,
     }
 
 
@@ -631,7 +665,7 @@ agent_tools.register(Tool(
     phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
 ))
 
-import hagoku.tools.memory_tools  # noqa: F401,E402 — Phase E: 注册 memory 工具
+import hagoku.tools.memory_tools  # noqa: F401,E402 — Phase E ✅: memory 工具已注册
 import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
 import hagoku.tools.biz_tools     # noqa: F401  — CO-T12～T18: 业务指标
 import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强

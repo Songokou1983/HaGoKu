@@ -336,6 +336,10 @@ class Orchestrator(
                 # 加载项目历史记忆，避免用户重复回答字段含义
                 memory_project = self.memory.build_memory_project(project_name) if self.memory else None
                 self._agent.memory_project = memory_project
+                # 注入 ProjectContext 到 context（必须在 run_scout_phase 之前，
+                # 因为 infer_field_semantics 依赖它构造 messages）
+                context["_project_context"] = getattr(self, '_project_context', None)
+                self._agent._context = {"_project_context": getattr(self, '_project_context', None)}
                 result = self._agent.run_scout_phase(
                     data_path, query, project_id=project_name,
                     memory_project=memory_project,

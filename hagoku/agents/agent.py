@@ -241,7 +241,21 @@ class DataAnalystAgent(BaseAgent):
             )
 
         system_prompt = (
-            "调用 submit_field_inference，给每个字段中文名和含义。\n"
+            self._load_prompt() + "\n\n"
+            "---\n\n"
+            "【当前关注点：理解字段】\n"
+            "你的任务：分析数据集的每个字段，按 submit_field_inference schema 填写。\n\n"
+            "submit_field_inference 必填字段（每列）：\n"
+            "- name: 原始列名（照抄）\n"
+            "- display_name: 简短中文业务名称（≤6字）\n"
+            "- used_in_analysis: true=参与分析，false=不参与\n"
+            "- description: 业务含义理解\n\n"
+            "规则：\n"
+            "- 根据字段名、数据类型、样本值推断含义\n"
+            "- 不确定的字段标注 needs_user_input=true\n"
+            "- 标识符列（如 ID、编码）used_in_analysis=false, suggested_role=\"identifier\"\n"
+            "- 数值列根据上下文判断是否参与分析\n"
+            "- **禁止输出 <think> 标签**\n\n"
             f"{analysis_goal_line}{memory_notes}{command_context}"
         )
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
@@ -308,8 +322,6 @@ class DataAnalystAgent(BaseAgent):
                     args = _json.loads(t.function.arguments)
                     for col_data in args.get("columns", []):
                         col_data["column_name"] = col_data.get("name", col_data.get("column_name", ""))
-                        col_data.setdefault("used_in_analysis", True)
-                        col_data.setdefault("needs_user_input", col_data.get("confidence", 1.0) < 0.8)
                         results.append(col_data)
                 except (_json.JSONDecodeError, TypeError) as e:
                     raise RuntimeError(f"字段推断失败：submit_field_inference 参数无法解析：{e}") from e
@@ -362,11 +374,25 @@ class DataAnalystAgent(BaseAgent):
                 profile["time_max"] = str(non_null.max())
         return profile
 
-    # ── Scout helper stubs（Phase D: 最小实现，Phase E 完善）─────────
+    # ── Scout helper stubs（Phase E: ✅ 已实现）─────────
 
     def _apply_project_memory(self, context: dict, memory_project: dict) -> None:
-        """应用项目记忆到 context。"""
-        pass
+        """应用项目记忆到 context — 预填充字段描述和中文名。"""
+        fields = memory_project.get("fields", {})
+        display_names = memory_project.get("display_names", {})
+        if not fields and not display_names:
+            return
+        descriptions = context.get("column_descriptions", {})
+        for col, desc in fields.items():
+            if col not in descriptions:
+                descriptions[col] = desc
+        context["column_descriptions"] = descriptions
+        if display_names:
+            dnames = context.get("column_display_names", {})
+            for col, dn in display_names.items():
+                if col not in dnames:
+                    dnames[col] = dn
+            context["column_display_names"] = dnames
 
     def _derive_roles(self, context: dict) -> None:
         """从 column_semantics 派生 target/features。"""
@@ -393,12 +419,47 @@ class DataAnalystAgent(BaseAgent):
         sync_legacy_dicts(context)
 
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
-        """从推断结果学习。"""
-        pass
+        """从推断结果学习 — 将用户确认的字段理解保存为 lesson。"""
+        semantics = context.get("column_semantics", [])
+        confirmed = [s for s in semantics if s.get("confirmed_by_user")]
+        if not confirmed or not project_id:
+            return
+        try:
+            from hagoku.memory.lessons import LessonStore
+            store = LessonStore()
+            for s in confirmed:
+                col = s.get("column_name", "")
+                dn = s.get("display_name", "")
+                desc = s.get("description", "")
+                if col and (dn or desc):
+                    store.save(
+                        scenario=f"字段理解: {col}",
+                        what_worked=f"用户确认 {col} 为「{dn or desc}」",
+                        what_failed="",
+                        lesson=f"项目 {project_id} 中，字段 {col} 的中文名为「{dn}」，含义：{desc}",
+                    )
+        except Exception:
+            logger.debug("学习记录保存失败（非关键路径）", exc_info=True)
 
     def _update_own_memory(self, context: dict, project_id: str | None) -> None:
-        """更新自身记忆。"""
-        pass
+        """更新项目记忆 — 持久化字段描述供下次分析复用。"""
+        if not project_id:
+            return
+        descriptions = context.get("column_descriptions", {})
+        display_names = context.get("column_display_names", {})
+        if not descriptions and not display_names:
+            return
+        try:
+            from hagoku.memory.projects._manager import MemoryManager
+            mm = context.get("_memory_manager")
+            if mm is None:
+                return
+            mm.persist_field_descriptions(
+                project_id, descriptions,
+                column_display_names=display_names,
+            )
+        except Exception:
+            logger.debug("项目记忆更新失败（非关键路径）", exc_info=True)
 
     # ═══════════════════════════════════════════════════════════════
     # 关注点 2：评估清洗

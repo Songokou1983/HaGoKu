@@ -1,4 +1,4 @@
-"""Prompt Lab API — prompt 模拟器后端（Phase E CO-M2）"""
+"""Prompt Lab API — prompt 模拟器后端（Phase E CO-M2 ✅）"""
 
 from __future__ import annotations
 

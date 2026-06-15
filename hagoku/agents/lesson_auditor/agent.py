@@ -1,4 +1,4 @@
-"""LessonAuditor — ② 层成长记忆质量审计 Agent（Phase E CO-M3.1）
+"""LessonAuditor — ② 层成长记忆质量审计 Agent（Phase E CO-M3.1 ✅）
 
 用 Meta LLM 审 lessons.jsonl：重复检测、矛盾识别、低质量标记、趋势月报。
 只输出建议，不修改 lesson 内容（brief §3.4）。

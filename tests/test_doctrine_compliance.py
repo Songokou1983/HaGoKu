@@ -811,3 +811,88 @@ def test_meta_提示词违规探测器自检() -> None:
     for text in ok_cases:
         matched = any(re.search(p, text) for p, _ in _PROMPT_VERDICT_PATTERNS)
         assert not matched, f"守门 7 探测器误报：合法 prompt 内容「{text}」被错误标记为违规"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 守门 5：代码层语义默认值 — 禁止 setdefault / .get() 预设业务结论
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 代码中通过 setdefault 或 .get(key, literal_default) 为业务语义字段设置
+# 字面量默认值（True/False/"feature"/"target" 等），等同于"我替 LLM 做业务判断"。
+# LLM 没给的值，代码不准填。
+
+# 业务语义字段名——这些字段的值必须由 LLM 产生
+_SEMANTIC_FIELD_NAMES = {
+    "used_in_analysis",
+    "needs_user_input",
+    "suggested_role",
+    "display_name",
+    "chinese_name",
+    "description",
+    "evidence",
+    "inferred_type",
+}
+
+# 检测 .setdefault("语义字段", 字面量) 或 .get("语义字段", 字面量默认值)
+_SETDEFAULT_PATTERN = re.compile(
+    r"\.setdefault\s*\(\s*[\"'](" + "|".join(_SEMANTIC_FIELD_NAMES) + r")[\"']\s*,"
+)
+_GET_DEFAULT_PATTERN = re.compile(
+    r"\.get\s*\(\s*[\"'](" + "|".join(_SEMANTIC_FIELD_NAMES) + r")[\"']\s*,\s*[^Nn]"
+)
+
+# .get("key", None) 或 .get("key", "") 不含业务语义，豁免
+_GET_DEFAULT_OK = re.compile(
+    r"\.get\s*\(\s*[\"'](" + "|".join(_SEMANTIC_FIELD_NAMES) + r")[\"']\s*,\s*(None|\[\]|\{\}|\"\"|''|0|1\.0)"
+)
+
+
+def _line_has_setdefault_violation(line: str) -> bool:
+    m = _SETDEFAULT_PATTERN.search(line)
+    if not m:
+        return False
+    field = m.group(1)
+    # 提取 setdefault 的第二个参数（默认值）
+    rest = line[m.end():].strip()
+    if rest.startswith("None") or rest.startswith("[]") or rest.startswith("{}") or rest.startswith('""') or rest.startswith("''"):
+        return False
+    return True
+
+
+def _line_has_getdefault_violation(line: str) -> bool:
+    m = _GET_DEFAULT_PATTERN.search(line)
+    if not m:
+        return False
+    # .get("key", None/[]/{}/"") 不含语义，豁免
+    if _GET_DEFAULT_OK.search(line):
+        return False
+    return True
+
+
+def test_doctrine_无代码层语义默认值() -> None:
+    """禁止通过 setdefault 或 .get() 为业务语义字段设置字面量默认值。
+
+    LLM 是字段语义的唯一权威。代码不准预设 used_in_analysis=True、
+    suggested_role="feature" 等业务结论。
+    """
+    violations: list[str] = []
+
+    for path in _scanned_files():
+        lines = _read(path).splitlines()
+        for lineno, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if _line_has_setdefault_violation(stripped):
+                violations.append(f"{path.relative_to(HAGOKU_ROOT)}:{lineno}  setdefault 语义默认值 → {stripped[:100]}")
+            elif _line_has_getdefault_violation(stripped):
+                violations.append(f"{path.relative_to(HAGOKU_ROOT)}:{lineno}  .get() 语义默认值 → {stripped[:100]}")
+
+    assert not violations, (
+        "\n违反【铁律 1 — 零硬编码】代码层语义默认值\n"
+        "代码通过 setdefault 或 .get() 为业务字段预设了字面量默认值\n"
+        "（如 used_in_analysis=True、suggested_role='feature'）\n"
+        "LLM 是字段语义的唯一权威——LLM 没给的值，代码不准填\n"
+        "修复：删除 setdefault 行，或改为 .get(key)（无默认值）\n"
+        f"违规行：\n" + "\n".join(violations)
+    )

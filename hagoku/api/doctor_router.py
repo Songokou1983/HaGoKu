@@ -1,0 +1,276 @@
+"""Doctor API — HaGoKu Doctor 审计端点（CO-D09）
+
+提供系统健康检查、方法库/工具箱审计触发、审计报告列表与查看。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/api/doctor", tags=["doctor"])
+
+AUDIT_DIR = Path.home() / ".hagoku" / "audits"
+
+
+class HealthResponse(BaseModel):
+    """系统健康检查响应模型。"""
+    ok: bool
+    total: int
+    passed: int
+    blocking_failed: bool
+    checks: list[dict[str, Any]]
+    model_available: str
+    token_rate_tok_s: float
+
+
+class AuditTriggerResponse(BaseModel):
+    """审计触发响应。"""
+    ok: bool
+    report_path: str
+    summary: dict[str, Any]
+
+
+class ChatRequest(BaseModel):
+    """Doctor 对话请求。"""
+    message: str
+    history: list[dict[str, str]] = []
+
+
+class ChatResponse(BaseModel):
+    """Doctor 对话响应。"""
+    reply: str
+
+
+@router.get("/health", response_model=HealthResponse)
+async def doctor_health() -> dict[str, Any]:
+    """执行系统健康检查（LLM 5 步 + 依赖库）。"""
+    from hagoku.tools.health import check_system
+
+    results = check_system()
+    ok_count = sum(1 for r in results if r.ok)
+
+    # 找到 LLM 检查中的模型和速率信息
+    llm_result = next((r for r in results if r.name == "LLM 服务" or "LLM" in r.name), None)
+    model_available = ""
+    token_rate = 0.0
+
+    # 尝试获取更详细的 LLM 健康报告
+    try:
+        from hagoku.config import HaGoKuConfig
+        from hagoku.tools.health import check_llm_health
+        cfg = HaGoKuConfig.load()
+        llm_report = check_llm_health(cfg)
+        model_available = llm_report.model_available
+        token_rate = llm_report.token_rate_tok_s
+    except Exception:
+        pass
+
+    return {
+        "ok": ok_count == len(results),
+        "total": len(results),
+        "passed": ok_count,
+        "blocking_failed": any(not r.ok for r in results[:3]),  # 前三项是阻塞
+        "checks": [
+            {
+                "name": r.name,
+                "ok": r.ok,
+                "detail": r.detail,
+                "suggestions": r.suggestions,
+            }
+            for r in results
+        ],
+        "model_available": model_available,
+        "token_rate_tok_s": token_rate,
+    }
+
+
+@router.post("/audit/methods", response_model=AuditTriggerResponse)
+async def trigger_method_audit() -> dict[str, Any]:
+    """触发方法库审计（MethodCurator）。"""
+    try:
+        from hagoku.agents.method_curator.agent import run_method_audit
+        path = run_method_audit()
+        return {
+            "ok": True,
+            "report_path": str(path),
+            "summary": {"report": path.name},
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Method audit failed: {e}")
+
+
+@router.post("/audit/tools", response_model=AuditTriggerResponse)
+async def trigger_tool_audit() -> dict[str, Any]:
+    """触发工具箱审计（ToolCurator）。"""
+    try:
+        from hagoku.agents.tool_curator.agent import run_tool_audit
+        path = run_tool_audit()
+        return {
+            "ok": True,
+            "report_path": str(path),
+            "summary": {"report": path.name},
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tool audit failed: {e}")
+
+
+@router.get("/audits")
+async def list_audits() -> dict[str, Any]:
+    """列出所有审计报告。"""
+    if not AUDIT_DIR.exists():
+        return {"audits": []}
+    reports = []
+    for f in sorted(AUDIT_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+        stat = f.stat()
+        # 判断报告类型
+        if f.name.startswith("method_"):
+            rtype = "method"
+        elif f.name.startswith("tool_"):
+            rtype = "tool"
+        elif f.name.startswith("lesson_"):
+            rtype = "lesson"
+        else:
+            rtype = "unknown"
+        reports.append({
+            "name": f.name,
+            "type": rtype,
+            "size": stat.st_size,
+            "mtime": int(stat.st_mtime),
+        })
+    return {"audits": reports}
+
+
+@router.get("/audits/{filename}")
+async def get_audit_report(filename: str) -> dict[str, Any]:
+    """获取审计报告内容。"""
+    # 安全：防止路径穿越
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = AUDIT_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Report not found")
+    content = path.read_text(encoding="utf-8")
+    return {"name": filename, "content": content, "size": len(content)}
+
+
+@router.get("/status")
+async def doctor_status() -> dict[str, Any]:
+    """检查 Doctor 系统状态（LLM 可用性、audits 目录等）。"""
+    from hagoku.config import HaGoKuConfig
+
+    try:
+        cfg = HaGoKuConfig.load()
+        # meta_llm 优先；未配则回退主 LLM（create_meta_client 同样逻辑）
+        meta_configured = bool(
+            (cfg.meta_llm.base_url and cfg.meta_llm.model)
+            or (cfg.llm.base_url and cfg.llm.model)
+        )
+    except Exception:
+        meta_configured = False
+
+    audits_exist = AUDIT_DIR.exists() and any(AUDIT_DIR.glob("*.md"))
+
+    return {
+        "meta_llm_configured": meta_configured,
+        "audits_dir": str(AUDIT_DIR),
+        "audits_exist": audits_exist,
+    }
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
+    """Doctor 对话 — 用 meta LLM 回复用户维护问题。
+
+    自动注入当前系统健康状态和最新审计摘要作为上下文。
+    """
+    from hagoku.config import HaGoKuConfig
+    from hagoku.channel import build_messages
+    from hagoku.tools.health import check_system
+
+    cfg = HaGoKuConfig.load()
+
+    # 创建 LLM 客户端：meta_llm 优先，否则回退主 LLM
+    from openai import OpenAI
+    import httpx as _httpx
+    if cfg.meta_llm.base_url and cfg.meta_llm.model:
+        client = OpenAI(
+            base_url=cfg.meta_llm.base_url,
+            api_key=cfg.meta_llm.api_key,
+            timeout=120.0,
+            http_client=_httpx.Client(transport=_httpx.HTTPTransport(retries=1)),
+        )
+        model = cfg.meta_llm.model
+    else:
+        client = OpenAI(
+            base_url=cfg.llm.base_url,
+            api_key=cfg.llm.api_key,
+            timeout=120.0,
+            http_client=_httpx.Client(transport=_httpx.HTTPTransport(retries=1)),
+        )
+        model = cfg.llm.model
+
+    # 收集系统上下文
+    health_ctx = ""
+    try:
+        results = check_system()
+        ok_count = sum(1 for r in results if r.ok)
+        health_ctx = f"系统健康：{ok_count}/{len(results)} 项通过\n"
+        for r in results:
+            icon = "✅" if r.ok else "❌"
+            health_ctx += f"  {icon} {r.name}: {r.detail}\n"
+    except Exception:
+        health_ctx = "系统健康：无法获取\n"
+
+    # 收集审计上下文
+    audit_ctx = ""
+    if AUDIT_DIR.exists():
+        reports = sorted(AUDIT_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if reports:
+            audit_ctx = f"最近审计报告 ({len(reports)} 份):\n"
+            for rp in reports[:3]:
+                try:
+                    content = rp.read_text(encoding="utf-8")[:300]
+                    audit_ctx += f"\n### {rp.name}\n{content}\n"
+                except Exception:
+                    pass
+
+    # 构建 system_extra
+    system_extra = f"""你是 HaGoKu Doctor，负责系统维护。你可以帮助用户：
+
+- 诊断系统健康问题（LLM 连接、依赖库）
+- 解释审计报告（方法库、工具箱）
+- 建议修复方案
+- 回答关于 HaGoKu 架构的问题
+
+你只能建议和审阅，不能修改代码或配置。告诉用户应该做什么，让用户自己操作。
+
+## 当前系统上下文
+
+{health_ctx}
+
+{audit_ctx if audit_ctx else "暂无审计报告。"}
+"""
+
+    history = req.history or []
+    messages = build_messages(
+        query="HaGoKu Doctor 维护对话",
+        user_input=req.message,
+        history=[{"role": h.get("role", "user"), "content": h.get("content", "")} for h in history],
+        system_extra=system_extra,
+    )
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        reply = resp.choices[0].message.content or ""
+        return {"reply": reply}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Meta LLM 调用失败: {e}")

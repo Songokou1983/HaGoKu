@@ -44,6 +44,10 @@ app = FastAPI(title="HaGoKu Studio API", version="0.1.0", lifespan=lifespan)
 from hagoku.api.prompt_lab import router as prompt_lab_router
 app.include_router(prompt_lab_router)
 
+# Doctor API（CO-D09）
+from hagoku.api.doctor_router import router as doctor_router
+app.include_router(doctor_router)
+
 # 环境区分：生产环境锁定 CORS，开发环境开放
 _hagoku_env = os.environ.get("HAGOKU_ENV", "").strip().lower()
 if _hagoku_env in ("production", "prod"):

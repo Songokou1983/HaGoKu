@@ -10,6 +10,7 @@ import PromptLabPanel from "./panels/PromptLabPanel";
 import EventPanel from "./panels/EventPanel";
 import KanbanPanel from "./panels/KanbanPanel";
 import CommandsPanel from "./panels/CommandsPanel";
+import DoctorPanel from "./panels/DoctorPanel";
 import {
   FolderKanban,
   BarChart3,
@@ -21,6 +22,7 @@ import {
   X,
   BookOpenCheck,
   FlaskConical,
+  Stethoscope,
 } from "lucide-react";
 
 type NavSection = "work" | "ref" | "ops" | "dev";
@@ -45,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "events",    title: "运行日志", Icon: Activity,     section: "ops" },
   // ── 开发者 ──
   { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
+  { id: "doctor",    title: "HaGoKu Doctor", Icon: Stethoscope,  section: "dev" },
   { id: "settings",  title: "设置",   Icon: Settings,      section: "dev" },
 ];
 
@@ -65,6 +68,7 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   settings:  <SettingsPanel />,
   lab:       <PromptLabPanel />,
   commands:  <CommandsPanel />,
+  doctor:    <DoctorPanel />,
 };
 
 /** 固定顺序，保证切换侧栏时面板不卸载（避免分析页 local state 被重置） */
@@ -77,6 +81,7 @@ const PANEL_ORDER: PanelId[] = [
   "kanban",
   "events",
   "lab",
+  "doctor",
   "settings",
 ];
 

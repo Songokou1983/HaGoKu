@@ -457,14 +457,31 @@ def list_methods(tag: str | None) -> None:
     click.echo()
 
 
-@cli.command(name="doctor")
-def doctor_cmd() -> None:
-    """检查系统健康状态（LLM 连接、依赖库）
+@cli.group(name="doctor", invoke_without_command=True)
+@click.pass_context
+def doctor_cmd(ctx: click.Context) -> None:
+    """HaGoKu Doctor — 系统健康检查与资产审计
 
+    \b
     示例：
-        hagoku doctor              # 完整检查
-        hagoku doctor --llm-only    # 只检查 LLM
+        hagoku doctor                    # 完整健康检查
+        hagoku doctor health             # 同上
+        hagoku doctor audit-methods      # 审知识库
+        hagoku doctor audit-tools        # 审工具箱
+        hagoku doctor tool-gate          # CI 守门检查
     """
+    if ctx.invoked_subcommand is None:
+        # 无子命令时执行默认健康检查
+        _run_doctor_health()
+
+
+@doctor_cmd.command(name="health")
+def doctor_health_cmd() -> None:
+    """系统健康检查（LLM 连接、依赖库）"""
+    _run_doctor_health()
+
+
+def _run_doctor_health() -> None:
     from .tools.health import check_system, format_health_report
 
     click.echo("🔍 HaGoKu Studio 系统健康检查...")
@@ -479,6 +496,47 @@ def doctor_cmd() -> None:
         click.echo("   hagoku config                    # 查看当前配置")
         click.echo("   # 或设置环境变量:")
         click.echo("   export HAGOKYU_LLM_BASE_URL=<你的 LLM 地址>")
+
+
+@doctor_cmd.command(name="audit-methods")
+def doctor_audit_methods_cmd() -> None:
+    """审计学术方法库（MethodCurator）"""
+    click.echo("🔍 MethodCurator — 审计学术方法库...")
+    try:
+        from .agents.method_curator.agent import run_method_audit
+        path = run_method_audit()
+        click.echo(f"✅ 审计完成: {path}")
+    except Exception as e:
+        click.echo(f"❌ 审计失败: {e}", err=True)
+        raise SystemExit(1)
+
+
+@doctor_cmd.command(name="audit-tools")
+def doctor_audit_tools_cmd() -> None:
+    """审计工具箱（ToolCurator）"""
+    click.echo("🔍 ToolCurator — 审计工具箱...")
+    try:
+        from .agents.tool_curator.agent import run_tool_audit
+        path = run_tool_audit()
+        click.echo(f"✅ 审计完成: {path}")
+    except Exception as e:
+        click.echo(f"❌ 审计失败: {e}", err=True)
+        raise SystemExit(1)
+
+
+@doctor_cmd.command(name="tool-gate")
+def doctor_tool_gate_cmd() -> None:
+    """CI 确定性守门检查（G1-G4）"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "ci" / "tool_gate.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=False,
+    )
+    raise SystemExit(result.returncode)
 
 
 @cli.command()

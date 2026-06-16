@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
 import { Field } from "../components/FormField";
+import { useThemeStore } from "../stores/theme";
 
 /** 接口返回的完整 llm 片段（含 sub_model，用于判断是否曾拆成两个名字） */
 interface LlmConfigPayload {
@@ -62,6 +63,8 @@ function formFromNormalized(n: LlmConfigPayload): LlmFormState {
 
 export default function SettingsPanel() {
   const [llm, setLlm] = useState<LlmFormState>(emptyLlm);
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
   const [metaUrl, setMetaUrl] = useState("");
   const [metaModel, setMetaModel] = useState("");
   const [metaKey, setMetaKey] = useState("");
@@ -83,6 +86,10 @@ export default function SettingsPanel() {
   const [testStatusMeta, setTestStatusMeta] = useState<TestStatus>("idle");
   const [testMessageMeta, setTestMessageMeta] = useState<string | null>(null);
   const [testTimeMeta, setTestTimeMeta] = useState<string | null>(null);
+
+  // 高级 LLM 配置
+  const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
+  const [subModelQuick, setSubModelQuick] = useState("");
 
   const loadConfig = useCallback(() => {
     setLoading(true);
@@ -240,7 +247,7 @@ export default function SettingsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           base_url: llm.base_url.trim(),
-          main_model: llm.main_model.trim(),
+          model: llm.main_model.trim(),
           api_key: apiKeyInput.trim(),
 
         }),
@@ -428,6 +435,33 @@ export default function SettingsPanel() {
               <CheckCircle2 size={12} /> 已保存
             </p>
           )}
+        </div>
+
+        {/* ── 主题 ── */}
+        <div className="border-t border-app-border/50 pt-4 mt-2">
+          <h3 className="text-ui-sm font-medium text-app-text mb-3">界面主题</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTheme("dark")}
+              className={`flex items-center gap-2 px-4 py-2 rounded border text-ui-xs cursor-pointer transition-colors ${
+                theme === "dark"
+                  ? "border-app-accent bg-app-accent/10 text-app-text"
+                  : "border-app-border bg-app-bg-secondary text-app-text-muted hover:border-app-accent/50"
+              }`}
+            >
+              <span className="text-sm">🌙</span> 暗色
+            </button>
+            <button
+              onClick={() => setTheme("light")}
+              className={`flex items-center gap-2 px-4 py-2 rounded border text-ui-xs cursor-pointer transition-colors ${
+                theme === "light"
+                  ? "border-app-accent bg-app-accent/10 text-app-text"
+                  : "border-app-border bg-app-bg-secondary text-app-text-muted hover:border-app-accent/50"
+              }`}
+            >
+              <span className="text-sm">☀️</span> 亮色
+            </button>
+          </div>
         </div>
       </div>
     </div>

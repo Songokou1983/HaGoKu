@@ -11,6 +11,8 @@ import EventPanel from "./panels/EventPanel";
 import KanbanPanel from "./panels/KanbanPanel";
 import CommandsPanel from "./panels/CommandsPanel";
 import DoctorPanel from "./panels/DoctorPanel";
+import { TitleBar } from "./components/TitleBar";
+import { useThemeStore } from "./stores/theme";
 import {
   FolderKanban,
   BarChart3,
@@ -120,6 +122,7 @@ function SystemStatus() {
 
 export default function App() {
   const { onMessage } = useWebSocket();
+  const theme = useThemeStore((s) => s.theme);
   const setLastError = useWorkspaceStore((s) => s.setLastError);
   const lastError = useWorkspaceStore((s) => s.lastError);
   const activeView = useWorkspaceStore((s) => s.activeView);
@@ -136,7 +139,9 @@ export default function App() {
   }, [onMessage, setLastError]);
 
   return (
-    <div
+    <div className="h-full flex flex-col bg-app-bg" data-theme={theme}>
+      <TitleBar />
+      <div className="flex-1 min-h-0"
       style={{
         display: "grid",
         gridTemplateColumns: "180px 1fr",
@@ -148,8 +153,8 @@ export default function App() {
       <aside className="flex flex-col border-r border-app-border bg-app-bg-secondary overflow-hidden">
         {/* Logo */}
         <div className="px-4 py-3 border-b border-app-border shrink-0">
-          <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu Studio</div>
-          <div className="text-ui-xs text-app-text-muted mt-0.5">数据分析师 · 专业工具箱</div>
+          <div className="text-app-text font-mono font-semibold tracking-wide">HaGoKu</div>
+          <div className="text-ui-xs text-app-text-muted mt-0.5">v0.10 · 数据分析师</div>
         </div>
 
         {/* Current project indicator */}
@@ -240,6 +245,7 @@ export default function App() {
           </div>
         ))}
       </main>
+    </div>
     </div>
   );
 }

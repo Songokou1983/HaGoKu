@@ -22,19 +22,25 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
     用户输入 → 对话历史 → LLM 自己看、自己决定。
     代码不截流，不单独调 LLM 解析。和 reporter handler 同模式。
     """
-    # 空输入 = 首次展示字段表（不调 LLM，纯 UI 事件）
+    # 空输入 = 首次展示——LLM 文本已由 run_scout_phase 直接 emit，这里只处理 ask_user
     if not user_input or not user_input.strip():
-        scout_msg = scout_field_review_pause_payload(context)
-        scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
-        return {"status": "scout_review", "message": "", "field_review": scout_msg.get("field_review")}
+        ask = context.pop("_pending_ask_user", None)
+        if ask:
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
+            return ("stay", None)
+        # 信号：分析暂停，前端显示输入框。文本已通过流式发送。
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+        return {"status": "scout_review", "message": ""}
 
     # 用户输入进对话历史，LLM 自己处理
     project_ctx = context.get("_project_context")
     if project_ctx:
         project_ctx.add_user_feedback("scout", context.get("interaction_revision", 0), raw_text=user_input)
 
-    result = self._agent.run_step(context, self._df_raw, user_input)
+    # 用户输入已由 add_user_feedback 写入 ProjectContext → build_prompt 历史。
+    # run_step 的 user_input 传空，避免 build_messages 再追加一遍（×2）。
+    result = self._agent.run_step(context, self._df_raw, "")
+    self._log_channel("scout", "run_step_done", text=result.get("text","")[:80])
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
@@ -49,11 +55,10 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         if target and target != "scout":
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    # 留在 scout：展示更新后的字段表
-    scout_msg = scout_field_review_pause_payload(context)
-    scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", scout_msg)
-    return {"status": "scout_review", "message": "", "field_review": scout_msg.get("field_review")}
+    # 留在 scout：发信号让前端显示输入框。文本已通过流式发送，不在此重复。
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+    reply_text = result.get("text", "")
+    return {"status": "scout_review", "message": reply_text}
 
 
 def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
@@ -259,6 +264,7 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     user_input: {"text": "用户回复", "stage": "当前阶段"}
     """
     text = user_input.get("text", "").strip()
+    self._log_channel("orchestrator", "respond_enter", text=text[:80], stage=self._stage)
     if self._is_cancel_requested():
         return {"status": "cancelled", "message": "分析已中止"}
     if self._error:

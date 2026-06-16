@@ -99,14 +99,21 @@ class Orchestrator(
     ConfirmationMixin,
     PipelineHelpersMixin,
 ):
+    """HaGoKu Studio 编排器：规则+AI 双驱动，协调四个 Agent"""
+
+    def _log_channel(self, agent: str, event: str, **kw: Any) -> None:
+        """通道日志——记录每个关键决策点。"""
+        try:
+            cl = getattr(self, "_channel_logger", None)
+            if cl: cl.log(agent, event, **kw)
+        except Exception: pass
+
     _STAGE_HANDLERS: dict[str, str] = {
         "scout": "_handle_scout_reply",
         "cleaner": "_handle_cleaner_reply",
         "analyst": "_handle_analyst_reply",
         "reporter": "_handle_reporter_reply",
     }
-
-    """HaGoKu Studio 编排器：规则+AI 双驱动，协调四个 Agent"""
 
     def __init__(self, config: HaGoKuConfig | None = None) -> None:
         self.config = config or HaGoKuConfig.load()
@@ -258,6 +265,7 @@ class Orchestrator(
 
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
+        self.output_mgr.save_run_meta(run_dir, {"run_id": run_id, "query": query, "project": project_name})
 
         # ── LLM dump：设置当前 run 的 dump 目录（CH-4：观察通道四合一）──
         from ..observability.llm_dump import set_run_dir

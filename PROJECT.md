@@ -639,6 +639,80 @@ hagoku/
 
 ---
 
+## Desktop App（v0.10，2026-06-16）
+
+HaGoKu 支持 Electron 桌面端，提供和 Reasonix 一致的对话体验。
+
+### 架构
+
+```
+desktop/
+├── main.js          # Electron 主进程（无框窗口、IPC、快捷键）
+├── preload.js       # 安全暴露 window.hagokuDesktop API
+├── start.sh         # 一键启动：API + Vite + Electron
+└── package.json     # Electron + electron-builder
+```
+
+### 启动方式
+
+```bash
+hagoku desktop           # CLI 一键启动
+bash desktop/start.sh    # 直接启动
+# 或从 Linux 应用菜单搜索 "HaGoKu"
+```
+
+### 功能
+
+- 无框窗口 + 自定义标题栏（最小化/最大化/关闭）
+- 窗口状态记忆（位置、大小、最大化）
+- 快捷键：Ctrl+=/- 缩放、F11 全屏、Ctrl+Shift+I 开发者工具
+- Dark/Light 双主题（CSS 变量驱动，Tailwind 原生支持）
+
+### 与 Reasonix 的对比
+
+| | Reasonix | HaGoKu Desktop |
+|---|---|---|
+| 窗口 | 原生 | Electron（Chromium） |
+| 渲染 | react-markdown + remark-gfm | 同 |
+| 流式 | agent_stream_delta/end | 同 |
+| 工具展示 | 内联卡片 | ToolExchangeTurn |
+| 主题 | 系统主题 | dark/light 双主题 |
+
+---
+
+## 通道审计（2026-06-16）
+
+### 发现的通道污染
+
+LLM 到用户之间曾被 5 层代码包装：
+`_scout_text` → `context` → `scout_field_review_pause_payload` → `USER_INPUT_REQUESTED` → `workflow message`
+
+每一层都可能变格式、丢信息、或被重复转发。已删除 3 层，现在 LLM 文本通过流式直达前端。
+
+### ×2 重复的四个来源
+
+| 来源 | 修复 |
+|---|---|
+| `add_user_feedback` + `build_messages` 双加用户输入 | 传空 user_input，由历史承载 |
+| `USER_INPUT_REQUESTED` + ACK 双通道 | 事件只发信号，ACK 只做状态 |
+| `ToolExchangeTurn` `assistant_pre_text` 和流式消息重复 | 关闭 pre_text |
+| React StrictMode effect 双跑 | 去重逻辑兜底 |
+
+### 守门盲区
+
+现有守门（测试 + CLAUDE.md 触发词）覆盖 6 种硬编码模式，不覆盖"代码搬运 LLM 输出"。这是第 7 种——已加刹车 D。
+
+### prompt 演进
+
+| 版本 | 行数 | 问题 |
+|---|---|---|
+| 旧 | 87 | 强制四阶段流水线、"只确认完成"沉默指令、矛盾格式要求 |
+| 新 | 32 | 自由对话、工具全开、每轮必须回复 |
+
+核心教训：**每加一条限制都是堵塞通道。删代码比加代码更接近通道原则。**
+
+---
+
 ## 项目信息
 
 - **名称**: HaGoKu Studio

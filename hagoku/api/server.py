@@ -69,7 +69,7 @@ app.add_middleware(ApiAuthMiddleware)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.10.0"}
 
 
 # ── 项目目录（与 `HaGoKuConfig.output.project_dir` / `HAGOKYU_PROJECT_DIR` 一致）────
@@ -539,49 +539,53 @@ async def get_project_runs(project_name: str):
         if not run_dir.is_dir():
             continue
         meta_file = run_dir / "run_meta.json"
-        if not meta_file.exists():
-            continue
-        try:
-            meta = _json.loads(meta_file.read_text(encoding="utf-8"))
-            rid = meta.get("run_id", run_dir.name)
-            output_path = meta.get("output_path", "")
-            out = run_dir / "output"
-            guardrails_blocked = (out / "GUARDRAILS_BLOCKED.md").exists()
-            html_exists = (out / "report.html").exists()
-            if output_path:
-                op = Path(output_path)
-                if op.exists() and op.suffix.lower() == ".html":
-                    html_exists = True
-            if guardrails_blocked:
-                status = "guardrails_blocked"
-            elif html_exists:
-                status = "completed"
-            else:
-                status = "unknown"
-            report_url = None
-            if html_exists:
-                fname = "report.html"
-                if not (out / "report.html").exists() and output_path:
-                    op = Path(output_path)
-                    if op.exists():
-                        fname = op.name
-                report_url = f"/api/reports/{project_name}/{rid}/{fname}"
-            guardrails_notice_url = (
-                f"/api/reports/{project_name}/{rid}/GUARDRAILS_BLOCKED.md"
-                if guardrails_blocked else None
-            )
-            runs.append({
-                "run_id": rid,
-                "query": meta.get("query", ""),
-                "status": status,
-                "report_url": report_url,
-                "guardrails_notice_url": guardrails_notice_url,
-                "guardrails_blocked": guardrails_blocked,
-            })
-        except Exception:
-            runs.append({"run_id": run_dir.name, "query": "", "status": "unknown", "report_url": None, "guardrails_blocked": False})
+        if meta_file.exists():
+            try:
+                meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception:
+                meta = {}
+        else:
+            meta = {}
+        rid = meta.get("run_id", run_dir.name)
+        query = meta.get("query", "")
+        has_dumps = (run_dir / "llm_dumps").exists()
+        has_events = (run_dir / "events.jsonl").exists()
+        status = "completed" if (run_dir / "output" / "report.html").exists() else ("active" if has_dumps or has_events else "empty")
+        runs.append({
+            "run_id": rid,
+            "query": query,
+            "status": status,
+        })
 
     return {"runs": runs}
+
+
+# ── GET /api/projects/{project_name}/runs/{run_id}/conversation — 会话历史 ──
+@app.get("/api/projects/{project_name}/runs/{run_id}/conversation")
+async def get_run_conversation(project_name: str, run_id: str):
+    import json as _json
+    run_dir = _projects_root() / project_name / "runs" / run_id
+    if not run_dir.exists():
+        raise HTTPException(404, "Run not found")
+    dumps_dir = run_dir / "llm_dumps"
+    if not dumps_dir.exists():
+        return {"messages": [], "run_id": run_id}
+    msgs: list[dict] = []
+    seen = set()
+    for df in sorted(dumps_dir.glob("*_response_*.json")):
+        try:
+            dump = _json.loads(df.read_text(encoding="utf-8"))
+            for m in dump.get("messages", []):
+                r = m.get("role", "")
+                if r == "system": continue
+                c = (m.get("content", "") or "").strip()
+                key = (r, c[:80])
+                if key in seen: continue
+                seen.add(key)
+                tc = m.get("tool_calls")
+                msgs.append({"role": r, "content": c[:500], "has_tool_calls": bool(tc)})
+        except Exception: pass
+    return {"messages": msgs, "run_id": run_id}
 
 
 # ── GET /api/projects/{project_name}/files — 列出项目数据文件 ─

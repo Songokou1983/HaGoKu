@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Wrench, AlertTriangle } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ToolCallItem } from "../types/events";
 
 export interface ToolExchangeTurnProps {
@@ -23,10 +25,12 @@ export function ToolExchangeTurn({
 
   return (
     <div className="border border-app-border/60 rounded-md overflow-hidden bg-app-bg-secondary/50 my-1">
-      {/* Assistant pre-text (流出的 prose，在 tool 调用前) */}
-      {assistant_pre_text && (
-        <div className="px-3 py-2 text-ui-xs text-app-text-muted italic border-b border-app-border/40 whitespace-pre-wrap">
-          {assistant_pre_text}
+      {/* Assistant pre-text removed — 流式 agent 消息已展示，此处不重复 */}
+      {false && assistant_pre_text && (
+        <div className="px-3 py-2 text-ui-xs text-app-text-muted italic border-b border-app-border/40">
+          <div className="kb-detail-html">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof assistant_pre_text === "string" ? assistant_pre_text : JSON.stringify(assistant_pre_text)}</ReactMarkdown>
+          </div>
         </div>
       )}
 

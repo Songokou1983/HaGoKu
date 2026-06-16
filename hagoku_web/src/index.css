@@ -24,6 +24,20 @@
   }
 }
 
+/* ── 主题 ── */
+[data-theme="dark"] {
+  --app-bg: #0B0E14; --app-bg-secondary: #11151E; --app-bg-tertiary: #1C2333;
+  --app-text: #E2E5EB; --app-text-muted: #8892A4;
+  --app-accent: #00D4AA; --app-accent-hover: #00B892;
+  --app-border: #2A3040;
+}
+[data-theme="light"] {
+  --app-bg: #F8F9FB; --app-bg-secondary: #FFFFFF; --app-bg-tertiary: #EEF0F4;
+  --app-text: #1A1D26; --app-text-muted: #5F6B7A;
+  --app-accent: #2563EB; --app-accent-hover: #1D4ED8;
+  --app-border: #D1D5DB;
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,

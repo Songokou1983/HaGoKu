@@ -467,6 +467,24 @@ export function useWsEventHandler(deps: WsEventDeps) {
             }
             setActiveFieldReviewRevision(incomingRevision);
             setFieldReviewScrollNonce((n) => n + 1);
+          } else if (!fr && dataObj.message) {
+            // 自由格式 markdown——LLM 直接输出的文本。去重：相同内容不重复追加
+            const msgText = String(dataObj.message);
+            if (!msgText.trim()) { /* 空消息跳过——ToolExchangeTurn 已展示 */ }
+            else {
+            setMessages((prev) => {
+              if (prev.length > 0 && prev[prev.length - 1].text === msgText) return prev;
+              return [
+                ...prev,
+                {
+                  id: uid(),
+                  role: "workflow",
+                  text: msgText,
+                  timestamp: d.timestamp,
+                },
+              ];
+            });
+            }
           } else if (!gatePayload && !cr && !ar && !isPureAsk) {
             setActiveFieldReviewId(null);
             setActiveFieldReviewRevision(-1);

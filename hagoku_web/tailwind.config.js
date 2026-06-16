@@ -7,29 +7,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 背景略抬一点层次，正文用灰白而非刺眼的近纯白
-        "app-bg":            '#121826',
-        "app-bg-secondary":  '#131A28',
-        "app-bg-tertiary":   '#222A3A',
-        "app-text":          '#E2E5EB',
-        "app-text-muted":    '#B8BFCA',
-        "app-accent":        '#3B82F6',
-        "app-accent-hover":  '#2563EB',
-        "app-border":        '#3D4658',
+        "app-bg":            'var(--app-bg, #0B0E14)',
+        "app-bg-secondary":  'var(--app-bg-secondary, #11151E)',
+        "app-bg-tertiary":   'var(--app-bg-tertiary, #1C2333)',
+        "app-text":          'var(--app-text, #E2E5EB)',
+        "app-text-muted":    'var(--app-text-muted, #8892A4)',
+        "app-accent":        'var(--app-accent, #00D4AA)',
+        "app-accent-hover":  'var(--app-accent-hover, #00B892)',
+        "app-border":        'var(--app-border, #2A3040)',
         "app-error":         '#EF4444',
         "app-error-hover":   '#DC2626',
         "app-success":       '#10B981',
         "app-success-hover":  '#059669',
         "app-warning":       '#F59E0B',
         "app-warning-hover": '#D97706',
-        // Status badge backgrounds
         "app-running":       '#1a3a5c',
         "app-done":          '#1a3a1a',
         "app-status-error":  '#3a1a1a',
         "app-status-waiting": '#3a3a1a',
-        // Agent text (VS Code bright blue)
         "app-agent":         '#9cdcfe',
-        // Event type colors
         "event-run":    '#569cd6',
         "event-done":   '#6a9955',
         "event-fail":   '#f44747',

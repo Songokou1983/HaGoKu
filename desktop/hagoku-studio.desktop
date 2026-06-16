@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=HaGoKu
+Comment=数据分析师 · 专业工具箱
+Exec=/home/son_goku/HaGoKu/desktop/start.sh
+Path=/home/son_goku/HaGoKu
+Terminal=false
+Type=Application
+Categories=Science;DataVisualization;
+StartupWMClass=HaGoKu Studio
+Icon=/home/son_goku/HaGoKu/desktop/icon.png

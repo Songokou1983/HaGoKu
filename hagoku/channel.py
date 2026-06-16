@@ -126,5 +126,6 @@ def build_messages(
         msgs.append({"role": "system", "content": validated.system_extra})
     msgs.append({"role": "user", "content": validated.query})
     msgs.extend(validated.history)
-    msgs.append({"role": "user", "content": validated.user_input})
+    if validated.user_input.strip():
+        msgs.append({"role": "user", "content": validated.user_input})
     return msgs

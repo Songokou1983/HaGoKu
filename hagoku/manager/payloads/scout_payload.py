@@ -83,6 +83,11 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     律 5：display_name / description 首选 column_semantics，兜底 column_descriptions/column_display_names。
     """
     cols = context.get("column_semantics") or []
+    if cols and isinstance(cols[0], dict) and "_scout_text" in cols[0]:
+        return {
+            "message": cols[0]["_scout_text"],
+            "field_review": None,
+        }
     if not cols:
         return {"message": "共 0 列 — 无法生成字段表。", "field_review": None}
     # 收口双写：从 column_semantics 派生（唯一权威），旧字典只作兜底

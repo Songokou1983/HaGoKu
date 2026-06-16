@@ -1,0 +1,25 @@
+{
+  "name": "hagoku-desktop",
+  "version": "1.0.0",
+  "description": "HaGoKu Studio Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --linux",
+    "dev": "electron ."
+  },
+  "author": "HaGoKu",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "studio.hagoku.desktop",
+    "productName": "HaGoKu Studio",
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Science"
+    }
+  }
+}

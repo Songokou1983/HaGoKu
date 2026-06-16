@@ -44,6 +44,9 @@ LLM 失败 → `raise RuntimeError` 让用户看见。禁止 except 兜底/默�
 #### 刹车 C — 禁止代码层语义默认值
 `setdefault("used_in_analysis", ...)` / `.get("suggested_role", "feature")` / `.get("needs_user_input", False)` → 全禁。LLM 没给的值代码不准填。`test_doctrine_compliance.py::test_doctrine_无代码层语义默认值` 守门。
 
+#### 刹车 D — 禁止代码搬运 LLM 输出
+LLM 的文本输出直接送前端。禁止代码读取 LLM 文本再写入另一个字段、包装成事件、或经过 `_scout_text` → `payload` → `message` 等多层周转。通道只有一层：LLM → 前端。
+
 ### 铁律 11 — 提示词层禁止预设业务结论
 
 > **漏洞转移防线**：铁律 1 限制了代码层，但 AI 实现者在代码层被限制后，容易把同样的"替 LLM 做判断"转移到提示词里。表面合规，实质违规。
@@ -75,6 +78,7 @@ LLM 失败 → `raise RuntimeError` 让用户看见。禁止 except 兜底/默�
 | `if intent == "预测"` / 中文 if-elif | 1 零硬编码 |
 | `["收入","营收"]` / `re.search(r"收入\|销售")` | 1 零硬编码 |
 | `setdefault("used_in_analysis", True)` / `.get("suggested_role", "feature")` | 1 零硬编码 — 语义默认值 |
+| `_scout_text` / `scout_field_review_pause_payload` / 多层包装 LLM 输出 | 刹车 D — 代码搬运 LLM 输出 |
 | 文档写 `Qwen`/`MiniMax`/`localhost:8000` | 9 配置中性 |
 | `@lru_cache` 装饰 LLM 调用 | 禁止——LLM 调用必须实时，缓存 = 隐性降级 |
 | prompt 里出现「必须判断为」/「应该理解成」/「不要分析」 | 11 提示词层禁止预设结论 |

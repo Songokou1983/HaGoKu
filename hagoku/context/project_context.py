@@ -235,7 +235,9 @@ class ProjectContext:
         messages_history: list[dict[str, str]] = []
         for e in self.entries:
             if e.type == "user_feedback":
-                messages_history.append({"role": "user", "content": e.raw_user_text or e.content})
+                text = (e.raw_user_text or e.content or "").strip()
+                if text:
+                    messages_history.append({"role": "user", "content": text})
             elif e.type == "agent_response":
                 messages_history.append({"role": "assistant", "content": e.content})
             elif e.type == "tool_exchange":

@@ -132,10 +132,22 @@ class DataAnalystAgent(BaseAgent):
                 "warnings": [],
                 "column_descriptions": {},
             }
+            # 通道直达：LLM 文本不进 column_semantics 周转，直接放 context
+            if column_semantics and isinstance(column_semantics[0], dict) and "_scout_text" in column_semantics[0]:
+                context["column_semantics"] = []
+            # 传播 ask_user 到 orchestrator
+            agent_ctx = self._context or {}
+            if agent_ctx.get("_pending_ask_user"):
+                context["_pending_ask_user"] = agent_ctx["_pending_ask_user"]
             context["_scout_conclusions"] = {
-                "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
-                "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
+                "participating": [],
+                "excluded": [],
             }
+            if column_semantics and "column_name" in column_semantics[0]:
+                context["_scout_conclusions"] = {
+                    "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
+                    "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
+                }
 
             # Phase D: 项目记忆 / 角色派生 / 质量警告
             if memory_project and project_id:
@@ -223,39 +235,18 @@ class DataAnalystAgent(BaseAgent):
         except Exception:
             logger.warning("提取 _pending_command_text 失败，用户指令未能注入 prompt", exc_info=True)
 
-        _schema = build_submit_field_inference_schema()
-        submit_tool = {
-            "type": "function",
-            "function": {
-                "name": "submit_field_inference",
-                "description": "提交字段语义推断结果。",
-                "parameters": _schema,
-            }
-        }
-
         analysis_goal_line = ""
         if query and query.strip():
             analysis_goal_line = (
-                f"\n\n【最高优先级 — 用户分析目标】\n「{query.strip()}」\n\n"
-                "给每个字段翻译一个中文名。现在调用 submit_field_inference。\n"
+                f"\n\n【用户分析目标】\n{query.strip()}\n"
             )
 
         system_prompt = (
             self._load_prompt() + "\n\n"
             "---\n\n"
             "【当前关注点：理解字段】\n"
-            "你的任务：分析数据集的每个字段，按 submit_field_inference schema 填写。\n\n"
-            "submit_field_inference 必填字段（每列）：\n"
-            "- name: 原始列名（照抄）\n"
-            "- display_name: 简短中文业务名称（≤6字）\n"
-            "- used_in_analysis: true=参与分析，false=不参与\n"
-            "- description: 业务含义理解\n\n"
-            "规则：\n"
-            "- 根据字段名、数据类型、样本值推断含义\n"
-            "- 不确定的字段标注 needs_user_input=true\n"
-            "- 标识符列（如 ID、编码）used_in_analysis=false, suggested_role=\"identifier\"\n"
-            "- 数值列根据上下文判断是否参与分析\n"
-            "- **禁止输出 <think> 标签**\n\n"
+            "输出你对每个字段的理解和判断。可以用表格、列表或段落——格式自由。\n"
+            "需要标注：字段含义、是否参与分析及理由。\n\n"
             f"{analysis_goal_line}{memory_notes}{command_context}"
         )
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
@@ -284,54 +275,52 @@ class DataAnalystAgent(BaseAgent):
                 "agent_infer_field_semantics",
                 messages,
                 model=self.llm_config.model,
-                extra={"query": query, "tools": ["submit_field_inference"]},
+                extra={"query": query},
             )
-            response = client.chat.completions.create(
-                model=self.llm_config.model,
-                messages=messages,
-                temperature=SCOUT_INFER_TEMPERATURE,
-                max_tokens=SCOUT_INFER_MAX_TOKENS,
-                tools=[submit_tool],
-                tool_choice={"type": "function", "function": {"name": "submit_field_inference"}},
-            )
+            # 流式输出——和 Reasonix 一样：逐 token emit，前端拼消息
+            from hagoku.llm.client import stream_chat_completion
+            from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
+            stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
+            full_text = ""
+            safe_emitted = 0
+            for chunk in stream_chat_completion(
+                client, self.llm_config.model, messages,
+                temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
+            ):
+                if chunk["type"] == "delta":
+                    full_text, delta, safe_emitted = stream_safe_append(
+                        full_text, chunk["content"], safe_emitted,
+                    )
+                    if delta:
+                        self._emit(EventType.AGENT_STREAM_DELTA, {
+                            "stream_id": stream_id,
+                            "delta": delta,
+                        })
+                elif chunk["type"] == "end":
+                    raw_text = strip_llm_think(full_text)
+                    self._emit(EventType.AGENT_STREAM_END, {
+                        "stream_id": stream_id,
+                        "content": raw_text,
+                    })
+                elif chunk["type"] == "error":
+                    raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
         except Exception as e:
             raise RuntimeError(f"字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
 
-        raw_text = response.choices[0].message.content or ""
-        from hagoku.llm.sanitize import strip_llm_think
-        raw_text = strip_llm_think(raw_text)
-        tool_calls = response.choices[0].message.tool_calls
-
-        tc = tool_calls or []
         dump_messages(
             "agent_infer_field_semantics_response",
-            messages + [{"role": "assistant", "content": raw_text,
-              "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in tc] if tc else None}],
+            messages + [{"role": "assistant", "content": raw_text}],
             model=self.llm_config.model,
         )
 
-        results: list[dict] = []
-        if tool_calls:
-            for t in tool_calls:
-                if t.function.name != "submit_field_inference":
-                    raise RuntimeError(
-                        f"字段推断失败：LLM 调用了未注册工具 {t.function.name!r}，"
-                        "期望 submit_field_inference。请重试或检查模型是否支持 tool calling。"
-                    )
-                try:
-                    args = _json.loads(t.function.arguments)
-                    for col_data in args.get("columns", []):
-                        col_data["column_name"] = col_data.get("name", col_data.get("column_name", ""))
-                        results.append(col_data)
-                except (_json.JSONDecodeError, TypeError) as e:
-                    raise RuntimeError(f"字段推断失败：submit_field_inference 参数无法解析：{e}") from e
-        if not results:
+        if not raw_text:
             raise RuntimeError(
-                "字段推断失败：LLM 未返回有效的 submit_field_inference 结果。"
+                "字段推断失败：LLM 未返回有效结果。"
                 "请查看 ~/.hagoku/llm_dumps/ 中 agent_infer_field_semantics 记录。"
             )
 
-        return results
+        # 返回 LLM 文本（前端 markdown 渲染）+ 空 column_semantics 兼容下游
+        return [{"_scout_text": raw_text}]
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:
         """对单列做数据画像（从 scout._profile_column 迁入）。"""
@@ -655,13 +644,12 @@ class DataAnalystAgent(BaseAgent):
         if df is None:
             df = getattr(self, '_df', None)
         client = create_raw_client(self.llm_config)
-        _tools = _agt.to_openai()  # Phase D: 全集，不再按 agent 过滤
+        _tools = _agt.to_openai()  # 全量工具——LLM 自己决定用什么
 
         project_ctx = context.get("_project_context")
         if project_ctx is None:
             raise RuntimeError("DataAnalystAgent.run_step: _project_context 未设置")
 
-        phase_hint = context.get("_current_phase", "")
         agent_extra = self.prompt
         if phase_hint:
             agent_extra = f"【当前关注点：{phase_hint}】\n\n" + agent_extra

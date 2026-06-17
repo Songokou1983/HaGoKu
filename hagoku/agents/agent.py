@@ -771,7 +771,7 @@ class DataAnalystAgent(BaseAgent):
                 project_ctx.add_tool_exchange("analyst", revision, tool_records, assistant_content=txt)
 
         # 工具调用后继续：让 LLM 看结果再回复
-        if tc_list and not txt.strip():
+        if tc_list:
             msgs2 = project_ctx.to_messages_for_llm(
                 "analyst", context, "",
                 agent_system_extra=agent_extra,

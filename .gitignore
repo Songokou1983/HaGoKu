@@ -61,3 +61,4 @@ UI_CHANGELOG_backup_*
 .archive/
 reasonix.toml
 smoke_runs/
+desktop/node_modules/

@@ -651,6 +651,7 @@ class DataAnalystAgent(BaseAgent):
             raise RuntimeError("DataAnalystAgent.run_step: _project_context 未设置")
 
         agent_extra = self.prompt
+        phase_hint = context.get("_current_stage", "")
         if phase_hint:
             agent_extra = f"【当前关注点：{phase_hint}】\n\n" + agent_extra
 
@@ -768,6 +769,20 @@ class DataAnalystAgent(BaseAgent):
                     ))
             if tool_records:
                 project_ctx.add_tool_exchange("analyst", revision, tool_records, assistant_content=txt)
+
+        # 工具调用后继续：让 LLM 看结果再回复
+        if tc_list and not txt.strip():
+            msgs2 = project_ctx.to_messages_for_llm(
+                "analyst", context, "",
+                agent_system_extra=agent_extra,
+            )
+            resp2 = client.chat.completions.create(
+                model=self.llm_config.model,
+                messages=msgs2,
+                temperature=0.3,
+                max_tokens=4096,
+            )
+            txt = (resp2.choices[0].message.content or "").strip()
 
         return {
             "text": txt, "route_to": route_to_args,

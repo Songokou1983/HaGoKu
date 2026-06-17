@@ -1,9 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ConvoMessage } from "../types";
 import { uid } from "../utils";
 
+const SESSION_KEY = "hagoku_session_messages";
+
+function loadSession(): ConvoMessage[] {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw) as ConvoMessage[];
+  } catch {}
+  return [];
+}
+
+function saveSession(msgs: ConvoMessage[]) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(msgs.slice(-100)));
+  } catch {}
+}
+
 export function useConversation() {
-  const [messages, setMessages] = useState<ConvoMessage[]>([]);
+  const [messages, setMessages] = useState<ConvoMessage[]>(loadSession);
+
+  // 每次消息变化自动持久化
+  useEffect(() => { saveSession(messages); }, [messages]);
 
   const addSystemMsg = (text: string, timestamp?: string) => {
     const ts = timestamp ?? new Date().toISOString();

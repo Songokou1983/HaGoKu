@@ -1,7 +1,9 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { AgentKey, AgentRunState, SessionPhase } from "../types";
-
+import type { ConvoMessage } from "../types";
 import { sanitizeText } from "../../../utils/sanitize";
+
+const SESSION_KEY = "hagoku_session";
 
 export function useAnalyzeSession(
   send: (cmd: string, payload: Record<string, unknown>) => boolean,

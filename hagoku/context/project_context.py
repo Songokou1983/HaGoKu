@@ -319,17 +319,9 @@ class ProjectContext:
             )
 
         elif etype == EventType.AGENT_COMPLETED:
-            if self._context_ref is None:
-                raise RuntimeError("ProjectContext._context_ref 未设置，信息通道断裂")
-            ctx = self._context_ref
-            snapshot = self._derive_snapshot(ctx) if ctx else None
-            revision = ctx.get("interaction_revision", 0) if ctx else 0
-            self.add_agent_response(
-                stage=agent,
-                revision=revision,
-                content=data.get("result_summary", data.get("message", f"{agent} 完成")),
-                snapshot=snapshot,
-            )
+            # 真实 LLM 文本已由 run_step/run_scout_phase 显式写入。
+            # 此处不重复写入，避免 status string 覆盖真实输出。
+            pass
 
         elif etype == EventType.USER_INPUT_RECEIVED:
             if self._context_ref is None:

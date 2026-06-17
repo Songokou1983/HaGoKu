@@ -280,12 +280,15 @@ class DataAnalystAgent(BaseAgent):
             # 流式输出——和 Reasonix 一样：逐 token emit，前端拼消息
             from hagoku.llm.client import stream_chat_completion
             from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
+            from hagoku.tools.registry import agent_tools as _agt
+            _tools = [t for t in _agt.to_openai() if t["function"]["name"] == "ask_user"]
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
             safe_emitted = 0
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
                 temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
+                tools=_tools if _tools else None,
             ):
                 if chunk["type"] == "delta":
                     full_text, delta, safe_emitted = stream_safe_append(
@@ -302,6 +305,16 @@ class DataAnalystAgent(BaseAgent):
                         "stream_id": stream_id,
                         "content": raw_text,
                     })
+                    # 处理工具调用
+                    tc_list = chunk.get("tool_calls")
+                    if tc_list:
+                        for tc in tc_list:
+                            fn = tc.get("function", {})
+                            try:
+                                args = _json.loads(fn.get("arguments", "{}"))
+                                _agt.dispatch(fn.get("name", ""), args, self._context or {}, df)
+                            except Exception:
+                                pass
                 elif chunk["type"] == "error":
                     raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
         except Exception as e:
@@ -653,7 +666,8 @@ class DataAnalystAgent(BaseAgent):
         agent_extra = self.prompt
         phase_hint = context.get("_current_stage", "")
         if phase_hint:
-            agent_extra = f"【当前关注点：{phase_hint}】\n\n" + agent_extra
+            stage_names = {"scout": "理解字段", "cleaner": "评估清洗", "analyst": "统计分析", "reporter": "撰写报告"}
+            agent_extra = f"【当前关注点：{stage_names.get(phase_hint, phase_hint)}】\n\n" + agent_extra
 
         messages = project_ctx.to_messages_for_llm(
             "analyst", context, user_input,
@@ -676,7 +690,7 @@ class DataAnalystAgent(BaseAgent):
             full_text = ""
             safe_emitted = 0
             final_tool_calls_raw: list[dict] = []
-            agent_key = context.get("_current_phase") or "analyst"
+            agent_key = phase_hint or "analyst"
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
                 temperature=0.3, max_tokens=4096, tools=_tools,

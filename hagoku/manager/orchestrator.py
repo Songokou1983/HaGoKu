@@ -353,15 +353,9 @@ class Orchestrator(
                     memory_project=memory_project,
                 )
                 context.update(result)
-                # ── 补录初始 Scout 快照（AGENT_COMPLETED 在 scout.run() 内部已触发，
-                #     此时 _context_ref 为空，snapshot 丢失；context.update 后显式补录）──
+                # 补录 snapshot（仅用于上下文恢复，不写假 agent response）
                 if hasattr(self, '_project_context') and self._project_context is not None:
-                    self._project_context.add_agent_response(
-                        stage="scout",
-                        revision=0,
-                        content=f"字段推断完成：理解 {len(context.get('column_semantics', []))} 个字段",
-                        snapshot=self._project_context._derive_snapshot(context),
-                    )
+                    self._project_context._derive_snapshot(context)
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
 

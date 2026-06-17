@@ -539,6 +539,22 @@ def doctor_tool_gate_cmd() -> None:
     raise SystemExit(result.returncode)
 
 
+@cli.command(name="desktop")
+def desktop_cmd() -> None:
+    """启动 HaGoKu Desktop 桌面应用"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "desktop" / "start.sh"
+    if not script.exists():
+        click.echo("❌ 桌面应用未安装。请先运行: cd desktop && npm install", err=True)
+        raise SystemExit(1)
+    click.echo("🖥️ 启动 HaGoKu Studio Desktop...")
+    result = subprocess.run(["bash", str(script)], cwd=script.parent)
+    raise SystemExit(result.returncode)
+
+
 @cli.command()
 def guardrails() -> None:
     """查看统计护栏规则"""

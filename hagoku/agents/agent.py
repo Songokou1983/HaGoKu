@@ -594,8 +594,10 @@ class DataAnalystAgent(BaseAgent):
             if tool_records:
                 project_ctx.add_tool_exchange(stage, revision, tool_records, assistant_content=txt)
 
-        # 工具调用后继续：让 LLM 看结果再回复
-        if tc_list:
+        # 工具调用后继续：循环直到 LLM 不再调工具
+        follow_rounds = 0
+        while tc_list and follow_rounds < 5:
+            follow_rounds += 1
             msgs2 = project_ctx.to_messages_for_llm(
                 stage, context, "",
                 agent_system_extra=agent_extra,
@@ -609,8 +611,8 @@ class DataAnalystAgent(BaseAgent):
             )
             msg2 = resp2.choices[0].message
             txt = (msg2.content or "").strip()
-            # dispatch 跟进轮的 tool_calls（LLM 可能调 update_field_understanding）
             tc2 = getattr(msg2, "tool_calls", None)
+            tc_list = None  # 默认结束循环
             if tc2:
                 recs2 = []
                 for t in tc2:
@@ -634,6 +636,7 @@ class DataAnalystAgent(BaseAgent):
                         ))
                 if recs2:
                     project_ctx.add_tool_exchange(stage, revision, recs2, assistant_content=txt)
+                tc_list = tc2  # 继续循环
 
         return {
             "text": txt, "route_to": route_to_args,

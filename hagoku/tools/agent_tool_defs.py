@@ -272,7 +272,7 @@ def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | Non
 
 agent_tools.register(Tool(
     name="set_columns",
-    description='设置字段属性。批量推荐: {"columns": [{"column_name":"A","display_name":"收入","used_in_analysis":true}]}。单列传 column_name。target/features/ignored 通过 suggested_role 设。',
+    description='写入你对字段的理解（列名、中文名、业务含义、角色、是否参与分析）。系统自动生成交互字段表展示给用户。推荐批量 columns 数组一次性写入全部列。',
     parameters={
         "type": "object",
         "properties": {

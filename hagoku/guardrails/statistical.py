@@ -66,10 +66,15 @@ class NoConclusionWithoutTest:
     def severity(self) -> Severity:
         return Severity.MANDATORY
 
+    # 以下分析类型本身不产生 p 值或检验统计量，无需检验即可下结论
+    _NO_TEST_TYPES = frozenset({"descriptive", "trend", "summary", "exploratory"})
+
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         has_conclusion = bool(analysis_result.get("conclusion_plain"))
         has_test = analysis_result.get("p_value") is not None or analysis_result.get("test_statistic") is not None
-        passed = not has_conclusion or has_test
+        atype = str(analysis_result.get("analysis_type", "")).lower()
+        is_testless_type = atype in self._NO_TEST_TYPES
+        passed = not has_conclusion or has_test or is_testless_type
         return GuardrailResult(
             rule=self.rule_name,
             severity=self.severity,
@@ -80,7 +85,7 @@ class NoConclusionWithoutTest:
 
 
 class MustReportEffectSize:
-    """报告显著性必须配效应量"""
+    """报告显著性时建议配效应量"""
 
     @property
     def rule_name(self) -> str:
@@ -88,7 +93,7 @@ class MustReportEffectSize:
 
     @property
     def severity(self) -> Severity:
-        return Severity.MANDATORY
+        return Severity.WARNING
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         has_significance = analysis_result.get("p_value") is not None
@@ -104,7 +109,7 @@ class MustReportEffectSize:
 
 
 class MustReportCI:
-    """点估计必须配置信区间"""
+    """点估计时建议配置信区间"""
 
     @property
     def rule_name(self) -> str:
@@ -112,7 +117,7 @@ class MustReportCI:
 
     @property
     def severity(self) -> Severity:
-        return Severity.MANDATORY
+        return Severity.WARNING
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         has_point_estimate = (
@@ -523,13 +528,13 @@ class StatisticalGuardrails:
 
         self.mandatory_rules: list[GuardrailRule] = [
             NoConclusionWithoutTest(),
-            MustReportEffectSize(),
-            MustReportCI(),
             NoCausalClaimWithoutMethod(),
             MustDiagnoseModel(),
         ]
 
         self.warning_rules: list[GuardrailRule] = [
+            MustReportEffectSize(),
+            MustReportCI(),
             AssumptionsViolated(),
             SmallSampleSize(),
             HighVIF(),

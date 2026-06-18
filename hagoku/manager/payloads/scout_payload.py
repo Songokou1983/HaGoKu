@@ -77,29 +77,6 @@ _ROLE_DISPLAY_MAP: dict[str, str] = {
     "unknown": "—",
 }
 
-def _build_basic_from_column_info(context: dict[str, Any]) -> dict[str, Any] | None:
-    """从 _column_info（{列名: dtype}）生成基础字段表，LLM 未产出结构化字段时用。"""
-    col_info = context.get("_column_info") or {}
-    if not col_info:
-        return None
-    rows = []
-    for name, dtype in col_info.items():
-        rows.append({
-            "field_name": name,
-            "chinese_name": name,
-            "meaning": str(dtype),
-            "evidence": "",
-            "needs_attention": True,
-            "suggested_role": "",
-            "used_in_analysis": None,
-        })
-    return {
-        "n_rows": context.get("n_rows", "?"),
-        "n_cols": len(rows),
-        "rows": rows,
-    }
-
-
 def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     """Scout 暂停：结构化字段表（供前端 HTML 渲染）；`message` 留空，不冒充 Agent 长文。
 
@@ -107,10 +84,10 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
     """
     cols = context.get("column_semantics") or []
     if cols and isinstance(cols[0], dict) and "_scout_text" in cols[0]:
-        # LLM 产出了文本但还未产出结构化字段 → 用已有列信息生成基础字段表
-        msg = cols[0]["_scout_text"]
-        field_review = _build_basic_from_column_info(context)
-        return {"message": msg, "field_review": field_review}
+        return {
+            "message": cols[0]["_scout_text"],
+            "field_review": None,
+        }
     if not cols:
         return {"message": "共 0 列 — 无法生成字段表。", "field_review": None}
     # 收口双写：从 column_semantics 派生（唯一权威），旧字典只作兜底

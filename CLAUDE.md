@@ -42,7 +42,8 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 4. exists: <this system already handles this at file:line — yes/no>
 ```
 
-**没有这四行 → 没有 edit_file。没有例外。没有"我先改着"。**
+**没有这四行 → 没有 edit_file。没有例外。没有"我先改着"。
+违反 → commit-msg hook 拦截。edit_file 前必须先有 read_file/grep。**
 
 ## ⚡ 系统架构（改代码前必须知道）
 

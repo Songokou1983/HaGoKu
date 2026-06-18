@@ -259,9 +259,17 @@ class DataAnalystAgent(BaseAgent):
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
         }
-        result = self.run_step(context, df, user_content)
+        raw_text = ""
+        for _ in range(5):  # 最多5轮，LLM每轮可调工具探索→下一轮拿结果继续
+            result = self.run_step(context, df, user_content if _ == 0 else "")
+            raw_text = result.get("text", "")
+            # 检查 LLM 是否已产出结构化字段
+            cs = context.get("column_semantics", [])
+            if cs and any("column_name" in s for s in cs):
+                break
+            if not result.get("text"):
+                break
 
-        raw_text = result.get("text", "")
         if not raw_text:
             raise RuntimeError(
                 "字段推断失败：LLM 未返回有效结果。"

@@ -7,13 +7,13 @@ _THINK_PATTERNS = (
     re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*reasoning\s*>.*?<\s*/\s*reasoning\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*thinking\s*>.*?<\s*/\s*thinking\s*>", re.DOTALL | re.IGNORECASE),
-    # DeepSeek DSML function-call 标签（<|tool_calls|> / <|DSML|> / <|tool_results|>）
-    re.compile(r"<\s*\|?\s*tool[ _]calls?\s*\|?\s*>.*?<\s*/\s*\|?\s*tool[ _]calls?\s*\|?\s*>", re.DOTALL | re.IGNORECASE),
-    re.compile(r"<\s*\|?\s*tool[ _]results?\s*\|?\s*>.*?<\s*/\s*\|?\s*tool[ _]results?\s*\|?\s*>", re.DOTALL | re.IGNORECASE),
-    re.compile(r"<\s*\|?\s*DSML\s*\|?\s*>.*?<\s*/\s*\|?\s*DSML\s*\|?\s*>", re.DOTALL | re.IGNORECASE),
+    # DeepSeek DSML function-call 标签（<｜tool_calls｜> / <｜DSML｜> / <｜tool_results｜>）
+    re.compile(r"<\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*[|｜]?\s*DSML\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
     # 未闭合的孤立 DSML 开/闭标签（流式中间态残留）
-    re.compile(r"<\s*\|?\s*DSML\s*\|?\s*>", re.IGNORECASE),
-    re.compile(r"<\s*/\s*\|?\s*DSML\s*\|?\s*>", re.IGNORECASE),
+    re.compile(r"<\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.IGNORECASE),
+    re.compile(r"<\s*/\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.IGNORECASE),
 )
 
 # 检测未闭合的 think 标签（流式中间态）

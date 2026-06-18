@@ -131,6 +131,7 @@ class DataAnalystAgent(BaseAgent):
                 "missing_summary": profile.get("missing_summary", {}),
                 "warnings": [],
                 "column_descriptions": {},
+                "_column_info": {c: str(df[c].dtype) for c in df.columns},
             }
             # 通道直达：LLM 文本不进 column_semantics 周转，直接放 context
             if column_semantics and isinstance(column_semantics[0], dict) and "_scout_text" in column_semantics[0]:
@@ -285,6 +286,7 @@ class DataAnalystAgent(BaseAgent):
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
             safe_emitted = 0
+            tc_list = None
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
                 temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
@@ -314,7 +316,10 @@ class DataAnalystAgent(BaseAgent):
                                 args = _json.loads(fn.get("arguments", "{}"))
                                 _agt.dispatch(fn.get("name", ""), args, self._context or {}, df)
                             except Exception:
-                                pass
+                                logger.warning(
+                                    "infer_field_semantics: 工具 %s 调度失败",
+                                    fn.get("name", "?"), exc_info=True,
+                                )
                 elif chunk["type"] == "error":
                     raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
         except Exception as e:
@@ -668,6 +673,12 @@ class DataAnalystAgent(BaseAgent):
         if phase_hint:
             stage_names = {"scout": "理解字段", "cleaner": "评估清洗", "analyst": "统计分析", "reporter": "撰写报告"}
             agent_extra = f"【当前关注点：{stage_names.get(phase_hint, phase_hint)}】\n\n" + agent_extra
+
+        # P2: 字段元数据持久化——首轮后 context._column_info 注入 system prompt
+        col_info = context.get("_column_info")
+        if col_info:
+            cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
+            agent_extra += f"\n数据集字段: {cols_str}\n"
 
         messages = project_ctx.to_messages_for_llm(
             "analyst", context, user_input,

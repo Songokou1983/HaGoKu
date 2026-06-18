@@ -353,9 +353,6 @@ class Orchestrator(
                     memory_project=memory_project,
                 )
                 context.update(result)
-                # 补录 snapshot（仅用于上下文恢复，不写假 agent response）
-                if hasattr(self, '_project_context') and self._project_context is not None:
-                    self._project_context._derive_snapshot(context)
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
 

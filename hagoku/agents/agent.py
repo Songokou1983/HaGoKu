@@ -262,12 +262,12 @@ class DataAnalystAgent(BaseAgent):
         raw_text = ""
         for _round in range(5):  # 最多5轮，LLM每轮可调工具探索→下一轮拿结果继续
             result = self.run_step(context, df, user_content if _round == 0 else "")
-            raw_text = result.get("text", "")
+            raw_text = result.get("text", "") or raw_text
             # 检查 LLM 是否已产出结构化字段
             cs = context.get("column_semantics", [])
             if cs and any("column_name" in s for s in cs):
                 break
-            if not result.get("text"):
+            if _round >= 2 and not raw_text:
                 break
 
         if not raw_text:

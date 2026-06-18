@@ -260,8 +260,8 @@ class DataAnalystAgent(BaseAgent):
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
         }
         raw_text = ""
-        for _ in range(5):  # 最多5轮，LLM每轮可调工具探索→下一轮拿结果继续
-            result = self.run_step(context, df, user_content if _ == 0 else "")
+        for _round in range(5):  # 最多5轮，LLM每轮可调工具探索→下一轮拿结果继续
+            result = self.run_step(context, df, user_content if _round == 0 else "")
             raw_text = result.get("text", "")
             # 检查 LLM 是否已产出结构化字段
             cs = context.get("column_semantics", [])
@@ -616,7 +616,33 @@ class DataAnalystAgent(BaseAgent):
                 max_tokens=4096,
                 tools=_tools,
             )
-            txt = (resp2.choices[0].message.content or "").strip()
+            msg2 = resp2.choices[0].message
+            txt = (msg2.content or "").strip()
+            # dispatch 跟进轮的 tool_calls（LLM 可能调 update_field_understanding）
+            tc2 = getattr(msg2, "tool_calls", None)
+            if tc2:
+                recs2 = []
+                for t in tc2:
+                    fn = t.function
+                    try:
+                        a = _json.loads(fn.arguments) if fn.arguments else {}
+                    except (_json.JSONDecodeError, TypeError):
+                        continue
+                    try:
+                        r = _agt.dispatch(fn.name, a, context, df)
+                        recs2.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "",
+                            name=fn.name, arguments=fn.arguments,
+                            result=_json.dumps(r, ensure_ascii=False, default=str),
+                        ))
+                    except Exception as exc:
+                        recs2.append(ToolCallRecord(
+                            tool_call_id=getattr(t, "id", "") or "",
+                            name=fn.name, arguments=fn.arguments,
+                            result="", error=str(exc),
+                        ))
+                if recs2:
+                    project_ctx.add_tool_exchange(stage, revision, recs2, assistant_content=txt)
 
         return {
             "text": txt, "route_to": route_to_args,

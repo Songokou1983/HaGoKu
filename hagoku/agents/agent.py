@@ -605,6 +605,7 @@ class DataAnalystAgent(BaseAgent):
                 messages=msgs2,
                 temperature=0.3,
                 max_tokens=4096,
+                tools=_tools,
             )
             txt = (resp2.choices[0].message.content or "").strip()
 

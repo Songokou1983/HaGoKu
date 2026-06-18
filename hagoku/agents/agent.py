@@ -133,10 +133,6 @@ class DataAnalystAgent(BaseAgent):
                 "column_descriptions": {},
                 "_column_info": {c: str(df[c].dtype) for c in df.columns},
             }
-            # 通道直达：LLM 文本不进 column_semantics 周转，直接放 context
-            # 不生成兜底字段表——LLM 文本已流式发送，用户看到后可通过对话纠正
-            if column_semantics and isinstance(column_semantics[0], dict) and "_scout_text" in column_semantics[0]:
-                pass  # _scout_text 透传给 scout_field_review_pause_payload 作为 message
             # 传播 ask_user 到 orchestrator
             agent_ctx = self._context or {}
             if agent_ctx.get("_pending_ask_user"):
@@ -268,6 +264,9 @@ class DataAnalystAgent(BaseAgent):
                 "请查看 ~/.hagoku/llm_dumps/ 中 agent_infer_field_semantics 记录。"
             )
 
+        cs = context.get("column_semantics", [])
+        if cs:
+            return cs
         return [{"_scout_text": raw_text}]
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:

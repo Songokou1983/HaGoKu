@@ -595,10 +595,8 @@ class DataAnalystAgent(BaseAgent):
                 project_ctx.add_tool_exchange(stage, revision, tool_records, assistant_content=txt)
 
         # 工具调用后继续：循环直到 LLM 不再调工具
-        follow_rounds = 0
-        all_follow_recs: list[Any] = []
-        while tc_list and follow_rounds < 5:
-            follow_rounds += 1
+        # 工具调用后继续：让 LLM 看结果再回复
+        if tc_list:
             msgs2 = project_ctx.to_messages_for_llm(
                 stage, context, "",
                 agent_system_extra=agent_extra,
@@ -613,8 +611,8 @@ class DataAnalystAgent(BaseAgent):
             msg2 = resp2.choices[0].message
             txt = (msg2.content or "").strip()
             tc2 = getattr(msg2, "tool_calls", None)
-            tc_list = None
             if tc2:
+                recs2 = []
                 for t in tc2:
                     fn = t.function
                     try:
@@ -623,20 +621,19 @@ class DataAnalystAgent(BaseAgent):
                         continue
                     try:
                         r = _agt.dispatch(fn.name, a, context, df)
-                        all_follow_recs.append(ToolCallRecord(
+                        recs2.append(ToolCallRecord(
                             tool_call_id=getattr(t, "id", "") or "",
                             name=fn.name, arguments=fn.arguments,
                             result=_json.dumps(r, ensure_ascii=False, default=str),
                         ))
                     except Exception as exc:
-                        all_follow_recs.append(ToolCallRecord(
+                        recs2.append(ToolCallRecord(
                             tool_call_id=getattr(t, "id", "") or "",
                             name=fn.name, arguments=fn.arguments,
                             result="", error=str(exc),
                         ))
-                tc_list = tc2
-        if all_follow_recs:
-            project_ctx.add_tool_exchange(stage, revision, all_follow_recs, assistant_content=txt)
+                if recs2:
+                    project_ctx.add_tool_exchange(stage, revision, recs2, assistant_content=txt)
 
         return {
             "text": txt, "route_to": route_to_args,

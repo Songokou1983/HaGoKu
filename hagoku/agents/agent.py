@@ -246,8 +246,9 @@ class DataAnalystAgent(BaseAgent):
             self._load_prompt() + "\n\n"
             "---\n\n"
             "【当前关注点：理解字段】\n"
-            "输出你对每个字段的理解和判断。可以用表格、列表或段落——格式自由。\n"
-            "需要标注：字段含义、是否参与分析及理由。\n\n"
+            "下方 JSON 已包含每列的统计信息（dtype、样本值、分布等），你不需要再调工具探查。\n"
+            "直接基于已有信息，对每个字段给出：字段含义、是否参与分析、理由。\n"
+            "输出格式自由——表格、列表、段落均可。\n\n"
             f"{analysis_goal_line}{memory_notes}{command_context}"
         )
         user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
@@ -282,7 +283,7 @@ class DataAnalystAgent(BaseAgent):
             from hagoku.llm.client import stream_chat_completion
             from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
             from hagoku.tools.registry import agent_tools as _agt
-            _tools = [t for t in _agt.to_openai() if t["function"]["name"] in ("ask_user", "get_sample_rows", "get_column_stats", "list_columns")]
+            _tools = [t for t in _agt.to_openai() if t["function"]["name"] == "ask_user"]
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
             safe_emitted = 0

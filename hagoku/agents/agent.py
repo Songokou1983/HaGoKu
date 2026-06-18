@@ -488,7 +488,7 @@ class DataAnalystAgent(BaseAgent):
                       extra={"tools": [t["function"]["name"] for t in _tools]})
 
         # CO-18: 流式路径 vs batch 回退
-        use_stream = getattr(self.llm_config, "stream_enabled", True)
+        use_stream = getattr(self.llm_config, "stream_enabled", False)
         txt = ""
         tc_list = None
 

@@ -310,41 +310,28 @@ export function useWsEventHandler(deps: WsEventDeps) {
           const data = (d.data ?? {}) as Record<string, unknown>;
           const toolCalls = data.tool_calls as any[] | undefined;
           if (toolCalls && toolCalls.length > 0) {
-            const mapped = toolCalls.map((tc: any) => ({
-              id: tc.id || uid(),
-              name: tc.name || "",
-              arguments_summary: tc.arguments_summary,
-              result_summary: tc.result_summary,
-              error: tc.error,
-              duration_ms: tc.duration_ms,
-            }));
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              // 合并到上一条 toolExchange 消息
-              if (last?.toolExchange) {
-                const updated = [...prev];
-                updated[prev.length - 1] = {
-                  ...last,
-                  toolExchange: {
-                    ...last.toolExchange,
-                    tool_calls: [...last.toolExchange.tool_calls, ...mapped],
-                  },
-                  timestamp: d.timestamp,
-                };
-                return updated;
-              }
-              return [...prev, {
+            setMessages((prev) => [
+              ...prev,
+              {
                 id: uid(),
                 role: "agent",
                 text: "",
                 timestamp: d.timestamp,
                 toolExchange: {
                   stage: (data.stage as string) || d.agent || "",
-                  tool_calls: mapped,
-                  assistant_pre_text: (data.assistant_pre_text as string) || null,
+                  tool_calls: toolCalls.map((tc: any) => ({
+                    id: tc.id || uid(),
+                    name: tc.name || "",
+                    arguments_summary: tc.arguments_summary,
+                    result_summary: tc.result_summary,
+                    error: tc.error,
+                    duration_ms: tc.duration_ms,
+                  })),
+                  assistant_pre_text:
+                    (data.assistant_pre_text as string) || null,
                 },
-              }];
-            });
+              },
+            ]);
           }
         }
 

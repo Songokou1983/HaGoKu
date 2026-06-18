@@ -232,7 +232,7 @@ class DataAnalystAgent(BaseAgent):
             if pt:
                 command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
         except Exception:
-            pass
+            actx = {}
 
         extra_prefix = ""
         if query and query.strip():
@@ -256,7 +256,7 @@ class DataAnalystAgent(BaseAgent):
             "query": query,
             "column_semantics": [],
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
-            "_pending_command_text": (ctx.get("_pending_command_text") or "").strip() if ctx else "",
+            "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
         }
         result = self.run_step(context, df, user_content)
 
@@ -547,7 +547,8 @@ class DataAnalystAgent(BaseAgent):
             model=self.llm_config.model)
 
         revision = context.get("interaction_revision", 0)
-        project_ctx.add_agent_response("analyst", revision, txt or "(tool calls)")
+        stage = context.get("_current_stage", "analyst")
+        project_ctx.add_agent_response(stage, revision, txt or "(tool calls)")
 
         route_to_args = None
         findings = None
@@ -591,12 +592,12 @@ class DataAnalystAgent(BaseAgent):
                         result="", error=str(exc),
                     ))
             if tool_records:
-                project_ctx.add_tool_exchange("analyst", revision, tool_records, assistant_content=txt)
+                project_ctx.add_tool_exchange(stage, revision, tool_records, assistant_content=txt)
 
         # 工具调用后继续：让 LLM 看结果再回复
         if tc_list:
             msgs2 = project_ctx.to_messages_for_llm(
-                "analyst", context, "",
+                stage, context, "",
                 agent_system_extra=agent_extra,
             )
             resp2 = client.chat.completions.create(

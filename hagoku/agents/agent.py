@@ -311,6 +311,12 @@ class DataAnalystAgent(BaseAgent):
                             "content": raw_text,
                         })
                         tc_list = chunk.get("tool_calls")
+                        # DeepSeek 用 DSML <|tool_calls|> 在 content 里传 function calls
+                        if not tc_list:
+                            from hagoku.llm.sanitize import extract_dsml_tool_calls
+                            dsml_tcs = extract_dsml_tool_calls(full_text)
+                            if dsml_tcs:
+                                tc_list = dsml_tcs
                         if tc_list:
                             for tc in tc_list:
                                 fn = tc.get("function", {})

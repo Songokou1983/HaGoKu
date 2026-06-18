@@ -502,7 +502,7 @@ class Orchestrator(
 
                 return {
                     "status": "scout_review",
-                    "message": scout_msg.get("message", "") or "字段理解完成",
+                    "message": scout_msg.get("message", ""),
                     "field_review": scout_msg.get("field_review"),
                     "phase": "scout",
                 }

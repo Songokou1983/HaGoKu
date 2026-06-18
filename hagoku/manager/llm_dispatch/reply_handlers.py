@@ -77,7 +77,6 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         self._cleaner_dialog_open = True
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
             "cleaning_assessment": assessment,
-            "message": "清洗评估完成。你可以接受或提出调整。",
         })
         self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}

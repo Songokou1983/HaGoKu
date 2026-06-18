@@ -112,6 +112,41 @@ agent_tools.register(Tool(
     phase_tag=['评估清洗', '跑统计'],  # 仅 Cleaner/Analyst
 ))
 
+# ═══════════════════════════════════════════════════════════════════
+# 字段搜索（通用）
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_grep(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """搜索 column_semantics，返回匹配的列。"""
+    pattern = str(args.get("pattern", "")).lower()
+    semantics = ctx.get("column_semantics", [])
+    results = []
+    for s in semantics:
+        name = str(s.get("column_name", "")).lower()
+        dn = str(s.get("display_name", "")).lower()
+        desc = str(s.get("description", "")).lower()
+        if pattern in name or pattern in dn or pattern in desc:
+            results.append({
+                "column_name": s.get("column_name"),
+                "display_name": s.get("display_name", ""),
+                "description": s.get("description", ""),
+                "used_in_analysis": s.get("used_in_analysis"),
+            })
+    return {"matches": results}
+
+agent_tools.register(Tool(
+    name="grep",
+    description="搜索字段名/中文名/含义，返回匹配的列。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "搜索关键词"},
+        },
+        "required": ["pattern"],
+    },
+    handler=_handle_grep,
+))
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 统一表格工具（所有 Agent 可用）

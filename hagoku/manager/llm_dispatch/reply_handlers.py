@@ -40,7 +40,7 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
     # 用户输入已由 add_user_feedback 写入 ProjectContext → build_prompt 历史。
     # run_step 的 user_input 传空，避免 build_messages 再追加一遍（×2）。
     result = self._agent.run_step(context, self._df_raw, "")
-    self._log_channel("scout", "run_step_done", text=result.get("text","")[:80])
+    self._log_channel("scout", "run_step_done", text=result.get("text",""))
 
     # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
@@ -264,7 +264,7 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     user_input: {"text": "用户回复", "stage": "当前阶段"}
     """
     text = user_input.get("text", "").strip()
-    self._log_channel("orchestrator", "respond_enter", text=text[:80], stage=self._stage)
+    self._log_channel("orchestrator", "respond_enter", text=text, stage=self._stage)
     if self._is_cancel_requested():
         return {"status": "cancelled", "message": "分析已中止"}
     if self._error:

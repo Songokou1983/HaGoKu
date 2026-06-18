@@ -11,6 +11,7 @@ httpx transport。每个客户端持有独立的 HTTPTransport，禁用代理以
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Generator
 
 import httpx
@@ -176,6 +177,41 @@ async def chat_completion(
     }
 
 
+def _dump_debug_context(
+    model: str,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+) -> None:
+    """通道诊断：HAGOKU_DUMP_DEBUG_CONTEXT=1 时，dump 完整的 messages + tools。
+
+    绝不做摘要/截断/修改——原样 JSON 写入 run_dir/llm_dumps/debug_context_N.json。
+    用于验证上下文保真律：LLM 实际收到的内容是否与 to_messages_for_llm() 输出一致。
+    """
+    if os.environ.get("HAGOKU_DUMP_DEBUG_CONTEXT", "").strip() != "1":
+        return
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        from hagoku.observability.llm_dump import _run_dump_dir
+        out_dir = _run_dump_dir if _run_dump_dir is not None else _Path.home() / ".hagoku" / "llm_dumps"
+    except Exception:
+        out_dir = _Path.home() / ".hagoku" / "llm_dumps"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # 取现有最大序号 + 1
+    existing = list(out_dir.glob("debug_context_*.json"))
+    seq = len(existing) + 1
+    payload = {
+        "model": model,
+        "messages": messages,
+        "tools": tools,
+    }
+    path = out_dir / f"debug_context_{seq:04d}.json"
+    path.write_text(_json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    import logging
+    logging.getLogger("hagoku.llm").info("debug_context dumped: %s (%d messages, %d tools)",
+                                         path, len(messages), len(tools or []))
+
+
 def stream_chat_completion(
     client: Any,
     model: str,
@@ -203,6 +239,9 @@ def stream_chat_completion(
     """
     full_content = ""
     final_tool_calls: list[dict[str, Any]] = []
+
+    # ── 通道诊断：dump 完整 context（HAGOKU_DUMP_DEBUG_CONTEXT=1）──
+    _dump_debug_context(model, messages, tools)
 
     try:
         stream = client.chat.completions.create(

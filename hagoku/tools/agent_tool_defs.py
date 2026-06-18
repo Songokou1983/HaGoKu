@@ -174,7 +174,21 @@ agent_tools.register(Tool(
 # ═══════════════════════════════════════════════════════════════════
 
 def _handle_update_field_understanding(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """更新字段的中文名和含义，同步写入 column_semantics 使字段表即时更新。"""
+    """更新字段的中文名和含义，同步写入 column_semantics。支持单列或批量。"""
+    # 批量模式: {"columns": [{"column_name": ..., "display_name": ..., ...}, ...]}
+    batch = args.get("columns")
+    if batch and isinstance(batch, list):
+        results = []
+        for item in batch:
+            if isinstance(item, dict):
+                results.append(_update_one_field(item, ctx))
+        return {"updated_batch": results}
+
+    # 单列模式（向后兼容）
+    return _update_one_field(args, ctx)
+
+
+def _update_one_field(args: dict, ctx: dict) -> dict:
     col = str(args.get("column_name", ""))
     dn = str(args.get("display_name", ""))
     desc = str(args.get("description", ""))
@@ -271,18 +285,34 @@ def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | Non
 
 agent_tools.register(Tool(
     name="update_field_understanding",
-    description="更新字段的中文名（display_name）或业务含义（description）。列名和业务名均可",
+    description="更新字段的中文名或业务含义。单列用 column_name，批量用 columns 数组。",
     parameters={
         "type": "object",
         "properties": {
-            "column_name": {"type": "string", "description": "列名或已确认的业务名"},
+            "column_name": {"type": "string", "description": "列名或已确认的业务名（单列模式）"},
             "display_name": {"type": "string", "description": "简短中文名称"},
             "description": {"type": "string", "description": "业务含义说明"},
             "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
             "used_in_analysis": {"type": "boolean"},
-            "evidence": {"type": "string", "description": "参与分析的理由，与 used_in_analysis 保持一致"},
+            "evidence": {"type": "string", "description": "参与分析的理由"},
+            "columns": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "column_name": {"type": "string"},
+                        "display_name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
+                        "used_in_analysis": {"type": "boolean"},
+                        "evidence": {"type": "string"},
+                    },
+                    "required": ["column_name"],
+                },
+                "description": "批量更新多列（推荐）",
+            },
         },
-        "required": ["column_name"],
+        "required": [],
     },
     handler=_handle_update_field_understanding,
     phase_tag=['理解字段'],

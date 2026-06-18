@@ -206,7 +206,7 @@ class DataAnalystAgent(BaseAgent):
             })
 
         payload = {"user_query": query, "n_rows": len(df), "n_cols": len(df.columns), "columns": column_list}
-        user_content = f"下方 JSON 已包含每列的完整统计信息（dtype、样本值、分布等）。请直接分析并输出字段理解表。\n\n请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"
+        user_content = f"请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"
 
         memory_notes = ""
         if memory_project:

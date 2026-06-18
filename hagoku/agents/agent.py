@@ -282,7 +282,7 @@ class DataAnalystAgent(BaseAgent):
             from hagoku.llm.client import stream_chat_completion
             from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
             from hagoku.tools.registry import agent_tools as _agt
-            _tools = [t for t in _agt.to_openai() if t["function"]["name"] == "ask_user"]
+            _tools = [t for t in _agt.to_openai() if t["function"]["name"] in ("ask_user", "get_sample_rows", "get_column_stats", "list_columns")]
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
             safe_emitted = 0

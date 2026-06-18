@@ -217,7 +217,7 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
                 elif e.type == "tool_exchange":
                     entry["text"] = (e.snapshot or {}).get("assistant_pre_text", "") if e.snapshot else ""
                     entry["tool_calls"] = [
-                        {"name": tc.name, "result": tc.result[:200], "error": tc.error}
+                        {"name": tc.name, "result": tc.result, "error": tc.error}
                         for tc in (e.tool_calls or [])
                     ]
                 conv.append(entry)

@@ -227,7 +227,7 @@ class Orchestrator(
                     _json.dumps({k: v}, default=str)
                     safe_ctx[k] = v
                 except (TypeError, ValueError):
-                    safe_ctx[k] = str(v)[:200]
+                    safe_ctx[k] = str(v)
 
             state = {
                 "stage": self._stage,

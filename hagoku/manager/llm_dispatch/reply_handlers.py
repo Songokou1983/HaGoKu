@@ -312,8 +312,11 @@ def respond(self, user_input: dict) -> dict[str, Any]:
         if len(result) > 2 and isinstance(result[2], dict):
             self._context.update(result[2])
         # 递归：下一阶段自动跑首轮
+        self.save_state()
         return self.respond(user_input)
 
+    # 保存状态供 app 重启恢复
+    self.save_state()
     return result
 
 

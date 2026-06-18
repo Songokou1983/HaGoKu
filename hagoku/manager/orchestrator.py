@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("hagoku.orchestrator")
 
 from ..agents.agent import DataAnalystAgent
 from ..config import HaGoKuConfig
@@ -194,10 +197,122 @@ class Orchestrator(
         self._cleaner_dialog_open = False
         self._error = None
 
+    def save_state(self) -> str | None:
+        """保存当前分析状态到 run_dir，供 app 重启后恢复。
+
+        保存内容：stage、context（可序列化部分）、DataFrames（parquet）。
+        ProjectContext 已通过 _save_path 自动增量写入 JSONL。
+        返回状态文件路径，失败返回 None。
+        """
+        import json as _json
+        try:
+            # 从 project_context 的 _save_path 推导 run_dir
+            pc = getattr(self, '_project_context', None)
+            if pc is None:
+                return None
+            save_path = getattr(pc, '_save_path', None)
+            if not save_path:
+                return None
+            run_dir = Path(save_path).parent
+            run_dir.mkdir(parents=True, exist_ok=True)
+
+            ctx = getattr(self, '_context', None) or {}
+            # 只保留可 JSON 序列化的字段，剔除 DataFrame/LLM client 等
+            safe_ctx = {}
+            skip_keys = {'_project_context', '_memory_manager', '_llm_client', '_df'}
+            for k, v in ctx.items():
+                if k in skip_keys:
+                    continue
+                try:
+                    _json.dumps({k: v}, default=str)
+                    safe_ctx[k] = v
+                except (TypeError, ValueError):
+                    safe_ctx[k] = str(v)[:200]
+
+            state = {
+                "stage": self._stage,
+                "project_name": getattr(self, '_project_name', ''),
+                "run_id": getattr(self._project_context, 'run_id', '') if hasattr(self, '_project_context') else '',
+                "query": safe_ctx.get('query', ''),
+                "data_path": safe_ctx.get('data_path', ''),
+                "context": safe_ctx,
+                "analyst_first_pass_done": self._analyst_first_pass_done,
+            }
+            (run_dir / "orch_state.json").write_text(
+                _json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
+
+            # 保存 DataFrames
+            if self._df_raw is not None:
+                self._df_raw.to_parquet(run_dir / "df_raw.parquet")
+            if self._df_clean is not None and self._df_clean is not self._df_raw:
+                self._df_clean.to_parquet(run_dir / "df_clean.parquet")
+
+            return str(run_dir / "orch_state.json")
+        except Exception:
+            logger.warning("save_state 失败", exc_info=True)
+            return None
+
+    @classmethod
+    def restore_session(cls, config: "HaGoKuConfig", run_dir: str) -> "Orchestrator | None":
+        """从 run_dir 恢复未完成的 session。失败返回 None。"""
+        import json as _json
+        import pandas as _pd
+        try:
+            from pathlib import Path as _Path
+            rdir = _Path(run_dir)
+            state_file = rdir / "orch_state.json"
+            if not state_file.exists():
+                return None
+            state = _json.loads(state_file.read_text(encoding="utf-8"))
+
+            orch = cls(config)
+            orch._project_name = state.get("project_name", "")
+            orch._stage = state.get("stage", "")
+            orch._analyst_first_pass_done = state.get("analyst_first_pass_done", False)
+            orch._context = state.get("context", {})
+
+            # 恢复 DataFrames
+            df_raw_path = rdir / "df_raw.parquet"
+            if df_raw_path.exists():
+                orch._df_raw = _pd.read_parquet(df_raw_path)
+                orch._df_clean = orch._df_raw
+            df_clean_path = rdir / "df_clean.parquet"
+            if df_clean_path.exists():
+                orch._df_clean = _pd.read_parquet(df_clean_path)
+
+            # 恢复 ProjectContext
+            ctx_jsonl = rdir / "project_context.jsonl"
+            if ctx_jsonl.exists():
+                from ..context.project_context import ProjectContext
+                pc = ProjectContext.load_jsonl(
+                    str(ctx_jsonl),
+                    run_id=state.get("run_id", rdir.name),
+                    analysis_goal=state.get("query", ""),
+                )
+                pc._save_path = str(ctx_jsonl)
+                orch._project_context = pc
+                # 恢复 event 订阅
+                pc.subscribe(orch.event_bus, context_ref=orch._context)
+                # 补充未持久化的字段
+                orch._context["_project_context"] = pc
+
+            # 恢复 OutputManager
+            from ..storage.output import OutputManager
+            orch.output_mgr = OutputManager(orch.config.output, orch._project_name)
+
+            logger.info("restore_session: 恢复 session stage=%s project=%s",
+                        orch._stage, orch._project_name)
+            return orch
+        except Exception:
+            logger.warning("restore_session 失败", exc_info=True)
+            return None
+
     def request_cancel(self) -> None:
         """前端「重置分析」：设置取消标志。"""
         with self._cancel_lock:
             self._cancel_requested_flag = True
+        # 保存当前状态，以便恢复
+        self.save_state()
 
     def _is_cancel_requested(self) -> bool:
         with self._cancel_lock:
@@ -376,6 +491,7 @@ class Orchestrator(
                 _df = _load(data_path)
                 self._df_clean = _df
                 self._df_raw = _df
+                self.save_state()
                 scout_msg = scout_field_review_pause_payload(context)
                 scout_msg["interaction_revision"] = interaction_revision
                 scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)

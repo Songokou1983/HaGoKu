@@ -113,6 +113,54 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
             _analysis_in_progress = False
 
 
+def _try_restore_session() -> bool:
+    """检查是否有未完成的 session，有则恢复 orchestrator 状态。返回 True 表示已恢复。"""
+    global _shared_orchestrator
+    try:
+        from pathlib import Path as _Path
+        from hagoku.config import HaGoKuConfig
+        from hagoku.manager.orchestrator import Orchestrator
+        from hagoku.storage.database import HaGoKuDB
+
+        config = HaGoKuConfig.load()
+        db = HaGoKuDB.get_instance(config.work_dir / "hagoku.db")
+        # 查找最近的非 completed run
+        projects_dir = _Path(config.output.project_dir)
+        if not projects_dir.exists():
+            return False
+        candidates = []
+        for proj_dir in projects_dir.iterdir():
+            if not proj_dir.is_dir():
+                continue
+            runs_dir = proj_dir / "runs"
+            if not runs_dir.exists():
+                continue
+            for run_dir in sorted(runs_dir.iterdir(), reverse=True):
+                state_file = run_dir / "orch_state.json"
+                if not state_file.exists():
+                    continue
+                # 检查是否已完成（有 report.html）
+                if (run_dir / "output" / "report.html").exists():
+                    continue
+                # 检查是否被取消标记
+                candidates.append((run_dir.stat().st_mtime, str(run_dir)))
+        if not candidates:
+            return False
+        candidates.sort(reverse=True)
+        run_dir = candidates[0][1]
+
+        orch = Orchestrator.restore_session(config, run_dir)
+        if orch is None:
+            return False
+        _shared_orchestrator = orch
+        set_bus(orch.event_bus)
+        return True
+    except Exception:
+        import logging
+        logging.getLogger("hagoku.ws").warning("_try_restore_session 失败", exc_info=True)
+        return False
+
+
 def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
     """从 Orchestrator 当前状态构建前端可恢复的快照。
 
@@ -153,6 +201,27 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         # Analyst 阶段：传最后一条 LLM 回复
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
+
+        # 对话历史（从 ProjectContext entries 回放）
+        pc = getattr(orch, '_project_context', None)
+        if pc is not None:
+            conv: list[dict] = []
+            for e in pc.entries:
+                entry: dict = {"type": e.type, "stage": e.stage, "timestamp": e.timestamp}
+                if e.type == "user_feedback":
+                    entry["text"] = e.raw_user_text or e.content or ""
+                elif e.type == "agent_response":
+                    entry["text"] = e.content or ""
+                elif e.type == "tool_exchange":
+                    entry["text"] = (e.snapshot or {}).get("assistant_pre_text", "") if e.snapshot else ""
+                    entry["tool_calls"] = [
+                        {"name": tc.name, "result": tc.result[:200], "error": tc.error}
+                        for tc in (e.tool_calls or [])
+                    ]
+                conv.append(entry)
+            if conv:
+                snapshot["conversation"] = conv
+
         return snapshot
     except Exception:
         return None
@@ -231,8 +300,18 @@ async def ws_handler(ws: WebSocket) -> None:
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.1.0"})
 
-        # ── 重连状态恢复：推送当前 pipeline 快照 ──
+        # ── 自动恢复未完成 session ──
+        global _shared_orchestrator
         orch = _shared_orchestrator
+        if orch is None or not getattr(orch, '_stage', ''):
+            restored = _try_restore_session()
+            if restored:
+                orch = _shared_orchestrator
+                # 确保 EventBus → WSBridge 已连接
+                if orch is not None:
+                    orch.event_bus.subscribe(bridge.on_event)
+
+        # ── 重连状态恢复：推送当前 pipeline 快照 ──
         if orch is not None:
             stage = getattr(orch, '_stage', '') or ''
             if stage:  # pipeline 正在某个阶段（包括暂停等用户输入）

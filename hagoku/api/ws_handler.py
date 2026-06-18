@@ -116,6 +116,8 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
 def _try_restore_session() -> bool:
     """检查是否有未完成的 session，有则恢复 orchestrator 状态。返回 True 表示已恢复。"""
     global _shared_orchestrator
+    if os.environ.get("HAGOKU_SKIP_AUTO_RESTORE"):
+        return False
     try:
         from pathlib import Path as _Path
         from hagoku.config import HaGoKuConfig

@@ -295,10 +295,11 @@ class TestCancelAnalysisCommand:
             )
             with patch("hagoku.api.ws_handler.get_bus", return_value=None):
                 with patch("hagoku.api.ws_handler._shared_orchestrator", None):
-                    try:
-                        await ws_handler(mock_ws)
-                    except Exception:
-                        pass
+                    with patch.dict("os.environ", {"HAGOKU_SKIP_AUTO_RESTORE": "1"}):
+                        try:
+                            await ws_handler(mock_ws)
+                        except Exception:
+                            pass
             errs = [c for c in mock_ws.send_json.call_args_list if c[0][0].get("type") == "error"]
             assert len(errs) >= 1
             assert errs[0][0][0].get("cmd") == "cancel_analysis"

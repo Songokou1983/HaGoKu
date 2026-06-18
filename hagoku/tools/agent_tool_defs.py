@@ -720,6 +720,6 @@ agent_tools.register(Tool(
 
 import hagoku.tools.memory_tools  # noqa: F401,E402 — Phase E ✅: memory 工具已注册
 import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
-import hagoku.tools.biz_tools     # noqa: F401  — CO-T12～T18: 业务指标
+# biz_tools 已移除 — ROI/ROAS/LTV 等公式不是工具，LLM 训练数据自带
 import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强
 import hagoku.tools.viz_tools     # noqa: F401  — CO-T22: 可视化

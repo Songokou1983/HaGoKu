@@ -26,8 +26,9 @@ def test_G1_run_不阻塞(orch):
     )
 
 
-def test_G2_Scout_handler_空输入_返回字段表(orch):
-    """G2: _handle_scout_reply 空输入时返回 scout_review 含 field_review。"""
+def test_G2_Scout_handler_空输入_返回scout_review(orch):
+    """G2: _handle_scout_reply 空输入时返回 scout_review 并 emit USER_INPUT_REQUESTED。
+    Phase D: field_review 已移至 orchestrator 初始 scout 阶段，不在此 handler 返回。"""
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "suggested_role": "feature", "used_in_analysis": True},
@@ -35,9 +36,12 @@ def test_G2_Scout_handler_空输入_返回字段表(orch):
         "column_descriptions": {"A": "测试列"},
         "column_display_names": {},
     }
+    captured = []
+    orch.event_bus.subscribe(lambda e: captured.append(e))
     result = orch._handle_scout_reply("", context)
     assert result["status"] == "scout_review"
-    assert "field_review" in result
+    # field_review 不再在返回值中，改为通过事件 emit
+    assert any(e.event_type.value == "user_input_requested" for e in captured)
 
 
 def test_G3_Scout_handler_纯确认_切Cleaner(orch):
@@ -197,7 +201,8 @@ def test_G10_律2_raw_text_跨_respond_保留(orch):
     result2 = orch._handle_scout_reply("A的单位是万元", context)
     assert result2["status"] == "scout_review" or isinstance(result2, tuple)
 
-    assert "field_review" in result1 if isinstance(result1, dict) else True
+    # Phase D: field_review 不在返回值中，通过 event_bus emit
+    # 验证 handler 未因多次调用而崩溃
 
 
 def test_G11_律6_raw_text_抵达_LLM(orch):

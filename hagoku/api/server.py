@@ -550,11 +550,31 @@ async def get_project_runs(project_name: str):
         query = meta.get("query", "")
         has_dumps = (run_dir / "llm_dumps").exists()
         has_events = (run_dir / "events.jsonl").exists()
-        status = "completed" if (run_dir / "output" / "report.html").exists() else ("active" if has_dumps or has_events else "empty")
+        is_guardrails_blocked = meta.get("guardrails_blocked", False) or (
+            (run_dir / "output" / "GUARDRAILS_BLOCKED.md").exists()
+        )
+        has_report = (run_dir / "output" / "report.html").exists()
+        if is_guardrails_blocked:
+            status = "guardrails_blocked"
+        elif has_report:
+            status = "completed"
+        elif has_dumps or has_events:
+            status = "active"
+        else:
+            status = "empty"
+        report_url = None
+        guardrails_notice_url = None
+        if has_report:
+            report_url = f"/api/reports/{project_name}/{rid}/report.html"
+        if is_guardrails_blocked:
+            guardrails_notice_url = f"/api/reports/{project_name}/{rid}/GUARDRAILS_BLOCKED.md"
         runs.append({
             "run_id": rid,
             "query": query,
             "status": status,
+            "guardrails_blocked": is_guardrails_blocked,
+            "report_url": report_url,
+            "guardrails_notice_url": guardrails_notice_url,
         })
 
     return {"runs": runs}

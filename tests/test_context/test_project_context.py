@@ -156,7 +156,9 @@ class TestProjectContextEventBus:
         assert ctx.entries[0].type == "stage_transition"
         assert ctx.entries[0].stage == "scout"
 
-    def test_agent_completed_adds_response_with_snapshot(self):
+    def test_agent_completed_no_longer_adds_entry(self):
+        """Phase D: AGENT_COMPLETED 不再写入 agent_response entry。
+        真实 LLM 文本已由 run_step/add_agent_response 显式写入，event handler 只做 pass。"""
         from hagoku.observability.event_bus import EventBus
         from hagoku.observability.events import EventType
 
@@ -173,10 +175,8 @@ class TestProjectContextEventBus:
         ctx.subscribe(bus, context_ref=test_ctx)
 
         bus.emit(EventType.AGENT_COMPLETED, "scout", {"result_summary": "完成"})
-        assert len(ctx.entries) == 1
-        assert ctx.entries[0].type == "agent_response"
-        assert ctx.entries[0].snapshot is not None
-        assert ctx.entries[0].snapshot["target"] == "Revenue"
+        # Phase D: AGENT_COMPLETED handler does pass — no entry added
+        assert len(ctx.entries) == 0
 
     def test_user_input_received_adds_feedback(self):
         from hagoku.observability.event_bus import EventBus
@@ -209,11 +209,9 @@ class TestProjectContextEventBus:
         assert ctx.entries[2].raw_user_text == "反馈2"
 
 
-def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
-    """守门：subscribe(context_ref=空dict) → dict 被 update 后 → AGENT_COMPLETED 拿到的 snapshot 非空。
-
-    验证 必修 3：context dict 引用稳定，snapshot 不因 context 延迟填充而丢失。
-    """
+def test_subscribe_持久引用_AGENT_COMPLETED_no_longer_adds_entry():
+    """Phase D: AGENT_COMPLETED handler pass，即使 context 后填充也不写 entry。
+    真实 LLM 文本由 run_step→add_agent_response 写入。"""
     from hagoku.observability.event_bus import EventBus
     from hagoku.observability.events import EventType
 
@@ -222,7 +220,6 @@ def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
     bus = EventBus()
     ctx.subscribe(bus, context_ref=ref)
 
-    # 模拟 scout.run() 完成后 context 被填充
     ref.update({
         "column_semantics": [
             {"column_name": "Revenue", "display_name": "收入", "used_in_analysis": True},
@@ -233,18 +230,14 @@ def test_subscribe_持久引用_AGENT_COMPLETED_拿到正确_snapshot():
 
     bus.emit(EventType.AGENT_COMPLETED, "scout", {"result_summary": "完成"})
 
-    assert len(ctx.entries) == 1
-    assert ctx.entries[0].type == "agent_response"
-    assert ctx.entries[0].snapshot is not None
-    assert len(ctx.entries[0].snapshot.get("fields", [])) == 1
-    assert ctx.entries[0].snapshot["target"] == "Revenue"
+    assert len(ctx.entries) == 0
 
 
 # ── _on_event _context_ref is None 回归测试（CH-3 fixup）──
 
-def test_on_event_agent_completed_without_context_ref_raises():
-    """_context_ref is None 时 AGENT_COMPLETED → raise RuntimeError，不静默降级。
-    律 7 守门：通道断裂必须 raise，logging.warning + ctx={} 是违规。"""
+def test_on_event_agent_completed_without_context_ref_no_error():
+    """Phase D: _context_ref is None 时 AGENT_COMPLETED handler pass，不抛异常。
+    _context_ref 检查已移至需要它的 handler（USER_INPUT_RECEIVED）。"""
     from hagoku.observability.events import Event, EventType
     from datetime import datetime
 
@@ -257,8 +250,8 @@ def test_on_event_agent_completed_without_context_ref_raises():
         agent="scout",
         data={"result_summary": "完成"},
     )
-    with pytest.raises(RuntimeError, match="信息通道断裂"):
-        ctx._on_event(event)
+    # Phase D: AGENT_COMPLETED handler pass — no exception
+    ctx._on_event(event)
 
 
 def test_on_event_user_input_received_without_context_ref_raises():

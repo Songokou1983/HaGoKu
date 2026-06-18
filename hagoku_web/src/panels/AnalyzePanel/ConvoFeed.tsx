@@ -86,27 +86,17 @@ export function ConvoFeed({
             </div>
           );
         }
-        // CO-14: Ask user — show as text with clickable options, reply in normal input
+        // CO-14: Ask user — delegate to AskUserPrompt component (handles yes_no / choice / free_text)
         if (m.askUser && onAskReply) {
           return (
             <div key={m.id} className="flex justify-start">
-              <div className="max-w-[85%] px-3 py-2 rounded-lg bg-app-bg-secondary border border-app-border text-app-text rounded-bl-sm text-ui-sm leading-relaxed">
-                <div className="kb-detail-html">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.askUser.question}</ReactMarkdown>
-                </div>
-                {m.askUser.options && m.askUser.options.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {m.askUser.options.map((opt: string, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => onAskReply(opt)}
-                        className="px-3 py-1 text-ui-xs rounded border border-app-border bg-app-bg-tertiary text-app-text-muted hover:text-app-text hover:border-app-accent cursor-pointer transition-colors"
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="max-w-[85%]">
+                <AskUserPrompt
+                  question={m.askUser.question}
+                  options={m.askUser.options}
+                  expected_format={m.askUser.expected_format}
+                  onReply={onAskReply}
+                />
               </div>
             </div>
           );

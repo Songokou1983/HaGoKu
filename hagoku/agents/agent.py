@@ -438,6 +438,7 @@ class DataAnalystAgent(BaseAgent):
         context: dict,
         df: pd.DataFrame | None = None,
         user_input: str = "",
+        tools: list | None = None,
     ) -> dict:
         """单步执行：跑 1 轮 LLM，处理 tool_calls。
 
@@ -449,7 +450,10 @@ class DataAnalystAgent(BaseAgent):
         if df is None:
             df = getattr(self, '_df', None)
         client = create_raw_client(self.llm_config)
-        _tools = _agt.to_openai()  # 全量工具——LLM 自己决定用什么
+        if tools is not None:
+            _tools = [t for t in _agt.to_openai() if t["function"]["name"] in tools]
+        else:
+            _tools = _agt.to_openai()  # 全量工具
 
         project_ctx = context.get("_project_context")
         if project_ctx is None:

@@ -186,13 +186,10 @@ class DataAnalystAgent(BaseAgent):
         query: str,
         memory_project: dict | None = None,
     ) -> list[dict]:
-        """字段语义推断 — 从 scout._infer_all_semantics 整体迁入。
+        """字段语义推断 — 委托 run_step 统一路径。
 
         Phase D: 整体搬迁，不重写。D7 删 scout/ 后此方法独立存在。
         """
-        from hagoku.llm.client import create_raw_client
-        from hagoku.agents.types import build_submit_field_inference_schema
-
         # 构建每列的 profile 摘要
         column_list: list[dict] = []
         for col in df.columns:
@@ -212,6 +209,7 @@ class DataAnalystAgent(BaseAgent):
             })
 
         payload = {"user_query": query, "n_rows": len(df), "n_cols": len(df.columns), "columns": column_list}
+        user_content = f"请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"
 
         memory_notes = ""
         if memory_project:
@@ -229,115 +227,46 @@ class DataAnalystAgent(BaseAgent):
 
         command_context = ""
         try:
-            ctx = getattr(self, "_context", {}) or {}
-            pt = (ctx.get("_pending_command_text") or "").strip()
+            actx = getattr(self, "_context", {}) or {}
+            pt = (actx.get("_pending_command_text") or "").strip()
             if pt:
                 command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
         except Exception:
-            logger.warning("提取 _pending_command_text 失败，用户指令未能注入 prompt", exc_info=True)
+            pass
 
-        analysis_goal_line = ""
+        extra_prefix = ""
         if query and query.strip():
-            analysis_goal_line = (
-                f"\n\n【用户分析目标】\n{query.strip()}\n"
-            )
+            extra_prefix += f"\n\n【用户分析目标】\n{query.strip()}\n"
+        extra_prefix += memory_notes + command_context
+        if extra_prefix.strip():
+            user_content = extra_prefix + "\n" + user_content
 
-        system_prompt = (
-            self._load_prompt() + "\n\n"
-            "---\n\n"
-            "【当前关注点：理解字段】\n"
-            "输出你对每个字段的理解和判断。可以用表格、列表或段落——格式自由。\n"
-            "需要标注：字段含义、是否参与分析及理由。\n\n"
-            f"{analysis_goal_line}{memory_notes}{command_context}"
-        )
-        user_prompt_str = _json.dumps(payload, ensure_ascii=False, default=str)
-
-        client = create_raw_client(self.llm_config)
         self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
 
-        from hagoku.observability.llm_dump import dump_messages
-
-        try:
-            ctx = self._context or {}
-            project_ctx = ctx.get("_project_context")
-            user_content = f"请分析以下数据集的字段语义：\n```json\n{user_prompt_str}\n```"
-            if project_ctx:
-                messages = project_ctx.to_messages_for_llm(
-                    "scout", {"query": query, "column_semantics": []},
-                    user_content,
-                    agent_system_extra=system_prompt,
-                )
-            else:
-                raise RuntimeError(
-                    "infer_field_semantics: _project_context 未设置，无法构造 messages。"
-                    " 请检查 understand_data → _init_context 是否正确初始化了 ProjectContext。"
-                )
-            from hagoku.tools.registry import agent_tools as _agt
-            _tools = [t for t in _agt.to_openai() if t["function"]["name"] in ("ask_user", "get_sample_rows", "get_column_stats", "list_columns")]
-            dump_messages(
-                "agent_infer_field_semantics",
-                messages,
-                model=self.llm_config.model,
-                extra={"query": query, "tools": [t["function"]["name"] for t in _tools]},
+        # ── 复用 run_step 统一路径（全量工具 + 流式 + 跟进轮）──
+        project_ctx = (self._context or {}).get("_project_context")
+        if project_ctx is None:
+            raise RuntimeError(
+                "infer_field_semantics: _project_context 未设置，无法构造 messages。"
+                " 请检查 understand_data → _init_context 是否正确初始化了 ProjectContext。"
             )
-            # 流式输出——和 Reasonix 一样：逐 token emit，前端拼消息
-            from hagoku.llm.client import stream_chat_completion
-            from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
-            stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
-            full_text = ""
-            safe_emitted = 0
-            tc_list = None
-            for chunk in stream_chat_completion(
-                client, self.llm_config.model, messages,
-                temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
-                tools=_tools if _tools else None,
-            ):
-                if chunk["type"] == "delta":
-                    full_text, delta, safe_emitted = stream_safe_append(
-                        full_text, chunk["content"], safe_emitted,
-                    )
-                    if delta:
-                        self._emit(EventType.AGENT_STREAM_DELTA, {
-                            "stream_id": stream_id,
-                            "delta": delta,
-                        })
-                elif chunk["type"] == "end":
-                    raw_text = strip_llm_think(full_text)
-                    self._emit(EventType.AGENT_STREAM_END, {
-                        "stream_id": stream_id,
-                        "content": raw_text,
-                    })
-                    # 处理工具调用
-                    tc_list = chunk.get("tool_calls")
-                    if tc_list:
-                        for tc in tc_list:
-                            fn = tc.get("function", {})
-                            try:
-                                args = _json.loads(fn.get("arguments", "{}"))
-                                _agt.dispatch(fn.get("name", ""), args, self._context or {}, df)
-                            except Exception:
-                                logger.warning(
-                                    "infer_field_semantics: 工具 %s 调度失败",
-                                    fn.get("name", "?"), exc_info=True,
-                                )
-                elif chunk["type"] == "error":
-                    raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
-        except Exception as e:
-            raise RuntimeError(f"字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
+        context = {
+            "_project_context": project_ctx,
+            "_current_stage": "scout",
+            "query": query,
+            "column_semantics": [],
+            "_column_info": {c: str(df[c].dtype) for c in df.columns},
+            "_pending_command_text": (ctx.get("_pending_command_text") or "").strip() if ctx else "",
+        }
+        result = self.run_step(context, df, user_content)
 
-        dump_messages(
-            "agent_infer_field_semantics_response",
-            messages + [{"role": "assistant", "content": raw_text}],
-            model=self.llm_config.model,
-        )
-
+        raw_text = result.get("text", "")
         if not raw_text:
             raise RuntimeError(
                 "字段推断失败：LLM 未返回有效结果。"
                 "请查看 ~/.hagoku/llm_dumps/ 中 agent_infer_field_semantics 记录。"
             )
 
-        # 返回 LLM 文本（前端 markdown 渲染）+ 空 column_semantics 兼容下游
         return [{"_scout_text": raw_text}]
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:
@@ -473,12 +402,7 @@ class DataAnalystAgent(BaseAgent):
     # ═══════════════════════════════════════════════════════════════
 
     def assess(self, df: pd.DataFrame, context: dict) -> dict:
-        """评估清洗需求——关注点 2：评估清洗。"""
-        import json
-        from hagoku.tools.registry import agent_tools as _agt
-        from hagoku.llm.client import create_raw_client
-        from hagoku.context.project_context import ToolCallRecord
-
+        """评估清洗需求——复用 run_step 统一路径。"""
         query = context.get("query", "") or context.get("analysis_goal", "")
         user_feedback = context.get("_user_feedback", "") or ""
 
@@ -490,157 +414,31 @@ class DataAnalystAgent(BaseAgent):
         if project_ctx is None:
             raise RuntimeError("DataAnalystAgent.assess: _project_context 未设置")
 
-        command_context = ""
-        try:
-            pt = (context.get("_pending_command_text") or "").strip()
-            if pt:
-                command_context = f"\n【用户最近提出的指令/纠正：】\n{pt}"
-        except Exception:
-            logger.warning("assess() 提取 _pending_command_text 失败，用户指令未能注入", exc_info=True)
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
-        if command_context:
-            intro += command_context
         revision = context.get("interaction_revision", 0)
         project_ctx.add_user_feedback("cleaner", revision, raw_text=intro)
-        agent_extra = "【当前阶段：数据清洗评估】调用 submit_assessment 提交评估结果。"
-        _tools = _agt.to_openai()
-        client = create_raw_client(self.llm_config)
 
-        from hagoku.observability.llm_dump import dump_messages
-        use_stream = getattr(self.llm_config, "stream_enabled", True)
+        context["_current_stage"] = "cleaner"
+        context.setdefault("_column_info", {c: str(df[c].dtype) for c in df.columns})
+
+        # 循环 run_step 直到 LLM 调 submit_assessment（最多 5 轮）
         for _round in range(5):
             self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
-            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
-            dump_messages("cleaner_dialogue", messages, model=self.llm_config.model,
-                          extra={"query": query, "tools": [t["function"]["name"] for t in _tools]})
+            result = self.run_step(context, df, "")
+            if result.get("submit_assessment"):
+                return result["assessment"]
+            if not result.get("text"):
+                continue
 
-            # CO-18: 流式路径 vs batch 回退
-            txt = ""
-            tc = None
-            if use_stream:
-                from hagoku.llm.client import stream_chat_completion
-                from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
-                stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
-                full_text = ""
-                safe_emitted = 0
-                final_tool_calls_raw: list[dict] = []
-                for chunk in stream_chat_completion(
-                    client, self.llm_config.model, messages,
-                    temperature=0.0, max_tokens=2048, tools=_tools,
-                ):
-                    if chunk["type"] == "delta":
-                        full_text, delta, safe_emitted = stream_safe_append(
-                            full_text, chunk["content"], safe_emitted,
-                        )
-                        if delta:
-                            self._emit(EventType.AGENT_STREAM_DELTA, {
-                                "stream_id": stream_id, "delta": delta,
-                                "agent": "cleaner",
-                            })
-                    elif chunk["type"] == "end":
-                        full_text = chunk.get("content", full_text)
-                        final_tool_calls_raw = chunk.get("tool_calls") or []
-                        self._emit(EventType.AGENT_STREAM_END, {
-                            "stream_id": stream_id, "agent": "cleaner",
-                        })
-                txt = strip_llm_think(full_text)
-                if final_tool_calls_raw:
-                    class _FakeTCC:
-                        def __init__(self, d):
-                            self.id = d.get("id", "")
-                            self.function = type("Fcc", (), {
-                                "name": d.get("function", {}).get("name", ""),
-                                "arguments": d.get("function", {}).get("arguments", ""),
-                            })()
-                    tc = [_FakeTCC(tc) for tc in final_tool_calls_raw]
-            else:
-                try:
-                    response = client.chat.completions.create(
-                        model=self.llm_config.model, messages=messages,
-                        temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
-                    )
-                except Exception as e:
-                    raise RuntimeError(f"Cleaner LLM 不可达: {e}") from e
-                msg = response.choices[0].message
-                tc = getattr(msg, "tool_calls", None)
-                txt = msg.content or ""
-            dump_messages("cleaner_assess_response", messages + [
-                {"role": "assistant", "content": txt,
-                 "tool_calls": [{"function": {"name": t.function.name, "arguments": t.function.arguments}} for t in (tc or [])] if tc else None}
-            ], model=self.llm_config.model)
-            if tc:
-                tool_records = []
-                for t in tc:
-                    fn = t.function
-                    try:
-                        args = json.loads(fn.arguments) if fn.arguments else {}
-                    except json.JSONDecodeError:
-                        continue
-                    if fn.name == "submit_assessment":
-                        # 上下文保真律：submit_assessment 也必须记录到 ProjectContext
-                        result = _agt.dispatch(fn.name, args, context, df)
-                        tool_records.append(ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
-                            arguments=fn.arguments,
-                            result=json.dumps(result, ensure_ascii=False, default=str),
-                        ))
-                        if tool_records:
-                            project_ctx.add_tool_exchange("cleaner", revision, tool_records, assistant_content=txt)
-                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
-                    if fn.name == "route_to":
-                        context["_cleaner_route_to"] = {"stage": args.get("stage"), "reason": args.get("reason", "")}
-                    try:
-                        result = _agt.dispatch(fn.name, args, context, df)
-                        tool_records.append(ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
-                            arguments=fn.arguments,
-                            result=json.dumps(result, ensure_ascii=False, default=str),
-                        ))
-                    except Exception as exc:
-                        tool_records.append(ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
-                            arguments=fn.arguments, result="", error=str(exc),
-                        ))
-                if tool_records:
-                    project_ctx.add_tool_exchange("cleaner", revision, tool_records, assistant_content=txt)
-                continue
-            if txt.strip():
-                project_ctx.add_agent_response("cleaner", revision, txt)
-                project_ctx.add_user_feedback("cleaner", revision,
-                    raw_text="请总结你的评估结果，调用 submit_assessment 提交。")
-                continue
+        # 最后一轮：强制要求 LLM 提交
         project_ctx.add_user_feedback("cleaner", revision,
             raw_text="你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。")
-        try:
-            messages = project_ctx.to_messages_for_llm("cleaner", context, "", agent_system_extra=agent_extra)
-            response = client.chat.completions.create(
-                model=self.llm_config.model, messages=messages,
-                temperature=0.0, max_tokens=2048, tools=_tools, tool_choice="auto",
-            )
-            msg = response.choices[0].message
-            tc = getattr(msg, "tool_calls", None)
-            if tc:
-                for t in tc:
-                    fn = t.function
-                    try:
-                        args = json.loads(fn.arguments) if fn.arguments else {}
-                    except json.JSONDecodeError:
-                        continue
-                    if fn.name == "submit_assessment":
-                        result = _agt.dispatch(fn.name, args, context, df)
-                        tr = ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "", name=fn.name,
-                            arguments=fn.arguments,
-                            result=json.dumps(result, ensure_ascii=False, default=str),
-                        )
-                        project_ctx.add_tool_exchange("cleaner", revision, [tr])
-                        return {"summary": args.get("summary", ""), "columns": args.get("columns", [])}
-        except Exception as e:
-            raise RuntimeError(
-                "Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。"
-            ) from e
+        result = self.run_step(context, df, "")
+        if result.get("submit_assessment"):
+            return result["assessment"]
+        raise RuntimeError("Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。")
 
     # ═══════════════════════════════════════════════════════════════
     # 通用：run_step（Phase B/C 接口）

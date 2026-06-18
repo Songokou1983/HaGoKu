@@ -293,6 +293,10 @@ def stream_chat_completion(
     final_tool_calls = [
         tool_call_buffers[i] for i in sorted(tool_call_buffers.keys())
     ]
+    # DeepSeek 用 DSML <|tool_calls|> 格式而非 OpenAI delta.tool_calls
+    if not final_tool_calls:
+        from hagoku.llm.sanitize import extract_dsml_tool_calls
+        final_tool_calls = extract_dsml_tool_calls(full_content)
     yield {
         "type": "end",
         "content": full_content,

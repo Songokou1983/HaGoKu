@@ -1,31 +1,87 @@
 """LLM 输出清洗 — 用户可见文本过滤。"""
 from __future__ import annotations
 
+import json as _json
 import re
+from typing import Any
 
 _THINK_PATTERNS = (
     re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*reasoning\s*>.*?<\s*/\s*reasoning\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*thinking\s*>.*?<\s*/\s*thinking\s*>", re.DOTALL | re.IGNORECASE),
-    # DeepSeek DSML function-call 标签（<｜tool_calls｜> / <｜DSML｜> / <｜tool_results｜>）
-    re.compile(r"<\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
-    re.compile(r"<\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
-    re.compile(r"<\s*[|｜]?\s*DSML\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.DOTALL | re.IGNORECASE),
-    # 未闭合的孤立 DSML 开/闭标签（流式中间态残留）
-    re.compile(r"<\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.IGNORECASE),
-    re.compile(r"<\s*/\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.IGNORECASE),
 )
+
+# DSML 标签（独立管理，不混入 THINK_PATTERNS——function calls 需要提取而非删除）
+_DSML_TOOL_CALLS = re.compile(
+    r"<\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>(.*?)<\s*/\s*[|｜]?\s*tool[ _]calls?\s*[|｜]?\s*>",
+    re.DOTALL | re.IGNORECASE,
+)
+_DSML_TOOL_RESULTS = re.compile(
+    r"<\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>(.*?)<\s*/\s*[|｜]?\s*tool[ _]results?\s*[|｜]?\s*>",
+    re.DOTALL | re.IGNORECASE,
+)
+_DSML_BLOCK = re.compile(
+    r"<\s*[|｜]?\s*DSML\s*[|｜]?\s*>.*?<\s*/\s*[|｜]?\s*DSML\s*[|｜]?\s*>",
+    re.DOTALL | re.IGNORECASE,
+)
+_DSML_TAG = re.compile(r"<\s*/?\s*[|｜]?\s*DSML\s*[|｜]?\s*>", re.IGNORECASE)
 
 # 检测未闭合的 think 标签（流式中间态）
 _OPEN_THINK = re.compile(r"<\s*(think|reasoning|thinking)\s*>", re.IGNORECASE)
 _CLOSE_THINK = re.compile(r"<\s*/\s*(think|reasoning|thinking)\s*>", re.IGNORECASE)
 
 
+def _strip_dsml(text: str) -> str:
+    """移除 DSML 标签（非 function-call 部分），保留纯净文本。"""
+    out = _DSML_TOOL_RESULTS.sub("", text)
+    out = _DSML_BLOCK.sub("", out)
+    out = _DSML_TAG.sub("", out)
+    return out
+
+
+def extract_dsml_tool_calls(text: str) -> list[dict[str, Any]]:
+    """从 DSML <|tool_calls|> 中提取 OpenAI 格式的 tool_calls。"""
+    result: list[dict[str, Any]] = []
+    for match in _DSML_TOOL_CALLS.finditer(text):
+        body = match.group(1).strip()
+        if not body:
+            continue
+        try:
+            parsed = _json.loads(body)
+        except _json.JSONDecodeError:
+            continue
+        if isinstance(parsed, list):
+            for i, tc in enumerate(parsed):
+                if isinstance(tc, dict):
+                    fn = tc.get("function", tc)
+                    name = fn.get("name", "")
+                    arguments = fn.get("arguments", {})
+                    if isinstance(arguments, dict):
+                        arguments = _json.dumps(arguments, ensure_ascii=False)
+                    result.append({
+                        "id": f"dsml_{len(result)}",
+                        "type": "function",
+                        "function": {"name": name, "arguments": str(arguments)},
+                    })
+        elif isinstance(parsed, dict):
+            name = parsed.get("name", "")
+            arguments = parsed.get("arguments", {})
+            if isinstance(arguments, dict):
+                arguments = _json.dumps(arguments, ensure_ascii=False)
+            result.append({
+                "id": f"dsml_{len(result)}",
+                "type": "function",
+                "function": {"name": name, "arguments": str(arguments)},
+            })
+    return result
+
+
 def strip_llm_think(text: str) -> str:
-    """移除模型 CoT / think 块，防止泄露到 UI。"""
+    """移除模型 CoT / think 块 + DSML 标签，防止泄露到 UI。"""
     out = text or ""
     for pat in _THINK_PATTERNS:
         out = pat.sub("", out)
+    out = _strip_dsml(out)
     return out.strip()
 
 

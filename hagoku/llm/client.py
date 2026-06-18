@@ -293,6 +293,10 @@ def stream_chat_completion(
     final_tool_calls = [
         tool_call_buffers[i] for i in sorted(tool_call_buffers.keys())
     ]
+    # 兼容 DSML 格式：部分模型将 function calls 放在 content 而非 delta.tool_calls
+    if not final_tool_calls and full_content:
+        from hagoku.llm.sanitize import extract_dsml_tool_calls as _extract
+        final_tool_calls = _extract(full_content)
     yield {
         "type": "end",
         "content": full_content,

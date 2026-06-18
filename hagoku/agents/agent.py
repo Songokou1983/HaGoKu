@@ -280,62 +280,48 @@ class DataAnalystAgent(BaseAgent):
                 model=self.llm_config.model,
                 extra={"query": query, "tools": [t["function"]["name"] for t in _tools]},
             )
-            # DeepSeek 第一轮常输出计划文本不调工具，给最多 3 轮机会让它真调
-            raw_text = ""
+            # 流式输出——和 Reasonix 一样：逐 token emit，前端拼消息
+            from hagoku.llm.client import stream_chat_completion
+            from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
+            stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
+            full_text = ""
+            safe_emitted = 0
             tc_list = None
-            for _round in range(3):
-                from hagoku.llm.client import stream_chat_completion
-                from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
-                stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
-                full_text = ""
-                safe_emitted = 0
-                tc_list = None
-                for chunk in stream_chat_completion(
-                    client, self.llm_config.model, messages,
-                    temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
-                    tools=_tools if _tools else None,
-                ):
-                    if chunk["type"] == "delta":
-                        full_text, delta, safe_emitted = stream_safe_append(
-                            full_text, chunk["content"], safe_emitted,
-                        )
-                        if delta:
-                            self._emit(EventType.AGENT_STREAM_DELTA, {
-                                "stream_id": stream_id,
-                                "delta": delta,
-                            })
-                    elif chunk["type"] == "end":
-                        raw_text = strip_llm_think(full_text)
-                        self._emit(EventType.AGENT_STREAM_END, {
+            for chunk in stream_chat_completion(
+                client, self.llm_config.model, messages,
+                temperature=SCOUT_INFER_TEMPERATURE, max_tokens=SCOUT_INFER_MAX_TOKENS,
+                tools=_tools if _tools else None,
+            ):
+                if chunk["type"] == "delta":
+                    full_text, delta, safe_emitted = stream_safe_append(
+                        full_text, chunk["content"], safe_emitted,
+                    )
+                    if delta:
+                        self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id,
-                            "content": raw_text,
+                            "delta": delta,
                         })
-                        tc_list = chunk.get("tool_calls")
-                        # DeepSeek 用 DSML <|tool_calls|> 在 content 里传 function calls
-                        if not tc_list:
-                            from hagoku.llm.sanitize import extract_dsml_tool_calls
-                            dsml_tcs = extract_dsml_tool_calls(full_text)
-                            if dsml_tcs:
-                                tc_list = dsml_tcs
-                        if tc_list:
-                            for tc in tc_list:
-                                fn = tc.get("function", {})
-                                try:
-                                    args = _json.loads(fn.get("arguments", "{}"))
-                                    _agt.dispatch(fn.get("name", ""), args, self._context or {}, df)
-                                except Exception:
-                                    logger.warning(
-                                        "infer_field_semantics: 工具 %s 调度失败",
-                                        fn.get("name", "?"), exc_info=True,
-                                    )
-                    elif chunk["type"] == "error":
-                        raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
-                # 如果本轮有工具调用，结束循环
-                if tc_list:
-                    break
-                # 无工具调用 → 把本轮回复追加到 messages，再给 LLM 一次机会
-                if raw_text:
-                    messages = messages + [{"role": "assistant", "content": raw_text}]
+                elif chunk["type"] == "end":
+                    raw_text = strip_llm_think(full_text)
+                    self._emit(EventType.AGENT_STREAM_END, {
+                        "stream_id": stream_id,
+                        "content": raw_text,
+                    })
+                    # 处理工具调用
+                    tc_list = chunk.get("tool_calls")
+                    if tc_list:
+                        for tc in tc_list:
+                            fn = tc.get("function", {})
+                            try:
+                                args = _json.loads(fn.get("arguments", "{}"))
+                                _agt.dispatch(fn.get("name", ""), args, self._context or {}, df)
+                            except Exception:
+                                logger.warning(
+                                    "infer_field_semantics: 工具 %s 调度失败",
+                                    fn.get("name", "?"), exc_info=True,
+                                )
+                elif chunk["type"] == "error":
+                    raise RuntimeError(f"字段推断流式失败：{chunk.get('message', '')}")
         except Exception as e:
             raise RuntimeError(f"字段推断失败：LLM 不可达，请检查 API 配置。原始错误: {e}") from e
 

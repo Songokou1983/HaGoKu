@@ -1,14 +1,24 @@
 # CLAUDE.md
 
-## ⛔ 第一原则：改代码前必须有这三行
+## ⛔ 第一原则：改代码前必须有这四行
 
 ```
-1. dump: <paste exact dump content, line numbers>
-2. path: <file:line → file:line → breakpoint>
-3. gap:  <what LLM received vs what it should have received>
+1. dump:   <paste exact dump content, line numbers>
+2. path:   <file:line → file:line → breakpoint>
+3. gap:    <what LLM received vs what it should have received>
+4. exists: <this system already handles this at file:line — yes/no>
 ```
 
-**没有这三行 → 没有 edit_file。没有例外。没有"我先改着"。**
+**没有这四行 → 没有 edit_file。没有例外。没有"我先改着"。**
+
+## ⚡ 系统架构（改代码前必须知道）
+
+- **单 Agent**：`DataAnalystAgent`，4 关注点（理解字段/评估清洗/跑统计/写报告）
+- **单入口**：`to_messages_for_llm()` → `build_messages()`，唯一 LLM 消息构造路径
+- **对话循环**：`run_step()` 已含工具调用→dispatch→回传→继续的完整循环。不要自己写
+- **流程控制**：LLM 通过 `route_to` 决定阶段切换，代码不做 if-elif 阶段判断
+- **代码只做机械执行**：不替 LLM 做语义判断，不加"禁止"堵行为
+- **PROJECT.md** = 设计真相来源
 
 ---
 

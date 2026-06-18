@@ -155,25 +155,12 @@ def _handle_update_field_table(args: dict, ctx: dict, _df: pd.DataFrame | None) 
     return {"updated": applied}
 
 
-agent_tools.register(Tool(
-    name="update_field_table",
-    description="更新字段表格。一次调用可修改多列的 display_name/description/role/in_analysis/cleaning/cleaning_reason。只需传要改的字段。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "columns": {"type": "object", "description": "key=列名, value=要更新的字段"},
-        },
-        "required": ["columns"],
-    },
-    handler=_handle_update_field_table,
-    phase_tag=['理解字段', '评估清洗', '跑统计'],
-))
 
 # ═══════════════════════════════════════════════════════════════════
 # Scout 字段理解工具
 # ═══════════════════════════════════════════════════════════════════
 
-def _handle_update_field_understanding(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+def _handle_set_columns(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     """更新字段的中文名和含义，同步写入 column_semantics。支持单列或批量。"""
     # 批量模式: {"columns": [{"column_name": ..., "display_name": ..., ...}, ...]}
     batch = args.get("columns")
@@ -284,8 +271,8 @@ def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | Non
 
 
 agent_tools.register(Tool(
-    name="update_field_understanding",
-    description="更新字段的中文名或业务含义。单列用 column_name，批量用 columns 数组。",
+    name="set_columns",
+    description='设置字段属性。批量推荐: {"columns": [{"column_name":"A","display_name":"收入","used_in_analysis":true}]}。单列传 column_name。target/features/ignored 通过 suggested_role 设。',
     parameters={
         "type": "object",
         "properties": {
@@ -314,62 +301,13 @@ agent_tools.register(Tool(
         },
         "required": [],
     },
-    handler=_handle_update_field_understanding,
+    handler=_handle_set_columns,
     phase_tag=['理解字段'],
 ))
 
-agent_tools.register(Tool(
-    name="update_field_role",
-    description="设置分析的 target/features/ignored 字段",
-    parameters={
-        "type": "object",
-        "properties": {
-            "target": {"type": "string", "description": "目标变量"},
-            "features": {"type": "array", "items": {"type": "string"}},
-            "ignored": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": [],
-    },
-    handler=_handle_update_field_role,
-    phase_tag=['理解字段'],
-))
-
-def _handle_update_assessment(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """更新评估表格中某一行。context 中的 _cleaner_assessment 会被修改。"""
-    assessment = ctx.get("_cleaner_assessment", {})
-    cols = assessment.get("columns", [])
-    target_col = str(args.get("column", ""))
-    updated = False
-    for c in cols:
-        if c.get("column") == target_col:
-            if "action" in args:
-                c["action"] = args["action"]
-                updated = True
-            if "reason" in args:
-                c["reason"] = args["reason"]
-                updated = True
-            break
-    if updated:
-        assessment["columns"] = cols
-        ctx["_cleaner_assessment"] = assessment
-    return {"updated": updated, "column": target_col}
 
 
-agent_tools.register(Tool(
-    name="update_assessment",
-    description="修改清洗评估表格中某一行的建议或原因。仅在用户明确要求修改某列时调用。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "column": {"type": "string", "description": "列名"},
-            "action": {"type": "string", "enum": ["clean", "skip"]},
-            "reason": {"type": "string", "description": "新的原因说明"},
-        },
-        "required": ["column"],
-    },
-    handler=_handle_update_assessment,
-    phase_tag=['评估清洗'],
-))
+
 
 agent_tools.register(Tool(
     name="submit_assessment",
@@ -403,48 +341,13 @@ agent_tools.register(Tool(
     phase_tag=['评估清洗'],
 ))
 
-agent_tools.register(Tool(
-    name="restrict_analysis_to",
-    description="限定参与分析的字段，其余自动排除",
-    parameters={
-        "type": "object",
-        "properties": {
-            "included_fields": {"type": "array", "items": {"type": "string"}, "description": "要保留的字段，列名或业务名均可"},
-            "rationale": {"type": "string", "description": "简要说明"},
-        },
-        "required": ["included_fields"],
-    },
-    handler=_handle_restrict_analysis_to,
-    phase_tag=['理解字段'],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Analyst 对话式分析工具
 # ═══════════════════════════════════════════════════════════════════
 
-def _handle_propose_method(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
-        "method_name": args.get("method_name", ""),
-        "reasoning": args.get("reasoning", ""),
-        "prerequisites": args.get("prerequisites", ""),
-    }
 
-agent_tools.register(Tool(
-    name="propose_method",
-    description="向用户建议一种分析方法，说明理由和前提。调用后会暂停等待用户回复。用户可接受、否定或调整。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "method_name": {"type": "string", "description": "方法名（如「趋势分解」「线性回归」「分组t检验」）"},
-            "reasoning": {"type": "string", "description": "为什么建议这个方法"},
-            "prerequisites": {"type": "string", "description": "前提条件（如「需要至少 30 个样本」）"},
-        },
-        "required": ["method_name", "reasoning"],
-    },
-    handler=_handle_propose_method,
-    phase_tag=['跑统计'],
-))
 
 
 def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
@@ -580,103 +483,16 @@ agent_tools.register(Tool(
 
 
 
-agent_tools.register(Tool(
-    name="update_analysis_scope",
-    description=(
-        "调整分析范围——纳入或排除字段。调用前先检查字段数据质量（调 get_column_stats），"
-        "根据实际数据自行判断是否满足分析要求。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "add_columns": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "纳入分析的列名列表",
-            },
-            "remove_columns": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "移出分析的列名列表",
-            },
-            "reason": {
-                "type": "string",
-                "description": "调整原因",
-            },
-        },
-        "required": [],
-    },
-    handler=_handle_update_analysis_scope,
-    phase_tag=['跑统计'],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Cleaner 对话式清洗工具
 # ═══════════════════════════════════════════════════════════════════
 
-def _handle_propose_cleaning_rule(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
-        "column": args.get("column", ""),
-        "rule": args.get("rule", ""),
-        "reason": args.get("reason", ""),
-    }
-
-agent_tools.register(Tool(
-    name="propose_cleaning_rule",
-    description="提议一条清洗规则。包含目标列、规则内容和理由。用户确认后才会应用。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "column": {"type": "string", "description": "目标列名"},
-            "rule": {"type": "string", "description": "清洗规则内容（如「将空值填充为0」「剔除 Z>3 的离群值」）"},
-            "reason": {"type": "string", "description": "提议这条规则的理由"},
-        },
-        "required": ["column", "rule", "reason"],
-    },
-    handler=_handle_propose_cleaning_rule,
-    phase_tag=['评估清洗'],
-))
 
 
-def _handle_compare_before_after(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
-    """跑 before/after 对比，展示清洗规则对数据的影响。"""
-    column = str(args.get("column", ""))
-    rule = str(args.get("rule", ""))
-    if df is None or column not in df.columns:
-        return {"error": f"列 {column} 不存在"}
-    before = {
-        "count": int(len(df)),
-        "nulls": int(df[column].isna().sum()),
-    }
-    if pd.api.types.is_numeric_dtype(df[column]):
-        before.update({
-            "mean": round(float(df[column].mean()), 4),
-            "std": round(float(df[column].std()), 4),
-            "min": float(df[column].min()),
-            "max": float(df[column].max()),
-        })
-    return {
-        "column": column,
-        "rule": rule,
-        "before": before,
-        "note": "before/after 对比需由调用方在应用规则后计算 after 值。此工具仅返回当前状态（before）。",
-    }
 
-agent_tools.register(Tool(
-    name="compare_before_after",
-    description="对比清洗规则应用前后的数据变化。传入列名和规则描述，返回当前（before）统计值。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "column": {"type": "string", "description": "目标列名"},
-            "rule": {"type": "string", "description": "要对比的清洗规则"},
-        },
-        "required": ["column", "rule"],
-    },
-    handler=_handle_compare_before_after,
-    phase_tag=['评估清洗'],
-))
+
 
 
 # ═══════════════════════════════════════════════════════════════════

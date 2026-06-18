@@ -1,0 +1,83 @@
+# Reasonix configuration.
+# Resolution order: flag > ./reasonix.toml > ~/.config/reasonix/config.toml > built-in defaults.
+# Secrets come from the environment via api_key_env; never put keys here.
+
+config_version = 2   # schema marker for diagnostics; old versions may ignore it
+default_model = "deepseek-v4-pro"   # ← flash→pro：质量优先（toml 优先于 config.json）
+# language      = "zh"   # ui/model language; empty = auto-detect from $LANG / $REASONIX_LANG
+
+[agent]
+# system_prompt = """..."""   # omit to use the built-in prompt for this version
+system_prompt_file = "docs/prompts/system-prompt-merged.md"   # 1.4.0 + 0.53 铁律合并版
+max_steps   = 0                  # 不限：复杂任务不剪
+temperature = 0.0                # 确定性：可复现质量
+auto_plan   = "on"               # ← off→on：复杂任务自动 plan
+auto_plan_classifier = "deepseek-v4-pro"   # ← 启用：borderline 判定用 pro
+soft_compact_ratio  = 0.7        # ← 0.5→0.7：晚 notice，给 cache 更多缓冲
+compact_ratio       = 0.85       # ← 0.8→0.85：晚 trigger
+compact_force_ratio = 0.95       # ← 0.9→0.95：晚 force
+# planner_model = "mimo"         # 保持注释：用户已决定不用双模型
+subagent_model      = "deepseek-v4-pro"   # ← 启用：subagent 干重活也用 pro
+subagent_effort     = "max"      # ← 启用：subagent 推理 effort 拉满
+subagent_efforts    = { review = "max", security_review = "max", task = "max" }   # ← 启用：每个 skill 都 max
+output_style        = "explanatory"   # ← 启用：让模型解释推理过程（更稳）
+
+[tools]
+enabled = []   # empty = all built-in tools
+bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
+
+[codegraph]
+enabled      = true   # built-in MCP server; off by default for first-run sessions
+auto_install = true   # fetch the runtime when CodeGraph is enabled but missing
+# path       = ""   # empty = cache, then PATH, then a bundle beside reasonix
+
+[skills]
+# paths = ["~/my-skills", "../shared/skills"]   # extra custom skill roots
+# excluded_paths = ["~/.agents/skills"]   # hide convention roots without deleting folders
+max_depth = 3   # ← 启用：嵌套扫描，让子目录里的 SKILL.md 也被发现
+# disabled_skills = ["review"]   # hide noisy or unwanted skills
+
+[permissions]
+# Per-call gating. mode = writer fallback when no rule matches: ask|allow|deny.
+# Readers always default to allow. Precedence: deny > ask > allow > fallback.
+# Rules are "ToolName" or "ToolName(glob)"; '*' matches any run, '?' one char.
+mode  = "allow"   # ← ask→allow：单用户、质量优先、不打断
+# 危险 deny 硬阻止（reasonix sandbox bash=off，靠 deny 兜底）
+deny = [
+  "bash(rm -rf /*)",
+  "bash(git push --force*)",
+  "bash(git push origin main*)",
+  "bash(sudo rm -rf*)",
+  "write_file(./.env)",
+  "edit_file(./.env)",
+  "edit_file(./CLAUDE.md)",
+  "edit_file(./reasonix.toml)",
+]
+allow = ["*"]   # 全部 allow，质量优先，单机不询问
+# ask = ["write_file"]   # force a prompt even if otherwise allowed
+
+[sandbox]
+# Confine tool blast radius. File-writers (write_file/edit_file/multi_edit)
+# may only write under workspace_root (empty = current dir) + allow_write.
+# bash = "enforce" (default) jails each command in an OS sandbox (macOS now;
+# graceful fallback elsewhere); "off" disables it. network allows egress.
+# workspace_root = ""            # default: current working directory
+# allow_write = ["/tmp"]          # extra dirs writers may also modify
+bash    = "off"
+network = true
+
+[statusline]
+# A custom status line: a command whose first stdout line replaces the built-in
+# data row. It receives {"model","contextUsed","contextWindow","cwd"} as JSON on stdin.
+# command = "my-statusline.sh"
+
+# External MCP servers. type: "stdio" (default, a subprocess) | "http" | "sse".
+# ${VAR} / ${VAR:-default} are expanded from the environment in command/args/env/url/headers.
+# [[plugins]]
+# name    = "example"
+# command = "reasonix-plugin-example"
+# [[plugins]]                                  # a remote server over Streamable HTTP
+# name    = "stripe"
+# type    = "http"
+# url     = "https://mcp.stripe.com"
+# headers = { Authorization = "Bearer ${STRIPE_KEY}" }

@@ -641,6 +641,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
 
           const pausedAgent = resolveAgentKey(d.agent) ?? "scout";
           setWaitingAgent(pausedAgent);
+          setGateOpen(true);
           setPhase("running");
           setTimeout(() => replyInputRef.current?.focus(), 100);
         }

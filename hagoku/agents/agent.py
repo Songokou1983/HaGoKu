@@ -273,17 +273,17 @@ class DataAnalystAgent(BaseAgent):
                     "infer_field_semantics: _project_context 未设置，无法构造 messages。"
                     " 请检查 understand_data → _init_context 是否正确初始化了 ProjectContext。"
                 )
+            from hagoku.tools.registry import agent_tools as _agt
+            _tools = [t for t in _agt.to_openai() if t["function"]["name"] == "ask_user"]
             dump_messages(
                 "agent_infer_field_semantics",
                 messages,
                 model=self.llm_config.model,
-                extra={"query": query},
+                extra={"query": query, "tools": [t["function"]["name"] for t in _tools]},
             )
             # 流式输出——和 Reasonix 一样：逐 token emit，前端拼消息
             from hagoku.llm.client import stream_chat_completion
             from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
-            from hagoku.tools.registry import agent_tools as _agt
-            _tools = [t for t in _agt.to_openai() if t["function"]["name"] == "ask_user"]
             stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat()})
             full_text = ""
             safe_emitted = 0

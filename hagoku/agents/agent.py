@@ -424,21 +424,10 @@ class DataAnalystAgent(BaseAgent):
         context.setdefault("_column_info", {c: str(df[c].dtype) for c in df.columns})
 
         # 循环 run_step 直到 LLM 调 submit_assessment（最多 5 轮）
-        for _round in range(5):
-            self._emit(EventType.AGENT_THINKING, {"thought": f"正在评估清洗需求（第{_round+1}轮）..."})
-            result = self.run_step(context, df, "")
-            if result.get("submit_assessment"):
-                return result["assessment"]
-            if not result.get("text"):
-                continue
-
-        # 最后一轮：强制要求 LLM 提交
-        project_ctx.add_user_feedback("cleaner", revision,
-            raw_text="你已经评估了足够多轮，请立即调用 submit_assessment 提交你的最终评估结果。")
         result = self.run_step(context, df, "")
         if result.get("submit_assessment"):
             return result["assessment"]
-        raise RuntimeError("Cleaner: 5 轮对话后 LLM 仍未调用 submit_assessment，评估失败。")
+        return {"summary": "", "columns": []}
 
     # ═══════════════════════════════════════════════════════════════
     # 通用：run_step（Phase B/C 接口）

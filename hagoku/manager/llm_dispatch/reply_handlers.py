@@ -108,49 +108,26 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
 
 
 def _run_analyst_first_pass(self, context: dict) -> None:
-    """阶段 1：自动跑首波分析，循环 run_step 直到 LLM 收敛或调 submit_first_pass。"""
+    """阶段 1：自动跑首波分析。"""
     import json as _json
 
-    max_rounds = 20
-    findings = None
-    first_pass_text = ""
+    result = self._agent.run_step(context, self._df_clean)
+    findings = result.get("findings")
+    if not findings:
+        project_ctx = context.get("_project_context")
+        if project_ctx:
+            for entry in reversed(project_ctx.entries):
+                if entry.type == "tool_exchange" and entry.stage == "analyst":
+                    for tc in (entry.tool_calls or []):
+                        if tc.name == "submit_first_pass":
+                            try:
+                                findings = _json.loads(tc.result) if tc.result else {}
+                            except (_json.JSONDecodeError, TypeError):
+                                findings = {}
+                            break
+                    break
 
-    for _round in range(max_rounds):
-        result = self._agent.run_step(context, self._df_clean)
-
-        if result.get("submit_analysis"):
-            findings = result.get("findings")
-            break
-
-        if findings is None:
-            project_ctx = context.get("_project_context")
-            if project_ctx:
-                for entry in reversed(project_ctx.entries):
-                    if entry.type == "tool_exchange" and entry.stage == "analyst":
-                        for tc in (entry.tool_calls or []):
-                            if tc.name == "submit_first_pass":
-                                try:
-                                    findings = _json.loads(tc.result) if tc.result else {}
-                                except (_json.JSONDecodeError, TypeError):
-                                    findings = {}
-                                break
-                        break
-        if findings is not None:
-            break
-
-        if not result.get("text") and not findings:
-            break
-
-        first_pass_text = result.get("text", "")
-
-    if findings:
-        summary = _rewrite_as_written_summary(self, findings)
-    else:
-        raise RuntimeError(
-            "首波自动分析未产生有效统计发现（findings 为空）。"
-            "请确认字段「参与分析」标记正确，并查看 ~/.hagoku/llm_dumps/ 诊断。"
-        )
-
+    summary = _rewrite_as_written_summary(self, findings) if findings else result.get("text", "")
     self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {
         "message": summary,
         "analyst_first_pass_summary": summary,

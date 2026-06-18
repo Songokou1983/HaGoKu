@@ -29,7 +29,8 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
             return ("stay", None)
         # 信号：分析暂停，前端显示输入框。文本已通过流式发送。
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+        payload = scout_field_review_pause_payload(context)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
         return {"status": "scout_review", "message": ""}
 
     # 用户输入进对话历史，LLM 自己处理

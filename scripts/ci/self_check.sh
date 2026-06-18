@@ -60,4 +60,12 @@ if [ "$TOOL_VIOLATIONS" -gt 0 ]; then
 fi
 echo "  ✅ 通过"
 
+echo "=== 10. commit-msg hook 已安装 ==="
+if [ -x "$ROOT/.git/hooks/commit-msg" ]; then
+    echo "  ✅ dump证据检查hook就位"
+else
+    echo "  ❌ 缺失: cp scripts/check_dump_evidence.py .git/hooks/commit-msg"
+    exit 1
+fi
+
 echo "=== ✅ 全部通过 ==="

@@ -34,4 +34,19 @@ echo "=== 7. P1 假 agent response ==="
 grep -q 'add_agent_response.*理解.*个字段\|add_agent_response.*字段推断完成' "$ROOT/hagoku/manager/orchestrator.py" && { echo "  ❌ orchestrator 仍在写假 agent response"; exit 1; } || echo "  ✅ orchestrator 无假 agent response"
 grep -q 'AGENT_COMPLETED.*add_agent_response' "$ROOT/hagoku/context/project_context.py" && { echo "  ❌ project_context 仍在 AGENT_COMPLETED 写假 response"; exit 1; } || echo "  ✅ project_context AGENT_COMPLETED 已清理"
 
+echo "=== 8. 代码不替 LLM 出内容 ==="
+# 字段表/结论只能从 column_semantics（LLM 产出）派生。禁止从 df 或原始列信息直接构造 field_review。
+python3 -c "
+import ast, sys
+path = '$ROOT/hagoku/manager/payloads/scout_payload.py'
+with open(path) as f:
+    tree = ast.parse(f.read())
+# 检查：构建 field_review rows 时是否引用了非 column_semantics 来源
+for node in ast.walk(tree):
+    if isinstance(node, ast.Subscript) and hasattr(node.value, 'id') and node.value.id == 'profiles':
+        print(f'{path}:{node.lineno} 从 _column_profiles 生成内容')
+        sys.exit(1)
+print('✅ scout_payload 未越界')
+" || { echo "  ❌"; exit 1; }
+
 echo "=== ✅ 全部通过 ==="

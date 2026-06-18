@@ -49,4 +49,15 @@ for node in ast.walk(tree):
 print('✅ scout_payload 未越界')
 " || { echo "  ❌"; exit 1; }
 
+echo "=== 9. 刹车 G — prompt/tool描述 不用禁止堵 ==="
+# 检测 prompt.md 和 tool descriptions 中是否出现「禁止/不要/不准」来堵行为
+VIOLATIONS=$(grep -c '禁止' "$ROOT/hagoku/agents/prompt.md" 2>/dev/null || echo 0)
+# prompt.md 已有的「禁止说'请用工具'」是合法工具使用规则，不是mismatch堵
+TOOL_VIOLATIONS=$(grep -rn '禁止.*调用\|不要.*调用\|不要.*使用\|不准.*输出\|不准.*使用' "$ROOT/hagoku/tools/agent_tool_defs.py" 2>/dev/null | wc -l)
+if [ "$TOOL_VIOLATIONS" -gt 0 ]; then
+    echo "  ❌ agent_tool_defs.py 存在刹车G违规"
+    exit 1
+fi
+echo "  ✅ 通过"
+
 echo "=== ✅ 全部通过 ==="

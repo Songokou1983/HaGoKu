@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
+## ⛔ 改代码前必须输出的三行（缺一不改）
+
+```
+1. dump: <paste exact dump content, line numbers>
+2. path: <file:line → file:line → breakpoint>
+3. gap:  <what the LLM received vs what it should have received>
+```
+
+没有这三行 → 没有 edit_file。没有例外。没有"我先改着"。
+
+---
+
 ## 项目
 
 **HaGoKu Studio — 1 个数据分析师 + 专业工具箱**（Phase D 已完成 4 agent 合 1）。详见 [`PROJECT.md`](PROJECT.md)。

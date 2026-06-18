@@ -7,6 +7,10 @@ _THINK_PATTERNS = (
     re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*reasoning\s*>.*?<\s*/\s*reasoning\s*>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\s*thinking\s*>.*?<\s*/\s*thinking\s*>", re.DOTALL | re.IGNORECASE),
+    # DeepSeek DSML function-call 标签
+    re.compile(r"<\s*\|?\\?tool[ _]calls?\s*\|?>.*?<\s*/\s*\|?\\?tool[ _]calls?\s*\|?>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*\|?\\?DSML\s*\|?>.*?<\s*/\s*\|?\\?DSML\s*\|?>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\s*\|?DSML\s*\|?>", re.IGNORECASE),
 )
 
 # 检测未闭合的 think 标签（流式中间态）

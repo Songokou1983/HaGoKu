@@ -157,23 +157,3 @@ def _handle_suggest_cleaning(args: dict, _ctx: dict, df: pd.DataFrame | None) ->
         return {"error": str(e)}
 
 
-agent_tools.register(Tool(
-    name="suggest_cleaning",
-    description=(
-        "根据缺失率和缺失机制，建议最合适的清洗策略。"
-        "需传 column（目标列名）。可选 null_rate（缺失率，不传则自动计算）和 "
-        "missing_mechanism（来自 detect_missing_pattern 的结果，不传则自动检测）。"
-        "返回建议策略 (drop_rows / fill_median / multiple_imputation / flag_and_keep 等) 和理由。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "column": {"type": "string", "description": "目标列名"},
-            "null_rate": {"type": "number", "description": "缺失率（不传则自动计算）"},
-            "missing_mechanism": {"type": "string", "description": "缺失机制: mcar / mar / mnar（不传则自动检测）"},
-        },
-        "required": ["column"],
-    },
-    handler=_handle_suggest_cleaning,
-    phase_tag=["评估清洗"],
-))

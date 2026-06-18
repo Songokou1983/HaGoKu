@@ -109,41 +109,6 @@ def _handle_assess_statistical_power(args: dict, _ctx: dict, _df: pd.DataFrame |
         return {"error": str(e)}
 
 
-agent_tools.register(Tool(
-    name="assess_statistical_power",
-    description=(
-        "评估当前数据在指定检验下的统计功效（power = 当效应真实存在时正确拒绝原假设的概率）。"
-        "mode 可选: ttest / anova / correlation / regression。"
-        "ttest 需传 n1, n2 (或 n), effect_size, paired；"
-        "anova 需传 n_per_group, n_groups, effect_size；"
-        "correlation 需传 n, effect_size, method；"
-        "regression 需传 n, n_predictors, effect_size。"
-        "功效 ≥ 0.80 为充足，< 0.50 为严重不足。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "mode": {
-                "type": "string",
-                "enum": ["ttest", "anova", "correlation", "regression"],
-                "description": "检验类型",
-            },
-            "n": {"type": "number", "description": "样本量（通用）"},
-            "n1": {"type": "number", "description": "第1组样本量（ttest）"},
-            "n2": {"type": "number", "description": "第2组样本量（ttest）"},
-            "paired": {"type": "boolean", "description": "是否配对（ttest）"},
-            "n_per_group": {"type": "number", "description": "每组样本量（anova）"},
-            "n_groups": {"type": "number", "description": "组数（anova）"},
-            "n_predictors": {"type": "number", "description": "自变量数（regression）"},
-            "effect_size": {"type": "number", "description": "预期效应量 (Cohen's d / f / r / f²)，默认 0.5"},
-            "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
-            "method": {"type": "string", "description": "相关方法: pearson / spearman"},
-        },
-        "required": ["mode"],
-    },
-    handler=_handle_assess_statistical_power,
-    phase_tag=["跑统计"],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -177,34 +142,6 @@ def _handle_required_sample_size(args: dict, _ctx: dict, _df: pd.DataFrame | Non
         return {"error": str(e)}
 
 
-agent_tools.register(Tool(
-    name="required_sample_size",
-    description=(
-        "计算达到目标功效所需的最小样本量。mode 可选: ttest / anova / correlation / regression。"
-        "ttest 需传 effect_size, power, paired, ratio；anova 需传 effect_size, n_groups；"
-        "correlation 需传 effect_size；regression 需传 effect_size, n_predictors。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "mode": {
-                "type": "string",
-                "enum": ["ttest", "anova", "correlation", "regression"],
-                "description": "检验类型",
-            },
-            "effect_size": {"type": "number", "description": "预期效应量"},
-            "power": {"type": "number", "description": "目标功效，默认 0.80"},
-            "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
-            "paired": {"type": "boolean", "description": "是否配对（ttest）"},
-            "ratio": {"type": "number", "description": "n2/n1 比例（ttest 独立样本），默认 1.0"},
-            "n_groups": {"type": "number", "description": "组数（anova）"},
-            "n_predictors": {"type": "number", "description": "自变量数（regression）"},
-        },
-        "required": ["mode", "effect_size"],
-    },
-    handler=_handle_required_sample_size,
-    phase_tag=["跑统计"],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -232,31 +169,6 @@ def _handle_interpret_nonsignificant(args: dict, _ctx: dict, _df: pd.DataFrame |
         return {"error": str(e)}
 
 
-agent_tools.register(Tool(
-    name="interpret_nonsignificant",
-    description=(
-        "当检验结果不显著 (p > 0.05) 时，判断是「真的没效应」还是「数据不够」。"
-        "需传 p_value, effect_size, effect_type (cohen_d/eta_squared/pearson_r/f_squared), n。"
-        "返回 verdict (significant/likely_no_effect/possibly_underpowered) 和建议。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "p_value": {"type": "number", "description": "检验 p 值"},
-            "effect_size": {"type": "number", "description": "观察到的效应量"},
-            "effect_type": {
-                "type": "string",
-                "enum": ["cohen_d", "eta_squared", "pearson_r", "f_squared"],
-                "description": "效应量类型",
-            },
-            "n": {"type": "number", "description": "样本量"},
-            "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
-        },
-        "required": ["p_value", "effect_size", "effect_type", "n"],
-    },
-    handler=_handle_interpret_nonsignificant,
-    phase_tag=["跑统计"],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -343,24 +255,6 @@ def _handle_diagnose_regression(args: dict, _ctx: dict, df: pd.DataFrame | None)
         return {"error": str(e)}
 
 
-agent_tools.register(Tool(
-    name="diagnose_regression",
-    description=(
-        "全面回归诊断：残差正态性 (Shapiro-Wilk)、异方差 (Breusch-Pagan)、"
-        "多重共线性 (VIF)、自相关 (Durbin-Watson)、残差模式、影响点 (Cook's distance)。"
-        "需在 run_statistical_test(linear_regression) 之后调用。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "target": {"type": "string", "description": "因变量列名"},
-            "features": {"type": "array", "items": {"type": "string"}, "description": "自变量列名列表"},
-        },
-        "required": ["target", "features"],
-    },
-    handler=_handle_diagnose_regression,
-    phase_tag=["跑统计"],
-))
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -343,7 +343,11 @@ agent_tools.register(Tool(
 
 agent_tools.register(Tool(
     name="submit_assessment",
-    description="提交清洗评估结果。action 只有 clean 或 skip，reason 是大白话原因说明",
+    description=(
+        "【Cleaner 阶段专用】提交清洗评估结果，结束清洗评估阶段。\n"
+        "调用此工具 = 告诉系统『我已完成所有列的清洗评估，可以进入分析阶段了』。\n"
+        "每列必须有明确的 action（clean/skip）和 reason。调用后系统会记录评估结果。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -433,9 +437,17 @@ def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
 agent_tools.register(Tool(
     name="ask_user",
     description=(
-        "向用户提问并暂停等待回复。**调用此工具会让 pipeline 进入暂停状态，等用户在 UI 回复**。\n"
-        "适用场景：你需要用户做方向性决策（如『要不要把 outlier 移除』），单靠数据无法判断。\n"
-        "不适用：你只是想说一段话——那直接输出文本即可，不要用此工具。"
+        "向用户提问并暂停等待回复。调用后 pipeline 进入暂停状态，等用户在 UI 回复。\n"
+        "\n"
+        "各阶段典型用法：\n"
+        "  scout: 展示完字段理解表后 → ask_user(question='是否进入清洗评估？', expected_format='yes_no')\n"
+        "  cleaner: 展示完清洗评估表后 → ask_user(question='清洗方案是否认可？', expected_format='yes_no')\n"
+        "  analyst: 用户给出方向性选择时（如「用哪个模型」）→ ask_user(expected_format='choice', options=[...])\n"
+        "\n"
+        "用户选「是」/「确认」后，你必须紧接着调用 route_to 切换阶段。\n"
+        "选「否」/「等等」则留在当前阶段继续对话。\n"
+        "\n"
+        "不适用：你只是想说一段话——直接输出文本，不要用此工具。"
     ),
     parameters={
         "type": "object",
@@ -504,7 +516,12 @@ def _handle_submit_first_pass(args: dict, ctx: dict, _df: pd.DataFrame | None) -
 
 agent_tools.register(Tool(
     name="submit_first_pass",
-    description="首波自动分析完成，提交原始发现。Orchestrator 会将这些发现重写为书面概括化结论并展示给用户。仅在阶段 1（自动分析）使用；阶段 2 使用 submit_analysis 提交最终结论。",
+    description=(
+        "【Analyst 阶段 1 专用】首波自动分析完成时调用。\n"
+        "调用此工具 = 告诉系统『我的初始分析做完了，可以把发现展示给用户了』。\n"
+        "系统会自动将你的发现重写为书面概括并展示，然后打开自由对话窗口。\n"
+        "仅在 Analyst 阶段首次进入时使用；后续对话轮次使用 submit_analysis 提交最终结论。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -646,12 +663,18 @@ def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
 agent_tools.register(Tool(
     name="route_to",
     description=(
-        "声明你接下来要去哪里。三种用法：\n"
-        "1. 切换阶段 → 传 stage（scout/cleaner/analyst/reporter），表示『本阶段我做完了，去下一个』\n"
-        "2. 留在当前阶段 → 不传 stage，表示『我还有话要说，继续这条对话』\n"
-        "3. 提前结束 → 传 stage='reporter'，跳过中间阶段直接收尾\n"
+        "切换分析阶段。你必须在当前阶段的工作全部完成后才调用此工具。\n"
         "\n"
-        "这是你控制 pipeline 流向的唯一方式——代码不再用任何关键词（如『确认』『继续』）替你判断。"
+        "标准流程（必须按顺序）：\n"
+        "  scout（字段理解完成） → route_to(stage='cleaner', reason='字段已确认')\n"
+        "  cleaner（清洗评估完成） → route_to(stage='analyst', reason='清洗方案已确认')\n"
+        "  analyst（统计分析完成） → route_to(stage='reporter', reason='结论已确定')\n"
+        "\n"
+        "规则：\n"
+        "- 用户说「确认」「可以」「继续」「没问题」「进入下一步」→ 你必须调 route_to 切换阶段，不要停留在当前阶段输出文本\n"
+        "- 用户说「等等」「不对」「修改」「再看看」→ 不调 route_to，留在当前阶段继续对话\n"
+        "- 每个阶段只能向前，不能回退（除非用户明确要求回到某阶段）\n"
+        "- 这是控制 pipeline 流向的唯一方式——代码不做任何关键词判断"
     ),
     parameters={
         "type": "object",

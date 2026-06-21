@@ -117,42 +117,6 @@ agent_tools.register(Tool(
 # 统一表格工具（所有 Agent 可用）
 # ═══════════════════════════════════════════════════════════════════
 
-def _handle_update_field_table(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """统一表格更新。代码只做 merge 写入，不判断。"""
-    updates = args.get("columns", args.get("updates", {}))
-    if isinstance(updates, list):
-        updates = {str(c.get("column", "")): c for c in updates if c.get("column")}
-    if not isinstance(updates, dict) or not updates:
-        return {"error": "columns 为空"}
-
-    semantics = ctx.get("column_semantics", [])
-    sem_by_name = {str(s.get("column_name", "")): s for s in semantics}
-    applied = []
-
-    for col, info in updates.items():
-        if not isinstance(info, dict):
-            continue
-        s = sem_by_name.get(col)
-        if s is None:
-            s = {"column_name": col}
-            semantics.append(s)
-            sem_by_name[col] = s
-        for field in ("display_name", "description", "role", "cleaning", "cleaning_reason", "suggested_role"):
-            if field in info:
-                s[field] = info[field]
-        if "in_analysis" in info:
-            s["in_analysis"] = info["in_analysis"]
-            s["used_in_analysis"] = info["in_analysis"]
-        applied.append(col)
-
-    ctx["column_semantics"] = semantics
-    # 律 5：同步 column_display_names，避免平行存储导致的展示不一致
-    display_names = ctx.setdefault("column_display_names", {})
-    for col in applied:
-        sem = sem_by_name.get(col, {})
-        if sem.get("display_name"):
-            display_names[col] = sem["display_name"]
-    return {"updated": applied}
 
 
 
@@ -216,19 +180,6 @@ def _update_one_field(args: dict, ctx: dict) -> dict:
         "synced_to_table": updated,
     }
 
-
-def _handle_update_field_role(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
-        "target": args.get("target", ""),
-        "features": args.get("features", []),
-        "ignored": args.get("ignored", []),
-    }
-
-
-def _handle_restrict_analysis_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
-        "included_fields": args.get("included_fields", []),
-    }
 
 
 def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
@@ -311,11 +262,7 @@ agent_tools.register(Tool(
 
 agent_tools.register(Tool(
     name="submit_assessment",
-    description=(
-        "【Cleaner 阶段专用】提交清洗评估结果，结束清洗评估阶段。\n"
-        "调用此工具 = 告诉系统『我已完成所有列的清洗评估，可以进入分析阶段了』。\n"
-        "每列必须有明确的 action（clean/skip）和 reason。调用后系统会记录评估结果。"
-    ),
+    description="提交清洗评估结果。",
     parameters={
         "type": "object",
         "properties": {
@@ -369,19 +316,7 @@ def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
 
 agent_tools.register(Tool(
     name="ask_user",
-    description=(
-        "向用户提问并暂停等待回复。调用后 pipeline 进入暂停状态，等用户在 UI 回复。\n"
-        "\n"
-        "各阶段典型用法：\n"
-        "  scout: 展示完字段理解表后 → ask_user(question='是否进入清洗评估？', expected_format='yes_no')\n"
-        "  cleaner: 展示完清洗评估表后 → ask_user(question='清洗方案是否认可？', expected_format='yes_no')\n"
-        "  analyst: 用户给出方向性选择时（如「用哪个模型」）→ ask_user(expected_format='choice', options=[...])\n"
-        "\n"
-        "用户选「是」/「确认」后，你必须紧接着调用 route_to 切换阶段。\n"
-        "选「否」/「等等」则留在当前阶段继续对话。\n"
-        "\n"
-        "不适用：你只是想说一段话——直接输出文本，不要用此工具。"
-    ),
+    description="向用户提问并暂停等待回复。",
     parameters={
         "type": "object",
         "properties": {
@@ -403,7 +338,7 @@ agent_tools.register(Tool(
 ))
 
 
-def _handle_submit_analysis(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+def _handle_submit_findings(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     return {
         "findings": args.get("findings", []),
         "method_used": args.get("method_used", []),
@@ -411,8 +346,8 @@ def _handle_submit_analysis(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     }
 
 agent_tools.register(Tool(
-    name="submit_analysis",
-    description="提交分析发现，结束分析阶段。调用前确保已覆盖用户关心的方向。confidence 取 high/medium/low 三选一。",
+    name="submit_findings",
+    description="提交分析发现。可以是首波探索性发现或最终结论。",
     parameters={
         "type": "object",
         "properties": {
@@ -434,49 +369,7 @@ agent_tools.register(Tool(
         },
         "required": ["findings", "method_used", "summary"],
     },
-    handler=_handle_submit_analysis,
-    phase_tag=['跑统计'],
-))
-
-
-def _handle_submit_first_pass(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """首波自动分析完成，提交原始 findings 给 Orchestrator 重写为书面概括。"""
-    return {
-        "findings": args.get("findings", []),
-        "method_used": args.get("method_used", []),
-        "summary": args.get("summary", ""),
-    }
-
-agent_tools.register(Tool(
-    name="submit_first_pass",
-    description=(
-        "【Analyst 阶段 1 专用】首波自动分析完成时调用。\n"
-        "调用此工具 = 告诉系统『我的初始分析做完了，可以把发现展示给用户了』。\n"
-        "系统会自动将你的发现重写为书面概括并展示，然后打开自由对话窗口。\n"
-        "仅在 Analyst 阶段首次进入时使用；后续对话轮次使用 submit_analysis 提交最终结论。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "detail": {"type": "string"},
-                        "evidence_columns": {"type": "array", "items": {"type": "string"}},
-                        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-                    },
-                    "required": ["title", "detail", "evidence_columns", "confidence"],
-                },
-            },
-            "method_used": {"type": "array", "items": {"type": "string"}},
-            "summary": {"type": "string"},
-        },
-        "required": ["findings", "method_used", "summary"],
-    },
-    handler=_handle_submit_first_pass,
+    handler=_handle_submit_findings,
     phase_tag=['跑统计'],
 ))
 
@@ -508,20 +401,7 @@ def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
 
 agent_tools.register(Tool(
     name="route_to",
-    description=(
-        "切换分析阶段。你必须在当前阶段的工作全部完成后才调用此工具。\n"
-        "\n"
-        "标准流程（必须按顺序）：\n"
-        "  scout（字段理解完成） → route_to(stage='cleaner', reason='字段已确认')\n"
-        "  cleaner（清洗评估完成） → route_to(stage='analyst', reason='清洗方案已确认')\n"
-        "  analyst（统计分析完成） → route_to(stage='reporter', reason='结论已确定')\n"
-        "\n"
-        "规则：\n"
-        "- 用户说「确认」「可以」「继续」「没问题」「进入下一步」→ 你必须调 route_to 切换阶段，不要停留在当前阶段输出文本\n"
-        "- 用户说「等等」「不对」「修改」「再看看」→ 不调 route_to，留在当前阶段继续对话\n"
-        "- 每个阶段只能向前，不能回退（除非用户明确要求回到某阶段）\n"
-        "- 这是控制 pipeline 流向的唯一方式——代码不做任何关键词判断"
-    ),
+    description="切换分析阶段。stage 可选：scout/cleaner/analyst/reporter。",
     parameters={
         "type": "object",
         "properties": {

@@ -110,7 +110,7 @@ def _run_analyst_first_pass(self, context: dict) -> None:
             for entry in reversed(project_ctx.entries):
                 if entry.type == "tool_exchange" and entry.stage == "analyst":
                     for tc in (entry.tool_calls or []):
-                        if tc.name == "submit_first_pass":
+                        if tc.name == "submit_findings":
                             try:
                                 findings = _json.loads(tc.result) if tc.result else {}
                             except (_json.JSONDecodeError, TypeError):
@@ -184,7 +184,7 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
         if target and target in {"scout", "cleaner", "reporter"}:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    if result.get("submit_analysis"):
+    if result.get("submit_findings"):
         findings = result["findings"]
         violations, violations_md = self._check_mandatory_guardrails(findings.get("findings", []))
         return ("switch", "reporter", {"findings": findings})

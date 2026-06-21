@@ -51,7 +51,7 @@ def test_handle_analyst_reply_skips_first_pass_on_second_entry():
 
     step_result = {
         "text": "收到，请说",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
     }
     orch._agent.run_step = MagicMock(return_value=step_result)

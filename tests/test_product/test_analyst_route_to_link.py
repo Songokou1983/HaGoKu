@@ -27,7 +27,7 @@ def test_route_to_reporter_triggers_switch():
     step_result = {
         "messages": orch._analyst_messages + [{"role": "assistant", "content": "好的"}],
         "text": "好的，切换至报告阶段",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"stage": "reporter", "reason": "用户要求进入报告阶段"},
     }
@@ -49,7 +49,7 @@ def test_route_to_scout_triggers_switch():
     step_result = {
         "messages": orch._analyst_messages,
         "text": "方向不对，回 Scout 重看字段",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"stage": "scout", "reason": "字段理解可能有问题"},
     }
@@ -70,7 +70,7 @@ def test_route_to_cleaner_triggers_switch():
     step_result = {
         "messages": orch._analyst_messages,
         "text": "清洗方案不对",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"stage": "cleaner", "reason": "清洗方案需要调整"},
     }
@@ -91,7 +91,7 @@ def test_route_to_without_stage_stays():
     step_result = {
         "messages": orch._analyst_messages + [{"role": "assistant", "content": "再等等"}],
         "text": "好的，再等等",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"reason": "用户说再等等"},
     }
@@ -112,7 +112,7 @@ def test_route_to_analyst_stays():
     step_result = {
         "messages": orch._analyst_messages,
         "text": "继续分析",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"stage": "analyst", "reason": "继续"},
     }
@@ -133,7 +133,7 @@ def test_route_to_and_other_tools_same_round():
     step_result = {
         "messages": orch._analyst_messages + [{"role": "assistant", "content": "检验完成，可以收尾了"}],
         "text": "检验完成，可以收尾了",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": {"stage": "reporter", "reason": "用户要求收尾"},
     }
@@ -154,7 +154,7 @@ def test_no_route_to_no_switch():
     step_result = {
         "messages": orch._analyst_messages + [{"role": "assistant", "content": "已执行 t 检验"}],
         "text": "已执行 t 检验，p=0.03",
-        "submit_analysis": False,
+        "submit_findings": False,
         "findings": None,
         "route_to": None,
     }

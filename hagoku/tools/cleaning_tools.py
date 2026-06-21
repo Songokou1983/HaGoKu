@@ -124,36 +124,4 @@ agent_tools.register(Tool(
 ))
 
 
-# ═══════════════════════════════════════════════════════════════════
-# CO-T21: suggest_cleaning
-# ═══════════════════════════════════════════════════════════════════
-
-def _handle_suggest_cleaning(args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
-    column = str(args.get("column", ""))
-    if not column:
-        return {"error": "column 必填"}
-    if df is None:
-        return {"error": "需要 DataFrame"}
-    if column not in df.columns:
-        return {"error": f"列 {column} 不存在"}
-
-    from hagoku.tools.cleaning import suggest_cleaning_strategy
-
-    null_rate = args.get("null_rate")
-    missing_mechanism = args.get("missing_mechanism")
-
-    try:
-        strategy, reason = suggest_cleaning_strategy(
-            df, column,
-            null_rate=float(null_rate) if null_rate is not None else None,
-            missing_mechanism=str(missing_mechanism) if missing_mechanism else None,
-        )
-        return {
-            "column": column,
-            "strategy": strategy.value if hasattr(strategy, "value") else str(strategy),
-            "reason": reason,
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
 

@@ -129,7 +129,7 @@ def test_G8_analyst_run_step_正常返回(orch):
     choice = MagicMock()
     msg = MagicMock()
     tc = MagicMock()
-    tc.function.name = "submit_analysis"
+    tc.function.name = "submit_findings"
     tc.function.arguments = json.dumps({"findings": [], "method_used": [], "summary": "ok"})
     tc.id = "call_test"
     msg.tool_calls = [tc]
@@ -145,7 +145,7 @@ def test_G8_analyst_run_step_正常返回(orch):
             mock_agt.to_openai.return_value = []
             result = agent.run_step(context, None, "分析")
 
-    assert result["submit_analysis"] is True
+    assert result["submit_findings"] is True
     assert "findings" in result
     # Phase B: messages 不再返回（由 ProjectContext 内部管理）
 

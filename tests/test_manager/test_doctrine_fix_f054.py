@@ -5,16 +5,16 @@ power_warnings/business_metrics），而 submit_analysis handler 实际返回
 {findings, method_used, summary}。
 """
 
-from hagoku.tools.agent_tool_defs import _handle_submit_analysis
+from hagoku.tools.agent_tool_defs import _handle_submit_findings
 
 
 def test_f054_submit_analysis_returns_expected_keys():
     """F-054 红灯：验证 submit_analysis handler 返回的 key 集合。
 
-    这个测试记录 _handle_submit_analysis 的返回契约。
+    这个测试记录 _handle_submit_findings 的返回契约。
     orchestrator 调用方必须使用这里定义的 key。
     """
-    result = _handle_submit_analysis(
+    result = _handle_submit_findings(
         args={
             "findings": [
                 {

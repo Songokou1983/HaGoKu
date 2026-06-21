@@ -114,7 +114,7 @@ class TestAnalystControlChannelLinks:
         """Analyst route_to(reporter) → switch"""
         step_result = {
             "text": "ok",
-            "submit_analysis": False,
+            "submit_findings": False,
             "findings": None,
             "route_to": {"stage": "reporter", "reason": "done"},
         }
@@ -128,7 +128,7 @@ class TestAnalystControlChannelLinks:
         """Analyst submit_analysis → switch to reporter"""
         step_result = {
             "text": "done",
-            "submit_analysis": True,
+            "submit_findings": True,
             "findings": {"findings": [], "method_used": [], "summary": "ok"},
             "route_to": None,
         }
@@ -142,7 +142,7 @@ class TestAnalystControlChannelLinks:
         """无控制工具调用 → 留在 analyst"""
         step_result = {
             "text": "ok",
-            "submit_analysis": False,
+            "submit_findings": False,
             "findings": None,
             "route_to": None,
         }

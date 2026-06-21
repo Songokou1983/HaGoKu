@@ -144,32 +144,6 @@ def _handle_required_sample_size(args: dict, _ctx: dict, _df: pd.DataFrame | Non
 
 
 
-# ═══════════════════════════════════════════════════════════════════
-# CO-T08: interpret_nonsignificant
-# ═══════════════════════════════════════════════════════════════════
-
-def _handle_interpret_nonsignificant(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dict:
-    from hagoku.tools.power_analysis import interpret_nonsignificant_result
-
-    p_value = float(args.get("p_value", 0))
-    effect_size = args.get("effect_size")
-    effect_type = str(args.get("effect_type", "cohen_d"))
-    n = int(args.get("n", 0))
-    alpha = float(args.get("alpha", 0.05))
-
-    try:
-        return interpret_nonsignificant_result(
-            p_value=p_value,
-            effect_size=float(effect_size) if effect_size is not None else None,
-            effect_type=effect_type,
-            n=n,
-            alpha=alpha,
-        )
-    except Exception as e:
-        return {"error": str(e)}
-
-
-
 
 # ═══════════════════════════════════════════════════════════════════
 # CO-T09: correct_multiple_comparisons

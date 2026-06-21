@@ -46,14 +46,14 @@ class TestAnalystTwoPhaseE2E:
         if submit_first_pass:
             messages[0]["tool_calls"] = [{
                 "id": "call_1", "type": "function",
-                "function": {"name": "submit_first_pass", "arguments": '{"findings":[],"method_used":["ttest"],"summary":"ok"}'},
+                "function": {"name": "submit_findings", "arguments": '{"findings":[],"method_used":["ttest"],"summary":"ok"}'},
             }]
             messages.append({"role": "tool", "tool_call_id": "call_1",
                              "content": '{"findings":[],"method_used":["ttest"],"summary":"ok"}'})
         return {
             "messages": messages,
             "text": text,
-            "submit_analysis": submit_analysis or submit_first_pass,
+            "submit_findings": submit_analysis or submit_first_pass,
             "findings": findings or ({"findings": [], "method_used": ["ttest"], "summary": "ok"} if submit_first_pass else None),
             "route_to": route_to,
         }

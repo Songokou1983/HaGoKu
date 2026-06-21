@@ -551,14 +551,11 @@ class DataAnalystAgent(BaseAgent):
                 if fn.name == "route_to":
                     route_to_args = _agt.dispatch(fn.name, args, context, df)
                     continue
-                if fn.name == "submit_analysis":
+                if fn.name == "submit_findings":
                     findings = _agt.dispatch(fn.name, args, context, df)
                     continue
                 if fn.name == "submit_assessment":
                     assessment = _agt.dispatch(fn.name, args, context, df)
-                    continue
-                if fn.name == "submit_first_pass":
-                    findings = _agt.dispatch(fn.name, args, context, df)
                     continue
                 if fn.name == "submit_report":
                     # reporter 的 submit_report — 返回报告参数
@@ -609,14 +606,11 @@ class DataAnalystAgent(BaseAgent):
                     if fn.name == "route_to":
                         route_to_args = _agt.dispatch(fn.name, a, context, df)
                         continue
-                    if fn.name == "submit_analysis":
+                    if fn.name == "submit_findings":
                         findings = _agt.dispatch(fn.name, a, context, df)
                         continue
                     if fn.name == "submit_assessment":
                         assessment = _agt.dispatch(fn.name, a, context, df)
-                        continue
-                    if fn.name == "submit_first_pass":
-                        findings = _agt.dispatch(fn.name, a, context, df)
                         continue
                     if fn.name == "submit_report":
                         findings = _agt.dispatch(fn.name, a, context, df)
@@ -639,6 +633,6 @@ class DataAnalystAgent(BaseAgent):
 
         return {
             "text": txt, "route_to": route_to_args,
-            "submit_analysis": findings is not None, "findings": findings,
+            "submit_findings": findings is not None, "findings": findings,
             "submit_assessment": assessment is not None, "assessment": assessment,
         }

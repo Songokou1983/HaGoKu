@@ -557,10 +557,6 @@ class DataAnalystAgent(BaseAgent):
                 if fn.name == "submit_assessment":
                     assessment = _agt.dispatch(fn.name, args, context, df)
                     continue
-                if fn.name == "submit_report":
-                    # reporter 的 submit_report — 返回报告参数
-                    findings = _agt.dispatch(fn.name, args, context, df)
-                    continue
                 try:
                     result = _agt.dispatch(fn.name, args, context, df)
                     tool_records.append(ToolCallRecord(
@@ -611,9 +607,6 @@ class DataAnalystAgent(BaseAgent):
                         continue
                     if fn.name == "submit_assessment":
                         assessment = _agt.dispatch(fn.name, a, context, df)
-                        continue
-                    if fn.name == "submit_report":
-                        findings = _agt.dispatch(fn.name, a, context, df)
                         continue
                     try:
                         r = _agt.dispatch(fn.name, a, context, df)

@@ -33,12 +33,7 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
         return {"status": "scout_review", "message": ""}
 
-    # 用户输入进对话历史，LLM 自己处理
-    project_ctx = context.get("_project_context")
-    if project_ctx:
-        project_ctx.add_user_feedback("scout", context.get("interaction_revision", 0), raw_text=user_input)
-
-    # 用户输入已由 add_user_feedback 写入 ProjectContext → build_prompt 历史。
+    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
     # run_step 的 user_input 传空，避免 build_messages 再追加一遍（×2）。
     result = self._agent.run_step(context, self._df_raw, "")
     self._log_channel("scout", "run_step_done", text=result.get("text",""))
@@ -83,11 +78,7 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
 
     # 对话模式 — Phase D: self._agent 由 orchestrator 保证已初始化
-    if user_input:
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            project_ctx.add_user_feedback("cleaner", context.get("interaction_revision", 0), raw_text=user_input)
-
+    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
     result = self._agent.run_step(context, df, user_input or "")
 
     # Phase C: ask_user 优先
@@ -172,19 +163,11 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
     """Analyst 对话阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
     # Phase D: self._agent 由 orchestrator 保证已初始化
+    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
     if not self._analyst_first_pass_done:
         _run_analyst_first_pass(self, context)
         self._analyst_first_pass_done = True
-        if user_input:
-            project_ctx = context.get("_project_context")
-            if project_ctx:
-                project_ctx.add_user_feedback("analyst", context.get("interaction_revision", 0), raw_text=user_input)
         return {"status": "analyst_review", "message": ""}
-
-    if user_input:
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            project_ctx.add_user_feedback("analyst", context.get("interaction_revision", 0), raw_text=user_input)
 
     result = self._agent.run_step(context, self._df_clean, user_input or "")
 
@@ -212,11 +195,7 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
 def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple:
     """Reporter 阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
     # Phase D: self._agent 由 orchestrator 保证已初始化
-    if user_input:
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            project_ctx.add_user_feedback("reporter", context.get("interaction_revision", 0), raw_text=user_input)
-
+    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
     result = self._agent.run_step(context, None, user_input or "")
 
     # Phase C: ask_user 优先
@@ -288,9 +267,9 @@ def respond(self, user_input: dict) -> dict[str, Any]:
         self._stage = result[1]
         if len(result) > 2 and isinstance(result[2], dict):
             self._context.update(result[2])
-        # 递归：下一阶段自动跑首轮
+        # 递归：下一阶段自动跑首轮（text 置空，避免 add_user_feedback 再写一遍）
         self.save_state()
-        return self.respond(user_input)
+        return self.respond({"text": "", "stage": self._stage})
 
     # 保存状态供 app 重启恢复
     self.save_state()

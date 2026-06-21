@@ -612,6 +612,22 @@ class DataAnalystAgent(BaseAgent):
                         a = _json.loads(fn.arguments) if fn.arguments else {}
                     except (_json.JSONDecodeError, TypeError):
                         continue
+                    # 第二轮同样检测控制工具（与第一轮逻辑对齐）
+                    if fn.name == "route_to":
+                        route_to_args = _agt.dispatch(fn.name, a, context, df)
+                        continue
+                    if fn.name == "submit_analysis":
+                        findings = _agt.dispatch(fn.name, a, context, df)
+                        continue
+                    if fn.name == "submit_assessment":
+                        assessment = _agt.dispatch(fn.name, a, context, df)
+                        continue
+                    if fn.name == "submit_first_pass":
+                        findings = _agt.dispatch(fn.name, a, context, df)
+                        continue
+                    if fn.name == "submit_report":
+                        findings = _agt.dispatch(fn.name, a, context, df)
+                        continue
                     try:
                         r = _agt.dispatch(fn.name, a, context, df)
                         recs2.append(ToolCallRecord(

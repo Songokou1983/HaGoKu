@@ -98,10 +98,10 @@ class TestAnalystTwoPhaseE2E:
         assert "[统计依据]" in msg
         assert "[局限或解读]" in msg
 
-        # 断言：用户尾话"确认"被保留为阶段 2 第一条用户消息
+        # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入，handler 不重复写。
+        # 直接调 handler 时 ProjectContext 应无 user_feedback 条目。
         user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
-        assert len(user_entries) >= 1, f"用户尾话应写入 ProjectContext，实际: {pc.entries}"
-        assert user_entries[0].raw_user_text == "确认"
+        assert len(user_entries) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_entries}"
 
         # ── 剧本第 2 步：阶段 2 — 用户输入"换 t 检验试试" ──
         orch._agent.run_step = MagicMock(return_value=self._make_step_result(

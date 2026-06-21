@@ -27,10 +27,10 @@ def test_handle_analyst_reply_triggers_first_pass_on_first_entry():
     assert orch._analyst_first_pass_done, "首次进入应设置 _analyst_first_pass_done=True"
     assert result["status"] == "analyst_review"
 
-    # Phase B: 用户尾话写入 ProjectContext
+    # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入，handler 不重复写。
+    # 直接调 handler 时 ProjectContext 应无 user_feedback 条目。
     user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
-    assert len(user_entries) >= 1, f"用户尾话应写入 ProjectContext，实际 entries: {pc.entries}"
-    assert user_entries[0].raw_user_text == "确认"
+    assert len(user_entries) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_entries}"
 
 
 def test_handle_analyst_reply_skips_first_pass_on_second_entry():

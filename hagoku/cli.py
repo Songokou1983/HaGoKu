@@ -405,15 +405,12 @@ def list_methods(tag: str | None) -> None:
     HaGoKu Studio 的工具按关注点分类：
 
     探查(4)     get_column_stats, get_sample_rows, list_columns, group_stats
-    字段(3)     update_field_table, update_field_understanding, update_field_role
-    清洗(6)     submit_assessment, update_assessment, propose_cleaning_rule,
-                compare_before_after, detect_outliers, detect_missing_pattern, suggest_cleaning
-    统计(10+)   run_statistical_test, check_test_assumptions, assess_statistical_power, ...
-    业务(7)     calc_roi, calc_roas, calc_ltv, calc_cac, calc_ltv_cac_ratio,
-                funnel_analysis, attribution_analysis
+    字段(1)     set_columns
+    清洗(2)     detect_outliers, detect_missing_pattern
+    统计(3)     run_statistical_test, check_test_assumptions, correct_multiple_comparisons
+    分析(2)     submit_assessment, submit_findings
     可视化(1)   create_plot
     流程(2)     ask_user, route_to
-    记忆(8)     query_method, read_method, save_lesson, ...
     """
     from .tools.registry import agent_tools
 

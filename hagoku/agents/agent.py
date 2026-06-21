@@ -257,15 +257,8 @@ class DataAnalystAgent(BaseAgent):
         }
         result = self.run_step(context, df, user_content)
         raw_text = result.get("text", "")
-
-        if not raw_text:
-            raise RuntimeError(
-                "字段推断失败：LLM 未返回有效结果。"
-                "请查看 ~/.hagoku/llm_dumps/ 中 agent_infer_field_semantics 记录。"
-            )
-
         cs = context.get("column_semantics", [])
-        if cs:
+        if cs and any("column_name" in s for s in cs):
             return cs
         return [{"_scout_text": raw_text}]
 

@@ -18,7 +18,7 @@
 
 | 工具 | 问题 | 建议 |
 |------|------|------|
-| `suggest_cleaning` | 根据规则推荐清洗策略。LLM 看到缺失率+缺失机制自己就知道该用什么策略。这是把分析方法做成了工具 | 删除 |
+| `suggest_cleaning` | 根据规则推荐清洗策略。分析方法是 LLM 知识库里的知识，不需要做成工具 | 删除 |
 | `interpret_nonsignificant` | "p>0.05 时怎么解读"——纯粹是 LLM 训练数据里的统计学知识 | 删除 |
 | `update_field_role` | handler 只做 `return args`，无任何副作用——LLM 调了等于没调 | 删除或合并进 `set_columns` |
 | `restrict_analysis_to` | handler 只做 `return args`——无状态写入 | 删除或合并进 `set_columns` |
@@ -147,6 +147,51 @@ route_to: "切换到指定分析阶段。" (1行)
 
 ---
 
+## 当前工具清单（15 个，2026-06-21 精简后）
+
+| # | 工具 | 描述 | 类别 |
+|---|------|------|------|
+| 1 | `ask_user` | 向用户提问并暂停等待回复。 | 流程控制 |
+| 2 | `route_to` | 切换分析阶段。stage 可选：scout/cleaner/analyst/reporter。 | 流程控制 |
+| 3 | `set_columns` | 写入你对字段的理解。批量推荐 columns 数组一次性写入全部列。 | 写状态 |
+| 4 | `submit_assessment` | 提交清洗评估结果。 | 流程控制 |
+| 5 | `submit_findings` | 提交分析发现。可以是首波探索性发现或最终结论。 | 流程控制 |
+| 6 | `list_columns` | 列出数据集中所有列名和类型。 | 读数据 |
+| 7 | `get_column_stats` | 获取某列的统计信息：min/q25/median/q75/max/mean/std/null_count。 | 读数据 |
+| 8 | `get_sample_rows` | 获取某列的抽样值，用于理解字段内容。 | 读数据 |
+| 9 | `group_stats` | 按某列分组，查看另一列的统计量。 | 读数据 |
+| 10 | `run_statistical_test` | 执行统计检验，返回 p_value/effect_size/confidence_interval。 | 跑计算 |
+| 11 | `check_test_assumptions` | 检验前假设检查：正态性、方差齐性、样本量等。 | 跑计算 |
+| 12 | `correct_multiple_comparisons` | 多重比较校正（bonferroni/bh/holm）。 | 跑计算 |
+| 13 | `detect_outliers` | 检测异常值（iqr/zscore）。 | 跑计算 |
+| 14 | `detect_missing_pattern` | 检测缺失机制（MCAR/MAR/MNAR）。 | 跑计算 |
+| 15 | `create_plot` | 生成交互式图表（Plotly）。 | 画图 |
+
+### 已删除
+
+| 工具 | 原因 |
+|------|------|
+| `suggest_cleaning` | 判断类——分析方法是 LLM 知识库里的知识，不是工具 |
+| `interpret_nonsignificant` | 判断类——纯统计学知识，训练数据已有 |
+| `update_field_table` | 与 `set_columns` 功能重叠 |
+| `update_field_role` | handler 只 return args，无副作用 |
+| `restrict_analysis_to` | handler 只 return args，无副作用 |
+| `submit_first_pass` | 合并入 `submit_findings`（代码判断首波/后续，不让 LLM 区分） |
+| `submit_analysis` | 合并入 `submit_findings` |
+| `submit_report` | 合并入 `submit_findings` |
+| 7 个 biz_tools | ROI/ROAS/LTV 等公式是 LLM 训练数据自带的知识 |
+
+### 暂不注册（代码保留，import 已注释）
+
+| 工具 | 原因 |
+|------|------|
+| 8 个 memory_tools | 记忆系统稳定后加回（query_method / read_method / save_lesson / recall_lessons / correct_lesson / remember_field / query_project_memory / forget_project） |
+| `assess_statistical_power` | 可通过 `run_statistical_test` 新增 test_type 吸收 |
+| `required_sample_size` | 同上 |
+| `diagnose_regression` | 依赖 ctx 中 model 对象，耦合重，后续按需加回 |
+
+---
+
 ## 检验标准
 
 工具改完后，用这两个问题验证：
@@ -161,3 +206,4 @@ route_to: "切换到指定分析阶段。" (1行)
 | 日期 | 版本 | 内容 |
 |------|------|------|
 | 2026-06-21 | v1 | 初稿：审计发现 4 类问题 + 3 个优化方向 |
+| 2026-06-21 | v2 | 精简完成：24→15 工具，审查通过，记录当前清单和删除/暂存理由 |

@@ -160,7 +160,7 @@ Prompt 内的示例是给 LLM 的上下文参考，不构成硬编码。
 |--------|------|
 | query_parser.py 中有无 if-else 关键词匹配？ | ❌ 无。全部 LLM |
 | 字段理解有无正则解析？ | ❌ 无。全部 function calling |
-| 分析方法选择有无 if-else 链？ | ❌ 无。LLM 从工具库选择 |
+| 分析方法选择有无 if-else 链？ | ❌ 无。LLM 从知识库（训练数据）自行选择 |
 | 分布判断有无硬编码阈值？ | ❌ 无。已从代码迁移到 LLM |
 
 ### 问题：CLI 模式 (orchestrator.py:1984-2105)

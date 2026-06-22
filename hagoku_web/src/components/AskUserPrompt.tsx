@@ -1,6 +1,3 @@
-import { useState } from "react";
-import { Send } from "lucide-react";
-
 export interface AskUserPromptProps {
   question: string;
   options?: string[];
@@ -70,5 +67,3 @@ export function AskUserPrompt({
     </div>
   );
 }
-
-function FreeTextAsk({

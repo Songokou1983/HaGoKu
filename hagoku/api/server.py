@@ -602,7 +602,7 @@ async def get_run_conversation(project_name: str, run_id: str):
             dump = _json.loads(df.read_text(encoding="utf-8"))
             for m in dump.get("messages", []):
                 r = m.get("role", "")
-                if r == "system": continue
+                if r in ("system", "tool"): continue
                 c = (m.get("content", "") or "").strip()
                 key = (r, c[:80])
                 if key in seen: continue

@@ -187,12 +187,15 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
-        # 对话历史（从 Session.messages 回放）
+        # 对话历史（从 Session.messages 回放，只传用户可见内容）
         session = getattr(orch, '_session', None)
         if session is not None and session.messages:
             conv = []
             for m in session.messages:
-                entry: dict = {"role": m.get("role", ""), "text": m.get("content", "")}
+                role = m.get("role", "")
+                if role == "tool":
+                    continue
+                entry: dict = {"role": role, "text": m.get("content", "")}
                 if m.get("tool_calls"):
                     entry["tool_calls"] = m["tool_calls"]
                 conv.append(entry)

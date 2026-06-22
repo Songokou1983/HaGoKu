@@ -1,5 +1,5 @@
 """A-2: 端到端验证 Analyst 阶段进入时触发首波自动分析（Phase B 升级版）"""
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 import pandas as pd
 
 from hagoku.config import HaGoKuConfig
@@ -18,17 +18,12 @@ def test_handle_analyst_reply_triggers_first_pass_on_first_entry():
 
     assert not orch._analyst_first_pass_done
 
-    with patch(
-        "hagoku.manager.llm_dispatch.reply_handlers._run_analyst_first_pass",
-        return_value=None,
-    ):
-        result = orch._handle_analyst_reply("确认", context)
+    orch._run_analyst_first_pass = MagicMock(return_value=None)
+    result = orch._handle_analyst_reply("确认", context)
 
     assert orch._analyst_first_pass_done, "首次进入应设置 _analyst_first_pass_done=True"
     assert result["status"] == "analyst_review"
 
-    # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入，handler 不重复写。
-    # 直接调 handler 时 ProjectContext 应无 user_feedback 条目。
     user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
     assert len(user_entries) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_entries}"
 
@@ -56,12 +51,10 @@ def test_handle_analyst_reply_skips_first_pass_on_second_entry():
     }
     orch._agent.run_step = MagicMock(return_value=step_result)
 
-    with patch(
-        "hagoku.manager.llm_dispatch.reply_handlers._run_analyst_first_pass",
-    ) as mock_first_pass:
-        result = orch._handle_analyst_reply("换个方法试试", context)
+    orch._run_analyst_first_pass = MagicMock()
+    result = orch._handle_analyst_reply("换个方法试试", context)
 
-    mock_first_pass.assert_not_called()
+    orch._run_analyst_first_pass.assert_not_called()
     assert result["status"] == "analyst_review"
     assert result["message"] == "收到，请说"
 
@@ -74,14 +67,10 @@ def test_handle_analyst_reply_empty_input_first_pass():
     pc = ProjectContext(run_id="test", analysis_goal="测试")
     context = {"query": "test", "column_semantics": [], "_project_context": pc}
 
-    with patch(
-        "hagoku.manager.llm_dispatch.reply_handlers._run_analyst_first_pass",
-        return_value=None,
-    ):
-        result = orch._handle_analyst_reply("", context)
+    orch._run_analyst_first_pass = MagicMock(return_value=None)
+    result = orch._handle_analyst_reply("", context)
 
     assert orch._analyst_first_pass_done
-    # 空输入不应追加 user 消息
     user_msgs = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
     assert len(user_msgs) == 0, f"空输入不应追加 user 消息，实际: {user_msgs}"
     assert result["status"] == "analyst_review"

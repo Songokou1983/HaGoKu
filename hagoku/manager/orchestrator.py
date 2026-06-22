@@ -65,6 +65,7 @@ from .llm_dispatch.reply_handlers import (  # noqa: F401
     _ensure_memory_for_respond,
     _handle_analyst_reply,
     _handle_cleaner_reply,
+    _handle_reply,
     _handle_reporter_reply,
     _handle_scout_reply,
     respond,
@@ -99,6 +100,7 @@ class Orchestrator(
             if cl: cl.log(agent, event, **kw)
         except Exception: pass
 
+    # 兼容旧测试
     _STAGE_HANDLERS: dict[str, str] = {
         "scout": "_handle_scout_reply",
         "cleaner": "_handle_cleaner_reply",

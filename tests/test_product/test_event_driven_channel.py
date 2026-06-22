@@ -88,18 +88,24 @@ def test_G6_respond路由_switch_切阶段(orch):
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
 
-    # Mock both handlers: scout → switch to cleaner, cleaner → stay
-    saved_scout = orch._handle_scout_reply
-    saved_cleaner = orch._handle_cleaner_reply
+    # Mock _handle_scout_reply（respond 通过别名路由到它）
+    saved = orch._handle_scout_reply
+    call_count = [0]
 
-    orch._handle_scout_reply = lambda *a, **kw: ("switch", "cleaner")
+    def mock_scout(self, user_input, context):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return ("switch", "cleaner")
+        return {"status": "cleaner_review", "message": "ok"}
+
+    orch._handle_scout_reply = mock_scout.__get__(orch)
     orch._handle_cleaner_reply = lambda *a, **kw: {"status": "cleaner_review", "message": "ok"}
     try:
         orch.respond({"text": "test"})
         assert orch._stage == "cleaner"
     finally:
-        orch._handle_scout_reply = saved_scout
-        orch._handle_cleaner_reply = saved_cleaner
+        orch._handle_scout_reply = saved
+        orch._handle_cleaner_reply = getattr(orch.__class__, '_handle_cleaner_reply')
 
 
 def test_G7_StageHandlers_完整性(orch):

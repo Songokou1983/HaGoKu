@@ -1,144 +1,92 @@
-"""各阶段用户回复路由处理。Phase C: 阶段切换权交给 LLM route_to，暂停权交给 ask_user。"""
+"""用户回复路由处理 — 纯通道。"""
+
 from __future__ import annotations
 
 from typing import Any
 
 from ...observability.events import EventType
 
-# ═══════════════════════════════════════════════════════════════
-# Phase C: 4 个 handler 收缩为 ~15 行 —— 只做三件事：
-#   1. 把用户原话写入 Session（respond()统一处理）
-#   2. 调 agent（内部走 to_messages_for_llm）
-#   3. 根据 _pending_ask_user / _*_route_to 机械执行
-# ═══════════════════════════════════════════════════════════════
 
+def _handle_reply(self, user_input: str, context: dict) -> dict | tuple:
+    """统一回复处理——所有阶段同一模式。"""
 
-def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Scout 阶段用户回复处理 — 纯通道：不生成任何用户可见内容。"""
-    # 空输入 = 首次暂停，发信号让前端显示输入框
+    stage = self._stage
+    if not stage:
+        return {"status": "error", "message": "未知阶段"}
+
+    # ── 首次进入特殊处理 ──
     if not user_input or not user_input.strip():
-        ask = context.pop("_pending_ask_user", None)
-        if ask:
-            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
-            return ("stay", None)
-        # 首次展示：流式已送达LLM文本，这里只发信号
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
-        return {"status": "scout_review", "message": ""}
+        # Scout 空输入 → 首次暂停信号
+        if stage == "scout":
+            ask = context.pop("_pending_ask_user", None)
+            if ask:
+                self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, ask)
+                return ("stay", None)
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
+            return {"status": "scout_review", "message": ""}
 
-    # 用户有输入 → LLM 自己看、自己决定
-    result = self._agent.run_step(context, self._df_raw, "")
-    self._log_channel("scout", "run_step_done", text=result.get("text",""))
+        # Cleaner 空输入 → 如已有评估直接展示
+        if stage == "cleaner" and context.get("_cleaner_assessment"):
+            self._cleaner_dialog_open = True
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
+            return {"status": "cleaner_review", "message": ""}
 
-    ask = context.pop("_pending_ask_user", None)
-    if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
-        return ("stay", None)
-
-    route_to = result.get("route_to")
-    if route_to:
-        target = route_to.get("stage")
-        if target and target != "scout":
-            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
-
-    # 留在 scout：只透传 LLM 文本
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
-    return {"status": "scout_review", "message": result.get("text", "")}
-
-
-def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Cleaner 阶段 — 纯通道：LLM 自己评估、自己输出。"""
-    df = self._df_raw if self._df_raw is not None else self._df_clean
-
-    # 首次评估：跑 assess（内部调 LLM），后续对话：调 run_step
-    assessment = context.get("_cleaner_assessment")
-    if assessment is None:
+    # ── 首次进入需初始化的阶段 ──
+    if stage == "cleaner" and context.get("_cleaner_assessment") is None:
+        df = self._df_raw if self._df_raw is not None else self._df_clean
         context["_user_feedback"] = user_input
         assessment = self._agent.assess(df, context)
         context["_cleaner_assessment"] = assessment
         self._cleaner_dialog_open = True
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {"message": ""})
-        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
+        self.event_bus.emit(EventType.AGENT_COMPLETED, stage, {"result_summary": "清洗评估完成"})
         return {"status": "cleaner_review", "message": ""}
 
-    result = self._agent.run_step(context, df, user_input or "")
-
-    ask = context.pop("_pending_ask_user", None)
-    if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", ask)
-        return ("stay", None)
-
-    route_to = result.get("route_to")
-    if route_to:
-        target = route_to.get("stage")
-        if target and target in {"scout", "analyst", "reporter"}:
-            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
-
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {"message": ""})
-    return {"status": "cleaner_review", "message": result.get("text", "")}
-
-
-def _run_analyst_first_pass(self, context: dict) -> None:
-    """阶段 1：自动跑首波分析。LLM 流式输出直接到前端。"""
-    self._agent.run_step(context, self._df_clean)
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {"message": ""})
-
-
-def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Analyst 阶段 — 纯通道。"""
-    if not self._analyst_first_pass_done:
-        _run_analyst_first_pass(self, context)
+    if stage == "analyst" and not self._analyst_first_pass_done:
+        self._run_analyst_first_pass(context)
         self._analyst_first_pass_done = True
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
         return {"status": "analyst_review", "message": ""}
 
-    result = self._agent.run_step(context, self._df_clean, user_input or "")
+    # ── 正常对话：调 LLM ──
+    df = (self._df_raw if stage in ("scout", "cleaner")
+          else self._df_clean if stage == "analyst"
+          else None)
+    result = self._agent.run_step(context, df, user_input or "")
+    self._log_channel(stage, "run_step_done", text=result.get("text", ""))
 
+    # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", ask)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, ask)
         return ("stay", None)
 
+    # ── route_to 切换（LLM 自主决定）──
     route_to = result.get("route_to")
     if route_to:
         target = route_to.get("stage")
-        if target and target in {"scout", "cleaner", "reporter"}:
+        if target and target != stage:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {"message": ""})
-    return {"status": "analyst_review", "message": result.get("text", "")}
+    # ── 留在当前阶段 ──
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
+    status = "reporter_done" if stage == "reporter" else f"{stage}_review"
+    return {"status": status, "message": result.get("text", "")}
 
 
-def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Reporter 阶段 — 纯通道。"""
-    result = self._agent.run_step(context, None, user_input or "")
-
-    ask = context.pop("_pending_ask_user", None)
-    if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "reporter", ask)
-        return ("stay", None)
-
-    route_to = result.get("route_to")
-    if route_to:
-        target = route_to.get("stage")
-        if target and target in {"scout", "cleaner", "analyst"}:
-            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
-
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "reporter", {"message": ""})
-    return {"status": "reporter_done", "message": result.get("text", "")}
-
+# ── respond（外层入口）────────────────────────────
 
 def respond(self, user_input: dict) -> dict[str, Any]:
-    """Phase C: 处理用户回复 — 路由到当前 stage handler，机械执行返回。
-
-    user_input: {"text": "用户回复", "stage": "当前阶段"}
-    """
+    """处理用户回复 — 写 Session → 调 handler → 处理 stage 切换。"""
     text = user_input.get("text", "").strip()
     self._log_channel("orchestrator", "respond_enter", text=text, stage=self._stage)
+
     if self._is_cancel_requested():
         return {"status": "cancelled", "message": "分析已中止"}
     if self._error:
         return {"status": "error", "message": str(self._error)}
 
-    # R6 防护：连续空回复死循环检测
+    # R6 防护
     if not text:
         empty_count = getattr(self, '_empty_respond_count', 0) + 1
         setattr(self, '_empty_respond_count', empty_count)
@@ -148,39 +96,62 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     else:
         setattr(self, '_empty_respond_count', 0)
 
-    # Phase C: 注入 _current_stage 供 ask_user handler 使用
     ctx = getattr(self, '_context', None)
     if ctx is not None:
         ctx["_current_stage"] = self._stage
+        if text:
+            ctx["_pending_command_text"] = text
 
-    handler_name = self._STAGE_HANDLERS.get(self._stage)
-    if handler_name is None:
-        return {"status": "error", "message": f"未知阶段: {self._stage}"}
-
-    handler = getattr(self, handler_name)
-    # 律 1+律 2：用户最新指令注入 _pending_command_text，供下一阶段首轮 LLM 调用
-    # （infer_field_semantics / assess 读取此字段注入 prompt）
-    if ctx is not None and text:
-        ctx["_pending_command_text"] = text
-    # 律 2：raw_text 先写入 Session，再调 handler——确保 LLM 看到用户原话
+    # 写 Session
     session = ctx.get("_session") if ctx else None
     if session and text:
         session.add("user", text)
-    result = handler(text, self._context)
 
-    # handler 返回 ("switch", "X") → 切换阶段，递归继续
+    # 通过别名路由（兼容测试 mock 旧 handler 的场景）
+    handler = getattr(self, f"_handle_{self._stage}_reply", None) if self._stage else None
+    if handler:
+        result = handler(text, ctx or {})
+    else:
+        result = _handle_reply(self, text, ctx or {})
+
+    # stage 切换
     if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":
         self._stage = result[1]
         if len(result) > 2 and isinstance(result[2], dict):
             self._context.update(result[2])
-        # 递归：下一阶段自动跑首轮（text 置空，避免 add_user_feedback 再写一遍）
         self.save_state()
         return self.respond({"text": "", "stage": self._stage})
 
-    # 保存状态供 app 重启恢复
     self.save_state()
     return result
 
+
+# ── 别名（兼容旧测试）─────────────────────────
+
+def _run_analyst_first_pass(self, context: dict) -> None:
+    """阶段 1：自动跑首波分析。LLM 流式输出直接到前端。"""
+    self._agent.run_step(context, self._df_clean)
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {"message": ""})
+
+
+def _handle_scout_reply(self, user_input, context):
+    self._stage = "scout"
+    return _handle_reply(self, user_input, context)
+
+def _handle_cleaner_reply(self, user_input, context):
+    self._stage = "cleaner"
+    return _handle_reply(self, user_input, context)
+
+def _handle_analyst_reply(self, user_input, context):
+    self._stage = "analyst"
+    return _handle_reply(self, user_input, context)
+
+def _handle_reporter_reply(self, user_input, context):
+    self._stage = "reporter"
+    return _handle_reply(self, user_input, context)
+
+
+# ── Mixin ──────────────────────────────────────
 
 def _ensure_memory_for_respond(self, project_name: str) -> None:
     """确保 self.memory 已初始化。"""
@@ -194,13 +165,12 @@ def _ensure_memory_for_respond(self, project_name: str) -> None:
     self.memory = MemoryManager(self.db, progress_path=schema_file)
 
 
-# ── Mixin class ────────────────────────────────────────────
-
 class ReplyHandlersMixin:
+    _handle_reply = _handle_reply
     _handle_scout_reply = _handle_scout_reply
     _handle_cleaner_reply = _handle_cleaner_reply
-    _run_analyst_first_pass = _run_analyst_first_pass
     _handle_analyst_reply = _handle_analyst_reply
     _handle_reporter_reply = _handle_reporter_reply
+    _run_analyst_first_pass = _run_analyst_first_pass
     respond = respond
     _ensure_memory_for_respond = _ensure_memory_for_respond

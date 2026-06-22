@@ -253,8 +253,8 @@ class TestReporterControlChannelLinks:
     """Reporter 控制通道链路验证 — route_to 已生效"""
 
     def test_reporter_route_to_in_handler(self):
-        """_handle_reporter_reply 含 route_to 处理。"""
-        from hagoku.manager.llm_dispatch.reply_handlers import _handle_reporter_reply
+        """_handle_reply 含 route_to 处理。"""
+        from hagoku.manager.llm_dispatch.reply_handlers import _handle_reply
         import inspect
-        src = inspect.getsource(_handle_reporter_reply)
-        assert "route_to" in src, "_handle_reporter_reply 应含 route_to 处理"
+        src = inspect.getsource(_handle_reply)
+        assert "route_to" in src, "_handle_reply 应含 route_to 处理"

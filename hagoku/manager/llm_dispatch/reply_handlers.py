@@ -51,10 +51,16 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         if target and target != "scout":
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    # 留在 scout：发信号让前端显示输入框。文本已通过流式发送，不在此重复。
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+    # Phase C: LLM 在 scout 里调了 submit_assessment → 切换到 cleaner
+    if result.get("submit_assessment"):
+        assessment = result.get("assessment") or {}
+        return ("switch", "cleaner", {"_cleaner_assessment": assessment, "_route_reason": "LLM 在 scout 阶段提交了清洗评估"})
+
+    # 留在 scout：重新生成 field_review（column_semantics 已被 set_columns 更新）
+    payload = scout_field_review_pause_payload(context)
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
     reply_text = result.get("text", "")
-    return {"status": "scout_review", "message": reply_text}
+    return {"status": "scout_review", "message": reply_text, "field_review": payload.get("field_review")}
 
 
 def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
@@ -70,6 +76,15 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         context["_user_feedback"] = user_input
         assessment = self._agent.assess(df, context)
         context["_cleaner_assessment"] = assessment
+        self._cleaner_dialog_open = True
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
+            "cleaning_assessment": assessment,
+        })
+        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
+        return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
+
+    # scout 阶段 LLM 已提交 assessment，直接展示（首波，无需再调 LLM）
+    if assessment is not None and (not user_input or not user_input.strip()):
         self._cleaner_dialog_open = True
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
             "cleaning_assessment": assessment,

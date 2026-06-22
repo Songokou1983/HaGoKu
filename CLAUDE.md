@@ -134,7 +134,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | **F** | "可能是模型的问题" | 默认假设代码/prompt/通道有bug，归因LLM必须带代码证据 |
 | **G** | prompt里出现"禁止/不要/不准" | 先查mismatch：prompt说的工具真能用吗？字段真传到了吗？修mismatch，不加禁止 |
 | **C** | `setdefault` / `.get("role","feature")` | LLM没给的值代码不准填 |
-| **D** | `_scout_text` → payload → message | LLM文本直接送前端，不经过代码多层周转 |
+| **D** | 代码"搬运"LLM文本 | LLM流式已经送达前端。禁止从context/column_semantics取LLM文本，通过事件/返回值再发一次。删掉搬运代码用户看到的不变→搬运。变了→原有通道断裂 |
 | **E** | 改完代码 | 跑 `bash scripts/ci/self_check.sh` 全部通过才提交 |
 
 ---

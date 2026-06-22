@@ -145,6 +145,40 @@ if failed:
 print('✅ 无残留内容生成import')
 " || { echo "  ❌"; exit 1; }
 
+# 检查 5: 禁止代码"搬运"LLM文本——从 _scout_text / column_semantics 取文本后二次发送
+python3 -c "
+import ast, sys, os, glob
+failed = False
+for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
+    if '/tests/' in pyfile or '/docs/' in pyfile:
+        continue
+    try:
+        with open(pyfile) as f:
+            tree = ast.parse(f.read())
+    except (SyntaxError, UnicodeDecodeError):
+        continue
+    # 检测模式: 从context取_scout_text → 放入emit或return的dict中作为message
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript):
+            # 检查是否是 context['column_semantics'] 或类似的取_scout_text模式
+            pass
+    # 简单文本检测: _scout_text 出现在 emit/return 附近的代码块中
+    lines = open(pyfile).readlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # 模式: msg_text = ... _scout_text ... 然后 emit(..., msg_text) 或 return {message: msg_text}
+        if '_scout_text' in stripped and not stripped.startswith('#'):
+            # 检查后续几行是否有 emit 或 return
+            block = ''.join(lines[i:min(i+4, len(lines))])
+            if 'emit(' in block or 'return {' in block:
+                if 'msg_text' in block or 'message' in block.split('_scout_text')[1] if '_scout_text' in block else False:
+                    print(f'{pyfile}:{i+1} 代码搬运LLM文本(_scout_text→emit/return)')
+                    failed = True
+if failed:
+    sys.exit(1)
+print('✅ 无LLM文本搬运')
+" || { echo "  ❌"; exit 1; }
+
 echo "=== 9. 刹车 G — prompt/tool描述 不用禁止堵 ==="
 # 检测 prompt.md 和 tool descriptions 中是否出现「禁止/不要/不准」来堵行为
 VIOLATIONS=$(grep -c '禁止' "$ROOT/hagoku/agents/prompt.md" 2>/dev/null || echo 0)

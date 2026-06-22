@@ -259,8 +259,6 @@ class DataAnalystAgent(BaseAgent):
         raw_text = result.get("text", "")
         cs = context.get("column_semantics", [])
         if cs and any("column_name" in s for s in cs):
-            # LLM 调了 set_columns → 保留结构化数据，同时附加 LLM 最后一轮输出的文本
-            cs.append({"_scout_text": raw_text})
             return cs
         return [{"_scout_text": raw_text}]
 

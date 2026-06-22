@@ -14,6 +14,7 @@ export function useAnalyzeSession(
   setPhase: (v: SessionPhase) => void,
   resetRunUiState: () => void,
   setMessages: (v: any[] | ((prev: any[]) => any[])) => void,
+  setReplyPending: (v: boolean) => void,
 ) {
   const [agentStates, setAgentStates] = useState<Record<AgentKey, AgentRunState>>({
     scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle",
@@ -42,6 +43,7 @@ export function useAnalyzeSession(
   const handleStartSession = useCallback(() => {
     if (!currentProject || !dataPath) return;
     setMessages([]);
+    setReplyPending(false);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
     setGuardrailsBlocked(false);

@@ -91,6 +91,7 @@ export default function AnalyzePanel() {
     setPhase,
     resetRunUiState,
     setMessages,
+    setReplyPending,
   );
 
   // WS event handler hook

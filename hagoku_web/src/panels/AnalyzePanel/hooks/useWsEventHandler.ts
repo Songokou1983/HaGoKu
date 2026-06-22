@@ -184,22 +184,20 @@ export function useWsEventHandler(deps: WsEventDeps) {
         }
         // 回放对话历史（app 重启后恢复）
         if (snap.conversation && Array.isArray(snap.conversation) && snap.conversation.length > 0) {
-          const histMsgs = snap.conversation.map((e: any) => ({
-            id: uid(),
-            role: e.type === "user_feedback" ? "user"
-                : e.type === "agent_response" ? "agent"
-                : "workflow",
-            text: e.text || "",
-            timestamp: e.timestamp || new Date().toISOString(),
-            ...(e.tool_calls && e.tool_calls.length > 0
-              ? { toolExchange: { stage: e.stage || "", tool_calls: e.tool_calls, assistant_pre_text: e.text || "" } }
-              : {}),
-          }));
           setMessages((prev) => {
-            // 避免重复：如果已有历史消息则跳过
-            const existingIds = new Set(prev.map(m => m.id));
-            const newMsgs = histMsgs.filter((m: any) => !existingIds.has(m.id));
-            return [...prev, ...newMsgs];
+            // 只在消息为空时回放（初次连接），避免重连时重复追加
+            if (prev.length > 0) return prev;
+            return snap.conversation.map((e: any) => ({
+              id: uid(),
+              role: e.type === "user_feedback" ? "user"
+                  : e.type === "agent_response" ? "agent"
+                  : "workflow",
+              text: e.text || "",
+              timestamp: e.timestamp || new Date().toISOString(),
+              ...(e.tool_calls && e.tool_calls.length > 0
+                ? { toolExchange: { stage: e.stage || "", tool_calls: e.tool_calls, assistant_pre_text: e.text || "" } }
+                : {}),
+            }));
           });
         }
         // Agent 状态恢复

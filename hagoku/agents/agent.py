@@ -539,7 +539,9 @@ class DataAnalystAgent(BaseAgent):
 
         revision = context.get("interaction_revision", 0)
         stage = context.get("_current_stage", "analyst")
-        project_ctx.add_agent_response(stage, revision, txt or "(tool calls)")
+        # 有 tool_calls 时不单独写 agent_response——add_tool_exchange 已含 assistant_content
+        if not tc_list:
+            project_ctx.add_agent_response(stage, revision, txt or "(tool calls)")
 
         route_to_args = None
         findings = None

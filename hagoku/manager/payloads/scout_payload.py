@@ -75,28 +75,6 @@ def derive_descriptions(context: dict[str, Any]) -> dict[str, str]:
     return result
 
 
-def sync_legacy_dicts(context: dict[str, Any]) -> None:
-    """将 column_semantics 的最新状态同步回旧字典（保持向后兼容）。
-
-    调用时机：任何对 column_semantics 做完写入后调用一次，确保旧路径不脏。
-    这是收口双写状态的过渡桥梁——未来旧字典彻底退场后此函数可删除。
-    """
-    descs: dict[str, str] = {}
-    dnames: dict[str, str] = {}
-    for s in context.get("column_semantics") or []:
-        col = str(s.get("column_name", "")).strip()
-        if not col:
-            continue
-        desc = str(s.get("description", "") or "").strip()
-        dn = str(s.get("display_name", "") or "").strip()
-        if desc:
-            descs[col] = desc
-        if dn:
-            dnames[col] = dn
-    if descs:
-        context["column_descriptions"] = descs
-    if dnames:
-        context["column_display_names"] = dnames
 
 def _resolve_scout_column_token(token: str, columns: list[str]) -> str | None:
     """将用户或 LLM 给出的字段标识解析为真实列名。

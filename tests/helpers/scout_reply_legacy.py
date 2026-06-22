@@ -12,8 +12,21 @@ from hagoku.manager.payloads.scout_payload import (
     _resolve_scout_column_token_with_context,
     derive_display_names,
     derive_descriptions,
-    sync_legacy_dicts,
 )
+
+# sync_legacy_dicts 已从生产代码删除——此处用空实现兼容旧测试
+def sync_legacy_dicts(context):
+    """兼容旧测试：从 column_semantics 同步到旧字典。"""
+    for s in context.get("column_semantics") or []:
+        col = str(s.get("column_name", "")).strip()
+        if not col:
+            continue
+        desc = str(s.get("description", "") or "").strip()
+        dn = str(s.get("display_name", "") or "").strip()
+        if desc:
+            context.setdefault("column_descriptions", {})[col] = desc
+        if dn:
+            context.setdefault("column_display_names", {})[col] = dn
 def apply_scout_user_field_reply_to_context(
     context: dict[str, Any],
     user_reply: str,

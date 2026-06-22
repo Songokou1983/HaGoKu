@@ -39,7 +39,6 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     scout_user_input_received_state,
     derive_display_names,
     derive_descriptions,
-    sync_legacy_dicts,
 )
 
 # Phase D 后：scout_reply 功能已迁入 agent.py + reply_handlers.py。

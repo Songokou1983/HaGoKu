@@ -495,6 +495,9 @@ class DataAnalystAgent(BaseAgent):
                         full_text, chunk["content"], safe_emitted,
                     )
                     if delta:
+                        if safe_emitted == len(delta):
+                            ch = getattr(self, '_log_channel', None)
+                            if ch: ch(agent_key, "stream_start", stream_id=stream_id)
                         self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id, "delta": delta,
                             "agent": agent_key,
@@ -502,6 +505,8 @@ class DataAnalystAgent(BaseAgent):
                 elif chunk["type"] == "end":
                     full_text = chunk.get("content", full_text)
                     final_tool_calls_raw = chunk.get("tool_calls") or []
+                    ch = getattr(self, '_log_channel', None)
+                    if ch: ch(agent_key, "stream_end", stream_id=stream_id, text_len=len(full_text))
                     self._emit(EventType.AGENT_STREAM_END, {
                         "stream_id": stream_id, "agent": agent_key,
                     })
@@ -609,12 +614,17 @@ class DataAnalystAgent(BaseAgent):
                             full_text, chunk["content"], safe_emitted,
                         )
                         if delta:
+                            if safe_emitted == len(delta):
+                                ch = getattr(self, '_log_channel', None)
+                                if ch: ch(agent_key, "stream_start", stream_id=stream_id)
                             self._emit(EventType.AGENT_STREAM_DELTA, {
                                 "stream_id": stream_id, "delta": delta, "agent": agent_key,
                             })
                     elif chunk["type"] == "end":
                         full_text = chunk.get("content", full_text)
                         final_tool_calls_raw = chunk.get("tool_calls") or []
+                        ch = getattr(self, '_log_channel', None)
+                        if ch: ch(agent_key, "stream_end", stream_id=stream_id, text_len=len(full_text))
                         self._emit(EventType.AGENT_STREAM_END, {
                             "stream_id": stream_id, "agent": agent_key,
                         })

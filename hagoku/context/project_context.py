@@ -104,6 +104,7 @@ class ProjectContext:
             content=content or raw_text[:200],
             raw_user_text=raw_text,
         ))
+        self._maybe_save()
 
     def add_agent_response(
         self,
@@ -121,6 +122,7 @@ class ProjectContext:
             content=content,
             snapshot=snapshot,
         ))
+        self._maybe_save()
 
     def add_stage_transition(self, stage: str, content: str = "") -> None:
         """记录阶段切换。"""

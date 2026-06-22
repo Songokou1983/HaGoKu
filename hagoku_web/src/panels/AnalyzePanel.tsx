@@ -227,7 +227,6 @@ export default function AnalyzePanel() {
       )}
 
       {/* ── Setup: project + file selectors ── */}
-      {phase === "setup" && (
       <ProjectFileSelectors
         currentProject={currentProject}
         projects={projects}
@@ -251,7 +250,6 @@ export default function AnalyzePanel() {
         handleUpload={handleUpload}
         phase={phase}
       />
-      )}
       {/* ── Setup idle: start button ── */}
       <StartPanel
         phase={phase}

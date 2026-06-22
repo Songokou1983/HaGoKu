@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import os
+
+# 全量日志——EventBus + WebSocket 全覆盖
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)-25s %(levelname)-8s %(message)s",
+    datefmt="%H:%M:%S",
+    force=True,
+)
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 

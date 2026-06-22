@@ -32,6 +32,9 @@ class EventBus:
             parent_id=parent_id,
         )
         self.events.append(event)
+        logger.info("EVENT %-30s agent=%-10s data=%s",
+            event_type.value, agent,
+            str({k: str(v)[:80] for k, v in (data or {}).items() if k not in ('stream_id',)})[:200])
         for callback in self.subscribers:
             try:
                 callback(event)

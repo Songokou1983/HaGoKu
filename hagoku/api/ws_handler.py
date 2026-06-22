@@ -343,10 +343,7 @@ async def ws_handler(ws: WebSocket) -> None:
             import logging as _logging
             _wslog = _logging.getLogger("hagoku.ws.recv")
             cmd = msg.get("cmd", "")
-            if cmd == "respond":
-                _wslog.info("respond text=%s stage=%s", str(msg.get("payload",{}).get("text",""))[:80], msg.get("payload",{}).get("stage",""))
-            else:
-                _wslog.info("cmd=%s", cmd)
+            _wslog.info("%s %s", cmd, str({k: str(v)[:100] for k, v in msg.items() if k != 'cmd'})[:200])
             if cmd == "ping":
                 await ws.send_json({"type": "pong"})
             elif cmd == "analyze":

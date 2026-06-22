@@ -31,7 +31,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict | tuple:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
             return {"status": "cleaner_review", "message": ""}
 
-    # ── 首次进入需初始化的阶段 ──
     if stage == "cleaner" and context.get("_cleaner_assessment") is None:
         df = self._df_raw if self._df_raw is not None else self._df_clean
         context["_user_feedback"] = user_input
@@ -114,13 +113,14 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     else:
         result = _handle_reply(self, text, ctx or {})
 
-    # stage 切换
+    # stage 切换：只更新阶段，不做任何自动操作。LLM 主导一切。
     if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":
         self._stage = result[1]
         if len(result) > 2 and isinstance(result[2], dict):
             self._context.update(result[2])
         self.save_state()
-        return self.respond({"text": "", "stage": self._stage})
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, self._stage, {"message": ""})
+        return {"status": f"{self._stage}_review", "message": "", "phase_switched": True}
 
     self.save_state()
     return result

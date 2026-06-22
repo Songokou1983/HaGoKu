@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { AskUserPrompt } from "../../components/AskUserPrompt";
+import { FieldReviewTable } from "./FieldReviewTable";
 import { sanitizeHtml } from "../../utils/sanitize";
 
 export function ConvoFeed({
@@ -48,9 +49,15 @@ export function ConvoFeed({
       className="flex-1 overflow-y-auto px-4 py-3 space-y-2"
     >
       {messages.map((m) => {
-      // Workflow: FieldReview table — removed, now handled by markdown rendering
+      // Workflow: FieldReview table
       if (m.role === "workflow" && m.fieldReview) {
-          return null;
+          return (
+            <div key={m.id} className="flex justify-start w-full">
+              <div className="w-full max-w-full">
+                <FieldReviewTable data={m.fieldReview} />
+              </div>
+            </div>
+          );
       }
       // Workflow: CleaningReview table
         if (m.role === "workflow" && m.cleaningReview) {

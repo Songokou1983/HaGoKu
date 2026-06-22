@@ -7,6 +7,19 @@ description: 改代码前强制执行四行诊断+铁律检查，不可跳过
 
 每次改代码前必须完成，不可跳过。
 
+## ⛔ 强制第一步：查 dump
+
+**现在必须执行以下命令并贴出结果，完成前不许做任何其他事：**
+
+```bash
+ls -lt ~/.hagoku/llm_dumps/ | head -5
+```
+
+如果 `~/.hagoku/llm_dumps/` 为空，改为查项目 run 目录：
+```bash
+find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/dev/null | head -5
+```
+
 ## 四行诊断（缺一不写代码）
 
 回答以下四行再调用 edit_file：

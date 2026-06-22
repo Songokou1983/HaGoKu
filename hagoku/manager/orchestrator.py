@@ -43,12 +43,6 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     sync_legacy_dicts,
 )
 
-from .payloads.cleaner_payload import (  # noqa: F401
-    _cleaning_quality_display,
-    _normalize_cleaning_operation,
-    cleaning_review_pause_payload,
-)
-
 # Phase D 后：scout_reply 功能已迁入 agent.py + reply_handlers.py。
 # 旧的 scout_reply.py 已删除。测试函数已迁移至 tests/helpers/scout_reply_legacy.py。
 # 生产不再依赖任何 scout_reply 模块。

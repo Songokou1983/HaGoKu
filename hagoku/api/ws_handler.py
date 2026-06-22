@@ -166,9 +166,8 @@ def _try_restore_session() -> bool:
 def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
     """从 Orchestrator 当前状态构建前端可恢复的快照。
 
-    用于 WebSocket 重连时恢复 UI 状态：当前阶段、字段表、对话等。
-    """
-    from hagoku.manager.payloads.scout_payload import scout_field_review_pause_payload
+    用于 WebSocket 重连时恢复 UI 状态：当前阶段、对话等。
+    不生成任何用户可见内容——所有展示数据由 LLM 流式输出提供。"""
     try:
         stage = getattr(orch, '_stage', '') or ''
         ctx = getattr(orch, '_context', None) or {}
@@ -180,26 +179,10 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
             "query": ctx.get('query', ''),
             "data_path": ctx.get('data_path', ''),
         }
-        # Scout 阶段：发字段核对表
-        if stage == "scout" and ctx:
-            try:
-                field_review = scout_field_review_pause_payload(ctx)
-                snapshot["field_review"] = field_review.get("field_review")
-            except Exception:
-                pass
         # Phase C: pending_ask_user（LLM ask_user 暂停状态恢复）
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
-
-        # Cleaner 阶段
-        if stage == "cleaner" and ctx:
-            try:
-                from hagoku.manager.payloads.cleaner_payload import cleaning_review_pause_payload
-                cleaner_review = cleaning_review_pause_payload(ctx)
-                snapshot["cleaning_review"] = cleaner_review
-            except Exception:
-                pass
         # Analyst 阶段：传最后一条 LLM 回复
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")

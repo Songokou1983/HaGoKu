@@ -5,46 +5,7 @@ Agent 互动与成长 — 可执行契约（见 docs/AGENT_INTERACTION_CONTRACT.
 """
 
 from hagoku.config import HaGoKuConfig
-from hagoku.manager.orchestrator import (
-    Orchestrator,
-    cleaning_review_pause_payload,
-)
-
-
-def test_c1_cleaner_pause_no_injected_dialogue():
-    """C1：Cleaner 暂停不得再注入整段「冒充 Agent」中文气泡（仅结构化 cleaning_review）。"""
-    orch = Orchestrator(HaGoKuConfig())
-
-    class R:
-        total_rows_original = 100
-        total_rows_after = 100
-        bias_risk = "low"
-        warnings: list[str] = []
-        operations = [{"column": "x", "strategy": "winsorize", "reason": "test", "rows_affected": 5}]
-
-    p = cleaning_review_pause_payload(R(), data_quality="good", impact_rate=0.0)
-    p["interaction_revision"] = 1
-    out = orch._attach_pause_dialogue_message("cleaner", p)
-    assert out.get("message") == ""
-    assert isinstance(out.get("cleaning_review"), dict)
-
-
-
-
-def test_c2_cleaning_review_structured_empty_message():
-    """Cleaner 暂停须 cleaning_review + 空 message（与 C2 同源）。"""
-    class R:
-        total_rows_original = 100
-        total_rows_after = 100
-        bias_risk = "low"
-        warnings: list[str] = []
-        operations = [{"column": "c", "strategy": "winsorize", "reason": "r", "rows_affected": 5}]
-
-    p = cleaning_review_pause_payload(R(), data_quality="unknown", impact_rate=0.0)
-    assert p.get("message") == ""
-    cr = p.get("cleaning_review")
-    assert cr is not None
-    assert "rows_removed" in cr
+from hagoku.manager.orchestrator import Orchestrator
 
 
 def test_c3_scout_user_natural_language_llm_driven():

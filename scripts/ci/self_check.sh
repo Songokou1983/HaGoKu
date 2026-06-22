@@ -35,52 +35,92 @@ grep -q 'add_agent_response.*理解.*个字段\|add_agent_response.*字段推断
 grep -q 'AGENT_COMPLETED.*add_agent_response' "$ROOT/hagoku/context/project_context.py" && { echo "  ❌ project_context 仍在 AGENT_COMPLETED 写假 response"; exit 1; } || echo "  ✅ project_context AGENT_COMPLETED 已清理"
 
 echo "=== 8. 代码不替 LLM 出内容 ==="
-# 通道原则：用户看到的一切只能是 LLM 输出。代码禁止生成 field_review/cleaning_assessment/analyst_review 等结构化展示数据。
-# 检查 1: 禁止从 context 非 LLM 字段构造 rows（如 _column_info / _column_profiles）
+# 通道原则：用户看到的一切只能是 LLM 输出。代码禁止：
+#   - 构造 field_review / cleaning_review / cleaning_assessment / analyst_review 等展示数据
+#   - 从 _column_info / _column_profiles 等非 LLM 来源生成 rows
+#   - import 已删除的内容生成函数
+
+# 检查 1: 全仓扫描——禁止代码构造 field_review/cleaning_review/cleaning_assessment payload
 python3 -c "
-import ast, sys
+import ast, sys, os, glob
 failed = False
-for subdir in ['manager/payloads', 'manager/llm_dispatch', 'agents']:
-    import os, glob
-    for pyfile in glob.glob(f'$ROOT/hagoku/{subdir}/**/*.py', recursive=True):
+forbidden_keys = {'field_review', 'cleaning_review', 'cleaning_assessment', 'analyst_review'}
+for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
+    # 跳过测试和文档
+    if '/tests/' in pyfile or '/docs/' in pyfile:
+        continue
+    try:
         with open(pyfile) as f:
-            try:
-                tree = ast.parse(f.read())
-            except SyntaxError:
-                continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Dict):
-                keys = [k.s if isinstance(k, ast.Constant) else '' for k in node.keys if isinstance(k, ast.Constant)]
-                rowlike = {'field_name','chinese_name','meaning'} & set(keys)
-                if len(rowlike) >= 2:
-                    print(f'{pyfile}:{node.lineno} 代码构造 field_review rows (keys={sorted(keys)[:6]})')
-                    failed = True
+            tree = ast.parse(f.read())
+    except (SyntaxError, UnicodeDecodeError):
+        continue
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            ks = set()
+            for k in node.keys:
+                if isinstance(k, ast.Constant):
+                    ks.add(str(k.value))
+            if ks & forbidden_keys:
+                print(f'{pyfile}:{node.lineno} 代码构造展示payload (keys={sorted(ks & forbidden_keys)})')
+                failed = True
 if failed:
     sys.exit(1)
-print('✅ 无代码生成结构化展示数据')
+print('✅ 无代码生成展示payload')
 " || { echo "  ❌"; exit 1; }
 
-# 检查 2: 禁止从非 LLM 输出源构造 field_review/cleaning_assessment payload
+# 检查 2: 全仓扫描——禁止代码构造 field_name/chinese_name/meaning 等 rows
 python3 -c "
-import ast, sys
-forbidden_keys = {'field_review', 'cleaning_assessment', 'analyst_review', 'fieldReview'}
-for subdir in ['manager/payloads', 'manager/llm_dispatch', 'agents']:
-    import os, glob
-    for pyfile in glob.glob(f'$ROOT/hagoku/{subdir}/**/*.py', recursive=True):
+import ast, sys, os, glob
+failed = False
+for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
+    if '/tests/' in pyfile or '/docs/' in pyfile:
+        continue
+    try:
         with open(pyfile) as f:
-            try:
-                tree = ast.parse(f.read())
-            except SyntaxError:
-                continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Dict):
-                keys = {k.s if isinstance(k, ast.Constant) else k.value if isinstance(k, ast.Constant) else '' for k in node.keys if hasattr(k, 's') or hasattr(k, 'value')}
-                keys = {str(k) for k in keys if k}
-                if keys & forbidden_keys:
-                    src = getattr(node, 'lineno', '?')
-                    print(f'{pyfile}:{src} 代码构造禁止的展示 payload (keys={sorted(keys & forbidden_keys)})')
-                    sys.exit(1)
-print('✅ 无代码构造 field_review/cleaning_assessment payload')
+            tree = ast.parse(f.read())
+    except (SyntaxError, UnicodeDecodeError):
+        continue
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            ks = set()
+            for k in node.keys:
+                if isinstance(k, ast.Constant):
+                    ks.add(str(k.value))
+            rowlike = {'field_name','chinese_name','meaning'} & ks
+            if len(rowlike) >= 2:
+                print(f'{pyfile}:{node.lineno} 代码构造rows (keys={sorted(ks)[:6]})')
+                failed = True
+if failed:
+    sys.exit(1)
+print('✅ 无代码生成rows')
+" || { echo "  ❌"; exit 1; }
+
+# 检查 3: 禁止 import 已删除的内容生成函数
+python3 -c "
+import sys, os, glob
+failed = False
+forbidden_imports = ['scout_field_review_pause_payload']
+for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
+    if '/tests/' in pyfile:
+        continue
+    try:
+        with open(pyfile) as f:
+            content = f.read()
+    except UnicodeDecodeError:
+        continue
+    for fi in forbidden_imports:
+        if fi in content and 'import' in content.split(fi)[0].split('\n')[-1]:
+            # 检查是否在注释中
+            lines = content.split('\n')
+            for i, line in enumerate(lines):
+                if fi in line and not line.strip().startswith('#'):
+                    import_keywords = ['import', 'from']
+                    if any(kw in line for kw in import_keywords):
+                        print(f'{pyfile}:{i+1} import了已删除的 {fi}')
+                        failed = True
+if failed:
+    sys.exit(1)
+print('✅ 无残留内容生成import')
 " || { echo "  ❌"; exit 1; }
 
 echo "=== 9. 刹车 G — prompt/tool描述 不用禁止堵 ==="

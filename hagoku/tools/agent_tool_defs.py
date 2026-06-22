@@ -415,7 +415,7 @@ agent_tools.register(Tool(
             "stage": {"type": "string", "enum": ["scout", "cleaner", "analyst", "reporter"]},
             "reason": {"type": "string", "description": "切换原因——告诉用户和后续 AI 为什么走这条路"},
         },
-        "required": ["reason"],
+        "required": ["stage", "reason"],
     },
     handler=_handle_route_to,
     phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],

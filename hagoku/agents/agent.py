@@ -540,7 +540,12 @@ class DataAnalystAgent(BaseAgent):
         findings = None
         assessment = None
 
-        if tc_list:
+        # ── 工具循环：LLM 调工具就继续，不调就停 ──
+        MAX_TOOL_ROUNDS = 5
+        for _round in range(MAX_TOOL_ROUNDS):
+            if not tc_list:
+                break
+
             tool_records = []
             for tc in tc_list:
                 fn = tc.function
@@ -573,56 +578,25 @@ class DataAnalystAgent(BaseAgent):
             if tool_records:
                 project_ctx.add_tool_exchange(stage, revision, tool_records, assistant_content=txt)
 
-        # 工具调用后继续：循环直到 LLM 不再调工具
-        # 工具调用后继续：让 LLM 看结果再回复
-        if tc_list:
-            msgs2 = project_ctx.to_messages_for_llm(
+            # 控制工具已触发 → 不需要继续循环
+            if route_to_args is not None or findings is not None or assessment is not None:
+                break
+
+            # 让 LLM 看到工具结果，决定下一步
+            msgs_next = project_ctx.to_messages_for_llm(
                 stage, context, "",
                 agent_system_extra=agent_extra,
             )
-            resp2 = client.chat.completions.create(
+            resp_next = client.chat.completions.create(
                 model=self.llm_config.model,
-                messages=msgs2,
+                messages=msgs_next,
                 temperature=0.3,
                 max_tokens=4096,
                 tools=_tools,
             )
-            msg2 = resp2.choices[0].message
-            txt = (msg2.content or "").strip()
-            tc2 = getattr(msg2, "tool_calls", None)
-            if tc2:
-                recs2 = []
-                for t in tc2:
-                    fn = t.function
-                    try:
-                        a = _json.loads(fn.arguments) if fn.arguments else {}
-                    except (_json.JSONDecodeError, TypeError):
-                        continue
-                    # 第二轮同样检测控制工具（与第一轮逻辑对齐）
-                    if fn.name == "route_to":
-                        route_to_args = _agt.dispatch(fn.name, a, context, df)
-                        continue
-                    if fn.name == "submit_findings":
-                        findings = _agt.dispatch(fn.name, a, context, df)
-                        continue
-                    if fn.name == "submit_assessment":
-                        assessment = _agt.dispatch(fn.name, a, context, df)
-                        continue
-                    try:
-                        r = _agt.dispatch(fn.name, a, context, df)
-                        recs2.append(ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "",
-                            name=fn.name, arguments=fn.arguments,
-                            result=_json.dumps(r, ensure_ascii=False, default=str),
-                        ))
-                    except Exception as exc:
-                        recs2.append(ToolCallRecord(
-                            tool_call_id=getattr(t, "id", "") or "",
-                            name=fn.name, arguments=fn.arguments,
-                            result="", error=str(exc),
-                        ))
-                if recs2:
-                    project_ctx.add_tool_exchange(stage, revision, recs2, assistant_content=txt)
+            msg_next = resp_next.choices[0].message
+            txt = (msg_next.content or "").strip()
+            tc_list = getattr(msg_next, "tool_calls", None)
 
         return {
             "text": txt, "route_to": route_to_args,

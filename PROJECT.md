@@ -637,6 +637,7 @@ hagoku/
 | `docs/INTERACTION_MULTITURN_PLAN.md` | 多轮对齐分期方案 | 开发者 |
 | `DEVELOPMENT_PROMPT.md` | 路线图跟踪 + 任务传递 + 审查约定 | 协作者 |
 | `docs/COMMAND_SYSTEM.md` | 命令系统完整设计 | 开发者 |
+| `docs/ANTIPATTERNS.md` | 反模式经验录（反复出现的错误模式） | AI 助手 + 开发者 |
 | `CLAUDE.md` | AI 编码助手上下文 | AI 助手 |
 | `docs/plans/2026-06-11-meta-layer-v2-brief.md` | Meta v2（Prompt Lab + LessonAuditor + prompt_gate + dev CLIs） | 开发者 |
 

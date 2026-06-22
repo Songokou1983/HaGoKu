@@ -241,14 +241,14 @@ class DataAnalystAgent(BaseAgent):
         self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
 
         # ── 复用 run_step 统一路径（全量工具 + 流式 + 跟进轮）──
-        project_ctx = (self._context or {}).get("_project_context")
-        if project_ctx is None:
-            raise RuntimeError(
-                "infer_field_semantics: _project_context 未设置，无法构造 messages。"
-                " 请检查 understand_data → _init_context 是否正确初始化了 ProjectContext。"
-            )
+        session = (self._context or {}).get("_session")
+        if session is None:
+            from hagoku.context.session import Session
+            session = Session(analysis_goal=query)
+            if self._context is not None:
+                self._context["_session"] = session
         context = {
-            "_project_context": project_ctx,
+            "_session": session,
             "_current_stage": "scout",
             "query": query,
             "column_semantics": [],
@@ -403,15 +403,17 @@ class DataAnalystAgent(BaseAgent):
                          if s.get("used_in_analysis") is True}
         col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
 
-        project_ctx = context.get("_project_context")
-        if project_ctx is None:
-            raise RuntimeError("DataAnalystAgent.assess: _project_context 未设置")
+        session = context.get("_session")
+        if session is None:
+            from hagoku.context.session import Session
+            session = Session(analysis_goal=context.get("query", ""))
+            context["_session"] = session
 
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
         revision = context.get("interaction_revision", 0)
-        project_ctx.add_user_feedback("cleaner", revision, raw_text=intro)
+        session.add("user", intro)
 
         context["_current_stage"] = "cleaner"
         context.setdefault("_column_info", {c: str(df[c].dtype) for c in df.columns})
@@ -448,9 +450,11 @@ class DataAnalystAgent(BaseAgent):
         else:
             _tools = _agt.to_openai()  # 全量工具
 
-        project_ctx = context.get("_project_context")
-        if project_ctx is None:
-            raise RuntimeError("DataAnalystAgent.run_step: _project_context 未设置")
+        session = context.get("_session")
+        if session is None:
+            from hagoku.context.session import Session
+            session = Session(analysis_goal=context.get("query", ""))
+            context["_session"] = session
 
         agent_extra = self.prompt
         phase_hint = context.get("_current_stage", "")
@@ -464,9 +468,9 @@ class DataAnalystAgent(BaseAgent):
             cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
             agent_extra += f"\n数据集字段: {cols_str}\n"
 
-        messages = project_ctx.to_messages_for_llm(
-            "analyst", context, user_input,
-            agent_system_extra=agent_extra,
+        messages = session.to_llm_messages(
+            system_extra=agent_extra,
+            user_input=user_input,
         )
 
         from hagoku.observability.llm_dump import dump_messages
@@ -539,9 +543,9 @@ class DataAnalystAgent(BaseAgent):
 
         revision = context.get("interaction_revision", 0)
         stage = context.get("_current_stage", "analyst")
-        # 有 tool_calls 时不单独写 agent_response——add_tool_exchange 已含 assistant_content
+        # 没有 tool_calls 时写入纯文本 assistant 消息
         if not tc_list:
-            project_ctx.add_agent_response(stage, revision, txt or "(tool calls)")
+            session.add("assistant", txt or "(tool calls)")
 
         route_to_args = None
         findings = None
@@ -583,16 +587,31 @@ class DataAnalystAgent(BaseAgent):
                         result="", error=str(exc),
                     ))
             if tool_records:
-                project_ctx.add_tool_exchange(stage, revision, tool_records, assistant_content=txt)
+                oai_calls = [
+                    {
+                        "id": tc.tool_call_id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for tc in tool_records
+                ]
+                results = [
+                    {
+                        "content": tc.error or tc.result,
+                        "tool_call_id": tc.tool_call_id,
+                    }
+                    for tc in tool_records
+                ]
+                session.add_tool_call(txt, oai_calls, results)
 
             # 控制工具已触发 → 不需要继续循环
             if route_to_args is not None or findings is not None or assessment is not None:
                 break
 
             # 让 LLM 看到工具结果，决定下一步
-            msgs_next = project_ctx.to_messages_for_llm(
-                stage, context, "",
-                agent_system_extra=agent_extra,
+            msgs_next = session.to_llm_messages(
+                system_extra=agent_extra,
+                user_input="",
             )
             # 第 2+ 轮 LLM 调用前 dump（与第 1 轮对称）
             dump_messages(f"agent_run_step_r{_round + 2}", msgs_next,

@@ -195,10 +195,10 @@ class Orchestrator(
         import json as _json
         try:
             # 从 project_context 的 _save_path 推导 run_dir
-            pc = getattr(self, '_project_context', None)
-            if pc is None:
+            session = getattr(self, '_session', None)
+            if session is None:
                 return None
-            save_path = getattr(pc, '_save_path', None)
+            save_path = getattr(session, '_save_path', None)
             if not save_path:
                 return None
             run_dir = Path(save_path).parent
@@ -207,7 +207,7 @@ class Orchestrator(
             ctx = getattr(self, '_context', None) or {}
             # 只保留可 JSON 序列化的字段，剔除 DataFrame/LLM client 等
             safe_ctx = {}
-            skip_keys = {'_project_context', '_memory_manager', '_llm_client', '_df'}
+            skip_keys = {'_session', '_memory_manager', '_llm_client', '_df'}
             for k, v in ctx.items():
                 if k in skip_keys:
                     continue
@@ -220,7 +220,7 @@ class Orchestrator(
             state = {
                 "stage": self._stage,
                 "project_name": getattr(self, '_project_name', ''),
-                "run_id": getattr(self._project_context, 'run_id', '') if hasattr(self, '_project_context') else '',
+                "run_id": run_id,
                 "query": safe_ctx.get('query', ''),
                 "data_path": safe_ctx.get('data_path', ''),
                 "context": safe_ctx,
@@ -269,20 +269,13 @@ class Orchestrator(
                 orch._df_clean = _pd.read_parquet(df_clean_path)
 
             # 恢复 ProjectContext
-            ctx_jsonl = rdir / "project_context.jsonl"
-            if ctx_jsonl.exists():
-                from ..context.project_context import ProjectContext
-                pc = ProjectContext.load_jsonl(
-                    str(ctx_jsonl),
-                    run_id=state.get("run_id", rdir.name),
-                    analysis_goal=state.get("query", ""),
-                )
-                pc._save_path = str(ctx_jsonl)
-                orch._project_context = pc
-                # 恢复 event 订阅
-                pc.subscribe(orch.event_bus, context_ref=orch._context)
-                # 补充未持久化的字段
-                orch._context["_project_context"] = pc
+            session_file = rdir / "session.json"
+            if session_file.exists():
+                from ..context.session import Session
+                session = Session.load(str(session_file), analysis_goal=state.get("query", ""))
+                session._save_path = str(session_file)
+                orch._session = session
+                orch._context["_session"] = session
 
             # 恢复 OutputManager
             from ..storage.output import OutputManager
@@ -375,15 +368,9 @@ class Orchestrator(
         set_run_dir(run_dir)
 
         # ── ProjectContext：统一上下文记忆系统（阶段1：并行旧路径）──
-        from ..context.project_context import ProjectContext
-        self._project_context = ProjectContext(
-            run_id=run_id,
-            analysis_goal=query,
-        )
-        self._project_context.subscribe(self.event_bus, context_ref=context)
-
-        # ── 持久化路径（阶段 3：crash 恢复）──
-        self._project_context._save_path = str(run_dir / "project_context.jsonl")
+        from ..context.session import Session
+        self._session = Session(analysis_goal=query)
+        self._session._save_path = str(run_dir / "session.json")
 
         # ── 通道日志：初始化 ChannelLogger ──
         from ..observability.channel_logger import ChannelLogger
@@ -449,8 +436,8 @@ class Orchestrator(
                 self._agent.memory_project = memory_project
                 # 注入 ProjectContext 到 context（必须在 run_scout_phase 之前，
                 # 因为 infer_field_semantics 依赖它构造 messages）
-                context["_project_context"] = getattr(self, '_project_context', None)
-                self._agent._context = {"_project_context": getattr(self, '_project_context', None)}
+                context["_session"] = getattr(self, '_session', None)
+                self._agent._context = {"_session": getattr(self, '_session', None)}
                 result = self._agent.run_scout_phase(
                     data_path, query, project_id=project_name,
                     memory_project=memory_project,
@@ -468,7 +455,7 @@ class Orchestrator(
                 # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
                 interaction_revision = 0
                 # ── 注入 ProjectContext 到 context ──
-                context["_project_context"] = getattr(self, '_project_context', None)
+                context["_session"] = getattr(self, '_session', None)
                 context["_memory_manager"] = self.memory
                 context["_project_name"] = project_name
 

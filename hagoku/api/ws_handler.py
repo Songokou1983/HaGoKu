@@ -188,21 +188,13 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
         # 对话历史（从 ProjectContext entries 回放）
-        pc = getattr(orch, '_project_context', None)
-        if pc is not None:
-            conv: list[dict] = []
-            for e in pc.entries:
-                entry: dict = {"type": e.type, "stage": e.stage, "timestamp": e.timestamp}
-                if e.type == "user_feedback":
-                    entry["text"] = e.raw_user_text or e.content or ""
-                elif e.type == "agent_response":
-                    entry["text"] = e.content or ""
-                elif e.type == "tool_exchange":
-                    entry["text"] = (e.snapshot or {}).get("assistant_pre_text", "") if e.snapshot else ""
-                    entry["tool_calls"] = [
-                        {"name": tc.name, "result": tc.result, "error": tc.error}
-                        for tc in (e.tool_calls or [])
-                    ]
+        session = getattr(orch, '_session', None)
+        if session is not None and session.messages:
+            conv = []
+            for m in session.messages:
+                entry: dict = {"role": m.get("role", ""), "text": m.get("content", "")}
+                if m.get("tool_calls"):
+                    entry["tool_calls"] = m["tool_calls"]
                 conv.append(entry)
             if conv:
                 snapshot["conversation"] = conv

@@ -163,14 +163,9 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     if ctx is not None and text:
         ctx["_pending_command_text"] = text
     # 律 2：raw_text 先写入 ProjectContext，再调 handler——确保 LLM 看到用户原话
-    project_ctx = ctx.get("_project_context") if ctx else None
-    if project_ctx and text:
-        project_ctx.add_user_feedback(
-            stage=self._stage,
-            revision=getattr(self, '_respond_revision', 0),
-            raw_text=text,
-        )
-        setattr(self, '_respond_revision', getattr(self, '_respond_revision', 0) + 1)
+    session = ctx.get("_session") if ctx else None
+    if session and text:
+        session.add("user", text)
     result = handler(text, self._context)
 
     # handler 返回 ("switch", "X") → 切换阶段，递归继续

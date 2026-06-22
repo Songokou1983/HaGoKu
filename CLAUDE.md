@@ -106,6 +106,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 - **对话循环**：`run_step()` 已含工具调用→dispatch→回传→继续的完整循环。不要自己写。**每轮都必须对称检测控制工具**
 - **流程控制**：LLM 通过 `route_to` 决定阶段切换，代码不做 if-elif 阶段判断
 - **代码只做机械执行**：不替 LLM 做语义判断，不加"禁止"堵行为
+- **流程保障 ≠ 替代决策**：数据分析有固定骨架（加载→画像→理解字段→清洗→分析→报告）。代码确保每步发生，LLM 决定每步的内容。`run_scout_phase` 调 load_data → generate_profile → 调 LLM 推断字段 是流程保障，不是越界
 - **通道铁律**：代码可以做一切辅助（透传/工具/日志/dump/校验），只要不做决策、不碰 LLM 输出。删掉代码后用户看到的内容不变 → 通道。变了 → 越界。
 - **PROJECT.md** = 设计真相来源
 
@@ -170,7 +171,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 
 ## 项目
 
-**HaGoKu Studio — 1 个数据分析师 + 专业工具箱**（Phase D 已完成 4 agent 合 1）。详见 [`PROJECT.md`](PROJECT.md)。
+**HaGoKu Studio — 用本地模型做专业级商业分析**（单 DataAnalystAgent + 15 工具 + Session 会话）。详见 [`PROJECT.md`](PROJECT.md)。
 
 ## 已由架构自动守门（不需人记）
 - `build_messages()` 唯一入口 → pre-commit hook 自动拦截

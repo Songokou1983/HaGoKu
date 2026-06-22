@@ -46,12 +46,6 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
 # 生产不再依赖任何 scout_reply 模块。
 
 
-from .llm_dispatch.confirmation import (  # noqa: F401
-    _apply_field_corrections,
-    _build_intent_context,
-    _llm_classify_confirmation,
-    _request_field_confirmation,
-)
 
 from .llm_dispatch.reply_handlers import (  # noqa: F401
     _ensure_memory_for_respond,
@@ -64,7 +58,7 @@ from .llm_dispatch.reply_handlers import (  # noqa: F401
     ReplyHandlersMixin,
 )
 
-from .llm_dispatch.confirmation import ConfirmationMixin  # noqa: F401
+
 from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
 from .payloads.pipeline_helpers import (  # noqa: F401
@@ -77,7 +71,6 @@ from .payloads.pipeline_helpers import (  # noqa: F401
 
 class Orchestrator(
     ReplyHandlersMixin,
-    ConfirmationMixin,
     PipelineHelpersMixin,
 ):
     """HaGoKu Studio 编排器：规则+AI 双驱动，协调四个 Agent"""

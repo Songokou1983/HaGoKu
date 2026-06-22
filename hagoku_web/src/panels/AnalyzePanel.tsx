@@ -383,6 +383,7 @@ export default function AnalyzePanel() {
                 }
               />
             </div>
+          )}
 
           {/* Done: report link + reset */}
           {phase === "done" &&

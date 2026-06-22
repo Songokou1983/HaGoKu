@@ -254,11 +254,6 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
     # mock parse_query 在源头（query_parser 模块），因为 orchestrator 用 local import
     # Mock plan + Scout + Cleaner assess（非本测试关注点），核心验证 _handle_cleaner_reply 不抛 ValueError
     with patch("hagoku.manager.query_parser.parse_query") as mock_parse, \
-         patch.object(orch, "_create_plan", return_value={
-             "plan_name": "探索性分析", "agents": ["scout", "cleaner", "analyst", "reporter"],
-             "analyst_focus": ["regression"], "target": "", "query": "分析", "reasoning": "",
-             "llm_generated": True,
-         }), \
          patch("hagoku.agents.agent.DataAnalystAgent.run_scout_phase") as mock_scout_run, \
          patch("hagoku.agents.agent.DataAnalystAgent.assess") as mock_cleaner_assess:
         mock_parse.return_value = QueryIntent(intent_type="exploration", confidence="high")

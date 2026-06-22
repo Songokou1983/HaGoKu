@@ -46,12 +46,6 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
 # 旧的 scout_reply.py 已删除。测试函数已迁移至 tests/helpers/scout_reply_legacy.py。
 # 生产不再依赖任何 scout_reply 模块。
 
-from .llm_dispatch.plan_generation import (  # noqa: F401
-    _build_analysis_purpose,
-    _describe_intent,
-    _get_upstream_summary,
-    _parse_user_query,
-)
 
 from .llm_dispatch.confirmation import (  # noqa: F401
     _apply_field_corrections,
@@ -71,7 +65,6 @@ from .llm_dispatch.reply_handlers import (  # noqa: F401
     ReplyHandlersMixin,
 )
 
-from .llm_dispatch.plan_generation import PlanGenerationMixin  # noqa: F401
 from .llm_dispatch.confirmation import ConfirmationMixin  # noqa: F401
 from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
@@ -85,7 +78,6 @@ from .payloads.pipeline_helpers import (  # noqa: F401
 
 class Orchestrator(
     ReplyHandlersMixin,
-    PlanGenerationMixin,
     ConfirmationMixin,
     PipelineHelpersMixin,
 ):
@@ -386,16 +378,7 @@ class Orchestrator(
         # 创建数据库记录
         self.db.create_project(project_name, data_path=data_path)
 
-        # 1.5 解析用户查询 — 理解用户真正想问什么
-        parsed_intent = self._parse_user_query(query)
-        self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-            "thought": f"🔍 收到，启动分析，让我来{self._describe_intent(parsed_intent)}",
-        })
-
-        # 2. 创建分析计划
-        plan = self._create_plan(query, parsed_intent=parsed_intent)
-        # 与 HaGoKuDB.create_run 默认一致；仅为 runs 表元数据，非面向用户的模式档位
-        self.db.create_run(run_id, project_name, query=query, plan=plan, manager_mode="balanced")
+        self.db.create_run(run_id, project_name, query=query, plan={}, manager_mode="balanced")
 
         # Phase D: 唯一 DataAnalystAgent
         self._agent = DataAnalystAgent(self.config.llm, self.event_bus, orchestrator=self, llm_client=self.llm)
@@ -475,86 +458,3 @@ class Orchestrator(
             self.event_bus.emit(EventType.RUN_FAILED, "manager", {"error": str(e)})
             raise
 
-    def _create_plan(
-        self,
-        query: str,
-        parsed_intent: Any | None = None,
-    ) -> dict[str, Any]:
-        """创建分析计划：LLM 唯一决策引擎，零硬编码规则。"""
-        try:
-            return self._call_llm_for_plan(query, parsed_intent=parsed_intent)
-        except RuntimeError:
-            self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
-                "thought": "LLM 计划生成失败：LLM 不可达，请检查 API 配置后重试。",
-            })
-            raise
-
-    def _call_llm_for_plan(
-        self,
-        query: str,
-        parsed_intent: Any | None = None,
-    ) -> dict[str, Any] | None:
-        """LLM 驱动的分析计划生成（唯一路径）。
-
-        Returns:
-            计划 dict，LLM 失败时返回 None。
-        """
-        from ..llm.plan_schema import (
-            DEFAULT_EXPLORATORY_FOCUS,
-            VALID_ANALYST_FOCUS,
-            LLMPlanResponse,
-        )
-        from ..llm.prompts import PLAN_GENERATION_SYSTEM, PLAN_GENERATION_USER
-
-        try:
-            if self._llm_client is None:
-                self._llm_client = create_structured_llm_client(self.config.llm)
-
-            from hagoku.channel import build_messages
-
-            intent_context = self._build_intent_context(query, parsed_intent)
-            # EXEMPT: 辅助 LLM — 分析计划生成，非主对话通道
-            messages = build_messages(
-                query=query,
-                user_input=PLAN_GENERATION_USER.format(query=intent_context),
-                system_extra=PLAN_GENERATION_SYSTEM,
-            )
-            response: LLMPlanResponse = self._llm_client.chat.completions.create(
-                model=self.config.llm.model,
-                messages=messages,
-                response_model=LLMPlanResponse,
-                temperature=self.config.llm.temperature,
-                max_tokens=self.config.llm.max_tokens,
-                timeout=30,
-            )
-
-            validated_focus = [f for f in response.analyst_focus if f in VALID_ANALYST_FOCUS]
-            if not validated_focus:
-                validated_focus = DEFAULT_EXPLORATORY_FOCUS.copy()
-
-            agents = list(response.agents)
-            if "scout" not in agents:
-                agents.insert(0, "scout")
-            if "reporter" not in agents:
-                agents.append("reporter")
-
-            plan = {
-                "plan_name": response.plan_name,
-                "agents": agents,
-                "analyst_focus": validated_focus,
-                "target": response.target,
-                "query": response.query,
-                "reasoning": response.reasoning,
-                "llm_generated": True,
-            }
-            self.event_bus.emit(EventType.PLAN_CREATED, "manager", {
-                "source": "llm",
-                "plan_name": plan["plan_name"],
-                "reasoning": plan.get("reasoning", ""),
-            })
-            return plan
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Manager LLM 计划生成失败：LLM 不可达，请检查配置。原始错误: {e}"
-            ) from e

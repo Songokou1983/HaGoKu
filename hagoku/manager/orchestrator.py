@@ -189,7 +189,7 @@ class Orchestrator(
         """保存当前分析状态到 run_dir，供 app 重启后恢复。
 
         保存内容：stage、context（可序列化部分）、DataFrames（parquet）。
-        ProjectContext 已通过 _save_path 自动增量写入 JSONL。
+        Session 已通过 _save_path 自动保存。
         返回状态文件路径，失败返回 None。
         """
         import json as _json
@@ -268,7 +268,7 @@ class Orchestrator(
             if df_clean_path.exists():
                 orch._df_clean = _pd.read_parquet(df_clean_path)
 
-            # 恢复 ProjectContext
+            # 恢复 Session
             session_file = rdir / "session.json"
             if session_file.exists():
                 from ..context.session import Session
@@ -367,7 +367,7 @@ class Orchestrator(
         from ..observability.llm_dump import set_run_dir
         set_run_dir(run_dir)
 
-        # ── ProjectContext：统一上下文记忆系统（阶段1：并行旧路径）──
+        # ── Session：统一会话记忆 ──
         from ..context.session import Session
         self._session = Session(analysis_goal=query)
         self._session._save_path = str(run_dir / "session.json")
@@ -434,7 +434,7 @@ class Orchestrator(
                 # 加载项目历史记忆，避免用户重复回答字段含义
                 memory_project = self.memory.build_memory_project(project_name) if self.memory else None
                 self._agent.memory_project = memory_project
-                # 注入 ProjectContext 到 context（必须在 run_scout_phase 之前，
+                # 注入 Session 到 context（必须在 run_scout_phase 之前，
                 # 因为 infer_field_semantics 依赖它构造 messages）
                 context["_session"] = getattr(self, '_session', None)
                 self._agent._context = {"_session": getattr(self, '_session', None)}
@@ -454,7 +454,7 @@ class Orchestrator(
                 # 对齐条件：用户纯确认  OR  所有字段 needs_user_input=False
                 # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
                 interaction_revision = 0
-                # ── 注入 ProjectContext 到 context ──
+                # ── 注入 Session 到 context ──
                 context["_session"] = getattr(self, '_session', None)
                 context["_memory_manager"] = self.memory
                 context["_project_name"] = project_name

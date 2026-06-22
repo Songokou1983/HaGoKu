@@ -7,7 +7,7 @@ from ...observability.events import EventType
 
 # ═══════════════════════════════════════════════════════════════
 # Phase C: 4 个 handler 收缩为 ~15 行 —— 只做三件事：
-#   1. 把用户原话写入 ProjectContext（Phase B 已做）
+#   1. 把用户原话写入 Session（respond()统一处理）
 #   2. 调 agent（内部走 to_messages_for_llm）
 #   3. 根据 _pending_ask_user / _*_route_to 机械执行
 # ═══════════════════════════════════════════════════════════════
@@ -162,7 +162,7 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     # （infer_field_semantics / assess 读取此字段注入 prompt）
     if ctx is not None and text:
         ctx["_pending_command_text"] = text
-    # 律 2：raw_text 先写入 ProjectContext，再调 handler——确保 LLM 看到用户原话
+    # 律 2：raw_text 先写入 Session，再调 handler——确保 LLM 看到用户原话
     session = ctx.get("_session") if ctx else None
     if session and text:
         session.add("user", text)

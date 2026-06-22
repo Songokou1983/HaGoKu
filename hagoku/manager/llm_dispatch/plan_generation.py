@@ -69,7 +69,7 @@ def _get_upstream_summary(self, agent_name: str) -> str | None:
 
     调用点期望拿到上游 Agent 摘要注入下游 prompt。
     Step 4 决定：handover 通道彻底删除后，本方法返回 None 即可。
-    下游 Agent 上下文由 ProjectContext.entries 统一管理。
+    下游 Agent 上下文由 Session.messages 统一管理。
     """
     return None
 

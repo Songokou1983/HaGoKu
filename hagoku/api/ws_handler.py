@@ -187,7 +187,7 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
-        # 对话历史（从 ProjectContext entries 回放）
+        # 对话历史（从 Session.messages 回放）
         session = getattr(orch, '_session', None)
         if session is not None and session.messages:
             conv = []

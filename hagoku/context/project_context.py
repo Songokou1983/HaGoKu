@@ -1,8 +1,7 @@
 # hagoku/context/project_context.py
-"""ProjectContext — 一次分析 run 的统一上下文记忆。
+"""[DEPRECATED] 生产代码已迁移到 Session (context/session.py)。
 
-作为 EventBus 的被动消费者（与 Scribe 平级），自动记录所有 Agent 交互。
-不做任何流程控制——只记录和查询。
+本文件仅保留供测试兼容。新代码请使用 Session。
 """
 from __future__ import annotations
 

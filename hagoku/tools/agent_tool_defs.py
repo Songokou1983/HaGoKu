@@ -161,6 +161,8 @@ def _update_one_field(args: dict, ctx: dict) -> dict:
                 sem["suggested_role"] = role
             if used is not None:
                 sem["used_in_analysis"] = bool(used)
+            elif role:
+                sem["used_in_analysis"] = role != "ignore"
             if evidence:
                 sem["evidence"] = evidence
             updated = True
@@ -223,7 +225,7 @@ def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | Non
 
 agent_tools.register(Tool(
     name="set_columns",
-    description='写入你对字段的理解。批量推荐 columns 数组一次性写入全部列。',
+    description='写入字段理解：display_name=中文名, description=含义, suggested_role=角色(target/feature/identifier/ignore), used_in_analysis=是否参与分析。批量推荐 columns 数组。',
     parameters={
         "type": "object",
         "properties": {

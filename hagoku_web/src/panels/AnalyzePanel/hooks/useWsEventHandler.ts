@@ -183,20 +183,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
           }
         }
         // 回放对话历史（app 重启后恢复）
-        if (snap.conversation && Array.isArray(snap.conversation) && snap.conversation.length > 0) {
-          // 快照是权威——重连直接替换，不做不可靠的 ID 查重
-          setMessages(snap.conversation.map((e: any) => ({
-            id: uid(),
-            role: e.type === "user_feedback" ? "user"
-                : e.type === "agent_response" ? "agent"
-                : "workflow",
-            text: e.text || "",
-            timestamp: e.timestamp || new Date().toISOString(),
-            ...(e.tool_calls && e.tool_calls.length > 0
-              ? { toolExchange: { stage: e.stage || "", tool_calls: e.tool_calls, assistant_pre_text: e.text || "" } }
-              : {}),
-          })));
-        }
+        // 快照不含对话历史——流式事件已送达全部消息
         // Agent 状态恢复
         const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
         const doneIdx = agentOrder.indexOf(snap.stage);

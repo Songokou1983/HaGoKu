@@ -187,23 +187,6 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
-        # 对话历史（从 Session.messages 构建，供前端重连恢复）
-        # 前端用替换模式：收到快照直接 setMessages，不做 ID 查重
-        session = getattr(orch, '_session', None)
-        if session is not None and session.messages:
-            conv = []
-            for m in session.messages:
-                role = m.get("role", "")
-                if role == "tool":
-                    continue
-                content = m.get("content", "") or ""
-                if role == "user" and content.startswith("【"):
-                    continue
-                entry: dict = {"role": role, "text": content}
-                conv.append(entry)
-            if conv:
-                snapshot["conversation"] = conv
-
         return snapshot
     except Exception:
         return None

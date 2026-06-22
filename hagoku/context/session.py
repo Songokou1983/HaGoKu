@@ -16,6 +16,16 @@ from typing import Any
 
 
 @dataclass
+class ToolCallRecord:
+    """单次工具调用 + 结果的记录。"""
+    tool_call_id: str
+    name: str
+    arguments: str
+    result: str
+    error: str | None = None
+
+
+@dataclass
 class Session:
     """一次分析会话。"""
 

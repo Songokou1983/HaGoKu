@@ -18,7 +18,7 @@ import pandas as pd
 from hagoku.config import LLMConfig
 from hagoku.observability.event_bus import EventBus
 from hagoku.observability.events import EventType
-from hagoku.context.project_context import ToolCallRecord
+from hagoku.context.session import ToolCallRecord
 from hagoku.agents.base import BaseAgent
 from hagoku.agents.constants import (
     SCOUT_INFER_MAX_TOKENS,

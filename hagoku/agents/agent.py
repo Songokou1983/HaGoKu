@@ -160,9 +160,6 @@ class DataAnalystAgent(BaseAgent):
             self._learn_from_results(context, project_id)
             self._update_own_memory(context, project_id)
 
-            self._emit(EventType.AGENT_COMPLETED, {
-                "result_summary": f"理解 {len(context.get('_column_info', context['column_semantics']))} 个字段"
-            })
             self._context = context
             return context
 

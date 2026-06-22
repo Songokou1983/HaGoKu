@@ -286,6 +286,17 @@ class WSBridge:
         if loop is None or not loop.is_running():
             return
         payload = _event_to_message(event)
+        import logging
+        logger = logging.getLogger("hagoku.ws.send")
+        d = event.data or {}
+        summary = {}
+        if d.get("field_review"):
+            fr = d["field_review"]
+            summary["field_review"] = f"{fr.get('n_cols','?')}cols"
+        if d.get("message"):
+            summary["message"] = str(d["message"])[:80]
+        logger.info("%s → %d clients %s", event.event_type.value, len(self._clients),
+            str(summary) if summary else "")
         asyncio.run_coroutine_threadsafe(self.broadcast(payload), loop)
 
 

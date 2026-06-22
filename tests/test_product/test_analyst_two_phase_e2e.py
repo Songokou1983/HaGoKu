@@ -77,26 +77,16 @@ class TestAnalystTwoPhaseE2E:
             text="首波完成", submit_first_pass=True,
         ))
 
-        # Mock _rewrite_as_written_summary
-        rewrite_output = "[发现] ROI 渠道差异\n[统计依据] p=0.03\n[局限或解读] 样本量 n=4"
-        with patch(
-            "hagoku.manager.llm_dispatch.reply_handlers._rewrite_as_written_summary",
-            return_value=rewrite_output,
-        ):
-            emits = []
-            with patch.object(orch.event_bus, "emit", wraps=lambda et, ag, data=None: emits.append((et, ag, data))):
-                result = orch._handle_analyst_reply("确认", orch._context)
+        emits = []
+        with patch.object(orch.event_bus, "emit", wraps=lambda et, ag, data=None: emits.append((et, ag, data))):
+            result = orch._handle_analyst_reply("确认", orch._context)
 
         # 断言：首波完成后 _analyst_first_pass_done = True
         assert orch._analyst_first_pass_done, "首波应设置 _analyst_first_pass_done"
 
-        # 断言：USER_INPUT_REQUESTED emit 含三要素
+        # 断言：USER_INPUT_REQUESTED emit 已发送
         user_events = [e for e in emits if e[0] == EventType.USER_INPUT_REQUESTED]
         assert len(user_events) >= 1
-        msg = user_events[0][2].get("message", "")
-        assert "[发现]" in msg
-        assert "[统计依据]" in msg
-        assert "[局限或解读]" in msg
 
         # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入，handler 不重复写。
         # 直接调 handler 时 ProjectContext 应无 user_feedback 条目。
@@ -131,11 +121,7 @@ class TestAnalystTwoPhaseE2E:
         orch._agent.run_step = MagicMock(return_value=self._make_step_result(
             text="分析完成", submit_first_pass=True,
         ))
-        with patch(
-            "hagoku.manager.llm_dispatch.reply_handlers._rewrite_as_written_summary",
-            return_value="[发现] ok\n[统计依据] ok\n[局限或解读] ok",
-        ):
-            orch._handle_analyst_reply("", orch._context)
+        orch._handle_analyst_reply("", orch._context)
 
         # 阶段 2 — route_to(reporter)
         orch._agent.run_step = MagicMock(return_value=self._make_step_result(

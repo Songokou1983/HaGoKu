@@ -37,7 +37,7 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     _resolve_scout_column_token_with_context,
     _scout_description_is_meaningful_for_user,
     _try_parse_json,
-    scout_user_input_received_payload,
+    scout_user_input_received_state,
     derive_display_names,
     derive_descriptions,
     sync_legacy_dicts,

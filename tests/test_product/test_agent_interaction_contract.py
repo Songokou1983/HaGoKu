@@ -45,7 +45,7 @@ def test_scout_user_input_received_payload_has_machine_fields():
 
     pure_confirm 字段已移除——确认判断由 LLM 通道完成，不在此载荷中。
     """
-    from hagoku.manager.orchestrator import scout_user_input_received_payload
+    from hagoku.manager.orchestrator import scout_user_input_received_state
 
     ctx = {
         "column_semantics": [
@@ -53,11 +53,11 @@ def test_scout_user_input_received_payload_has_machine_fields():
             {"column_name": "b", "needs_user_input": False},
         ],
     }
-    p = scout_user_input_received_payload(ctx, "a=foo", ["a←foo"], 2)
+    p = scout_user_input_received_state(ctx, "a=foo", ["a←foo"], 2)
     assert p["parse_applied_count"] == 1
     assert p["parse_failed"] is False
     assert p["columns_still_needing_input"] == []
-    p2 = scout_user_input_received_payload(ctx, "确认", [], 3)
+    p2 = scout_user_input_received_state(ctx, "确认", [], 3)
     assert p2["parse_applied_count"] == 0
     assert p2["parse_failed"] is True  # 有输入但无应用更新
 

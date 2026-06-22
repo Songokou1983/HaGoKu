@@ -77,65 +77,9 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
 
 
 def _run_analyst_first_pass(self, context: dict) -> None:
-    """阶段 1：自动跑首波分析。"""
-    import json as _json
-
-    result = self._agent.run_step(context, self._df_clean)
-    findings = result.get("findings")
-    if not findings:
-        project_ctx = context.get("_project_context")
-        if project_ctx:
-            for entry in reversed(project_ctx.entries):
-                if entry.type == "tool_exchange" and entry.stage == "analyst":
-                    for tc in (entry.tool_calls or []):
-                        if tc.name == "submit_findings":
-                            try:
-                                findings = _json.loads(tc.result) if tc.result else {}
-                            except (_json.JSONDecodeError, TypeError):
-                                findings = {}
-                            break
-                    break
-
-    summary = _rewrite_as_written_summary(self, findings) if findings else result.get("text", "")
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {
-        "message": summary,
-        "analyst_first_pass_summary": summary,
-    })
-
-
-def _rewrite_as_written_summary(self, findings: dict) -> str:
-    """调 LLM 把原始统计 findings 重写为 3-5 段书面概括化发现。"""
-    import json as _json
-    from ...llm.client import create_raw_client
-    from ...observability.llm_dump import dump_messages
-    from hagoku.channel import build_messages
-
-    system = (
-        "你是数据分析师，把以下统计结果重写为 3-5 段书面发现。\n"
-        "每段必须含 [发现] / [统计依据] / [局限或解读] 三要素标记。\n"
-        "不许编造未在输入中出现的统计数字。\n"
-        "不许给「建议进入报告阶段」等诱导用户终止的句式。\n"
-        "用中文输出。"
-    )
-    user_content = _json.dumps(findings, ensure_ascii=False, default=str)
-    # EXEMPT: 辅助 LLM — 统计 findings → 书面摘要转换，无状态数据变换，非对话延续
-    messages = build_messages(query=user_content, user_input=user_content, system_extra=system)
-    dump_messages("analyst_rewrite_summary", messages, model=self.config.llm.model)
-
-    client = create_raw_client(self.config.llm)
-    resp = client.chat.completions.create(
-        model=self.config.llm.model,
-        messages=messages,
-        temperature=0.3,
-        max_tokens=2048,
-    )
-    result = (resp.choices[0].message.content or "").strip()
-    dump_messages(
-        "analyst_rewrite_summary_response",
-        messages + [{"role": "assistant", "content": result}],
-        model=self.config.llm.model,
-    )
-    return result
+    """阶段 1：自动跑首波分析。LLM 流式输出直接到前端。"""
+    self._agent.run_step(context, self._df_clean)
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {"message": ""})
 
 
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
@@ -260,7 +204,6 @@ class ReplyHandlersMixin:
     _handle_scout_reply = _handle_scout_reply
     _handle_cleaner_reply = _handle_cleaner_reply
     _run_analyst_first_pass = _run_analyst_first_pass
-    _rewrite_as_written_summary = _rewrite_as_written_summary
     _handle_analyst_reply = _handle_analyst_reply
     _handle_reporter_reply = _handle_reporter_reply
     respond = respond

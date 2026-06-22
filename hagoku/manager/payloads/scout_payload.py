@@ -228,7 +228,7 @@ def _try_parse_json(text: str) -> Any:
 # ── LLM 工具定义：字段理解（function calling）──────────────────
 # LLM 通过调用这些工具来主动更新字段表格，而非被动输出 JSON。
 
-def scout_user_input_received_payload(
+def scout_user_input_received_state(
     context: dict[str, Any],
     user_reply: str,
     applied_scout: list[str],

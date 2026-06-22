@@ -36,17 +36,20 @@ grep -q 'AGENT_COMPLETED.*add_agent_response' "$ROOT/hagoku/context/project_cont
 
 echo "=== 8. 代码不替 LLM 出内容 ==="
 # 通道原则：用户看到的一切只能是 LLM 输出。代码禁止：
-#   - 构造 field_review / cleaning_review / cleaning_assessment / analyst_review 等展示数据
+#   - 构造任何带展示语义键的 dict（field_review / cleaning_review / analysis_fields_summary 等）
 #   - 从 _column_info / _column_profiles 等非 LLM 来源生成 rows
+#   - 定义名为 *_payload 的函数（这是内容生成函数的命名模式）
 #   - import 已删除的内容生成函数
 
-# 检查 1: 全仓扫描——禁止代码构造 field_review/cleaning_review/cleaning_assessment payload
+# 检查 1: 全仓扫描——禁止代码构造展示类 payload（扩大的禁止键集合）
 python3 -c "
 import ast, sys, os, glob
 failed = False
-forbidden_keys = {'field_review', 'cleaning_review', 'cleaning_assessment', 'analyst_review'}
+forbidden_keys = {
+    'field_review', 'cleaning_review', 'cleaning_assessment', 'analyst_review',
+    'analysis_fields_summary', 'analyst_first_pass_summary',
+}
 for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
-    # 跳过测试和文档
     if '/tests/' in pyfile or '/docs/' in pyfile:
         continue
     try:
@@ -68,7 +71,7 @@ if failed:
 print('✅ 无代码生成展示payload')
 " || { echo "  ❌"; exit 1; }
 
-# 检查 2: 全仓扫描——禁止代码构造 field_name/chinese_name/meaning 等 rows
+# 检查 2: 全仓扫描——禁止代码构造 field_name/chinese_name/meaning 等前端 rows
 python3 -c "
 import ast, sys, os, glob
 failed = False
@@ -95,11 +98,32 @@ if failed:
 print('✅ 无代码生成rows')
 " || { echo "  ❌"; exit 1; }
 
-# 检查 3: 禁止 import 已删除的内容生成函数
+# 检查 3: 禁止定义 *_payload 函数（内容生成函数的命名模式）
 python3 -c "
 import sys, os, glob
 failed = False
-forbidden_imports = ['scout_field_review_pause_payload']
+for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
+    if '/tests/' in pyfile:
+        continue
+    try:
+        with open(pyfile) as f:
+            for i, line in enumerate(f, 1):
+                if line.strip().startswith('def ') and '_payload(' in line:
+                    fname = line.strip().split('(')[0].replace('def ', '')
+                    print(f'{pyfile}:{i} 定义内容生成函数 {fname}')
+                    failed = True
+    except UnicodeDecodeError:
+        continue
+if failed:
+    sys.exit(1)
+print('✅ 无 *_payload 内容生成函数')
+" || { echo "  ❌"; exit 1; }
+
+# 检查 4: 禁止 import 已删除的内容生成函数
+python3 -c "
+import sys, os, glob
+failed = False
+forbidden_imports = ['scout_field_review_pause_payload', 'cleaning_review_pause_payload']
 for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
     if '/tests/' in pyfile:
         continue
@@ -109,13 +133,11 @@ for pyfile in glob.glob(f'$ROOT/hagoku/**/*.py', recursive=True):
     except UnicodeDecodeError:
         continue
     for fi in forbidden_imports:
-        if fi in content and 'import' in content.split(fi)[0].split('\n')[-1]:
-            # 检查是否在注释中
+        if fi in content:
             lines = content.split('\n')
             for i, line in enumerate(lines):
                 if fi in line and not line.strip().startswith('#'):
-                    import_keywords = ['import', 'from']
-                    if any(kw in line for kw in import_keywords):
+                    if 'import' in line or 'from' in line:
                         print(f'{pyfile}:{i+1} import了已删除的 {fi}')
                         failed = True
 if failed:

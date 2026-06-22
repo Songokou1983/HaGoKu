@@ -21,8 +21,15 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
         if ask:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
             return ("stay", None)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
-        return {"status": "scout_review", "message": ""}
+        # 首次展示：取 LLM 在 infer 阶段输出的文本作为 message
+        cols = context.get("column_semantics") or []
+        msg_text = ""
+        for s in cols:
+            if isinstance(s, dict) and "_scout_text" in s:
+                msg_text = s["_scout_text"]
+                break
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": msg_text})
+        return {"status": "scout_review", "message": msg_text}
 
     # 用户有输入 → LLM 自己看、自己决定
     result = self._agent.run_step(context, self._df_raw, "")

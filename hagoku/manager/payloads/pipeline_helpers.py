@@ -250,42 +250,6 @@ def _handle_command_if_present(
 
 
 
-def _init_pipeline_tasks(self) -> str:
-    """初始化分析 pipeline：创建 Scout → Cleaner → Analyst → Reporter 任务链。
-
-    Step 4 从 Scribe.init_pipeline 内联而来。Scout 直接设为 ready（第一个运行），
-    其余为 triage（等父任务完成自动 promote）。
-    返回 Scout 任务 ID。
-    """
-    scout_id = self.kanban.create_task(
-        agent="scout",
-        title="Scout: 理解数据字段",
-        description="加载数据，推断字段语义",
-    )
-    self.kanban.update_status(scout_id, "ready")
-
-    cleaner_id = self.kanban.create_task(
-        agent="cleaner",
-        title="Cleaner: 清洗数据",
-        description="检测异常并清洗数据",
-        parent_id=scout_id,
-    )
-
-    analyst_id = self.kanban.create_task(
-        agent="analyst",
-        title="Analyst: 跑统计分析",
-        description="执行统计分析",
-        parent_id=cleaner_id,
-    )
-
-    self.kanban.create_task(
-        agent="reporter",
-        title="Reporter: 生成报告",
-        description="生成分析报告",
-        parent_id=analyst_id,
-    )
-
-    return scout_id
 
 def _attach_pause_dialogue_message(
     self,
@@ -307,5 +271,4 @@ class PipelineHelpersMixin:
     _handle_mandatory_violations = _handle_mandatory_violations
     _finish_run_cancelled = _finish_run_cancelled
     _handle_command_if_present = _handle_command_if_present
-    _init_pipeline_tasks = _init_pipeline_tasks
     _attach_pause_dialogue_message = _attach_pause_dialogue_message

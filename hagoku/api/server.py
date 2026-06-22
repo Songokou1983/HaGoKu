@@ -397,11 +397,6 @@ async def clear_project_history(project_name: str):
         runs_dir = proj_dir / "runs"
         if runs_dir.exists():
             shutil.rmtree(runs_dir)
-        kanban_db = proj_dir / "kanban.db"
-        if kanban_db.exists():
-            kanban_db.unlink()
-        from hagoku.storage.kanban import KanbanDB
-        KanbanDB.clear_instance(proj_dir)
         for f in ("progress.yaml", "process_log.md", "handover_notes.md", "context.md"):
             fp = proj_dir / f
             if fp.exists():
@@ -642,55 +637,6 @@ async def list_project_files(project_name: str):
     return {"files": files}
 
 
-# ── GET /api/projects/{project_name}/kanban/tasks — Scribe 看板任务（Web 流程引导）─
-@app.get("/api/projects/{project_name}/kanban/tasks")
-async def list_project_kanban_tasks(project_name: str):
-    """
-    返回当前项目 kanban.db 中的任务。
-    每次分析 run 会 init_pipeline 再挂一组 Scout→Reporter 任务；只取**时间上新的一组**（至多 4 条）避免列表无限变长。
-    """
-    proj_dir = _projects_root() / project_name
-    if not proj_dir.is_dir():
-        raise HTTPException(404, "Project not found")
-    db_path = proj_dir / "kanban.db"
-    if not db_path.exists():
-        return {"tasks": []}
-
-    from hagoku.storage.kanban import KanbanDB
-
-    kb = KanbanDB.get_instance(proj_dir)
-    rows = kb.list_tasks()
-    if not rows:
-        return {"tasks": []}
-    rows.sort(key=lambda t: str(t.get("created_at") or ""), reverse=True)
-    latest = rows[:4]
-    latest.sort(key=lambda t: str(t.get("created_at") or ""))
-    tasks = [
-        {
-            "id": r["id"],
-            "agent": r["agent"],
-            "title": r["title"],
-            "description": (r.get("description") or ""),
-            "status": r["status"],
-            "priority": r.get("priority", 0),
-            "created_at": r.get("created_at"),
-            "updated_at": r.get("updated_at"),
-            "completed_at": r.get("completed_at"),
-            "result": r.get("result"),
-            "comments": [
-                {
-                    "id": c["id"],
-                    "task_id": c["task_id"],
-                    "author": c["author"],
-                    "body": c["body"],
-                    "created_at": c["created_at"],
-                }
-                for c in kb.get_comments(r["id"])
-            ],
-        }
-        for r in latest
-    ]
-    return {"tasks": tasks}
 
 
 # ── POST /api/projects/{project_name}/upload — 上传数据文件 ───

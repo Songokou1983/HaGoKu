@@ -37,7 +37,7 @@ HaGoKu Studio 由三个要素构成。代码只负责壳子（运行环境）、
 | 要素 | 含义 | 代码做什么 |
 |------|------|-----------|
 | **壳子** | Web UI + CLI + 事件系统 + 存储 | 给用户操作界面，给 Agent 运行环境 |
-| **架构** | Agent 分工 + 协作顺序 + 护栏 + 看板 | 谁在什么时候做什么，产出如何传递 |
+| **架构** | Agent 分工 + 协作顺序 + 护栏 | 谁在什么时候做什么，产出如何传递 |
 | **通道** | 信息通道（上下文 ↔ LLM）+ 控制通道（LLM 流程决策） | 信息完整到达 LLM 且不被截断丢弃；LLM 的产出/决策机械执行；失败轮次原样保留 |
 
 **通道有两类，缺一不可**：
@@ -81,7 +81,6 @@ HaGoKu Studio 由三个要素构成。代码只负责壳子（运行环境）、
 - 可视化渲染（Plotly）
 - 数据 I/O（Pandas/DuckDB）
 - 护栏校验（p 值/效应量/置信区间存在性检查）
-- 看板状态机（确定性状态转换）
 
 **区分线**：LLM 管"做什么"，代码管"怎么做"。
 
@@ -414,13 +413,13 @@ Session 持有 messages 数组；`to_llm_messages()` 统一 LLM 调用入口。
 
 ---
 
-## 看板（UI 显示对象）
+## 阶段进度（PipelineBar）
 
-`kanban.db` 在 Phase C 后降级为 UI 进度显示对象，不再参与流程控制。阶段切换由 LLM 通过 `route_to` 工具自主决定。
+阶段由 LLM 通过 `route_to` 工具自主更新。前端 PipelineBar 读取 `_stage` 显示当前阶段。
+不依赖 KanbanDB（2026-06-22 已删除——4 agent 时代产物，1 agent 后无意义）。
 
 ```
 ~/.hagoku/projects/{project}/
-├── kanban.db       ← SQLite（UI 进度条数据源）
 ├── context.md      ← 项目上下文
 ├── data/           ← 数据制品 (Parquet)
 ├── runs/           ← 分析运行记录
@@ -538,7 +537,7 @@ LLM 收到了用户输入但未产生任何有效工具调用（tool_calls 为�
 ├── config.yaml
 ├── hagoku.db                     # SQLite 元数据库
 └── projects/{name}/
-    ├── progress.yaml / context.md / kanban.db
+    ├── progress.yaml / context.md
     ├── data/                     # raw/cleaned .parquet
     ├── runs/{run_id}/
     │   ├── run_meta.json / plan.json / events.jsonl
@@ -557,7 +556,7 @@ HaGoKu Studio 全程透明，用户坐副驾驶位：
 🧹 评估清洗 ── ✅ 完成 (8s)
 📊 跑统计   ── 🔄 执行中...
 📝 写报告   ── ⏳ 等待中
-> Orchestrator（📋 看板驱动 + 阶段消息生成）在后台运行，不显示终端进度。
+> Orchestrator 在后台运行，不显示终端进度。
 ```
 
 ---
@@ -630,7 +629,7 @@ hagoku/
 | **PROJECT.md**（本文件） | 项目灵魂、架构原则、通道完备性十律、唯一真相源 | 所有人 |
 | `README.md` | 用户手册（安装、命令、快速开始） | 用户 |
 | `DEV.md` | 开发快速上手 | 新贡献者 |
-| `docs/DEVELOPMENT.md` | 设计手册（看板/向量/防护/审查） | 开发者 |
+| `docs/DEVELOPMENT.md` | 设计手册（向量/防护/审查） | 开发者 |
 | `docs/EXTERNAL_REFERENCES.md` | 外部项目思想参考 | 开发者 |
 | `docs/TROUBLESHOOTING.md` | 常见问题排查 | 开发者 |
 | `docs/AGENT_INTERACTION_CONTRACT.md` | Agent 交互可执行契约 | 开发者 |

@@ -19,7 +19,6 @@ from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
 from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
-from ..storage.kanban import KanbanDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
 from ..storage.project_manager import ProjectManager
@@ -82,7 +81,6 @@ from .payloads.pipeline_helpers import (  # noqa: F401
     _finish_run_cancelled,
     _handle_command_if_present,
     _handle_mandatory_violations,
-    _init_pipeline_tasks,
 )
 
 class Orchestrator(
@@ -348,11 +346,6 @@ class Orchestrator(
         # ── 持久 context 引用（必修 3）：Scribe 初始化前声明 ──
         context: dict[str, Any] = {}
 
-        # 初始化 kanban 状态机（Step 4：从 Scribe 迁移到 Orchestrator 内部）
-        self.kanban = KanbanDB.get_instance(self.output_mgr.project_dir)
-        self.event_bus.subscribe(self._on_event)
-        self._init_pipeline_tasks()
-
         # 处理 --progress 参数
         if progress_path:
             n = self.memory.import_progress_yaml(project_name, Path(progress_path))
@@ -565,102 +558,3 @@ class Orchestrator(
             raise RuntimeError(
                 f"Manager LLM 计划生成失败：LLM 不可达，请检查配置。原始错误: {e}"
             ) from e
-
-    def _on_event(self, event) -> None:
-        """统一事件处理器，Step 4 仅处理 3 个影响 kanban 状态的事件。"""
-        etype = event.event_type
-        if etype == EventType.AGENT_STARTED:
-            self._on_agent_started(event)
-        elif etype == EventType.AGENT_COMPLETED:
-            self._on_agent_completed(event)
-        elif etype == EventType.AGENT_FAILED:
-            self._on_agent_failed(event)
-
-    def _on_agent_started(self, event) -> None:
-        agent = event.agent
-        goal = event.data.get("goal", "")
-        # 优先复用 _init_pipeline_tasks 创建的任务（状态为 ready）
-        ready_task = self.kanban.get_ready_task(agent.lower())
-        if ready_task:
-            ok = self.kanban.claim_task(ready_task["id"], f"{agent.lower()}_agent")
-            if not ok:
-                pass  # claim failed, task already taken
-        else:
-            task = self.kanban.get_active_task(agent.lower())
-            if not task:
-                task_id = self.kanban.create_task(
-                    agent=agent.lower(),
-                    title=f"{agent}: {goal}",
-                    description=f"Started at {datetime.now().strftime('%H:%M:%S')}",
-                )
-                self.kanban.update_status(task_id, "todo")
-                self.kanban.update_status(task_id, "ready")
-
-    def _on_agent_completed(self, event) -> None:
-        agent = event.agent
-        result = event.data.get("result_summary", "")
-        lock_holder = f"{agent.lower()}_agent"
-        self.kanban.complete_agent_task_atomic(
-            agent=agent.lower(),
-            lock_holder=lock_holder,
-            result=result,
-        )
-        # 自动 promote 下游任务
-        self._auto_promote_next(agent)
-
-    def _on_agent_failed(self, event) -> None:
-        agent = event.agent
-        error = event.data.get("error", "")
-        task = self.kanban.get_active_task(agent.lower())
-        if task and task["status"] == "running":
-            self.kanban.update_status(task["id"], "blocked")
-            self.kanban.add_comment(task["id"], "system", f"Failed: {error}")
-
-    def _auto_promote_next(self, agent: str) -> None:
-        """上游 Agent 完成后，自动 promote 下游任务为 ready。
-
-        Scout done → Cleaner ready
-        Cleaner done → Analyst ready
-        Analyst done → Reporter ready
-        Reporter done → Pipeline 完成（所有任务 done）
-        """
-        pipeline = ["scout", "cleaner", "analyst", "reporter"]
-        try:
-            idx = pipeline.index(agent.lower())
-        except ValueError:
-            return
-
-        downstream = pipeline[idx + 1] if idx + 1 < len(pipeline) else None
-        if downstream is None:
-            # Reporter 完成 → 所有任务完成
-            for ag in pipeline:
-                task = self.kanban.get_any_task(ag)
-                if task and task["status"] != "done":
-                    self.kanban.update_status(task["id"], "done")
-            return
-
-        # Promote 下游任务
-        task = self.kanban.get_any_task(downstream)
-        if task and task["status"] in ("todo", "triage"):
-            self.kanban.update_status(task["id"], "ready")
-
-    def block_task(self, agent_name: str, reason: str) -> bool:
-        """Block 指定 Agent 的任务（等用户输入）。
-
-        Step 4 起：4 agent 直接调本方法（不再经 Scribe）。
-        """
-        if not hasattr(self, "kanban") or self.kanban is None:
-            return False
-        task = self.kanban.get_active_task(agent_name.lower())
-        if not task:
-            return False
-        return self.kanban.block_task(task["id"], reason)
-
-    def unblock_task(self, agent_name: str) -> bool:
-        """Unblock 指定 Agent 的任务。Step 1 内联：直接走 kanban。"""
-        if not hasattr(self, "kanban") or self.kanban is None:
-            return False
-        task = self.kanban.get_active_task(agent_name.lower())
-        if not task:
-            return False
-        return self.kanban.unblock_task(task["id"])

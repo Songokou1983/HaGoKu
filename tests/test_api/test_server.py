@@ -90,50 +90,6 @@ class TestProjectRunsGuardrailsContract:
         assert d["last_guardrails_blocked"] is True
 
 
-class TestKanbanTasksEndpoint:
-    """GET /api/projects/{name}/kanban/tasks — Scribe 看板只读"""
-
-    def test_kanban_tasks_empty_when_no_db(self, tmp_path, monkeypatch):
-        proj = tmp_path / "projects" / "nop"
-        proj.mkdir(parents=True)
-        monkeypatch.setattr("hagoku.api.server._projects_root", lambda: tmp_path / "projects")
-        from fastapi.testclient import TestClient
-
-        client = TestClient(app)
-        r = client.get("/api/projects/nop/kanban/tasks")
-        assert r.status_code == 200
-        assert r.json()["tasks"] == []
-
-    def test_kanban_tasks_returns_rows_ordered(self, tmp_path, monkeypatch):
-        from hagoku.storage.kanban import KanbanDB
-
-        proj = tmp_path / "projects" / "k1"
-        proj.mkdir(parents=True)
-        monkeypatch.setattr("hagoku.api.server._projects_root", lambda: tmp_path / "projects")
-        kb = KanbanDB.get_instance(proj)
-        kb.create_task("scout", "Scout: A", "d1")
-        kb.create_task("cleaner", "Cleaner: B", "d2")
-
-        from fastapi.testclient import TestClient
-
-        client = TestClient(app)
-        r = client.get("/api/projects/k1/kanban/tasks")
-        assert r.status_code == 200
-        tasks = r.json()["tasks"]
-        assert len(tasks) == 2
-        assert tasks[0]["agent"] == "scout"
-        assert tasks[0]["description"] == "d1"
-        assert tasks[1]["title"] == "Cleaner: B"
-
-    def test_kanban_tasks_404_missing_project(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("hagoku.api.server._projects_root", lambda: tmp_path / "projects")
-        (tmp_path / "projects").mkdir(parents=True)
-        from fastapi.testclient import TestClient
-
-        client = TestClient(app)
-        r = client.get("/api/projects/ghost/kanban/tasks")
-        assert r.status_code == 404
-
 
 class TestConfigEndpoints:
     """GET /api/config、POST /api/config/llm"""

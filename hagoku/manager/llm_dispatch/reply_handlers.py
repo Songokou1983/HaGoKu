@@ -109,6 +109,16 @@ def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
         if target and target in {"scout", "analyst", "reporter"}:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
+    # Phase C: LLM 重新提交了评估 → 更新 assessment 并重新展示
+    if result.get("submit_assessment"):
+        new_assessment = result.get("assessment") or {}
+        context["_cleaner_assessment"] = new_assessment
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
+            "cleaning_assessment": new_assessment,
+        })
+        return {"status": "cleaner_review", "message": result.get("text", ""),
+                "cleaning_assessment": new_assessment}
+
     return {"status": "cleaner_review", "message": result.get("text", ""),
             "cleaning_assessment": assessment}
 

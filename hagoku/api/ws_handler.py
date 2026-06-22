@@ -187,8 +187,8 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         if stage == "analyst" and ctx:
             snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
-        # 对话历史（从 Session.messages 回放，只传用户可见内容）
-        # 规则：跳过 tool 结果、代码注入（以「【」开头）的 user 消息
+        # 对话历史（从 Session.messages 构建，供前端重连恢复）
+        # 前端用替换模式：收到快照直接 setMessages，不做 ID 查重
         session = getattr(orch, '_session', None)
         if session is not None and session.messages:
             conv = []
@@ -197,10 +197,8 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
                 if role == "tool":
                     continue
                 content = m.get("content", "") or ""
-                # 跳过代码注入的内部上下文（assess() 等方法构造的 LLM 引导消息）
                 if role == "user" and content.startswith("【"):
                     continue
-                # assistant：只传文本，不传 tool_calls 细节（避免前端误渲染）
                 entry: dict = {"role": role, "text": content}
                 conv.append(entry)
             if conv:

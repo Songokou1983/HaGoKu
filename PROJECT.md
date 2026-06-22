@@ -294,7 +294,7 @@ HaGoKu 的 prompt.md 当前 ~3KB / 74 行。长度本身不是目标——但如
 
 ## 配置中性（原「通道完备性十律」，已由架构自动满足）
 
-> **Phase D 后**：单 agent + 单 chat（ProjectContext）+ `to_messages_for_llm()` 统一入口已物理保证原律 1-6/8-10 自动满足。仅保留配置中性（铁律 9）作为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
+> **Phase D 后**：单 agent + 单 Session（`context/session.py`）+ `to_llm_messages()` 统一入口已物理保证原律 1-6/8-10 自动满足。仅保留配置中性（铁律 9）作为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
 
 > 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过 `hagoku-ui` 设置功能选择的，不是项目真理。
 
@@ -355,7 +355,7 @@ grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留�
 
 **唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 关注点工作（理解字段/评估清洗/跑统计/写报告），通过 `route_to` 自主切换。统一 prompt（`hagoku/agents/prompt.md`，74 行）。27 工具全集可见。
 
-ProjectContext 持有唯一 chat；`to_messages_for_llm()` 统一 LLM 调用入口。
+Session 持有 messages 数组；`to_llm_messages()` 统一 LLM 调用入口。
 
 ### 分析计划生成
 
@@ -572,7 +572,7 @@ hagoku/
 ├── memory/           # 三层记忆（学术方法 / 成长经验 / 项目记忆）
 ├── tools/            # 分析工具集（插件架构）
 ├── guardrails/       # 统计护栏 + 输出解析
-├── storage/          # 持久化（kanban/project/artifact/database）
+├── context/          # 会话管理（Session：messages 数组） + 消息通道（build_messages）
 ├── observability/    # 事件总线 + 终端显示
 ├── api/              # FastAPI + WebSocket
 └── devtools/         # 交互场景模拟
@@ -691,7 +691,7 @@ bash desktop/start.sh    # 直接启动
 LLM 到用户之间曾被 5 层代码包装：
 `_scout_text` → `context` → `scout_field_review_pause_payload` → `USER_INPUT_REQUESTED` → `workflow message`
 
-每一层都可能变格式、丢信息、或被重复转发。已删除 3 层，现在 LLM 文本通过流式直达前端。
+每一层都可能变格式、丢信息、或被重复转发。已全部删除——2026-06-22 彻底移除 `scout_field_review_pause_payload` 及所有代码生成函数，LLM 文本通过流式直达前端。
 
 ### ×2 重复的四个来源
 

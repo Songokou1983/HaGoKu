@@ -65,3 +65,25 @@
 - 2026-06-18：守门第 8 项只检测 `_column_profiles` 使用
 - 2026-06-22：150 行的 `scout_field_review_pause_payload` + 70 行的 `cleaning_review_pause_payload` 完全漏网，守门点了 15 天绿灯
 - 2026-06-22：守门扩展到 5 层 AST 扫描
+
+---
+
+## 反模式 5：用户消息在前端显示两次（×2）
+
+**触发**：用户输入一条消息，前端会话里显示两条相同的用户气泡。
+
+**已知来源**：
+1. **`add_user_feedback` 时序错误**（已修复）：`respond()` 先调 handler（触发 LLM）后写 ProjectContext，LLM 看不到用户回复。修复后又出现新变体。
+2. **`_pending_command_text` 注入**：`respond()` 写 `_pending_command_text`，`infer_field_semantics` 把它拼进 user message → 对话历史里 user_feedback 有一条，初始 user message 里又包含一次 → LLM 看到两条。
+3. **React StrictMode**：开发环境下组件双渲染，`useEffect` 中的 `setMessages` 可能被调两次。
+4. **`state_snapshot` 回放**：WebSocket 重连时 `_build_state_snapshot` 把 ProjectContext 的 user_feedback 条目映射为 `role: "user"` 消息回放，与已有的前端消息叠加。
+
+**排查方法**：
+1. 先读 dump 确认 LLM messages 里用户消息是否出现两次（后端问题） vs 只出现一次（前端问题）
+2. 如果是后端：检查 `_pending_command_text` 是否和 `add_user_feedback` 造成了双重写入
+3. 如果是前端：检查 React DevTools 看消息数组是否有重复条目
+
+**历史**：
+- 2026-06-12：架构讨论中记录了 ×2 的四个来源（`add_user_feedback` 双加、`USER_INPUT_REQUESTED` + ACK 双通道、`ToolExchangeTurn` pre_text 重复、React StrictMode）
+- 2026-06-21：`respond()` 外层写 + handler 内部写 → ×2，修复为写入单点化
+- 2026-06-22：用户反馈 ×2 再次出现，dump 显示 LLM messages 中只出现一次（前端问题），原因待定

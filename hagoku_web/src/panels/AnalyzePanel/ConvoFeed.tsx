@@ -54,6 +54,13 @@ export function ConvoFeed({
           return (
             <div key={m.id} className="flex justify-start w-full">
               <div className="w-full max-w-full">
+                {m.text ? (
+                  <div className="px-3 py-2 rounded-lg bg-app-bg-secondary border border-app-border text-app-text rounded-bl-sm text-ui-sm leading-relaxed mb-2">
+                    <div className="kb-detail-html">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizeHtml(m.text)}</ReactMarkdown>
+                    </div>
+                  </div>
+                ) : null}
                 <FieldReviewTable data={m.fieldReview} />
               </div>
             </div>

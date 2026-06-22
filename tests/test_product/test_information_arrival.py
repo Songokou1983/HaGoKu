@@ -542,3 +542,53 @@ def test_project_context_history_includes_full_stage_dialog():
     assert msgs[1]["role"] == "assistant"
     assert msgs[2]["role"] == "user" and "第二轮纠正" in msgs[2]["content"]
     assert msgs[3]["role"] == "assistant"
+
+
+def test_stream_全轮流式_后续轮也发AGENT_STREAM_DELTA():
+    """验证：run_step 工具循环中后续轮也走流式，不只第1轮。"""
+    from unittest.mock import MagicMock, patch
+    from hagoku.agents.agent import DataAnalystAgent
+    from hagoku.config import LLMConfig
+    from hagoku.observability.event_bus import EventBus
+    from hagoku.context.session import Session
+    from hagoku.observability.events import EventType
+
+    bus = EventBus()
+    emitted = []
+    bus.subscribe(lambda e: emitted.append(e.event_type))
+
+    agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    agent.event_bus = bus
+    agent.prompt = "test"
+    agent.llm_config = LLMConfig()
+
+    session = Session(analysis_goal="test")
+    ctx = {"_session": session, "_current_stage": "scout", "column_semantics": []}
+
+    # Mock streaming client — R1 returns tool_calls, R2 returns text
+    call_count = 0
+
+    def fake_stream(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Round 1: tool call
+            yield {"type": "delta", "content": "让我查一下"}
+            yield {"type": "end", "content": "让我查一下", "tool_calls": [{
+                "id": "c1", "function": {"name": "get_sample_rows", "arguments": '{"column":"BU"}'}
+            }]}
+        else:
+            # Round 2: final text
+            yield {"type": "delta", "content": "最终结果"}
+            yield {"type": "end", "content": "最终结果", "tool_calls": []}
+
+    with patch("hagoku.llm.client.stream_chat_completion", side_effect=fake_stream):
+        # Mock tool dispatch
+        with patch("hagoku.tools.registry.AgentTools.dispatch", return_value="ok"):
+            result = agent.run_step(ctx, None, "分析")
+
+    # 验证：两轮都应发出流式事件
+    delta_events = [e for e in emitted if e == EventType.AGENT_STREAM_DELTA]
+    end_events = [e for e in emitted if e == EventType.AGENT_STREAM_END]
+    assert len(delta_events) >= 2, f"至少2轮delta，实际{len(delta_events)}"
+    assert len(end_events) >= 2, f"至少2轮end，实际{len(end_events)}"

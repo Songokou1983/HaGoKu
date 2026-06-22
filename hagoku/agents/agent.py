@@ -587,6 +587,10 @@ class DataAnalystAgent(BaseAgent):
                 stage, context, "",
                 agent_system_extra=agent_extra,
             )
+            # 第 2+ 轮 LLM 调用前 dump（与第 1 轮对称）
+            dump_messages(f"agent_run_step_r{_round + 2}", msgs_next,
+                          model=self.llm_config.model,
+                          extra={"tools": [t["function"]["name"] for t in _tools]})
             resp_next = client.chat.completions.create(
                 model=self.llm_config.model,
                 messages=msgs_next,
@@ -597,6 +601,12 @@ class DataAnalystAgent(BaseAgent):
             msg_next = resp_next.choices[0].message
             txt = (msg_next.content or "").strip()
             tc_list = getattr(msg_next, "tool_calls", None)
+            # 第 2+ 轮 LLM 响应 dump（与第 1 轮对称）
+            dump_messages(f"agent_run_step_r{_round + 2}_response",
+                msgs_next + [{"role": "assistant", "content": txt,
+                 "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                for tc in (tc_list or [])] if tc_list else None}],
+                model=self.llm_config.model)
 
         return {
             "text": txt, "route_to": route_to_args,

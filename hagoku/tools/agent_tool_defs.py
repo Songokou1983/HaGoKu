@@ -231,7 +231,7 @@ agent_tools.register(Tool(
             "display_name": {"type": "string", "description": "简短中文名称"},
             "description": {"type": "string", "description": "业务含义说明"},
             "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
-            "used_in_analysis": {"type": "boolean"},
+            "used_in_analysis": {"type": "boolean", "description": "是否参与后续统计分析"},
             "evidence": {"type": "string", "description": "参与分析的理由"},
             "columns": {
                 "type": "array",
@@ -242,7 +242,7 @@ agent_tools.register(Tool(
                         "display_name": {"type": "string"},
                         "description": {"type": "string"},
                         "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
-                        "used_in_analysis": {"type": "boolean"},
+                        "used_in_analysis": {"type": "boolean", "description": "是否参与后续统计分析"},
                         "evidence": {"type": "string"},
                     },
                     "required": ["column_name"],

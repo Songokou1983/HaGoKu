@@ -31,6 +31,13 @@ def set_run_dir(run_dir: Path) -> None:
     _run_dump_seq = 0
 
 
+def reset_run_dir() -> None:
+    """测试 teardown：清空 _run_dump_dir，防止测试 dump 污染生产 run 目录。"""
+    global _run_dump_dir, _run_dump_seq
+    _run_dump_dir = None
+    _run_dump_seq = 0
+
+
 def _is_enabled() -> bool:
     v = os.environ.get("HAGOKU_DUMP_LLM", "").strip()
     return v != "0"  # 默认开，仅显式设 0 才关

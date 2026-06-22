@@ -8,7 +8,6 @@ from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import (
     Orchestrator,
     cleaning_review_pause_payload,
-    scout_field_review_pause_payload,
 )
 
 
@@ -30,20 +29,6 @@ def test_c1_cleaner_pause_no_injected_dialogue():
     assert isinstance(out.get("cleaning_review"), dict)
 
 
-def test_c2_scout_field_review_structured_empty_message():
-    """C2：Scout 字段核对须结构化 + message 可为空。"""
-    ctx = {
-        "n_rows": 3,
-        "column_semantics": [{"column_name": "A", "needs_user_input": False}],
-        "column_descriptions": {"A": "多为测试（例：1）"},
-        "column_display_names": {},
-    }
-    p = scout_field_review_pause_payload(ctx)
-    assert p.get("message") == ""
-    fr = p.get("field_review")
-    assert fr is not None
-    assert fr["n_cols"] == 1
-    assert len(fr["rows"]) == 1
 
 
 def test_c2_cleaning_review_structured_empty_message():
@@ -90,18 +75,6 @@ def test_c3_scout_user_natural_language_llm_driven():
 # ─── Phase 1：Scout 多轮对齐子状态机 ───────────────────────────────────────────
 
 
-def test_interaction_revision_in_scout_payload():
-    """interaction_revision 须出现在 Scout pause payload（供前端区分多轮同阶段）。"""
-    ctx = {
-        "n_rows": 2,
-        "column_semantics": [{"column_name": "X", "needs_user_input": False}],
-        "column_descriptions": {},
-        "column_display_names": {},
-    }
-    p = scout_field_review_pause_payload(ctx)
-    p["interaction_revision"] = 3
-    assert p["interaction_revision"] == 3
-    assert p["field_review"] is not None
 
 
 # ─── 2.8.3：跨阶段闸门 ─────────────────────────────────────────────────────────

@@ -284,4 +284,3 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
             raise
 
         assert resp["status"] == "cleaner_review"
-        assert "cleaning_assessment" in resp

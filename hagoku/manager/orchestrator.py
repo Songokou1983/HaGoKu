@@ -35,14 +35,8 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     _md_table_cell,
     _resolve_scout_column_token,
     _resolve_scout_column_token_with_context,
-    _scout_ai_meaning_cell,
-    _scout_chinese_display_cell,
     _scout_description_is_meaningful_for_user,
-    _scout_display_name_cell,
-    _scout_second_column_cell,
-    _scout_semantic_fallback_label,
     _try_parse_json,
-    scout_field_review_pause_payload,
     scout_user_input_received_payload,
     derive_display_names,
     derive_descriptions,
@@ -484,7 +478,6 @@ class Orchestrator(
                 context["_memory_manager"] = self.memory
                 context["_project_name"] = project_name
 
-                # 事件驱动：emit 字段表 + 保存状态 + 返回（不阻塞）
                 self._stage = "scout"
                 self._context = context
                 from hagoku.tools.data_io import load_data as _load
@@ -492,18 +485,10 @@ class Orchestrator(
                 self._df_clean = _df
                 self._df_raw = _df
                 self.save_state()
-                scout_msg = scout_field_review_pause_payload(context)
-                scout_msg["interaction_revision"] = interaction_revision
-                scout_msg = self._attach_pause_dialogue_message("scout", scout_msg)
-                # USER_INPUT_REQUESTED 由 _handle_scout_reply 空输入分支统一 emit，
-                # 避免此处与 respond() 重复发送导致前端双倍渲染
-                # AGENT_COMPLETED 不在此处发——Scout 在用户确认前不应标记"完成"
-                # 用户确认进入下一阶段时由 _handle_scout_reply 切 Cleaner 后发
 
                 return {
                     "status": "scout_review",
-                    "message": scout_msg.get("message", ""),
-                    "field_review": scout_msg.get("field_review"),
+                    "message": "",
                     "phase": "scout",
                 }
 

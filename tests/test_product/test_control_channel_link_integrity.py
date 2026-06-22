@@ -124,8 +124,8 @@ class TestAnalystControlChannelLinks:
         assert result[0] == "switch"
         assert result[1] == "reporter"
 
-    def test_submit_analysis_triggers_switch(self, orch):
-        """Analyst submit_analysis → switch to reporter"""
+    def test_submit_findings_without_route_to_stays(self, orch):
+        """submit_findings 无 route_to → 留在 analyst（代码不替 LLM 做阶段决策）"""
         step_result = {
             "text": "done",
             "submit_findings": True,
@@ -134,9 +134,8 @@ class TestAnalystControlChannelLinks:
         }
         orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("提交", {"query": "test"})
-        assert isinstance(result, tuple)
-        assert result[0] == "switch"
-        assert result[1] == "reporter"
+        assert isinstance(result, dict)
+        assert result["status"] == "analyst_review"
 
     def test_no_control_tool_stays(self, orch):
         """无控制工具调用 → 留在 analyst"""

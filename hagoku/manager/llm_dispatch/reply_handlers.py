@@ -3,9 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..payloads.scout_payload import (
-    scout_field_review_pause_payload,
-)
 from ...observability.events import EventType
 
 # ═══════════════════════════════════════════════════════════════
@@ -17,110 +14,66 @@ from ...observability.events import EventType
 
 
 def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Scout 阶段用户回复处理 — 通道直达。
-
-    用户输入 → 对话历史 → LLM 自己看、自己决定。
-    代码不截流，不单独调 LLM 解析。和 reporter handler 同模式。
-    """
-    # 空输入 = 首次展示——LLM 文本已由 run_scout_phase 直接 emit，这里只处理 ask_user
+    """Scout 阶段用户回复处理 — 纯通道：不生成任何用户可见内容。"""
+    # 空输入 = 首次暂停，发信号让前端显示输入框
     if not user_input or not user_input.strip():
         ask = context.pop("_pending_ask_user", None)
         if ask:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
             return ("stay", None)
-        # 信号：分析暂停，前端显示输入框。文本已通过流式发送。
-        payload = scout_field_review_pause_payload(context)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
         return {"status": "scout_review", "message": ""}
 
-    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
-    # run_step 的 user_input 传空，避免 build_messages 再追加一遍（×2）。
+    # 用户有输入 → LLM 自己看、自己决定
     result = self._agent.run_step(context, self._df_raw, "")
     self._log_channel("scout", "run_step_done", text=result.get("text",""))
 
-    # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
     if ask:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
         return ("stay", None)
 
-    # Phase C: route_to 切换
     route_to = result.get("route_to")
     if route_to:
         target = route_to.get("stage")
         if target and target != "scout":
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    # Phase C: LLM 在 scout 里调了 submit_assessment → 切换到 cleaner
-    if result.get("submit_assessment"):
-        assessment = result.get("assessment") or {}
-        return ("switch", "cleaner", {"_cleaner_assessment": assessment, "_route_reason": "LLM 在 scout 阶段提交了清洗评估"})
-
-    # 留在 scout：重新生成 field_review（column_semantics 已被 set_columns 更新）
-    payload = scout_field_review_pause_payload(context)
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
-    reply_text = result.get("text", "")
-    return {"status": "scout_review", "message": reply_text, "field_review": payload.get("field_review")}
+    # 留在 scout：只透传 LLM 文本
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+    return {"status": "scout_review", "message": result.get("text", "")}
 
 
 def _handle_cleaner_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Cleaner 评估阶段用户回复 — Phase C: LLM 驱动的阶段切换。
-
-    首次：运行 assess 评估。后续：自由对话，LLM 通过 route_to 表达切换。
-    """
+    """Cleaner 阶段 — 纯通道：LLM 自己评估、自己输出。"""
     df = self._df_raw if self._df_raw is not None else self._df_clean
 
-    # 首次评估（首波展示）
+    # 首次评估：跑 assess（内部调 LLM），后续对话：调 run_step
     assessment = context.get("_cleaner_assessment")
     if assessment is None:
         context["_user_feedback"] = user_input
         assessment = self._agent.assess(df, context)
         context["_cleaner_assessment"] = assessment
         self._cleaner_dialog_open = True
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
-            "cleaning_assessment": assessment,
-        })
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {"message": ""})
         self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
-        return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
+        return {"status": "cleaner_review", "message": ""}
 
-    # scout 阶段 LLM 已提交 assessment，直接展示（首波，无需再调 LLM）
-    if assessment is not None and (not user_input or not user_input.strip()):
-        self._cleaner_dialog_open = True
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
-            "cleaning_assessment": assessment,
-        })
-        self.event_bus.emit(EventType.AGENT_COMPLETED, "cleaner", {"result_summary": "清洗评估完成"})
-        return {"status": "cleaner_review", "message": "", "cleaning_assessment": assessment}
-
-    # 对话模式 — Phase D: self._agent 由 orchestrator 保证已初始化
-    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
     result = self._agent.run_step(context, df, user_input or "")
 
-    # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
     if ask:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", ask)
         return ("stay", None)
 
-    # Phase C: route_to 切换（唯一阶段切换入口——无关键词分支）
     route_to = result.get("route_to")
     if route_to:
         target = route_to.get("stage")
         if target and target in {"scout", "analyst", "reporter"}:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    # Phase C: LLM 重新提交了评估 → 更新 assessment 并重新展示
-    if result.get("submit_assessment"):
-        new_assessment = result.get("assessment") or {}
-        context["_cleaner_assessment"] = new_assessment
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {
-            "cleaning_assessment": new_assessment,
-        })
-        return {"status": "cleaner_review", "message": result.get("text", ""),
-                "cleaning_assessment": new_assessment}
-
-    return {"status": "cleaner_review", "message": result.get("text", ""),
-            "cleaning_assessment": assessment}
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "cleaner", {"message": ""})
+    return {"status": "cleaner_review", "message": result.get("text", "")}
 
 
 def _run_analyst_first_pass(self, context: dict) -> None:
@@ -186,9 +139,7 @@ def _rewrite_as_written_summary(self, findings: dict) -> str:
 
 
 def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Analyst 对话阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
-    # Phase D: self._agent 由 orchestrator 保证已初始化
-    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
+    """Analyst 阶段 — 纯通道。"""
     if not self._analyst_first_pass_done:
         _run_analyst_first_pass(self, context)
         self._analyst_first_pass_done = True
@@ -196,46 +147,37 @@ def _handle_analyst_reply(self, user_input: str, context: dict) -> dict | tuple:
 
     result = self._agent.run_step(context, self._df_clean, user_input or "")
 
-    # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
     if ask:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", ask)
         return ("stay", None)
 
-    # Phase C: route_to 切换
     route_to = result.get("route_to")
     if route_to:
         target = route_to.get("stage")
         if target and target in {"scout", "cleaner", "reporter"}:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
-    if result.get("submit_findings"):
-        findings = result["findings"]
-        violations, violations_md = self._check_mandatory_guardrails(findings.get("findings", []))
-        return ("switch", "reporter", {"findings": findings})
-
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "analyst", {"message": ""})
     return {"status": "analyst_review", "message": result.get("text", "")}
 
 
 def _handle_reporter_reply(self, user_input: str, context: dict) -> dict | tuple:
-    """Reporter 阶段 — Phase C: LLM 驱动的阶段切换与暂停。"""
-    # Phase D: self._agent 由 orchestrator 保证已初始化
-    # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。
+    """Reporter 阶段 — 纯通道。"""
     result = self._agent.run_step(context, None, user_input or "")
 
-    # Phase C: ask_user 优先
     ask = context.pop("_pending_ask_user", None)
     if ask:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "reporter", ask)
         return ("stay", None)
 
-    # Phase C: route_to 切换
     route_to = result.get("route_to")
     if route_to:
         target = route_to.get("stage")
         if target and target in {"scout", "cleaner", "analyst"}:
             return ("switch", target, {"_route_reason": route_to.get("reason", "")})
 
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "reporter", {"message": ""})
     return {"status": "reporter_done", "message": result.get("text", "")}
 
 

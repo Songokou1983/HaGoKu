@@ -35,18 +35,52 @@ grep -q 'add_agent_response.*理解.*个字段\|add_agent_response.*字段推断
 grep -q 'AGENT_COMPLETED.*add_agent_response' "$ROOT/hagoku/context/project_context.py" && { echo "  ❌ project_context 仍在 AGENT_COMPLETED 写假 response"; exit 1; } || echo "  ✅ project_context AGENT_COMPLETED 已清理"
 
 echo "=== 8. 代码不替 LLM 出内容 ==="
-# 字段表/结论只能从 column_semantics（LLM 产出）派生。禁止从 df 或原始列信息直接构造 field_review。
+# 通道原则：用户看到的一切只能是 LLM 输出。代码禁止生成 field_review/cleaning_assessment/analyst_review 等结构化展示数据。
+# 检查 1: 禁止从 context 非 LLM 字段构造 rows（如 _column_info / _column_profiles）
 python3 -c "
 import ast, sys
-path = '$ROOT/hagoku/manager/payloads/scout_payload.py'
-with open(path) as f:
-    tree = ast.parse(f.read())
-# 检查：构建 field_review rows 时是否引用了非 column_semantics 来源
-for node in ast.walk(tree):
-    if isinstance(node, ast.Subscript) and hasattr(node.value, 'id') and node.value.id == 'profiles':
-        print(f'{path}:{node.lineno} 从 _column_profiles 生成内容')
-        sys.exit(1)
-print('✅ scout_payload 未越界')
+failed = False
+for subdir in ['manager/payloads', 'manager/llm_dispatch', 'agents']:
+    import os, glob
+    for pyfile in glob.glob(f'$ROOT/hagoku/{subdir}/**/*.py', recursive=True):
+        with open(pyfile) as f:
+            try:
+                tree = ast.parse(f.read())
+            except SyntaxError:
+                continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                keys = [k.s if isinstance(k, ast.Constant) else '' for k in node.keys if isinstance(k, ast.Constant)]
+                rowlike = {'field_name','chinese_name','meaning'} & set(keys)
+                if len(rowlike) >= 2:
+                    print(f'{pyfile}:{node.lineno} 代码构造 field_review rows (keys={sorted(keys)[:6]})')
+                    failed = True
+if failed:
+    sys.exit(1)
+print('✅ 无代码生成结构化展示数据')
+" || { echo "  ❌"; exit 1; }
+
+# 检查 2: 禁止从非 LLM 输出源构造 field_review/cleaning_assessment payload
+python3 -c "
+import ast, sys
+forbidden_keys = {'field_review', 'cleaning_assessment', 'analyst_review', 'fieldReview'}
+for subdir in ['manager/payloads', 'manager/llm_dispatch', 'agents']:
+    import os, glob
+    for pyfile in glob.glob(f'$ROOT/hagoku/{subdir}/**/*.py', recursive=True):
+        with open(pyfile) as f:
+            try:
+                tree = ast.parse(f.read())
+            except SyntaxError:
+                continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                keys = {k.s if isinstance(k, ast.Constant) else k.value if isinstance(k, ast.Constant) else '' for k in node.keys if hasattr(k, 's') or hasattr(k, 'value')}
+                keys = {str(k) for k in keys if k}
+                if keys & forbidden_keys:
+                    src = getattr(node, 'lineno', '?')
+                    print(f'{pyfile}:{src} 代码构造禁止的展示 payload (keys={sorted(keys & forbidden_keys)})')
+                    sys.exit(1)
+print('✅ 无代码构造 field_review/cleaning_assessment payload')
 " || { echo "  ❌"; exit 1; }
 
 echo "=== 9. 刹车 G — prompt/tool描述 不用禁止堵 ==="

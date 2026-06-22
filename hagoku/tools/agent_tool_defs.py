@@ -166,12 +166,19 @@ def _update_one_field(args: dict, ctx: dict) -> dict:
             updated = True
 
     if not updated:
-        semantics.append({
+        entry = {
             "column_name": col,
             "display_name": dn or col,
             "chinese_name": dn or col,
             "description": desc,
-        })
+        }
+        if role:
+            entry["suggested_role"] = role
+        if used is not None:
+            entry["used_in_analysis"] = bool(used)
+        if evidence:
+            entry["evidence"] = evidence
+        semantics.append(entry)
 
     return {
         "updated": col,

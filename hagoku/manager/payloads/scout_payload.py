@@ -88,7 +88,7 @@ def scout_field_review_pause_payload(context: dict[str, Any]) -> dict[str, Any]:
         # 从 _column_info 生成基础字段表（列名+dtype 是机械数据，不违反刹车 C）
         col_info = context.get("_column_info") or {}
         if col_info:
-            rows = [{"field_name": c, "chinese_name": c, "meaning": str(d), "needs_attention": True} for c, d in col_info.items()]
+            rows = [{"field_name": c, "chinese_name": c, "meaning": str(d), "needs_attention": True, "suggested_role": "", "used_in_analysis": None, "evidence": ""} for c, d in col_info.items()]
             return {"message": msg, "field_review": {"n_rows": context.get("n_rows", "?"), "n_cols": len(rows), "rows": rows}}
         return {"message": msg, "field_review": None}
     if not cols:

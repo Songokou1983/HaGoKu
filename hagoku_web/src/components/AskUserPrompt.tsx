@@ -63,58 +63,12 @@ export function AskUserPrompt({
     );
   }
 
-  // free_text (default)
-  return <FreeTextAsk question={question} onReply={onReply} />;
-}
-
-function FreeTextAsk({
-  question,
-  onReply,
-}: {
-  question: string;
-  onReply: (answer: string) => void;
-}) {
-  const [text, setText] = useState("");
-
-  const handleSubmit = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onReply(trimmed);
-    setText("");
-  };
-
+  // free_text — 由底部全局输入框统一处理，不创建第二个通道
   return (
     <div className="border border-app-border/60 rounded-md p-3 bg-app-bg-secondary/50 my-1">
-      <p className="text-ui-sm text-app-text mb-2 leading-relaxed">{question}</p>
-      <div className="flex gap-2 items-end">
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
-          placeholder="输入回复…"
-          autoFocus
-          className="flex-1 bg-app-bg border border-app-border rounded px-3 py-1.5
-            text-ui-sm text-app-text placeholder-app-text-muted
-            focus:outline-none focus:border-app-accent transition-colors"
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={!text.trim()}
-          className="px-3 py-1.5 rounded text-ui-xs font-medium bg-app-accent text-white
-            hover:bg-app-accent-hover transition-colors duration-150 cursor-pointer
-            disabled:opacity-50 disabled:cursor-not-allowed shrink-0
-            flex items-center gap-1"
-        >
-          <Send size={12} />
-          发送
-        </button>
-      </div>
+      <p className="text-ui-sm text-app-text leading-relaxed">{question}</p>
     </div>
   );
 }
+
+function FreeTextAsk({

@@ -29,10 +29,7 @@ def _handle_scout_reply(self, user_input: str, context: dict) -> dict | tuple:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
             return ("stay", None)
         # 信号：分析暂停，前端显示输入框。文本已通过流式发送。
-        payload = scout_field_review_pause_payload(context)
-        import logging
-        logging.getLogger("hagoku.ws").warning("_handle_scout_reply emit USER_INPUT_REQUESTED payload keys=%s", list(payload.keys()))
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", payload)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
         return {"status": "scout_review", "message": ""}
 
     # 用户输入由 respond() 外层统一写入 ProjectContext，handler 不重复写。

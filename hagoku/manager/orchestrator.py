@@ -37,8 +37,6 @@ from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 
     _scout_description_is_meaningful_for_user,
     _try_parse_json,
     scout_user_input_received_state,
-    derive_display_names,
-    derive_descriptions,
 )
 
 # Phase D 后：scout_reply 功能已迁入 agent.py + reply_handlers.py。
@@ -419,11 +417,6 @@ class Orchestrator(
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 
-                # ── 多轮对齐：Scout 字段理解子状态机 ───────────────────────────────
-                # 结构：外层循环（Scout 循环 + gate）；内层 Scout 循环负责字段对齐
-                # 对齐条件：用户纯确认  OR  所有字段 needs_user_input=False
-                # 对齐后发 gate_to_cleaning 暂停；用户「还有补充」→ 回 Scout 内层循环；纯确认 → 进 Cleaner
-                interaction_revision = 0
                 # ── 注入 Session 到 context ──
                 context["_session"] = getattr(self, '_session', None)
                 context["_memory_manager"] = self.memory

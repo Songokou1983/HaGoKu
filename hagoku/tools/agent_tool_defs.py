@@ -305,18 +305,11 @@ agent_tools.register(Tool(
 
 
 def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """处理 LLM 的 ask_user 调用——触发暂停信号写入 context。
-
-    orchestrator/reply_handlers 检测到 context["_pending_ask_user"] 后：
-      1. emit USER_INPUT_REQUESTED 事件（payload 含 question/options/expected_format）
-      2. 设置 _stage 仍为当前阶段（不切换）
-      3. respond() 返回，等待 WS 收到用户回复后再走一轮
-    """
+    """处理 LLM 的 ask_user 调用——触发暂停信号写入 context。"""
     pending = {
         "question": args.get("question", ""),
         "options": args.get("options", []),
         "expected_format": args.get("expected_format", "free_text"),
-        "asked_by_stage": ctx.get("_current_stage", "unknown"),
     }
     ctx["_pending_ask_user"] = pending
     return pending

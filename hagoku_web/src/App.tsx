@@ -26,7 +26,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 
-type NavSection = "work" | "ref" | "ops" | "dev";
+type NavSection = "work" | "ref" | "dev";
 
 interface NavItem {
   id: PanelId;
@@ -43,11 +43,10 @@ const NAV_ITEMS: NavItem[] = [
   // ── 参考 ──
   { id: "knowledge", title: "知识库", Icon: BookOpen,      section: "ref" },
   { id: "commands",  title: "命令指引", Icon: BookOpenCheck, section: "ref" },
-  // ── 运行 ──
-  { id: "events",    title: "运行日志", Icon: Activity,     section: "ops" },
   // ── 开发者 ──
   { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
   { id: "doctor",    title: "HaGoKu Doctor", Icon: Stethoscope,  section: "dev" },
+  { id: "events",    title: "运行日志", Icon: Activity,     section: "dev" },
   { id: "settings",  title: "设置",   Icon: Settings,      section: "dev" },
 ];
 

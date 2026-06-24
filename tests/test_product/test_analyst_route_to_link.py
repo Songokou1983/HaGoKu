@@ -19,8 +19,8 @@ def _setup_analyst_agent_for_test(orch):
     orch._analyst_first_pass_done = True
 
 
-def test_route_to_reporter_triggers_switch():
-    """LLM 调 route_to(stage="reporter") → _handle_analyst_reply 返回 ("switch", "reporter")"""
+def test_route_to_reporter_no_longer_switches():
+    """LLM route_to 已删除 — _handle_analyst_reply 返回 dict 而非 switch tuple"""
     orch = Orchestrator(HaGoKuConfig())
     _setup_analyst_agent_for_test(orch)
 
@@ -35,14 +35,12 @@ def test_route_to_reporter_triggers_switch():
 
     result = orch._handle_analyst_reply("够了，去写报告吧", {"query": "test"})
 
-    assert isinstance(result, tuple), f"应返回 tuple (switch, ...)，实际: {type(result)}"
-    assert result[0] == "switch"
-    assert result[1] == "reporter"
-    assert result[2].get("_route_reason") == "用户要求进入报告阶段"
+    assert isinstance(result, dict), f"应返回 dict，实际: {type(result)}"
+    assert result["status"] == "analyst_review"
 
 
-def test_route_to_scout_triggers_switch():
-    """LLM 调 route_to(stage="scout") → 返回 ("switch", "scout")"""
+def test_route_to_scout_no_longer_switches():
+    """LLM route_to 已删除 — _handle_analyst_reply 返回 dict"""
     orch = Orchestrator(HaGoKuConfig())
     _setup_analyst_agent_for_test(orch)
 
@@ -57,13 +55,12 @@ def test_route_to_scout_triggers_switch():
 
     result = orch._handle_analyst_reply("方向不对，回去重看字段", {"query": "test"})
 
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "scout"
+    assert isinstance(result, dict)
+    assert result["status"] == "analyst_review"
 
 
-def test_route_to_cleaner_triggers_switch():
-    """LLM 调 route_to(stage="cleaner") → 返回 ("switch", "cleaner")"""
+def test_route_to_cleaner_no_longer_switches():
+    """LLM route_to 已删除 — _handle_analyst_reply 返回 dict"""
     orch = Orchestrator(HaGoKuConfig())
     _setup_analyst_agent_for_test(orch)
 
@@ -78,9 +75,8 @@ def test_route_to_cleaner_triggers_switch():
 
     result = orch._handle_analyst_reply("Cleaner 的清洗方案不对", {"query": "test"})
 
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "cleaner"
+    assert isinstance(result, dict)
+    assert result["status"] == "analyst_review"
 
 
 def test_route_to_without_stage_stays():
@@ -124,8 +120,8 @@ def test_route_to_analyst_stays():
     assert result["status"] == "analyst_review"
 
 
-def test_route_to_and_other_tools_same_round():
-    """LLM 同一轮既调 route_to 又调其他工具 → route_to 仍生效，其他工具也执行。"""
+def test_route_to_and_other_tools_no_longer_switches():
+    """LLM route_to 已删除 — run_step 同轮既有 route_to 又有其他工具，handler 只返回 dict。"""
     orch = Orchestrator(HaGoKuConfig())
     _setup_analyst_agent_for_test(orch)
 
@@ -141,9 +137,8 @@ def test_route_to_and_other_tools_same_round():
 
     result = orch._handle_analyst_reply("够了，去写报告", {"query": "test"})
 
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "reporter"
+    assert isinstance(result, dict)
+    assert result["status"] == "analyst_review"
 
 
 def test_no_route_to_no_switch():

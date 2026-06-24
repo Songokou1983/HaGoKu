@@ -44,23 +44,21 @@ class TestScoutControlChannelLinks:
         orch._agent.prompt = ""
         orch._agent.run_step = MagicMock(return_value={"route_to": route_to_result} if route_to_result else {})
 
-    def test_route_to_cleaner_triggers_switch(self, orch):
-        """LLM route_to(stage="cleaner") → _handle_scout_reply 返回 ("switch", "cleaner")"""
+    def test_route_to_cleaner_no_longer_switches(self, orch):
+        """LLM route_to 已删除 — _handle_scout_reply 返回 dict 而非 switch tuple"""
         context = self._scout_context()
         self._setup_scout_agent(orch, {"stage": "cleaner", "reason": "done"})
         result = orch._handle_scout_reply("可以进入清洗了", context)
-        assert isinstance(result, tuple)
-        assert result[0] == "switch"
-        assert result[1] == "cleaner"
+        assert isinstance(result, dict)
+        assert result["status"] == "scout_review"
 
-    def test_route_to_reporter_triggers_switch(self, orch):
-        """LLM route_to(stage="reporter") → switch to reporter"""
+    def test_route_to_reporter_no_longer_switches(self, orch):
+        """LLM route_to 已删除 — _handle_scout_reply 返回 dict"""
         context = self._scout_context()
         self._setup_scout_agent(orch, {"stage": "reporter", "reason": "直接报告"})
         result = orch._handle_scout_reply("直接去报告", context)
-        assert isinstance(result, tuple)
-        assert result[0] == "switch"
-        assert result[1] == "reporter"
+        assert isinstance(result, dict)
+        assert result["status"] == "scout_review"
 
     def test_route_to_scout_stays(self, orch):
         """LLM route_to(stage="scout") → 留在 scout"""
@@ -110,8 +108,8 @@ class TestAnalystControlChannelLinks:
         orch._analyst_first_pass_done = True
         return orch
 
-    def test_route_to_reporter_triggers_switch(self, orch):
-        """Analyst route_to(reporter) → switch"""
+    def test_route_to_reporter_no_longer_switches(self, orch):
+        """Analyst route_to 已删除 — _handle_analyst_reply 返回 dict"""
         step_result = {
             "text": "ok",
             "submit_findings": False,
@@ -120,9 +118,8 @@ class TestAnalystControlChannelLinks:
         }
         orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("够了", {"query": "test"})
-        assert isinstance(result, tuple)
-        assert result[0] == "switch"
-        assert result[1] == "reporter"
+        assert isinstance(result, dict)
+        assert result["status"] == "analyst_review"
 
     def test_submit_findings_without_route_to_stays(self, orch):
         """submit_findings 无 route_to → 留在 analyst（代码不替 LLM 做阶段决策）"""
@@ -174,8 +171,8 @@ class TestCleanerControlChannelLinks:
             "_cleaner_assessment": {"summary": "done", "columns": []},
         }
 
-    def test_route_to_analyst_triggers_switch(self, orch):
-        """Cleaner route_to(analyst) → switch"""
+    def test_route_to_analyst_no_longer_switches(self, orch):
+        """Cleaner route_to 已删除 — _handle_cleaner_reply 返回 dict"""
         context = self._cleaner_context()
         from hagoku.agents.agent import DataAnalystAgent
         agent = DataAnalystAgent.__new__(DataAnalystAgent)
@@ -194,12 +191,11 @@ class TestCleanerControlChannelLinks:
             "route_to": {"stage": "analyst", "reason": "done"},
         })
         result = orch._handle_cleaner_reply("可以了", context)
-        assert isinstance(result, tuple)
-        assert result[0] == "switch"
-        assert result[1] == "analyst"
+        assert isinstance(result, dict)
+        assert result["status"] == "cleaner_review"
 
-    def test_route_to_scout_triggers_switch(self, orch):
-        """Cleaner route_to(scout) → switch"""
+    def test_route_to_scout_no_longer_switches(self, orch):
+        """Cleaner route_to 已删除 — _handle_cleaner_reply 返回 dict"""
         context = self._cleaner_context()
         from hagoku.agents.agent import DataAnalystAgent
         agent = DataAnalystAgent.__new__(DataAnalystAgent)
@@ -218,8 +214,8 @@ class TestCleanerControlChannelLinks:
             "route_to": {"stage": "scout", "reason": "重看"},
         })
         result = orch._handle_cleaner_reply("清洗方案有问题", context)
-        assert isinstance(result, tuple)
-        assert result[1] == "scout"
+        assert isinstance(result, dict)
+        assert result["status"] == "cleaner_review"
 
     def test_no_route_to_stays_in_cleaner(self, orch):
         """无 route_to → 留在 cleaner"""
@@ -252,9 +248,9 @@ class TestCleanerControlChannelLinks:
 class TestReporterControlChannelLinks:
     """Reporter 控制通道链路验证 — route_to 已生效"""
 
-    def test_reporter_route_to_in_handler(self):
-        """_handle_reply 含 route_to 处理。"""
+    def test_reporter_route_to_not_in_handler(self):
+        """_handle_reply 不含 route_to 处理（route_to 已永久删除）。"""
         from hagoku.manager.llm_dispatch.reply_handlers import _handle_reply
         import inspect
         src = inspect.getsource(_handle_reply)
-        assert "route_to" in src, "_handle_reply 应含 route_to 处理"
+        assert "route_to" not in src, "_handle_reply 不应含 route_to 处理（工具已删除）"

@@ -58,9 +58,8 @@ def test_cleaner_full_flow():
 
     # Step 2: 用户"可以了" → route_to(analyst)
     result2 = orch._handle_cleaner_reply("可以了", context)
-    assert isinstance(result2, tuple)
-    assert result2[0] == "switch"
-    assert result2[1] == "analyst"
+    assert isinstance(result2, dict)
+    assert result2["status"] == "cleaner_review"
 
 
 def test_cleaner_user_challenges():
@@ -121,6 +120,5 @@ def test_cleaner_route_to_scout():
     }
 
     result = orch._handle_cleaner_reply("字段理解有问题，回去重看", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "scout"
+    assert isinstance(result, dict)
+    assert result["status"] == "cleaner_review"

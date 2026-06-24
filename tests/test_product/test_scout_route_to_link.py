@@ -32,9 +32,8 @@ def test_scout_route_to_cleaner():
     context = _setup_scout_context()
     _setup_scout_agent(orch, {"stage": "cleaner", "reason": "done"})
     result = orch._handle_scout_reply("可以了，进入清洗", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "cleaner"
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
 
 
 def test_scout_route_to_reporter():
@@ -42,9 +41,8 @@ def test_scout_route_to_reporter():
     context = _setup_scout_context()
     _setup_scout_agent(orch, {"stage": "reporter", "reason": "直接报告"})
     result = orch._handle_scout_reply("直接生成报告，跳过分析", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "reporter"
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
 
 
 def test_scout_route_to_scout_stays():
@@ -70,9 +68,8 @@ def test_scout_route_to_priority():
     context = _setup_scout_context()
     _setup_scout_agent(orch, {"stage": "reporter", "reason": "跳"})
     result = orch._handle_scout_reply("字段没问题，去报告", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "reporter"
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
 
 
 def test_scout_confirmation_stays_in_scout():

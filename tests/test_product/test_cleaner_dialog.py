@@ -74,8 +74,8 @@ def test_second_call_uses_dialog_mode():
     assert result["status"] == "cleaner_review"
 
 
-def test_cleaner_route_to_analyst():
-    """LLM 调 route_to(stage="analyst") → switch"""
+def test_cleaner_route_to_no_longer_switches():
+    """LLM route_to 已删除 — _handle_cleaner_reply 返回 dict 而非 switch tuple"""
     orch = Orchestrator(HaGoKuConfig())
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
@@ -96,9 +96,8 @@ def test_cleaner_route_to_analyst():
     }
 
     result = orch._handle_cleaner_reply("可以了", context)
-    assert isinstance(result, tuple)
-    assert result[0] == "switch"
-    assert result[1] == "analyst"
+    assert isinstance(result, dict)
+    assert result["status"] == "cleaner_review"
 
 
 def test_cleaner_confirmation_text_no_longer_triggers_switch():

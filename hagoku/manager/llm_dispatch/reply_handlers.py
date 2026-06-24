@@ -60,13 +60,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict | tuple:
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, ask)
         return ("stay", None)
 
-    # ── route_to 切换（LLM 自主决定）──
-    route_to = result.get("route_to")
-    if route_to:
-        target = route_to.get("stage")
-        if target and target != stage:
-            return ("switch", target, {"_route_reason": route_to.get("reason", "")})
-
     # ── 留在当前阶段 ──
     self.event_bus.emit(EventType.USER_INPUT_REQUESTED, stage, {"message": ""})
     status = "reporter_done" if stage == "reporter" else f"{stage}_review"

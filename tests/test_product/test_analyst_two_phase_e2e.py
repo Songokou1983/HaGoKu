@@ -108,9 +108,8 @@ class TestAnalystTwoPhaseE2E:
             route_to={"stage": "scout", "reason": "方向不对"},
         ))
         result3 = orch._handle_analyst_reply("方向不对，回去重看字段", orch._context)
-        assert isinstance(result3, tuple)
-        assert result3[0] == "switch"
-        assert result3[1] == "scout"
+        assert isinstance(result3, dict)
+        assert result3["status"] == "analyst_review"
 
         # ── 剧本第 4 步：模拟用户重进 Analyst（新会话），用户说"够了，去写报告" ──
         orch._analyst_first_pass_done = False  # 模拟重新进入
@@ -129,9 +128,8 @@ class TestAnalystTwoPhaseE2E:
             route_to={"stage": "reporter", "reason": "用户要求"},
         ))
         result4 = orch._handle_analyst_reply("够了，去写报告", orch._context)
-        assert isinstance(result4, tuple)
-        assert result4[0] == "switch"
-        assert result4[1] == "reporter"
+        assert isinstance(result4, dict)
+        assert result4["status"] == "analyst_review"
 
         # ── 验证：整个流程中 _handle_analyst_reply 被正确调用了 4 次 ──
         # （通过 _analyst_first_pass_done 在重新进入时重置来验证）

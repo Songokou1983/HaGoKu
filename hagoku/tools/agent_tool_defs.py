@@ -394,33 +394,6 @@ agent_tools.register(Tool(
 
 
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 流程路由工具（所有 Agent 可用）
-# ═══════════════════════════════════════════════════════════════════
-
-def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """LLM 表达流程意图。留在当前阶段或切换到下一阶段。"""
-    stage = args.get("stage")
-    reason = args.get("reason", "")
-    return {"stage": stage, "reason": reason}
-
-
-agent_tools.register(Tool(
-    name="route_to",
-    description="切换分析阶段。stage 可选：scout/cleaner/analyst/reporter。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "stage": {"type": "string", "enum": ["scout", "cleaner", "analyst", "reporter"]},
-            "reason": {"type": "string", "description": "切换原因——告诉用户和后续 AI 为什么走这条路"},
-        },
-        "required": ["stage", "reason"],
-    },
-    handler=_handle_route_to,
-    phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
-))
-
 # import hagoku.tools.memory_tools  # noqa: F401,E402 — 记忆工具暂不注册（等记忆系统稳定后加回）
 import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
 # biz_tools 已移除 — ROI/ROAS/LTV 等公式不是工具，LLM 训练数据自带

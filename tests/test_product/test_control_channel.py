@@ -33,28 +33,17 @@ class TestControlChannel:
             f"预期匹配模式：{CONTROL_TOOL_PATTERNS}"
         )
 
-    def test_route_to_accepts_stage_parameter(self):
-        """route_to 工具必须包含 stage 参数，允许 LLM 指定目标阶段。"""
+    def test_route_to_tool_deleted(self):
+        """route_to 工具已被永久删除 — 阶段切换不再由工具驱动。"""
         tools = {t["function"]["name"]: t["function"] for t in agent_tools.to_openai("scout")}
         rt = tools.get("route_to")
-        assert rt is not None, "route_to 工具不存在（控制通道断裂）"
-        params = rt.get("parameters", {}).get("properties", {})
-        assert "stage" in params, (
-            f"route_to 缺少 'stage' 参数，LLM 无法指定目标阶段。\n"
-            f"现有参数：{list(params.keys())}"
-        )
-        # stage 的 enum 应覆盖全部 4 阶段
-        stage_enum = params["stage"].get("enum", [])
-        for s in AGENTS:
-            assert s in stage_enum, (
-                f"route_to stage.enum 缺 '{s}'，LLM 无法跳转到该阶段"
-            )
+        assert rt is None, f"route_to 工具应已删除，但仍存在于 scout 工具集中"
 
-    def test_route_to_available_to_all_agents(self):
-        """route_to 必须对所有 4 个 Agent 可用。"""
+    def test_route_to_not_available_to_any_agent(self):
+        """route_to 已永久删除，不能对任何 Agent 可用。"""
         for agent in AGENTS:
             tools = {t["function"]["name"] for t in agent_tools.to_openai(agent)}
-            assert "route_to" in tools, (
-                f"律 8 残缺：'{agent}' 的工具集无 route_to。\n"
+            assert "route_to" not in tools, (
+                f"route_to 应已删除，但 '{agent}' 的工具集仍包含它。\n"
                 f"当前工具：{sorted(tools)}"
             )

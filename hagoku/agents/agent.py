@@ -440,10 +440,6 @@ class DataAnalystAgent(BaseAgent):
             context["_session"] = session
 
         agent_extra = self.prompt
-        phase_hint = context.get("_current_stage", "")
-        if phase_hint:
-            stage_names = {"scout": "理解字段", "cleaner": "评估清洗", "analyst": "统计分析", "reporter": "撰写报告"}
-            agent_extra = f"【当前关注点：{stage_names.get(phase_hint, phase_hint)}】\n\n" + agent_extra
 
         # P2: 字段元数据持久化——首轮后 context._column_info 注入 system prompt
         col_info = context.get("_column_info")
@@ -472,7 +468,7 @@ class DataAnalystAgent(BaseAgent):
             full_text = ""
             safe_emitted = 0
             final_tool_calls_raw: list[dict] = []
-            agent_key = phase_hint or "analyst"
+            agent_key = "analyst"
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
                 temperature=0.3, max_tokens=4096, tools=_tools,
@@ -608,7 +604,7 @@ class DataAnalystAgent(BaseAgent):
                 full_text = ""
                 safe_emitted = 0
                 final_tool_calls_raw = []
-                agent_key = phase_hint or "analyst"
+                agent_key = "analyst"
                 for chunk in stream_chat_completion(
                     client, self.llm_config.model, msgs_next,
                     temperature=0.3, max_tokens=4096, tools=_tools,

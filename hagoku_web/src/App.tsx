@@ -8,7 +8,6 @@ import KnowledgePanel from "./panels/KnowledgePanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import PromptLabPanel from "./panels/PromptLabPanel";
 import EventPanel from "./panels/EventPanel";
-import KanbanPanel from "./panels/KanbanPanel";
 import CommandsPanel from "./panels/CommandsPanel";
 import DoctorPanel from "./panels/DoctorPanel";
 import { TitleBar } from "./components/TitleBar";
@@ -45,7 +44,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "knowledge", title: "知识库", Icon: BookOpen,      section: "ref" },
   { id: "commands",  title: "命令指引", Icon: BookOpenCheck, section: "ref" },
   // ── 运行 ──
-  { id: "kanban",    title: "看板",   Icon: List,          section: "ops" },
   { id: "events",    title: "运行日志", Icon: Activity,     section: "ops" },
   // ── 开发者 ──
   { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
@@ -65,7 +63,6 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   analyze:   <AnalyzePanel />,
   report:    <ReportPanel />,
   knowledge: <KnowledgePanel />,
-  kanban:    <KanbanPanel />,
   events:    <EventPanel />,
   settings:  <SettingsPanel />,
   lab:       <PromptLabPanel />,
@@ -80,7 +77,6 @@ const PANEL_ORDER: PanelId[] = [
   "report",
   "knowledge",
   "commands",
-  "kanban",
   "events",
   "lab",
   "doctor",

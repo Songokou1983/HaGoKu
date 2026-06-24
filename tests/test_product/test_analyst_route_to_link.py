@@ -36,7 +36,7 @@ def test_route_to_reporter_no_longer_switches():
     result = orch._handle_analyst_reply("够了，去写报告吧", {"query": "test"})
 
     assert isinstance(result, dict), f"应返回 dict，实际: {type(result)}"
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_route_to_scout_no_longer_switches():
@@ -56,7 +56,7 @@ def test_route_to_scout_no_longer_switches():
     result = orch._handle_analyst_reply("方向不对，回去重看字段", {"query": "test"})
 
     assert isinstance(result, dict)
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_route_to_cleaner_no_longer_switches():
@@ -76,7 +76,7 @@ def test_route_to_cleaner_no_longer_switches():
     result = orch._handle_analyst_reply("Cleaner 的清洗方案不对", {"query": "test"})
 
     assert isinstance(result, dict)
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_route_to_without_stage_stays():
@@ -97,7 +97,7 @@ def test_route_to_without_stage_stays():
 
     # 不应是 tuple（不应切换）
     assert not isinstance(result, tuple), f"不传 stage 不应切换，实际: {result}"
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_route_to_analyst_stays():
@@ -117,7 +117,7 @@ def test_route_to_analyst_stays():
     result = orch._handle_analyst_reply("继续分析", {"query": "test"})
 
     assert not isinstance(result, tuple), f"stage=analyst 不应切换，实际: {result}"
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_route_to_and_other_tools_no_longer_switches():
@@ -138,7 +138,7 @@ def test_route_to_and_other_tools_no_longer_switches():
     result = orch._handle_analyst_reply("够了，去写报告", {"query": "test"})
 
     assert isinstance(result, dict)
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
 
 
 def test_no_route_to_no_switch():
@@ -158,5 +158,5 @@ def test_no_route_to_no_switch():
     result = orch._handle_analyst_reply("换 t 检验试试", {"query": "test"})
 
     assert not isinstance(result, tuple), f"无 route_to 不应切换，实际: {result}"
-    assert result["status"] == "analyst_review"
+    assert result["status"] == "scout_review"
     assert "t 检验" in result["message"]

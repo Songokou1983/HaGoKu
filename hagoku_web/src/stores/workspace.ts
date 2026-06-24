@@ -6,7 +6,6 @@ export type PanelId =
   | "analyze"
   | "report"
   | "knowledge"
-  | "kanban"
   | "settings"
   | "lab"
   | "events"

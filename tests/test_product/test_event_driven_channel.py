@@ -1,7 +1,7 @@
-"""事件驱动通道守门测试 G1-G8
+"""事件驱动通道守门测试 G1-G8（Phase D 扁平化版）
 
-验证：run() 不阻塞、LLM route_to 阶段切换、cancel、异常处理、
-raw_text 跨 respond 保留、messages 累积。
+验证：run() 不阻塞、cancel、异常处理、raw_text 保留。
+Phase D 后不再有 stage 路由/switch tuple/route_to 跳转。
 """
 
 import inspect
@@ -27,8 +27,7 @@ def test_G1_run_不阻塞(orch):
 
 
 def test_G2_Scout_handler_空输入_返回scout_review(orch):
-    """G2: _handle_scout_reply 空输入时返回 scout_review 并 emit USER_INPUT_REQUESTED。
-    Phase D: field_review 已移至 orchestrator 初始 scout 阶段，不在此 handler 返回。"""
+    """G2: _handle_scout_reply 空输入时返回 scout_review 并 emit USER_INPUT_REQUESTED。"""
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "suggested_role": "feature", "used_in_analysis": True},
@@ -40,19 +39,18 @@ def test_G2_Scout_handler_空输入_返回scout_review(orch):
     orch.event_bus.subscribe(lambda e: captured.append(e))
     result = orch._handle_scout_reply("", context)
     assert result["status"] == "scout_review"
-    # field_review 不再在返回值中，改为通过事件 emit
     assert any(e.event_type.value == "user_input_requested" for e in captured)
 
 
 def test_G3_Scout_handler_纯确认_切Cleaner(orch):
-    """Phase C: 确认词不再触发切换——LLM route_to 是唯一入口。
+    """Phase C/D: 确认词不再触发切换——LLM route_to 已删除。
     用户说"继续"但 LLM 没调 route_to → 留在 scout。"""
     from hagoku.agents.agent import DataAnalystAgent
     orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = ""
-    orch._agent.run_step = MagicMock(return_value={})
+    orch._agent.run_step = MagicMock(return_value={"text": "ok"})
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "used_in_analysis": True},
@@ -61,7 +59,6 @@ def test_G3_Scout_handler_纯确认_切Cleaner(orch):
         "column_display_names": {},
     }
     result = orch._handle_scout_reply("继续", context)
-    # Phase C: 不再是 switch，留在 scout
     assert isinstance(result, dict)
     assert result["status"] == "scout_review"
 
@@ -73,39 +70,34 @@ def test_G4_cancel_via_respond(orch):
     assert result["status"] == "cancelled"
 
 
-def test_G5_respond_未知阶段_返回error(orch):
-    """G5: self._stage 为空字符串 → respond() 返回 error。"""
-    orch._stage = ""
+def test_G5_respond_error_state(orch):
+    """G5: self._error 非空 → respond() 返回 error（Phase D 后 _stage 不再产生 error）。"""
+    orch._error = RuntimeError("测试错误")
     result = orch.respond({"text": "test"})
     assert result["status"] == "error"
 
 
-def test_G6_respond路由_switch_切阶段(orch):
-    """G6: handler 返回 ("switch", "X") → respond() 切换 self._stage 并递归。"""
+def test_G6_respond_flat_pipe_no_switch(orch):
+    """G6: Phase D 后 respond() 直接调 _handle_reply，不再通过 stage 路由切换。
+    respond() 始终返回 _handle_reply 的 dict 结果。"""
     import pandas as pd
-    orch._stage = "scout"
-    orch._context = {}
+    from hagoku.agents.agent import DataAnalystAgent
+
+    orch._stage = "analyst"
+    orch._context = {"query": "测试", "column_semantics": []}
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
 
-    # Mock _handle_scout_reply（respond 通过别名路由到它）
-    saved = orch._handle_scout_reply
-    call_count = [0]
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = ""
+    orch._agent.run_step = MagicMock(return_value={"text": "收到"})
 
-    def mock_scout(self, user_input, context):
-        call_count[0] += 1
-        if call_count[0] == 1:
-            return ("switch", "cleaner")
-        return {"status": "cleaner_review", "message": "ok"}
-
-    orch._handle_scout_reply = mock_scout.__get__(orch)
-    orch._handle_cleaner_reply = lambda *a, **kw: {"status": "cleaner_review", "message": "ok"}
-    try:
-        orch.respond({"text": "test"})
-        assert orch._stage == "cleaner"
-    finally:
-        orch._handle_scout_reply = saved
-        orch._handle_cleaner_reply = getattr(orch.__class__, '_handle_cleaner_reply')
+    result = orch.respond({"text": "test"})
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
+    assert result["message"] == "收到"
 
 
 def test_G7_StageHandlers_完整性(orch):
@@ -153,39 +145,35 @@ def test_G8_analyst_run_step_正常返回(orch):
 
     assert result["submit_findings"] is True
     assert "findings" in result
-    # Phase B: messages 不再返回（由 ProjectContext 内部管理）
 
 
-def test_G9_律8_route_to_触发(orch):
-    """G9（律 8）：handler 返回 ("switch", "X") 模拟 route_to 效果。
+def test_G9_flat_pipe_no_switch_tuple(orch):
+    """G9（律 8）：Phase D 后 handler 不再返回 switch tuple。
+    respond() 直接调 _handle_reply，忽略任何旧式 tuple。"""
+    import pandas as pd
+    from hagoku.agents.agent import DataAnalystAgent
 
-    LLM 调 route_to(stage="cleaner") 的真实路径需要在端到端测试中验证
-    （需要 mock LLM 返回 route_to tool_call）。
-    本测试验证 handler→switch→respond 的切换机制正确。
-    """
     orch._stage = "scout"
     orch._context = {"column_semantics": [], "column_descriptions": {}, "column_display_names": {}}
+    orch._df_raw = pd.DataFrame({"A": [1, 2]})
+    orch._df_clean = orch._df_raw
 
-    saved_scout = orch._handle_scout_reply
-    saved_cleaner = orch._handle_cleaner_reply
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = ""
+    orch._agent.run_step = MagicMock(return_value={"text": "ok"})
 
-    orch._handle_scout_reply = lambda *a, **kw: ("switch", "cleaner")
-    orch._handle_cleaner_reply = lambda *a, **kw: {"status": "cleaner_review", "message": "ok"}
-    try:
-        orch.respond({"text": "好，进入清洗"})
-        assert orch._stage == "cleaner"
-    finally:
-        orch._handle_scout_reply = saved_scout
-        orch._handle_cleaner_reply = saved_cleaner
+    result = orch.respond({"text": "好，进入清洗"})
+    # Phase D: respond() 不再处理 switch tuple，直接返回 _handle_reply 的 dict
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
+    # _stage 不变（无切换逻辑）
+    assert orch._stage == "scout"
 
 
 def test_G10_律2_raw_text_跨_respond_保留(orch):
-    """G10（律 2）：Scout handler 多次 receive 不同 raw_text，context 正确更新。
-
-    律 2 要求 raw_text 保留。_handle_scout_reply 内部调
-    apply_scout_user_field_reply_to_context → LLM 处理 → 更新 context。
-    本测试验证 handler 对多次用户输入能正确传递和处理。
-    """
+    """G10（律 2）：Scout handler 多次 receive 不同 raw_text，正确传递。"""
     context = {
         "column_semantics": [
             {"column_name": "A", "display_name": "列A", "suggested_role": "feature", "used_in_analysis": True},
@@ -199,59 +187,62 @@ def test_G10_律2_raw_text_跨_respond_保留(orch):
     orch._agent.llm_config = orch.config.llm
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = ""
-    orch._agent.run_step = MagicMock(return_value={})
+    orch._agent.run_step = MagicMock(return_value={"text": "ok"})
 
     result1 = orch._handle_scout_reply("A是收入", context)
-    assert result1["status"] == "scout_review" or isinstance(result1, tuple)
+    assert result1["status"] == "scout_review"
 
     result2 = orch._handle_scout_reply("A的单位是万元", context)
-    assert result2["status"] == "scout_review" or isinstance(result2, tuple)
+    assert result2["status"] == "scout_review"
 
-    # Phase D: field_review 不在返回值中，通过 event_bus emit
-    # 验证 handler 未因多次调用而崩溃
+    # Phase D: 验证 handler 未因多次调用而崩溃
 
 
-def test_G11_律6_raw_text_抵达_LLM(orch):
-    """G11（律 6）：respond() 将 raw_text 传给 handler——handler 能拿到用户输入。
+def test_G11_律6_raw_text_抵达_handler(orch):
+    """G11（律 6）：respond() 将 raw_text 经 _handle_reply 传给 _agent.run_step。
 
-    律 6 要求信息抵达。handler 的 text 参数必须等于用户输入的 raw_text。
+    律 6 要求信息抵达。验证 _agent.run_step 收到的 user_input 等于 raw_text。
     """
-    captured = {}
+    import pandas as pd
+    from hagoku.agents.agent import DataAnalystAgent
 
-    def _capture(text, ctx):
-        captured["text"] = text
-        return {"status": "analyst_review", "message": f"收到: {text}"}
-
-    saved = orch._handle_analyst_reply
-    orch._handle_analyst_reply = _capture
     orch._stage = "analyst"
     orch._context = {"query": "测试", "column_semantics": []}
-    try:
-        orch.respond({"text": "把Inc1加进来"})
-        assert "Inc1" in captured.get("text", ""), f"handler 收到的 text 应为用户 raw_text，实际: {captured}"
-    finally:
-        orch._handle_analyst_reply = saved
+    orch._df_raw = pd.DataFrame({"A": [1, 2]})
+    orch._df_clean = orch._df_raw
+
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = ""
+    orch._agent.run_step = MagicMock(return_value={"text": "收到"})
+
+    result = orch.respond({"text": "把Inc1加进来"})
+    assert result["status"] == "scout_review"
+
+    # 验证 run_step 收到了 raw_text
+    orch._agent.run_step.assert_called_once()
+    call_args = orch._agent.run_step.call_args
+    user_input_arg = call_args[0][2]  # run_step(context, df, user_input)
+    assert "Inc1" in user_input_arg, f"run_step 应收到 raw_text，实际: {user_input_arg}"
 
 
 def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
-    """G12：真端到端——_handle_cleaner_reply 调 cleaner.assess(df, ...) 不应抛 ValueError。
+    """G12：真端到端——_handle_cleaner_reply 调 _handle_reply 不抛 ValueError。
 
-    回归保护：line 2582 之前写 `self._df_raw or self._df_clean`，DataFrame 求
-    值抛 ambiguous truth value。修复后改三元表达式，pytest 必须能真调 cleaner
-    handler 一遍（不走 mock），确认 bug 不复发。
-
-    parse_query 在 LLM 不可达时直接 raise（铁律 7），这里 mock 掉让测试
-    专注于 DataFrame truthiness 回归，不依赖真实 LLM。
+    回归保护：DataFrame truthiness 回归。
+    Phase D 后 _handle_cleaner_reply 是存根，delegate 到 _handle_reply。
+    需要 mock _agent.run_step 避免真实 LLM 调用。
     """
     import pandas as pd
     from unittest.mock import patch
     from hagoku.manager.query_parser import QueryIntent
+    from hagoku.agents.agent import DataAnalystAgent
 
     # 写最小 CSV 走真 run() 触发 _df_raw 加载
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("A,B\n1,3\n2,4\n3,5\n", encoding="utf-8")
 
-    # mock parse_query 在源头（query_parser 模块），因为 orchestrator 用 local import
     # Mock plan + Scout + Cleaner assess（非本测试关注点），核心验证 _handle_cleaner_reply 不抛 ValueError
     with patch("hagoku.manager.query_parser.parse_query") as mock_parse, \
          patch("hagoku.agents.agent.DataAnalystAgent.run_scout_phase") as mock_scout_run, \
@@ -276,6 +267,13 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
         assert isinstance(orch._df_raw, pd.DataFrame)
         assert isinstance(orch._df_clean, pd.DataFrame)
 
+        # 设置 mock _agent 以便 _handle_cleaner_reply 能正常返回
+        orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+        orch._agent.llm_config = orch.config.llm
+        orch._agent.event_bus = orch.event_bus
+        orch._agent.prompt = ""
+        orch._agent.run_step = MagicMock(return_value={"text": "ok"})
+
         # 真调 _handle_cleaner_reply——之前会 ValueError，现在应正常返回
         try:
             resp = orch._handle_cleaner_reply("确认清洗策略", orch._context)
@@ -284,4 +282,4 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
                 pytest.fail(f"回归：DataFrame truth value ambiguous 复发: {e}")
             raise
 
-        assert resp["status"] == "cleaner_review"
+        assert resp["status"] == "scout_review"

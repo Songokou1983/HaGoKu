@@ -119,7 +119,7 @@ class TestAnalystControlChannelLinks:
         orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("够了", {"query": "test"})
         assert isinstance(result, dict)
-        assert result["status"] == "analyst_review"
+        assert result["status"] == "scout_review"
 
     def test_submit_findings_without_route_to_stays(self, orch):
         """submit_findings 无 route_to → 留在 analyst（代码不替 LLM 做阶段决策）"""
@@ -132,7 +132,7 @@ class TestAnalystControlChannelLinks:
         orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("提交", {"query": "test"})
         assert isinstance(result, dict)
-        assert result["status"] == "analyst_review"
+        assert result["status"] == "scout_review"
 
     def test_no_control_tool_stays(self, orch):
         """无控制工具调用 → 留在 analyst"""
@@ -145,7 +145,7 @@ class TestAnalystControlChannelLinks:
         orch._agent.run_step = MagicMock(return_value=step_result)
         result = orch._handle_analyst_reply("继续", {"query": "test"})
         assert not isinstance(result, tuple)
-        assert result["status"] == "analyst_review"
+        assert result["status"] == "scout_review"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -192,7 +192,7 @@ class TestCleanerControlChannelLinks:
         })
         result = orch._handle_cleaner_reply("可以了", context)
         assert isinstance(result, dict)
-        assert result["status"] == "cleaner_review"
+        assert result["status"] == "scout_review"
 
     def test_route_to_scout_no_longer_switches(self, orch):
         """Cleaner route_to 已删除 — _handle_cleaner_reply 返回 dict"""
@@ -215,7 +215,7 @@ class TestCleanerControlChannelLinks:
         })
         result = orch._handle_cleaner_reply("清洗方案有问题", context)
         assert isinstance(result, dict)
-        assert result["status"] == "cleaner_review"
+        assert result["status"] == "scout_review"
 
     def test_no_route_to_stays_in_cleaner(self, orch):
         """无 route_to → 留在 cleaner"""
@@ -238,7 +238,7 @@ class TestCleanerControlChannelLinks:
         })
         result = orch._handle_cleaner_reply("再讨论一下", context)
         assert not isinstance(result, tuple)
-        assert result["status"] == "cleaner_review"
+        assert result["status"] == "scout_review"
 
 
 # ═══════════════════════════════════════════════════════════════════

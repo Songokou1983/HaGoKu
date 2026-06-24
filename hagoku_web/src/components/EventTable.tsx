@@ -50,9 +50,6 @@ function EventRow({ entry }: { entry: EventEntry }) {
       <td className="px-3 py-0.5 text-app-text-muted whitespace-nowrap">
         {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
       </td>
-      <td className={`px-3 py-0.5 whitespace-nowrap ${gr ? "text-app-warning" : agentColor}`} title={entry.agent}>
-        {focusLabel(entry.agent)}
-      </td>
       <td className={`px-3 py-0.5 whitespace-nowrap ${eventCls}`}>
         {eventLabel}
       </td>
@@ -78,7 +75,6 @@ export function EventTable({ entries }: EventTableProps) {
       <thead className="sticky top-0 bg-app-bg-secondary text-app-text-muted text-ui-xs uppercase select-none z-10">
         <tr>
           <th className="px-3 py-1 text-left font-medium">时间</th>
-          <th className="px-3 py-1 text-left font-medium">阶段</th>
           <th className="px-3 py-1 text-left font-medium">事件</th>
           <th className="px-3 py-1 text-left font-medium">详情</th>
         </tr>

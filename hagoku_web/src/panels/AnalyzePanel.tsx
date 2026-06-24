@@ -15,7 +15,6 @@ import {
   FileText,
   ShieldAlert,
 } from "lucide-react";
-import { PipelineBar } from "./AnalyzePanel/PipelineBar";
 import { ConvoFeed } from "./AnalyzePanel/ConvoFeed";
 import { ClearHistoryButton } from "./AnalyzePanel/ClearHistoryButton";
 import { ProjectFileSelectors } from "./AnalyzePanel/ProjectFileSelectors";
@@ -265,14 +264,6 @@ export default function AnalyzePanel() {
       {/* ── Query / running / done: conversation view ── */}
       {phase !== "setup" && (
         <>
-          {/* Pipeline bar */}
-          <div className="px-3 py-2 border-b border-app-border shrink-0">
-            <PipelineBar
-              states={sess.agentStates}
-              elapsed={sess.agentElapsed}
-            />
-          </div>
-
           {/* CO-15: ThinkingStrip — single latest thought, not in ConvoFeed */}
           <ThinkingStrip text={thinkingText} />
 

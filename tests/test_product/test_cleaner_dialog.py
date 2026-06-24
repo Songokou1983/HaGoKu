@@ -1,4 +1,8 @@
-"""CL-2: 验证 Cleaner 对话化 — 首次评估展示 + 对话循环 + route_to"""
+"""CL-2: 验证 Cleaner 纯通道模式（Phase D 扁平化）
+
+_handle_cleaner_reply 现为存根，直接 delegate 到 _handle_reply。
+不再有首次评估/对话模式切换/route_to 跳转。
+"""
 from unittest.mock import MagicMock, patch
 import json as _json
 import pandas as pd
@@ -16,62 +20,52 @@ def _setup_cleaner_context():
     }
 
 
-class FakeCleanerAgent:
-    """伪装 CleanerAgent 用于测试 _handle_cleaner_reply。"""
-    def __init__(self):
-        self.llm_config = None
-        self.event_bus = None
-        self.prompt = "test"
-        self.run_step = MagicMock()
-
-    def _load_cleaning_rules(self):
-        return "test rules"
-
-    def assess(self, df, context):
-        return {"summary": "评估完成", "columns": []}
-
-
-def test_first_call_runs_assessment_and_opens_dialog():
-    """首次进入 Cleaner → 运行评估 + 设置 _cleaner_dialog_open=True + 返回 cleaner_review"""
+def test_cleaner_reply_with_agent():
+    """_handle_cleaner_reply 非空输入 → 调 _agent.run_step → 返回 scout_review。"""
     orch = Orchestrator(HaGoKuConfig())
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
     context = _setup_cleaner_context()
 
-    fake = FakeCleanerAgent()
-    orch._agent = fake
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
+    orch._agent.run_step = MagicMock(return_value={
+        "text": "评估完成",
+        "submit_assessment": False,
+        "assessment": None,
+        "route_to": None,
+    })
+
     result = orch._handle_cleaner_reply("评估", context)
-
-    assert result["status"] == "cleaner_review"
-    assert orch._cleaner_dialog_open, "首次评估后应设置 _cleaner_dialog_open=True"
-    assert context.get("_cleaner_assessment") is not None
+    assert result["status"] == "scout_review"
+    orch._agent.run_step.assert_called_once()
 
 
-def test_second_call_uses_dialog_mode():
-    """第二次进入 Cleaner → 使用 run_step 对话模式（不重新评估）"""
+def test_cleaner_reply_returns_dict():
+    """_handle_cleaner_reply 始终返回 dict。"""
     orch = Orchestrator(HaGoKuConfig())
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
     context = _setup_cleaner_context()
-    context["_cleaner_assessment"] = {"summary": "已有评估", "columns": []}
 
-    fake = FakeCleanerAgent()
-    orch._agent = fake
-    orch._cleaner_messages = [{"role": "user", "content": "你好"}]
-    orch._cleaner_dialog_open = True
-
-    fake.run_step.return_value = {
-        "messages": orch._cleaner_messages + [{"role": "assistant", "content": "收到"}],
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
+    orch._agent.run_step = MagicMock(return_value={
         "text": "收到",
         "submit_assessment": False,
         "assessment": None,
         "route_to": None,
-    }
+    })
 
     result = orch._handle_cleaner_reply("换个方案", context)
-
-    fake.run_step.assert_called_once()
-    assert result["status"] == "cleaner_review"
+    assert isinstance(result, dict)
+    assert result["status"] == "scout_review"
 
 
 def test_cleaner_route_to_no_longer_switches():
@@ -80,24 +74,22 @@ def test_cleaner_route_to_no_longer_switches():
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
     context = _setup_cleaner_context()
-    context["_cleaner_assessment"] = {"summary": "done", "columns": []}
 
-    fake = FakeCleanerAgent()
-    orch._agent = fake
-    orch._cleaner_messages = [{"role": "user", "content": "可以了"}]
-    orch._cleaner_dialog_open = True
-
-    fake.run_step.return_value = {
-        "messages": orch._cleaner_messages,
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
+    orch._agent.run_step = MagicMock(return_value={
         "text": "好的",
         "submit_assessment": False,
         "assessment": None,
         "route_to": {"stage": "analyst", "reason": "清洗完成"},
-    }
+    })
 
     result = orch._handle_cleaner_reply("可以了", context)
     assert isinstance(result, dict)
-    assert result["status"] == "cleaner_review"
+    assert result["status"] == "scout_review"
 
 
 def test_cleaner_confirmation_text_no_longer_triggers_switch():
@@ -106,20 +98,20 @@ def test_cleaner_confirmation_text_no_longer_triggers_switch():
     orch._df_raw = pd.DataFrame({"A": [1, 2]})
     orch._df_clean = orch._df_raw
     context = _setup_cleaner_context()
-    context["_cleaner_assessment"] = {"summary": "done", "columns": []}
 
-    fake = FakeCleanerAgent()
-    orch._agent = fake
-    orch._cleaner_dialog_open = True
-
-    fake.run_step.return_value = {
+    from hagoku.agents.agent import DataAnalystAgent
+    orch._agent = DataAnalystAgent.__new__(DataAnalystAgent)
+    orch._agent.llm_config = orch.config.llm
+    orch._agent.event_bus = orch.event_bus
+    orch._agent.prompt = "test"
+    orch._agent.run_step = MagicMock(return_value={
         "text": "ok",
         "submit_assessment": False,
         "assessment": None,
         "route_to": None,
-    }
+    })
 
     result = orch._handle_cleaner_reply("确认", context)
-    # Phase C: 留在 cleaner，不再自动切 analyst
+    # Phase C/D: 留在当前，不再自动切 analyst
     assert isinstance(result, dict)
-    assert result["status"] == "cleaner_review"
+    assert result["status"] == "scout_review"

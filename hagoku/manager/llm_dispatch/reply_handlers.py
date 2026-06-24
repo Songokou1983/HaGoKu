@@ -59,6 +59,7 @@ def respond(self, user_input: dict) -> dict[str, Any]:
 
     ctx = getattr(self, '_context', None)
     if ctx is not None:
+        ctx["_current_stage"] = self._stage
         if text:
             ctx["_pending_command_text"] = text
 

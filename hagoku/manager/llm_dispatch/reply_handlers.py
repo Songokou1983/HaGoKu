@@ -24,6 +24,12 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     result = self._agent.run_step(context, df, user_input)
     self._log_channel("analyst", "run_step_done", text=result.get("text", ""))
 
+    # ── 被动观测：LLM 调了 submit_* 说明阶段推进了 ──
+    if result.get("submit_assessment"):
+        self._stage = "analyst"
+    if result.get("submit_findings"):
+        self._stage = "reporter"
+
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:

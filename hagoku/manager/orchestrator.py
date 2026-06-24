@@ -184,7 +184,6 @@ class Orchestrator(
             if not save_path:
                 return None
             run_dir = Path(save_path).parent
-            run_id = run_dir.name
             run_dir.mkdir(parents=True, exist_ok=True)
 
             ctx = getattr(self, '_context', None) or {}

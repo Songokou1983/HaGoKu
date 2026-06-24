@@ -51,8 +51,9 @@ def _handle_reply(self, user_input: str, context: dict) -> dict | tuple:
     df = (self._df_raw if stage in ("scout", "cleaner")
           else self._df_clean if stage == "analyst"
           else None)
+    self._log_channel(stage, "run_step_enter", has_df=df is not None, input_len=len(user_input or ""))
     result = self._agent.run_step(context, df, user_input or "")
-    self._log_channel(stage, "run_step_done", text=result.get("text", ""))
+    self._log_channel(stage, "run_step_done", text=result.get("text", "")[:200])
 
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
@@ -108,10 +109,12 @@ def respond(self, user_input: dict) -> dict[str, Any]:
 
     # 通过别名路由（兼容测试 mock 旧 handler 的场景）
     handler = getattr(self, f"_handle_{self._stage}_reply", None) if self._stage else None
+    self._log_channel("orchestrator", "respond_dispatch", stage=self._stage, handler=bool(handler))
     if handler:
         result = handler(text, ctx or {})
     else:
         result = _handle_reply(self, text, ctx or {})
+    self._log_channel("orchestrator", "respond_handler_done", stage=self._stage, result_type=type(result).__name__)
 
     # stage 切换：只更新阶段，不做任何自动操作。LLM 主导一切。
     if isinstance(result, tuple) and len(result) >= 2 and result[0] == "switch":

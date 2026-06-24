@@ -40,7 +40,7 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 def respond(self, user_input: dict) -> dict[str, Any]:
     """处理用户回复 — 写 Session → 调 handler → 处理 stage 切换。"""
     text = user_input.get("text", "").strip()
-    self._log_channel("orchestrator", "respond_enter", text=text, stage=self._stage)
+    self._log_channel("orchestrator", "respond_enter", text=text)
 
     if self._is_cancel_requested():
         return {"status": "cancelled", "message": "分析已中止"}
@@ -59,7 +59,6 @@ def respond(self, user_input: dict) -> dict[str, Any]:
 
     ctx = getattr(self, '_context', None)
     if ctx is not None:
-        ctx["_current_stage"] = self._stage
         if text:
             ctx["_pending_command_text"] = text
 

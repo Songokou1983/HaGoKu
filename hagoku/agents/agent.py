@@ -1,8 +1,7 @@
 """
 DataAnalystAgent — 唯一数据分析师（Phase D：4 agent 合 1）
 
-从 agents/prompt.md 读取统一 prompt（4 关注点），
-所有工具对 LLM 可见，LLM 通过 route_to 声明关注点切换。
+从 agents/prompt.md 读取统一 prompt，所有工具对 LLM 可见。
 """
 
 from __future__ import annotations
@@ -61,8 +60,7 @@ class DataAnalystAgent(BaseAgent):
     """数据分析师 — 唯一 agent。
 
     一套 chat、一套 prompt、全部工具可见。
-    LLM 自己按 4 个关注点（理解字段/评估清洗/跑统计/写报告）切换焦点，
-    通过 route_to 声明 phase tag。
+    LLM 按 prompt 描述的自然流程与用户交互。
     """
 
     ROLE = "analyst"
@@ -241,7 +239,6 @@ class DataAnalystAgent(BaseAgent):
                 self._context["_session"] = session
         context = {
             "_session": session,
-            "_current_stage": "scout",
             "query": query,
             "column_semantics": [],
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
@@ -398,7 +395,6 @@ class DataAnalystAgent(BaseAgent):
         revision = context.get("interaction_revision", 0)
         session.add("user", intro)
 
-        context["_current_stage"] = "cleaner"
         context.setdefault("_column_info", {c: str(df[c].dtype) for c in df.columns})
 
         # 循环 run_step 直到 LLM 调 submit_assessment（最多 5 轮）
@@ -520,13 +516,10 @@ class DataAnalystAgent(BaseAgent):
                             for tc in (tc_list or [])] if tc_list else None}],
             model=self.llm_config.model)
 
-        revision = context.get("interaction_revision", 0)
-        stage = context.get("_current_stage", "analyst")
         # 没有 tool_calls 时写入纯文本 assistant 消息
         if not tc_list:
             session.add("assistant", txt or "(tool calls)")
 
-        route_to_args = None
         findings = None
         assessment = None
 
@@ -542,9 +535,6 @@ class DataAnalystAgent(BaseAgent):
                 try:
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
-                    continue
-                if fn.name == "route_to":
-                    route_to_args = _agt.dispatch(fn.name, args, context, df)
                     continue
                 if fn.name == "submit_findings":
                     findings = _agt.dispatch(fn.name, args, context, df)
@@ -584,7 +574,7 @@ class DataAnalystAgent(BaseAgent):
                 session.add_tool_call(txt, oai_calls, results)
 
             # 控制工具已触发 → 不需要继续循环
-            if route_to_args is not None or findings is not None or assessment is not None:
+            if findings is not None or assessment is not None:
                 break
 
             # 让 LLM 看到工具结果，决定下一步
@@ -649,7 +639,7 @@ class DataAnalystAgent(BaseAgent):
                 model=self.llm_config.model)
 
         return {
-            "text": txt, "route_to": route_to_args,
+            "text": txt,
             "submit_findings": findings is not None, "findings": findings,
             "submit_assessment": assessment is not None, "assessment": assessment,
         }

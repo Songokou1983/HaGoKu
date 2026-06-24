@@ -84,8 +84,7 @@ def test_handle_analyst_reply_empty_input():
 
 
 def test_reset_run_state_clears_first_pass_flag():
-    """_reset_run_state 应重置 _analyst_first_pass_done（属性仍保留，handler 不再使用）。"""
+    """_reset_run_state 清理状态（属性已移除，不再需要重置 _analyst_first_pass_done）。"""
     orch = Orchestrator(HaGoKuConfig())
-    orch._analyst_first_pass_done = True
     orch._reset_run_state()
-    assert not orch._analyst_first_pass_done, "_reset_run_state 应重置 _analyst_first_pass_done"
+    assert orch._stage == ""

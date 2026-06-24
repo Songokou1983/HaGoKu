@@ -125,11 +125,6 @@ class Orchestrator(
         self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
-        self._analyst_agent: Any = None
-        self._analyst_first_pass_done: bool = False
-        self._cleaner_agent: Any = None
-        self._cleaner_dialog_open: bool = False
-        self._reporter_agent: Any = None
         self._error: Exception | None = None
 
 
@@ -161,10 +156,6 @@ class Orchestrator(
         self._stage = ""
         self._df_clean = None
         self._df_raw = None
-        self._analyst_agent = None
-        self._analyst_first_pass_done = False
-        self._cleaner_agent = None
-        self._cleaner_dialog_open = False
         self._error = None
 
     def save_state(self) -> str | None:
@@ -207,7 +198,6 @@ class Orchestrator(
                 "query": safe_ctx.get('query', ''),
                 "data_path": safe_ctx.get('data_path', ''),
                 "context": safe_ctx,
-                "analyst_first_pass_done": self._analyst_first_pass_done,
             }
             (run_dir / "orch_state.json").write_text(
                 _json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
@@ -239,7 +229,6 @@ class Orchestrator(
             orch = cls(config)
             orch._project_name = state.get("project_name", "")
             orch._stage = state.get("stage", "")
-            orch._analyst_first_pass_done = state.get("analyst_first_pass_done", False)
             orch._context = state.get("context", {})
 
             # 恢复 DataFrames
@@ -362,7 +351,6 @@ class Orchestrator(
         self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
-        self._analyst_agent: Any = None
         self._error: Exception | None = None
 
 

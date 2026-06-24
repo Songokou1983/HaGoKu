@@ -27,8 +27,10 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     # ── 被动观测：LLM 调了 submit_* 说明阶段推进了 ──
     if result.get("submit_assessment"):
         self._stage = "analyst"
+        context["_cleaner_assessment"] = result.get("assessment") or {}
     if result.get("submit_findings"):
         self._stage = "reporter"
+        context["_analyst_findings"] = result.get("findings") or {}
 
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)

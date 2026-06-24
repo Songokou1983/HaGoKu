@@ -542,9 +542,19 @@ class DataAnalystAgent(BaseAgent):
                     continue
                 if fn.name == "submit_findings":
                     findings = _agt.dispatch(fn.name, args, context, df)
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(tc, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result=_json.dumps(findings, ensure_ascii=False, default=str),
+                    ))
                     continue
                 if fn.name == "submit_assessment":
                     assessment = _agt.dispatch(fn.name, args, context, df)
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(tc, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result=_json.dumps(assessment, ensure_ascii=False, default=str),
+                    ))
                     continue
                 try:
                     result = _agt.dispatch(fn.name, args, context, df)

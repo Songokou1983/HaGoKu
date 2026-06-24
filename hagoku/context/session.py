@@ -80,6 +80,34 @@ class Session:
             system_extra=system_extra,
         )
 
+    # ── 阶段推断 ──
+
+    KEY_TOOL_TO_FOCUS = [
+        ("submit_findings", "撰写报告"),
+        ("submit_assessment", "统计分析"),
+        ("set_columns", "评估清洗"),
+    ]
+
+    def infer_current_focus(self) -> str:
+        """从 session.messages 推断当前关注点——只读，不修改 messages。
+
+        推断逻辑：扫描 assistant 消息的 tool_calls，找最近的关键工具调用。
+        - 没调过任何关键工具 → "理解字段"（首次进入）
+        - 调过 set_columns → "评估清洗"
+        - 调过 submit_assessment → "统计分析"
+        - 调过 submit_findings → "撰写报告"
+        """
+        last_focus = "理解字段"  # 默认首次进入
+        for msg in self.messages:
+            if msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls") or []:
+                name = tc.get("function", {}).get("name", "")
+                for key, focus in self.KEY_TOOL_TO_FOCUS:
+                    if name == key:
+                        last_focus = focus
+        return last_focus
+
     # ── 持久化 ──
 
     def _maybe_save(self) -> None:

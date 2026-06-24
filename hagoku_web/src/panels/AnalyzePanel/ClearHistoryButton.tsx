@@ -26,7 +26,7 @@ export function ClearHistoryButton({ currentProject, onClear }: { currentProject
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-app-bg border border-app-border rounded-lg p-6 max-w-sm mx-4 shadow-xl">
             <p className="text-ui-sm text-app-text mb-4">
-              将清除该项目所有历史分析记录（运行记录、看板、记忆）。数据文件保留。此操作不可撤销，确认清除？
+              将清除该项目所有历史分析记录（运行记录、记忆）。数据文件保留。此操作不可撤销，确认清除？
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowConfirm(false)}

@@ -410,7 +410,7 @@ def list_methods(tag: str | None) -> None:
     统计(3)     run_statistical_test, check_test_assumptions, correct_multiple_comparisons
     分析(2)     submit_assessment, submit_findings
     可视化(1)   create_plot
-    流程(2)     ask_user, route_to
+    流程(1)     ask_user
     """
     from .tools.registry import agent_tools
 

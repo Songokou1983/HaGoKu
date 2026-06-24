@@ -535,7 +535,7 @@ class DataAnalystAgent(BaseAgent):
         assessment = None
 
         # ── 工具循环：LLM 调工具就继续，不调就停 ──
-        MAX_TOOL_ROUNDS = 5
+        MAX_TOOL_ROUNDS = 99
         for _round in range(MAX_TOOL_ROUNDS):
             if not tc_list:
                 break

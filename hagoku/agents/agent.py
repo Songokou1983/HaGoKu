@@ -240,6 +240,7 @@ class DataAnalystAgent(BaseAgent):
         context = {
             "_session": session,
             "query": query,
+            "_current_stage": "scout",
             "column_semantics": [],
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",

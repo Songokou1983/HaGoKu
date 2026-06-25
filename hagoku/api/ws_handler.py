@@ -383,6 +383,11 @@ async def ws_handler(ws: WebSocket) -> None:
                         })
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})
+            elif cmd == "cancel_respond":
+                orch = _shared_orchestrator
+                if orch is not None:
+                    orch.request_cancel_respond()
+                await ws.send_json({"type": "ack", "cmd": "cancel_respond"})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}

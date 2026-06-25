@@ -205,6 +205,10 @@ export function useWsEventHandler(deps: WsEventDeps) {
         setReplyPending?.(false);
         continue;
       }
+      if (msg.type === "ack" && msg.cmd === "cancel_respond") {
+        setReplyPending?.(false);
+        continue;
+      }
 
       // ── error ───────────────────────────────────────────────────
       if (msg.type === "error") {

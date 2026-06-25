@@ -271,12 +271,19 @@ export default function AnalyzePanel() {
             <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 shrink-0 text-ui-xs text-app-text-muted">
               <Loader2 size={13} className="animate-spin text-app-accent" />
               <span>分析师正在处理你的回复…</span>
+              <button
+                type="button"
+                onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}
+                className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs
+                  hover:border-app-error hover:text-app-error cursor-pointer transition-colors"
+              >
+                停止
+              </button>
             </div>
           )}
 
-          {/* Reply input — shown when gate is open AND not pending */}
-          {sess.gateOpen && !replyPending && (
-            <div className="shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
+          {/* Reply input — always visible */}
+          <div className="shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
             {/* Quick action buttons */}
             {cleanerCleaningReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
@@ -346,7 +353,6 @@ export default function AnalyzePanel() {
                 }
               />
             </div>
-          )}
 
           {/* Done: report link + reset */}
           {phase === "done" &&

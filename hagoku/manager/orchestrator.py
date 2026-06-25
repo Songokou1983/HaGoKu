@@ -263,6 +263,13 @@ class Orchestrator(
         # 保存当前状态，以便恢复
         self.save_state()
 
+    def request_cancel_respond(self) -> None:
+        """前端点「停止」：中断当前 respond 处理。"""
+        self._respond_cancelled = True
+
+    def _is_respond_cancelled(self) -> bool:
+        return getattr(self, '_respond_cancelled', False)
+
     def _is_cancel_requested(self) -> bool:
         with self._cancel_lock:
             return self._cancel_requested_flag

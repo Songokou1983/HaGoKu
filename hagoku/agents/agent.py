@@ -591,6 +591,10 @@ class DataAnalystAgent(BaseAgent):
             if context.get("_pending_ask_user"):
                 break
 
+            # 用户点了停止 → 中断处理
+            if getattr(getattr(self, 'orchestrator', None), '_respond_cancelled', False):
+                break
+
             # 让 LLM 看到工具结果，决定下一步
             agent_extra = self.prompt
             if col_info:

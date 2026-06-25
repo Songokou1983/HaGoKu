@@ -57,6 +57,9 @@ def respond(self, user_input: dict) -> dict[str, Any]:
     else:
         setattr(self, '_empty_respond_count', 0)
 
+    # ── 清除上次停止标记 ──
+    setattr(self, '_respond_cancelled', False)
+
     ctx = getattr(self, '_context', None)
     if ctx is not None:
         if text:

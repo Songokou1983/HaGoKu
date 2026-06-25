@@ -161,7 +161,11 @@ async def list_reports(project_name: str):
 async def get_report_run(project_name: str, run_id: str, filename: str):
     if "/" in filename:
         raise HTTPException(400, "Invalid filename")
-    path = _projects_root() / project_name / "runs" / run_id / "output" / filename
+    if run_id == "latest":
+        # 项目级最新报告
+        path = _projects_root() / project_name / "reports" / f"{filename}"
+    else:
+        path = _projects_root() / project_name / "runs" / run_id / "output" / filename
     if not path.exists():
         raise HTTPException(404, "File not found")
     if filename.endswith(".html"):

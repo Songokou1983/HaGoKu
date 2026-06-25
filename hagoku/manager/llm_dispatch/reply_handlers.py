@@ -20,12 +20,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
         return {"status": "scout_review", "message": ""}
 
     # ── 调 LLM ──
-    if not hasattr(self, '_agent') or self._agent is None:
-        from hagoku.agents.agent import DataAnalystAgent
-        self._agent = DataAnalystAgent(
-            self.config.llm, self.event_bus,
-            orchestrator=self, llm_client=None,
-        )
     df = self._df_clean if self._df_clean is not None else self._df_raw
     result = self._agent.run_step(context, df, user_input)
     self._log_channel("analyst", "run_step_done", text=result.get("text", ""))

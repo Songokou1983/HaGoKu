@@ -169,10 +169,8 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
     用于 WebSocket 重连时恢复 UI 状态：当前阶段、对话等。
     不生成任何用户可见内容——所有展示数据由 LLM 流式输出提供。"""
     try:
-        stage = getattr(orch, '_stage', '') or ''
         ctx = getattr(orch, '_context', None) or {}
         snapshot: dict[str, Any] = {
-            "stage": stage,
             "project_name": getattr(orch, '_project_name', '') or (
                 ctx.get('data_path', '').split('/')[-2] if ctx.get('data_path') else ''
             ),
@@ -279,7 +277,7 @@ async def ws_handler(ws: WebSocket) -> None:
         # ── 自动恢复未完成 session ──
         global _shared_orchestrator
         orch = _shared_orchestrator
-        if orch is None or not getattr(orch, '_stage', ''):
+        if orch is None:
             restored = _try_restore_session()
             if restored:
                 orch = _shared_orchestrator
@@ -289,10 +287,8 @@ async def ws_handler(ws: WebSocket) -> None:
 
         # ── 重连状态恢复：推送当前 pipeline 快照 ──
         if orch is not None:
-            stage = getattr(orch, '_stage', '') or ''
-            if stage:  # pipeline 正在某个阶段（包括暂停等用户输入）
-                snapshot = _build_state_snapshot(orch)
-                if snapshot:
+            snapshot = _build_state_snapshot(orch)
+            if snapshot:
                     await ws.send_json({"type": "state_snapshot", "data": snapshot})
 
         while True:
@@ -396,7 +392,7 @@ async def ws_handler(ws: WebSocket) -> None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})
                 else:
                     try:
-                        result = orch.respond({"text": user_text, "stage": getattr(orch, '_stage', '')})
+                        result = orch.respond({"text": user_text})
                         await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})

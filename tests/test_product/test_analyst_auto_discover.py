@@ -84,7 +84,12 @@ def test_handle_analyst_reply_empty_input():
 
 
 def test_reset_run_state_clears_first_pass_flag():
-    """_reset_run_state 清理状态（属性已移除，不再需要重置 _analyst_first_pass_done）。"""
+    """_reset_run_state 清理运行时字段（_stage 已删除）。"""
     orch = Orchestrator(HaGoKuConfig())
+    orch._df_raw = pd.DataFrame({"a": [1]})
+    orch._df_clean = pd.DataFrame({"b": [2]})
+    orch._error = ValueError("test")
     orch._reset_run_state()
-    assert orch._stage == ""
+    assert orch._df_raw is None
+    assert orch._df_clean is None
+    assert orch._error is None

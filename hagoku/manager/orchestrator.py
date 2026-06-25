@@ -122,7 +122,6 @@ class Orchestrator(
         self._cancel_lock = threading.Lock()
         self._cancel_requested_flag = False
         # 事件驱动状态机字段
-        self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
         self._error: Exception | None = None
@@ -153,7 +152,6 @@ class Orchestrator(
 
     def _reset_run_state(self) -> None:
         """新一轮分析前清理上次残留。"""
-        self._stage = ""
         self._df_clean = None
         self._df_raw = None
         self._error = None
@@ -192,7 +190,6 @@ class Orchestrator(
                     safe_ctx[k] = str(v)
 
             state = {
-                "stage": self._stage,
                 "project_name": getattr(self, '_project_name', ''),
                 "run_id": run_id,
                 "query": safe_ctx.get('query', ''),
@@ -228,7 +225,6 @@ class Orchestrator(
 
             orch = cls(config)
             orch._project_name = state.get("project_name", "")
-            orch._stage = state.get("stage", "")
             orch._context = state.get("context", {})
 
             # 恢复 DataFrames
@@ -253,8 +249,8 @@ class Orchestrator(
             from ..storage.output import OutputManager
             orch.output_mgr = OutputManager(orch.config.output, orch._project_name)
 
-            logger.info("restore_session: 恢复 session stage=%s project=%s",
-                        orch._stage, orch._project_name)
+            logger.info("restore_session: 恢复 session project=%s",
+                        orch._project_name)
             return orch
         except Exception:
             logger.warning("restore_session 失败", exc_info=True)
@@ -348,7 +344,6 @@ class Orchestrator(
             self._cancel_requested_flag = False
         # 事件驱动状态机字段
         self._project_name = project_name
-        self._stage: str = ""
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
         self._error: Exception | None = None
@@ -411,7 +406,7 @@ class Orchestrator(
                 context["_memory_manager"] = self.memory
                 context["_project_name"] = project_name
 
-                self._stage = "scout"
+
                 self._context = context
                 from hagoku.tools.data_io import load_data as _load
                 _df = _load(data_path)

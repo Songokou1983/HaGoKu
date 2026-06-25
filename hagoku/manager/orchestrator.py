@@ -398,6 +398,9 @@ class Orchestrator(
                 if context.get("error"):
                     raise RuntimeError(str(context["error"]))
 
+                # 写 run_dir 到 context，供 generate_report 等工具使用
+                context["_run_dir"] = str(run_dir)
+
                 if self._is_cancel_requested():
                     return self._finish_run_cancelled(run_id, project_name, run_start, run_dir)
 

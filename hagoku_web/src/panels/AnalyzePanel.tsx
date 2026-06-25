@@ -24,7 +24,16 @@ import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
 import { sanitizeText } from "../utils/sanitize";
-import { focusLabel, focusPlaceholder } from "../constants/focusAreas";
+
+const STAGE_LABELS: Record<string, string> = {
+  scout: "理解字段", cleaner: "评估清洗", analyst: "跑统计", reporter: "写报告",
+};
+const STAGE_PLACEHOLDERS: Record<string, string> = {
+  scout: "字段理解不对时输入说明，Enter 发送",
+  cleaner: "不同意建议？输入你的想法后 Enter 发送",
+  analyst: "补充关注点后 Enter 发送",
+  reporter: "输入回复后 Enter 发送",
+};
 
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
@@ -174,7 +183,7 @@ export default function AnalyzePanel() {
   const currentStage =
     sess.waitingAgent || (phase === "running" ? "analyst" : null);
   const contextSubtitle = currentStage
-    ? `当前：${focusLabel(currentStage)}`
+    ? `当前：${STAGE_LABELS[currentStage] || currentStage}`
     : undefined;
 
   return (
@@ -362,7 +371,7 @@ export default function AnalyzePanel() {
 
               {/* CO-17: InputBar replacing inline textarea */}
               <InputBar
-                placeholder={focusPlaceholder(sess.waitingAgent)}
+                placeholder={STAGE_PLACEHOLDERS[sess.waitingAgent] || ""}
                 value={sess.replyText}
                 onChange={(v) => sess.setReplyText(v)}
                 onSend={submitUserReply}

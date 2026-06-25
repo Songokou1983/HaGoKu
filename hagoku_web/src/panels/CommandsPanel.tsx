@@ -16,7 +16,10 @@ import {
   Terminal,
 } from "lucide-react";
 import { PanelHeader } from "../components/PanelHeader";
-import { focusLabel } from "../constants/focusAreas";
+
+const STAGE_LABELS: Record<string, string> = {
+  scout: "理解字段", cleaner: "评估清洗", analyst: "跑统计", reporter: "写报告",
+};
 
 // ── 类型定义 ──────────────────────────────────────────────────────
 interface FastCommand {
@@ -325,7 +328,7 @@ function StageRefCard({ stage }: { stage: StageRefCommands }) {
       >
         <span className={stage.stageColor}>{stage.stageIcon}</span>
         <span className="text-ui-sm font-medium text-app-text flex-1">
-          {focusLabel(stage.agent.toLowerCase())}
+          {STAGE_LABELS[stage.agent.toLowerCase()] || stage.agent}
         </span>
         <span className="text-ui-xs text-app-text-muted">{stage.stage}</span>
         {expanded ? (

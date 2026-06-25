@@ -1,6 +1,6 @@
 import type { AnalystReviewPayload } from "./types";
 import { significanceShort } from "./parsers";
-import { focusLabel } from "../../constants/focusAreas";
+
 
 export function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
   return (
@@ -9,7 +9,7 @@ export function AnalystReviewTable({ data }: { data: AnalystReviewPayload }) {
         motion-safe:transition-shadow motion-safe:duration-300 shadow-sm hover:shadow-md"
     >
       <div className="px-3 py-2 border-b border-app-border text-ui-xs leading-snug space-y-0.5">
-        <div className="font-medium text-app-text">{focusLabel("analyst")}</div>
+        <div className="font-medium text-app-text">跑统计</div>
         <div className="text-app-text-muted">
           共 {data.n_findings} 条结果 · 其中统计显著 {data.n_significant} 条 · 请核对下表（p 值、效应量、置信区间）；可补充说明，或点「确认继续」进入下一步
         </div>

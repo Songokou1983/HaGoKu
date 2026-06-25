@@ -1,7 +1,6 @@
 import { EmptyState } from "./EmptyState";
 import { WifiOff } from "lucide-react";
 import type { EventType } from "../types/events";
-import { focusLabel } from "../constants/focusAreas";
 
 export interface EventEntry {
   id: string;

@@ -154,7 +154,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 
 ---
 
-## 反模式经验录 → [docs/ANTIPATTERNS.md](docs/ANTIPATTERNS.md)
+## 反模式经验录 → [docs/CHANNEL.md](docs/CHANNEL.md)
 
 反复出现的错误模式：搬运 LLM 文本、只流式第 1 轮、代码替 LLM 做阶段决策、守门太窄。
 

@@ -25,16 +25,6 @@ import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
 import { sanitizeText } from "../utils/sanitize";
 
-const STAGE_LABELS: Record<string, string> = {
-  scout: "理解字段", cleaner: "评估清洗", analyst: "跑统计", reporter: "写报告",
-};
-const STAGE_PLACEHOLDERS: Record<string, string> = {
-  scout: "字段理解不对时输入说明，Enter 发送",
-  cleaner: "不同意建议？输入你的想法后 Enter 发送",
-  analyst: "补充关注点后 Enter 发送",
-  reporter: "输入回复后 Enter 发送",
-};
-
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
   const status = useWorkspaceStore((s) => s.status);
@@ -142,11 +132,11 @@ export default function AnalyzePanel() {
   // Submit reply handler
   const submitUserReply = useCallback(
     (raw: string) => {
-      if (!sess.waitingAgent && !replyPending) return;
+      if (!replyPending) return;
       const outgoing = sanitizeText(raw.trim());
       if (!outgoing) return;
       sess.replySnapshotRef.current = {
-        agent: sess.waitingAgent || "analyst",
+        agent: "analyst",
         gate: sess.gateOpen,
       };
       const s = send("respond", { text: outgoing });
@@ -164,7 +154,7 @@ export default function AnalyzePanel() {
       setReplyPending(true);
       sess.setGateOpen(false);
     },
-    [send, sess.waitingAgent, sess.gateOpen, replyPending],
+    [send, sess.gateOpen, replyPending],
   );
 
   const canStart =
@@ -173,30 +163,17 @@ export default function AnalyzePanel() {
     fileExists &&
     connectionStatus === "connected";
   const scoutFieldReviewOpen =
-    Boolean(sess.activeFieldReviewId) && sess.waitingAgent === "scout";
+    Boolean(sess.activeFieldReviewId);
   const cleanerCleaningReviewOpen =
-    Boolean(sess.activeCleaningReviewId) && sess.waitingAgent === "cleaner";
+    Boolean(sess.activeCleaningReviewId);
   const analystReviewOpen =
-    Boolean(sess.activeAnalystReviewId) && sess.waitingAgent === "analyst";
+    Boolean(sess.activeAnalystReviewId);
 
-  // CO-04: context subtitle
-  const currentStage =
-    sess.waitingAgent || (phase === "running" ? "analyst" : null);
-  const contextSubtitle = currentStage
-    ? `当前：${STAGE_LABELS[currentStage] || currentStage}`
-    : undefined;
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text relative">
       <PanelHeader
         title="分析"
-        badge={
-          contextSubtitle ? (
-            <span className="text-ui-xs text-app-text-muted font-normal tracking-normal normal-case">
-              {contextSubtitle}
-            </span>
-          ) : undefined
-        }
       >
         <div className="flex items-center gap-2">
           <button
@@ -354,8 +331,7 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {sess.waitingAgent === "cleaner" &&
-                !cleanerCleaningReviewOpen && (
+              {sess.waitingAgent && (
                   <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
                     <button
                       type="button"
@@ -371,7 +347,7 @@ export default function AnalyzePanel() {
 
               {/* CO-17: InputBar replacing inline textarea */}
               <InputBar
-                placeholder={STAGE_PLACEHOLDERS[sess.waitingAgent] || ""}
+              placeholder="输入回复后 Enter 发送"
                 value={sess.replyText}
                 onChange={(v) => sess.setReplyText(v)}
                 onSend={submitUserReply}

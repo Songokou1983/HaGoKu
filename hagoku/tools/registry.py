@@ -30,7 +30,7 @@ class Tool:
     parameters: dict[str, Any]
     handler: Callable[..., Any]
     phase_tag: list[str] = field(default_factory=lambda: ["理解字段", "评估清洗", "跑统计", "写报告"])
-    # Phase D: phase_tag 替代 agents。仅作 LLM 自参考，不过滤工具。
+    # phase_tag 仅供 CLI 查询和 curator 使用，不传给 LLM
 
 
 class AgentTools:
@@ -55,20 +55,14 @@ class AgentTools:
 
     @classmethod
     def to_openai(cls, agent: str = "") -> list[dict[str, Any]]:
-        """Phase D: 返回全部工具（不再按 agent 过滤）。
-
-        phase_tag 作为 description 的一部分，让 LLM 知道工具的典型使用场景。
-        """
+        """返回全部工具（不再按 agent 过滤）。"""
         result: list[dict[str, Any]] = []
         for t in cls._tools.values():
-            desc = t.description
-            if hasattr(t, 'phase_tag') and t.phase_tag:
-                desc = f"{desc}（通常在【{'/'.join(t.phase_tag)}】关注点使用）"
             result.append({
                 "type": "function",
                 "function": {
                     "name": t.name,
-                    "description": desc,
+                    "description": t.description,
                     "parameters": t.parameters,
                 },
             })

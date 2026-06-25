@@ -621,7 +621,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
             ]);
           }
 
-          const pausedAgent = resolveAgentKey(d.agent) ?? "scout";
+          const pausedAgent = resolveAgentKey(d.agent);
           setWaitingAgent(pausedAgent);
           setGateOpen(true);
           setPhase("running");

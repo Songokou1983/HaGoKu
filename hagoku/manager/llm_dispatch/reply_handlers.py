@@ -14,9 +14,9 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     if not user_input or not user_input.strip():
         ask = context.pop("_pending_ask_user", None)
         if ask:
-            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
         else:
-            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
         return {"status": "scout_review", "message": ""}
 
     # ── 调 LLM ──
@@ -27,11 +27,11 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", ask)
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
         return {"status": "scout_review", "message": ""}
 
     # ── 留在当前 ──
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "scout", {"message": ""})
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
     return {"status": "scout_review", "message": result.get("text", "")}
 
 

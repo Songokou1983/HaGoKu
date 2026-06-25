@@ -436,8 +436,6 @@ class DataAnalystAgent(BaseAgent):
             context["_session"] = session
 
         agent_extra = self.prompt
-        phase_hint = context["_session"].infer_current_focus()
-        agent_extra = f"【当前关注点：{phase_hint}】\n\n" + agent_extra
 
         # P2: 字段元数据持久化——首轮后 context._column_info 注入 system prompt
         col_info = context.get("_column_info")
@@ -586,8 +584,7 @@ class DataAnalystAgent(BaseAgent):
                 session.add_tool_call(txt, oai_calls, results)
 
             # 让 LLM 看到工具结果，决定下一步
-            phase_hint = context["_session"].infer_current_focus()
-            agent_extra = f"【当前关注点：{phase_hint}】\n\n" + self.prompt
+            agent_extra = self.prompt
             if col_info:
                 cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
                 agent_extra += f"\n数据集字段: {cols_str}\n"

@@ -381,6 +381,7 @@ agent_tools.register(Tool(
 def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     from hagoku.tools.reporting import ReportData, ReportGenerator, ReportSection
     from pathlib import Path
+    import os
 
     sections_data = args.get("sections") or []
     sections = []
@@ -409,6 +410,19 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     output_path = str(Path(run_dir) / "output" / "report.html") if run_dir else ""
     gen = ReportGenerator()
     gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
+
+    # ── 更新项目报告链接 ──
+    if run_dir and output_path:
+        try:
+            proj_dir = Path(run_dir).parent.parent  # runs/{id} → {project}
+            reports_dir = proj_dir / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            latest_link = reports_dir / "latest.html"
+            if latest_link.exists() or latest_link.is_symlink():
+                latest_link.unlink()
+            latest_link.symlink_to(os.path.relpath(output_path, reports_dir))
+        except Exception:
+            pass  # 非关键路径
 
     return {"html_path": output_path, "sections_count": len(sections)}
 

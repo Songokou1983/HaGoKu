@@ -205,6 +205,20 @@ class Orchestrator(
             if self._df_clean is not None and self._df_clean is not self._df_raw:
                 self._df_clean.to_parquet(run_dir / "df_clean.parquet")
 
+            # ── 写入项目元数据 project.json ──
+            project_name = getattr(self, '_project_name', '')
+            if project_name:
+                proj_dir = self.config.output.project_dir / project_name
+                proj_dir.mkdir(parents=True, exist_ok=True)
+                proj_file = proj_dir / "project.json"
+                if not proj_file.exists():
+                    _json.dump({
+                        "name": project_name,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "data_file": safe_ctx.get('data_path', ''),
+                        "current_run_id": run_id,
+                    }, proj_file.open("w", encoding="utf-8"), ensure_ascii=False, default=str)
+
             return str(run_dir / "orch_state.json")
         except Exception:
             logger.warning("save_state 失败", exc_info=True)

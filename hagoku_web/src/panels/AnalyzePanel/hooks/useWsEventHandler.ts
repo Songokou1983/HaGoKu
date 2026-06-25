@@ -59,6 +59,8 @@ interface WsEventDeps {
   onThinking?: (text: string | null) => void;
   /** CO-16: reply pending state setter */
   setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
+  setCurrentProject?: (p: string) => void;
+  setCurrentDataPath?: (p: string) => void;
 }
 
 export function useWsEventHandler(deps: WsEventDeps) {
@@ -92,6 +94,8 @@ export function useWsEventHandler(deps: WsEventDeps) {
     currentProject,
     onThinking,
     setReplyPending,
+    setCurrentProject,
+    setCurrentDataPath,
     waitinAgent,
   } = deps;
 
@@ -182,8 +186,25 @@ export function useWsEventHandler(deps: WsEventDeps) {
             ]);
           }
         }
-        // 回放对话历史（app 重启后恢复）
-        // 快照不含对话历史——流式事件已送达全部消息
+        // ── 回放对话历史（app 重启后恢复）
+        if (snap.messages && Array.isArray(snap.messages)) {
+          const replayed: ConvoMessage[] = snap.messages.map((m: any) => ({
+            id: uid(),
+            role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+            text: m.content || "",
+            timestamp: m.timestamp || new Date().toISOString(),
+          }));
+          setMessages(replayed);
+        }
+        // 恢复项目和数据文件
+        if (snap.project_name && setCurrentProject) {
+          setCurrentProject(snap.project_name);
+        }
+        if (snap.data_path && setCurrentDataPath) {
+          setCurrentDataPath(snap.data_path);
+        }
+        if (snap.phase) setPhase("running");
+        if (snap.gate_open) setGateOpen(true);
         // Agent 状态恢复
         const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
         const doneIdx = agentOrder.indexOf(snap.stage);

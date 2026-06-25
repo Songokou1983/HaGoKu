@@ -181,11 +181,26 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
             ),
             "query": ctx.get('query', ''),
             "data_path": ctx.get('data_path', ''),
+            "phase": "running",
+            "gate_open": True,
         }
         # Phase C: pending_ask_user（LLM ask_user 暂停状态恢复）
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
+        # 对话历史（最近 50 条文本消息，不含大体积 tool 结果）
+        session = ctx.get("_session")
+        if session:
+            msgs = []
+            for m in session.messages[-50:]:
+                role = m.get("role", "")
+                if role in ("user", "assistant"):
+                    msgs.append({
+                        "role": role,
+                        "content": m.get("content", "")[:500],
+                        "timestamp": m.get("timestamp", ""),
+                    })
+            snapshot["messages"] = msgs
 
         return snapshot
     except Exception:

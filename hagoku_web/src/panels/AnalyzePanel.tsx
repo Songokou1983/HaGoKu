@@ -125,6 +125,8 @@ export default function AnalyzePanel() {
     currentProject,
     onThinking: setThinkingText,
     setReplyPending,
+    setCurrentProject,
+    setCurrentDataPath,
   });
 
   useAgentStatusSync();

@@ -240,7 +240,6 @@ class DataAnalystAgent(BaseAgent):
         context = {
             "_session": session,
             "query": query,
-            "_current_stage": "scout",
             "column_semantics": [],
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
@@ -591,6 +590,11 @@ class DataAnalystAgent(BaseAgent):
                 break
 
             # 让 LLM 看到工具结果，决定下一步
+            phase_hint = context["_session"].infer_current_focus()
+            agent_extra = f"【当前关注点：{phase_hint}】\n\n" + self.prompt
+            if col_info:
+                cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
+                agent_extra += f"\n数据集字段: {cols_str}\n"
             msgs_next = session.to_llm_messages(
                 system_extra=agent_extra,
                 user_input="",

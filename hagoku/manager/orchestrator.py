@@ -249,6 +249,17 @@ class Orchestrator(
             from ..storage.output import OutputManager
             orch.output_mgr = OutputManager(orch.config.output, orch._project_name)
 
+            # 恢复 Agent
+            from ..agents.agent import DataAnalystAgent
+            orch._agent = DataAnalystAgent(
+                orch.config.llm, orch.event_bus,
+                orchestrator=orch, llm_client=orch.llm,
+            )
+            orch._agent.prompt = orch._agent._load_prompt()
+            # 注入 session 到 agent context
+            if orch._session:
+                orch._agent._context = {"_session": orch._session}
+
             logger.info("restore_session: 恢复 session project=%s",
                         orch._project_name)
             return orch

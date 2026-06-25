@@ -113,6 +113,15 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
             _analysis_in_progress = False
 
 
+def _respond_task(orch: "Orchestrator", user_text: str) -> dict[str, Any]:
+    """Executor 入口：在后台线程调用 respond()，不阻塞事件循环。
+    
+    对标 _run_analysis_task——确保流式事件在 respond() 执行期间能
+    通过 WSBridge → WebSocket 实时推送到前端。
+    """
+    return orch.respond({"text": user_text})
+
+
 def _try_restore_session() -> bool:
     """检查是否有未完成的 session，有则恢复 orchestrator 状态。返回 True 表示已恢复。"""
     global _shared_orchestrator
@@ -392,7 +401,10 @@ async def ws_handler(ws: WebSocket) -> None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})
                 else:
                     try:
-                        result = orch.respond({"text": user_text})
+                        loop = asyncio.get_running_loop()
+                        result = await loop.run_in_executor(
+                            None, _respond_task, orch, user_text,
+                        )
                         await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})

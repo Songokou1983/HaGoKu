@@ -590,5 +590,5 @@ def test_stream_全轮流式_后续轮也发AGENT_STREAM_DELTA():
     # 验证：两轮都应发出流式事件
     delta_events = [e for e in emitted if e == EventType.AGENT_STREAM_DELTA]
     end_events = [e for e in emitted if e == EventType.AGENT_STREAM_END]
-    assert len(delta_events) >= 1, f"至少1轮delta，实际{len(delta_events)}"
-    assert len(end_events) >= 1, f"至少1轮end，实际{len(end_events)}"
+    assert len(delta_events) >= 2, f"至少2轮delta，实际{len(delta_events)}"
+    assert len(end_events) >= 2, f"至少2轮end，实际{len(end_events)}"

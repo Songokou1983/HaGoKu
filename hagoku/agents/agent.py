@@ -230,7 +230,7 @@ class DataAnalystAgent(BaseAgent):
 
         self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
 
-        # ── 对话循环：LLM 探索数据，有文本产出时停 ──
+        # ── 复用 run_step 统一路径（全量工具 + 流式 + 跟进轮）──
         session = (self._context or {}).get("_session")
         if session is None:
             from hagoku.context.session import Session
@@ -244,21 +244,12 @@ class DataAnalystAgent(BaseAgent):
             "_column_info": {c: str(df[c].dtype) for c in df.columns},
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
         }
-        user_input = user_content
-        raw_text = ""
-        max_rounds = 10
-        for _ in range(max_rounds):
-            result = self.run_step(context, df, user_input)
-            user_input = ""
-            raw_text = result.get("text", "")
-            had_tools = result.get("had_tools", False)
-            ask = context.get("_pending_ask_user")
-            if ask and self._context is not None:
-                self._context["_pending_ask_user"] = ask
-                break
-            # 有文本 + 没调工具 → LLM 说完了，停
-            if raw_text.strip() and not had_tools:
-                break
+        result = self.run_step(context, df, user_content)
+        # 传递 _pending_ask_user 到外层 context，供 _handle_reply 检测暂停
+        ask = context.get("_pending_ask_user")
+        if ask and self._context is not None:
+            self._context["_pending_ask_user"] = ask
+        raw_text = result.get("text", "")
         cs = context.get("column_semantics", [])
         if cs and any("column_name" in s for s in cs):
             return cs
@@ -536,8 +527,12 @@ class DataAnalystAgent(BaseAgent):
         findings = None
         assessment = None
 
-        # ── 工具 dispatch（一轮）──
-        if tc_list:
+        # ── 工具循环：LLM 调工具就继续，不调就停 ──
+        MAX_TOOL_ROUNDS = 99
+        for _round in range(MAX_TOOL_ROUNDS):
+            if not tc_list:
+                break
+
             tool_records = []
             for tc in tc_list:
                 fn = tc.function
@@ -592,9 +587,77 @@ class DataAnalystAgent(BaseAgent):
                 ]
                 session.add_tool_call(txt, oai_calls, results)
 
+            # ask_user 被调用 → LLM 决定暂停等用户回复，停止工具循环
+            if context.get("_pending_ask_user"):
+                break
+
+            # 让 LLM 看到工具结果，决定下一步
+            agent_extra = self.prompt
+            if col_info:
+                cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
+                agent_extra += f"\n数据集字段: {cols_str}\n"
+            msgs_next = session.to_llm_messages(
+                system_extra=agent_extra,
+                user_input="",
+            )
+            # 第 2+ 轮 LLM 调用前 dump（与第 1 轮对称）
+            dump_messages(f"agent_run_step_r{_round + 2}", msgs_next,
+                          model=self.llm_config.model,
+                          extra={"tools": [t["function"]["name"] for t in _tools]})
+            # 后续轮也走流式（同第1轮），确保 LLM 文本能到达前端
+            if use_stream:
+                from hagoku.llm.client import stream_chat_completion
+                from hagoku.llm.sanitize import stream_safe_append, strip_llm_think
+                stream_id = _json.dumps({"ts": datetime.now(timezone.utc).isoformat(), "round": _round + 2})
+                full_text = ""
+                safe_emitted = 0
+                final_tool_calls_raw = []
+                agent_key = "analyst"
+                for chunk in stream_chat_completion(
+                    client, self.llm_config.model, msgs_next,
+                    temperature=0.3, max_tokens=4096, tools=_tools,
+                ):
+                    if chunk["type"] == "delta":
+                        full_text, delta, safe_emitted = stream_safe_append(
+                            full_text, chunk["content"], safe_emitted,
+                        )
+                        if delta:
+                            if safe_emitted == len(delta):
+                                ch = getattr(self, '_log_channel', None)
+                                if ch: ch(agent_key, "stream_start", stream_id=stream_id)
+                            self._emit(EventType.AGENT_STREAM_DELTA, {
+                                "stream_id": stream_id, "delta": delta, "agent": agent_key,
+                            })
+                    elif chunk["type"] == "end":
+                        full_text = chunk.get("content", full_text)
+                        final_tool_calls_raw = chunk.get("tool_calls") or []
+                        ch = getattr(self, '_log_channel', None)
+                        if ch: ch(agent_key, "stream_end", stream_id=stream_id, text_len=len(full_text))
+                        self._emit(EventType.AGENT_STREAM_END, {
+                            "stream_id": stream_id, "agent": agent_key,
+                        })
+                txt = strip_llm_think(full_text).strip()
+                if final_tool_calls_raw:
+                    tc_list = [_FakeTC(tc) for tc in final_tool_calls_raw]
+                else:
+                    tc_list = None
+            else:
+                resp_next = client.chat.completions.create(
+                    model=self.llm_config.model, messages=msgs_next,
+                    temperature=0.3, max_tokens=4096, tools=_tools,
+                )
+                msg_next = resp_next.choices[0].message
+                txt = (msg_next.content or "").strip()
+                tc_list = getattr(msg_next, "tool_calls", None)
+            # 第 2+ 轮 LLM 响应 dump（与第 1 轮对称）
+            dump_messages(f"agent_run_step_r{_round + 2}_response",
+                msgs_next + [{"role": "assistant", "content": txt,
+                 "tool_calls": [{"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                for tc in (tc_list or [])] if tc_list else None}],
+                model=self.llm_config.model)
+
         return {
             "text": txt,
-            "had_tools": bool(tc_list),
             "submit_findings": findings is not None, "findings": findings,
             "submit_assessment": assessment is not None, "assessment": assessment,
         }

@@ -19,10 +19,20 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
             self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
         return {"status": "scout_review", "message": ""}
 
-    # ── 调 LLM ──
+    # ── 调 LLM：对话循环 —— LLM 没说话就续轮，说了话就停 ──
     df = self._df_clean if self._df_clean is not None else self._df_raw
-    result = self._agent.run_step(context, df, user_input)
-    self._log_channel("analyst", "run_step_done", text=result.get("text", ""))
+    first_input = user_input
+    txt = ""
+    max_rounds = 10
+    for _ in range(max_rounds):
+        result = self._agent.run_step(context, df, first_input)
+        first_input = ""
+        txt = result.get("text", "") or ""
+        self._log_channel("analyst", "run_step_done", text=txt)
+        if context.get("_pending_ask_user"):
+            break
+        if txt.strip():
+            break
 
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
@@ -32,7 +42,7 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 
     # ── 留在当前 ──
     self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
-    return {"status": "scout_review", "message": result.get("text", "")}
+    return {"status": "scout_review", "message": txt}
 
 
 # ── respond（外层入口）────────────────────────────

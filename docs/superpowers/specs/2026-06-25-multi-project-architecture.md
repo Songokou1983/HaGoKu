@@ -213,22 +213,62 @@ interface WorkspaceState {
 |------|------|------|------|
 | 1 | 项目文件夹结构化 | orchestrator.py（save_state 写 project.json + memory.json）| 无 |
 | 2 | ProjectManager 类 | 新建 `hagoku/manager/project_manager.py` | 步骤 1 |
-| 3 | ws_handler 改 project 参数 | ws_handler.py（所有 cmd 加 project）| 步骤 2 |
-| 4 | 前端多项目 Store | workspace.ts + AnalyzePanel.tsx | 步骤 3 |
-| 5 | 项目切换功能 | ProjectPanel.tsx + AnalyzePanel.tsx | 步骤 4 |
-| 6 | 报告页项目感知 | ReportPanel.tsx | 步骤 5 |
-| 7 | 清理全局单例 | 全局变量 → ProjectManager 属性 | 步骤 2 |
+| 3 | ws_handler 适配 ProjectManager | ws_handler.py（_shared_orchestrator → _project_manager）| 步骤 2 |
+| 4 | 前端项目选择 + 切换逻辑 | workspace.ts + ProjectPanel.tsx + AnalyzePanel.tsx | 步骤 3 |
+| 5 | 报告页项目感知 | ReportPanel.tsx | 步骤 4 |
+| 6 | 清理全局单例 + 旧代码删除 | 全局变量 → ProjectManager 属性 | 步骤 2 |
+
+### 各步骤详情
+
+**步骤 1：项目文件夹结构化**
+- `save_state()` 追加写入 `~/.../projects/{name}/project.json`
+- `run_scout_phase` 完成后同步 `memory.json`
+- `generate_report` 完成后更新 `reports/latest.html` 符号链接
+
+**步骤 2：ProjectManager**
+- 新建类，封装当前项目 Orchestrator
+- `switch_project()` 含保存→清空→加载→快照
+- `get_snapshot()` 复用现有 `_build_state_snapshot`
+- 启动时扫描 `projects/` 目录构建项目列表
+
+**步骤 3：ws_handler 适配**
+- 现有 `_shared_orchestrator` → `_project_manager.get_current_orch()`
+- 新增 `switch_project`、`create_project`、`delete_project`、`list_projects` 命令
+- `respond`/`analyze`/`cancel_*` 去掉 project 字段
+
+**步骤 4：前端**
+- Zustand store 加 `currentProject`、`projectList`
+- ProjectPanel 加项目列表、新建/删除按钮
+- AnalyzePanel 监听 `currentProject` 切换 → 清空 → 加载快照
+- `replyPending` 时禁止切项目
+
+**步骤 5：报告页**
+- 报告 URL 改为 `/api/reports/{project_name}/latest`
+
+**步骤 6：清理**
+- 删 `_shared_orchestrator`、`_analysis_busy_lock` 等全局变量
+- 更新测试中的引用
 
 ---
 
-## 六、风险评估
+## 六、设计决策记录
 
-| 风险 | 概率 | 缓解 |
-|------|------|------|
-| 项目切换时丢数据 | 低 | 切换前 save_state()，恢复路径已验证 |
-| 两项目同时分析 | 低 | 单用户场景不会，多 WS 连接由并发锁保护 |
-| 旧项目数据格式不兼容 | 中 | project.json 不存在时回退到只读模式（runs 目录仍可访问）|
-| 前端状态切换闪烁 | 低 | projectStates 缓存减少请求 |
+| 决策 | 选项 | 选择 | 理由 |
+|------|------|------|------|
+| 内存模型 | dict 存所有项目 vs 单例当前项目 | **单例** | 磁盘加载 <100ms，更简单，避免多项目并发 |
+| 前端缓存 | 缓存所有项目状态 vs 每次重新加载 | **不缓存** | 磁盘加载够快，省前端复杂度 |
+| 切项目时分析中 | 禁止 vs 自动暂停 | **禁止** | 保证当前项目稳定，单次 LLM 调用很快完成 |
+| 旧项目兼容 | 自动迁移 vs 不需要 | **不需要** | 老项目数据直接删除，从零开始 |
+| WS 协议 | 所有命令带 project vs 只切项目带 | **只切项目带** | 减少冗余，当前项目是隐式上下文 |
+
+## 七、风险评估
+
+| 风险 | 缓解 |
+|------|------|
+| 项目切换时磁盘写入失败 → 状态丢失 | switch 前 save_state() 失败时拒绝切换 |
+| 重连后恢复哪个项目 | 扫描 projects/，找有 current_run_id 且最近修改的 |
+| 项目文件夹被手动删除 | ProjectManager 启动时扫描，不存在的项目从列表中移除 |
+| 前端状态切换闪烁 | 清空面板瞬间 (<100ms) + 快照立即渲染 |
 
 ---
 

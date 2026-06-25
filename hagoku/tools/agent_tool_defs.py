@@ -374,8 +374,74 @@ agent_tools.register(Tool(
 ))
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 报告生成工具
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    from hagoku.tools.reporting import ReportData, ReportGenerator, ReportSection
+    from pathlib import Path
+
+    sections_data = args.get("sections") or []
+    sections = []
+    for s in sections_data:
+        sections.append(ReportSection(
+            title=s.get("title", ""),
+            content=s.get("content", ""),
+            findings=s.get("findings") or [],
+            charts=s.get("charts") or [],
+            headline=s.get("headline"),
+        ))
+
+    report = ReportData(
+        project_name=ctx.get("_project_name", ""),
+        query=ctx.get("query", ""),
+        sections=sections,
+        headline=args.get("headline", ""),
+        findings_summary=args.get("findings", []),
+        data_summary={
+            "n_rows": ctx.get("n_rows", 0),
+            "n_cols": ctx.get("n_cols", 0),
+        },
+    )
+
+    run_dir = ctx.get("_run_dir") or ""
+    output_path = str(Path(run_dir) / "output" / "report.html") if run_dir else ""
+    gen = ReportGenerator()
+    gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
+
+    return {"html_path": output_path, "sections_count": len(sections)}
 
 
+agent_tools.register(Tool(
+    name="generate_report",
+    description="生成 HTML 分析报告。模板可选: default/academic/brief/business_analysis",
+    parameters={
+        "type": "object",
+        "properties": {
+            "sections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "content": {"type": "string"},
+                        "headline": {"type": "string"},
+                        "findings": {"type": "array", "items": {"type": "object"}},
+                        "charts": {"type": "array", "items": {"type": "object"}},
+                    },
+                    "required": ["title", "content"],
+                },
+            },
+            "headline": {"type": "string"},
+            "findings": {"type": "array", "items": {"type": "object"}},
+            "template": {"type": "string"},
+        },
+        "required": ["sections"],
+    },
+    handler=_handle_generate_report,
+    phase_tag=['写报告'],
+))
 
 
 # ═══════════════════════════════════════════════════════════════════

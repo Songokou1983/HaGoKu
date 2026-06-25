@@ -291,16 +291,16 @@ async def ws_handler(ws: WebSocket) -> None:
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
 
-        # ── 自动恢复未完成 session ──
+        # ── 状态恢复：优先从磁盘恢复，回退到内存 ──
         global _shared_orchestrator
-        orch = _shared_orchestrator
-        if orch is None:
-            restored = _try_restore_session()
-            if restored:
-                orch = _shared_orchestrator
-                # 确保 EventBus → WSBridge 已连接
-                if orch is not None:
-                    orch.event_bus.subscribe(bridge.on_event)
+        restored = _try_restore_session()
+        if restored:
+            orch = _shared_orchestrator
+        else:
+            orch = _shared_orchestrator
+        # 确保 EventBus → WSBridge 已连接
+        if orch is not None:
+            orch.event_bus.subscribe(bridge.on_event)
 
         # ── 重连状态恢复：推送当前 pipeline 快照 ──
         if orch is not None:

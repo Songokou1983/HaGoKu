@@ -281,7 +281,7 @@ async def ws_handler(ws: WebSocket) -> None:
     # subscribers 中出现多条，一次 emit 会多次 broadcast，前端进度文案会成对重复。
 
     try:
-        await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.1.0"})
+        await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
 
         # ── 自动恢复未完成 session ──
         global _shared_orchestrator

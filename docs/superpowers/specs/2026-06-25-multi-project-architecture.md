@@ -52,11 +52,24 @@ HaGoKu 从单项目变为多项目系统。每个项目独立存储、独立会�
 | `project.json` | 不存在 | 新增，记录元数据 |
 | `memory.json` | 不存在（在 SQLite） | 新增，从 SQLite 同步 |
 | `reports/latest.html` | 不存在 | 新增，符号链接到最新报告 |
-| 多项目支持 | 单 `_shared_orchestrator` | `_project_sessions: dict` |
+| 多项目支持 | 单 `_shared_orchestrator` | ProjectManager 管理当前项目 |
 
 ---
 
 ## 二、后端：ProjectManager
+
+### 内存模型
+
+只持有**当前活跃项目**的 Orchestrator。切换项目时：当前项目存盘 → 清空 → 新项目从磁盘加载。
+
+```
+ProjectManager
+├── _current_project: str | None
+├── _current_orchestrator: Orchestrator | None
+└── 其他项目状态全在磁盘上
+```
+
+**为什么不用 dict 存所有项目**：数据量小（620行×8列仅几十KB），磁盘加载毫秒级。单例模型更简单、无内存压力、避免多项目并发问题。
 
 ### 核心类
 
@@ -64,41 +77,46 @@ HaGoKu 从单项目变为多项目系统。每个项目独立存储、独立会�
 class ProjectManager:
     """管理所有项目的生命周期"""
 
-    _sessions: dict[str, Orchestrator]  # {project_name: orchestrator}
+    _current_project: str | None = None
+    _current_orch: Orchestrator | None = None
 
-    def get_or_create(self, project_name: str) -> Orchestrator:
-        """获取项目 orchestrator。
-        1. 内存有 → 返回
-        2. 内存无 → 从磁盘恢复（最新 orch_state.json）
-        3. 磁盘无 → 创建新 orchestrator（需要先上传数据）
+    def switch_project(self, project_name: str) -> dict:
+        """切换到目标项目。
+        1. 如果当前项目有活跃分析 → 拒绝切换
+        2. 保存当前项目状态到磁盘
+        3. 清空 _current_orch
+        4. 从磁盘恢复目标项目 → 返回快照
+        5. 磁盘无 → 创建新 orchestrator
         """
 
-    def run_analysis(self, project_name: str, data_path: str, query: str):
-        """为项目启动新分析。
-        创建 run 目录 → 写入 project.json → orchestrator.run()
-        """
+    def get_current_orch(self) -> Orchestrator:
+        """获取当前项目的 orchestrator"""
 
-    def respond(self, project_name: str, text: str) -> dict:
-        """处理用户回复。找到对应项目 orchestrator → respond()"""
+    def run_analysis(self, data_path: str, query: str):
+        """为当前项目启动新分析。"""
 
-    def get_snapshot(self, project_name: str) -> dict:
-        """返回项目当前状态快照，供前端恢复"""
+    def respond(self, text: str) -> dict:
+        """处理用户回复。"""
 
-    def cancel_respond(self, project_name: str):
-        """取消当前项目的 respond 处理"""
+    def get_snapshot(self) -> dict:
+        """返回当前项目状态快照"""
 
-    def save_project(self, project_name: str):
-        """保存项目状态到磁盘"""
+    def cancel_respond(self):
+        """取消当前 respond 处理"""
+
+    def delete_project(self, project_name: str):
+        """删除项目文件夹"""
 ```
 
-### 替换现有全局变量
+### 和现在的差异
 
-| 现有 | 替换为 |
-|------|--------|
-| `_shared_orchestrator` | `_project_manager.sessions[project_name]` |
-| `_analysis_in_progress` | `_project_manager.sessions[project_name]._analysis_busy` |
-| `orch.run()` | `_project_manager.run_analysis(project_name, ...)` |
-| `orch.respond()` | `_project_manager.respond(project_name, text)` |
+- 现有全局变量 `_shared_orchestrator` 改为 `_project_manager._current_orch`
+- WS 命令不需要 `project` 字段（始终操作当前项目）
+- 切项目通过 `switch_project` 命令显式执行
+
+### 项目切换限制
+
+如果当前项目有活跃的 LLM 调用（`replyPending`），**禁止切换**。前端弹出提示"当前项目分析进行中，请等待完成或停止后再切换"。完整分析跨度太长，不应让用户等。
 
 ### 初始化流程
 
@@ -112,27 +130,27 @@ class ProjectManager:
 
 ---
 
-## 三、WS 协议扩展
+## 三、WS 协议
 
-每个命令加 `project` 字段：
+当前项目由 `switch_project` 设定，后续命令不需要 `project` 字段。
 
 ```json
-// 新增项目
-{"cmd": "create_project", "project": "新项目"}
+// 项目列表
+{"cmd": "list_projects"}
 // 切换项目
 {"cmd": "switch_project", "project": "test0625"}
-// 分析
-{"cmd": "analyze", "project": "test0625", "payload": {"data_path": "...", "query": "..."}}
+// 新建项目
+{"cmd": "create_project", "project": "新项目"}
+// 删除项目
+{"cmd": "delete_project", "project": "test0625"}
+// 分析（使用当前项目）
+{"cmd": "analyze", "payload": {"data_path": "...", "query": "..."}}
 // 回复
-{"cmd": "respond", "project": "test0625", "payload": {"text": "Inc1是收入"}}
+{"cmd": "respond", "payload": {"text": "Inc1是收入"}}
 // 取消回复
-{"cmd": "cancel_respond", "project": "test0625"}
+{"cmd": "cancel_respond"}
 // 取消分析
-{"cmd": "cancel_analysis", "project": "test0625"}
-// 获取项目列表
-{"cmd": "list_projects"}
-// 上传数据
-{"cmd": "upload_data", "project": "test0625", "payload": {...}}
+{"cmd": "cancel_analysis"}
 ```
 
 `switch_project` 响应：
@@ -152,30 +170,18 @@ class ProjectManager:
 
 ---
 
-## 四、前端：多项目状态管理
+## 四、前端
 
-### Zustand Store
+### 状态管理
+
+前端不缓存多项目状态。切项目时清空分析面板，等待后端 snapshot 恢复渲染。
 
 ```typescript
 interface WorkspaceState {
-  // 全局
   currentProject: string | null;
   projectList: string[];
   connectionStatus: ConnectionStatus;
-
-  // 每个项目独立状态
-  projectStates: Record<string, ProjectState>;
-}
-
-interface ProjectState {
-  dataPath: string;
-  query: string;
-  messages: ConvoMessage[];
-  phase: string;
-  reportUrl: string | null;
-  waitingAgent: string | null;
-  gateOpen: boolean;
-  // ... 其他项目级状态
+  replyPending: boolean;  // 用于禁止项目切换
 }
 ```
 
@@ -184,20 +190,18 @@ interface ProjectState {
 ```
 用户点击项目B
   ↓
-1. 保存项目A状态到 projectStates["A"]
-2. 设置 currentProject = "B"
-3. 检查 projectStates["B"] 是否有缓存
-   ├─ 有 → 直接渲染
-   └─ 无 → 发送 {"cmd": "switch_project", "project": "B"}
-          → 接收 state_snapshot → 恢复 → 渲染
+1. replyPending? → 提示"分析进行中，无法切换" → 拒绝
+2. 清空分析面板（messages、review 表、thinking 等）
+3. 发送 {"cmd": "switch_project", "project": "B"}
+4. 接收 state_snapshot → 恢复对话和状态 → 渲染
 ```
 
 ### UI 改动
 
 | 组件 | 改动 |
 |------|------|
-| ProjectPanel | 项目列表 + 新建/删除项目 |
-| AnalyzePanel | 监听 currentProject 切换 → 自动恢复 |
+| ProjectPanel | 项目列表 + 新建/删除/切换 |
+| AnalyzePanel | 监听 currentProject 切换 → 清空并重新加载 |
 | ReportPanel | 显示当前项目的报告 |
 | 标题栏 | 显示当前项目名 |
 

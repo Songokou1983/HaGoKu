@@ -28,10 +28,12 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
         result = self._agent.run_step(context, df, first_input)
         first_input = ""
         txt = result.get("text", "") or ""
+        had_tools = result.get("had_tools", False)
         self._log_channel("analyst", "run_step_done", text=txt)
         if context.get("_pending_ask_user"):
             break
-        if txt.strip():
+        # 有文本 + 没调工具 → LLM 说完了，停
+        if txt.strip() and not had_tools:
             break
 
     # ── ask_user 优先 ──

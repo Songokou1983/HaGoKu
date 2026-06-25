@@ -251,11 +251,13 @@ class DataAnalystAgent(BaseAgent):
             result = self.run_step(context, df, user_input)
             user_input = ""
             raw_text = result.get("text", "")
+            had_tools = result.get("had_tools", False)
             ask = context.get("_pending_ask_user")
             if ask and self._context is not None:
                 self._context["_pending_ask_user"] = ask
                 break
-            if raw_text.strip():
+            # 有文本 + 没调工具 → LLM 说完了，停
+            if raw_text.strip() and not had_tools:
                 break
         cs = context.get("column_semantics", [])
         if cs and any("column_name" in s for s in cs):
@@ -592,6 +594,7 @@ class DataAnalystAgent(BaseAgent):
 
         return {
             "text": txt,
+            "had_tools": bool(tc_list),
             "submit_findings": findings is not None, "findings": findings,
             "submit_assessment": assessment is not None, "assessment": assessment,
         }

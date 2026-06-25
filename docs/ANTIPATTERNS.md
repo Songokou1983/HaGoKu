@@ -144,3 +144,87 @@
 **后果**：一个测试挂掉，排查了 15 分钟才发现是这行引起的链式反应。
 
 **提炼**：**改之前 grep 所有引用。** 改一个变量 → 搜它在哪里被读取。改一个条件 → 搜它依赖什么假设。2 分钟的搜索省 15 分钟的排查。
+
+---
+
+## 通道实现参考（2026-06-25 v0.9 验证的正确模式）
+
+以下模式经过全天 9 轮调试验证，架构调整时不应破坏。
+
+### 信息通道
+
+```
+用户输入 → respond() → session.add("user", text) → _handle_reply()
+→ run_step() → build_messages(query, user_input, history=session.messages)
+→ LLM 调用 → stream deltas → EventBus → WSBridge → WebSocket → 前端渲染
+```
+
+**规则**：
+- `build_messages()` 是 LLM 消息构造的唯一入口（`hagoku/channel.py`）
+- 用户原话通过 `session.add("user")` 写入，不在别处重复写入
+- LLM 文本通过流式直达前端，代码不搬运 LLM 输出的文本
+
+### 控制通道
+
+```
+LLM 调 ask_user → _pending_ask_user 写入 context → run_step 内循环 break
+→ _handle_reply 检测 → emit USER_INPUT_REQUESTED → 前端显示问题
+→ 用户回复 → respond() → _handle_reply → run_step → 循环
+```
+
+**规则**：
+- `ask_user` 是 LLM 唯一的暂停机制，代码只执行不判断
+- `_pending_ask_user` 在 `respond()` 空文本分支和 `_handle_reply` 末尾各 pop 一次
+- `infer_field_semantics` 内 `_pending_ask_user` 需传到 `self._context`
+
+### 停止信号
+
+```
+用户点停止 → 前端 send("cancel_respond") → ws_handler → orch.request_cancel_respond()
+→ _respond_cancelled = True → run_step 内循环检查 → break
+→ _handle_reply 正常返回 → emit USER_INPUT_REQUESTED → 对话从断点继续
+```
+
+**规则**：
+- 停止不抛异常，不走 error 路径
+- session 已写入的内容保留，LLM 下次看到截断历史自己接上
+- `respond()` 开头清除 `_respond_cancelled` 标记
+
+### 状态持久化
+
+```
+运行中：save_state() → orch_state.json + session.json + df_*.parquet
+重连：_try_restore_session() → 磁盘优先 → restore_session() → 恢复完整状态
+前端：state_snapshot → 恢复 project/data_path/messages/ask_user
+```
+
+**规则**：
+- `restore_session()` 是完整恢复的单一路径：context + DataFrames + Session + Agent + OutputManager
+- `_try_restore_session()` 搜索所有项目目录，找最新的 orch_state.json
+- 快照包含 messages（最近 50 条）、project_name、data_path、phase、gate_open
+
+### 工具循环
+
+```
+run_step() 内循环：for _round in range(99):
+    if not tc_list: break          # LLM 不再调工具
+    dispatch(tools)                # 执行所有工具调用
+    session.add_tool_call(...)     # 写入对话历史
+    if _pending_ask_user: break    # LLM 要暂停
+    if _respond_cancelled: break   # 用户要停止
+    call_llm_again(...)            # 让 LLM 看到工具结果继续
+```
+
+**规则**：
+- 循环不设上限（99 足够），LLM 自己决定何时停
+- 每轮 LLM 输出都走流式
+- 工具 dispatch 失败不中断循环（记录 error 后 continue）
+
+### 前端渲染
+
+```
+输入框：永远可见，不受 gateOpen/replyPending 控制
+停止按钮：replyPending 时显示，点它取消当前 respond
+AskUserPrompt：yes_no/choice 变体底部永远有文本输入框（全局 InputBar）
+状态标签：不显示"当前：XX 阶段"（代码不猜阶段）
+```

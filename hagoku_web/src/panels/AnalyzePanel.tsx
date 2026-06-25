@@ -132,7 +132,7 @@ export default function AnalyzePanel() {
   // Submit reply handler
   const submitUserReply = useCallback(
     (raw: string) => {
-      if (!replyPending) return;
+      if (!sess.gateOpen && !replyPending) return;
       const outgoing = sanitizeText(raw.trim());
       if (!outgoing) return;
       sess.replySnapshotRef.current = {
@@ -274,8 +274,8 @@ export default function AnalyzePanel() {
             </div>
           )}
 
-          {/* Agent reply input — shown when agent is waiting AND not pending */}
-          {sess.waitingAgent && !replyPending && (
+          {/* Reply input — shown when gate is open AND not pending */}
+          {sess.gateOpen && !replyPending && (
             <div className="shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
             {/* Quick action buttons */}
             {cleanerCleaningReviewOpen && (
@@ -331,20 +331,6 @@ export default function AnalyzePanel() {
                   </button>
                 </div>
               )}
-              {sess.waitingAgent && (
-                  <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                    <button
-                      type="button"
-                      onClick={() => submitUserReply("确认继续")}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                    >
-                      <CheckCircle2 size={14} />
-                      确认
-                    </button>
-                  </div>
-                )}
-
               {/* CO-17: InputBar replacing inline textarea */}
               <InputBar
               placeholder="输入回复后 Enter 发送"

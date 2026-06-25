@@ -24,14 +24,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     result = self._agent.run_step(context, df, user_input)
     self._log_channel("analyst", "run_step_done", text=result.get("text", ""))
 
-    # ── 被动观测：LLM 调了 submit_* 说明阶段推进了 ──
-    if result.get("submit_assessment"):
-        self._stage = "analyst"
-        context["_cleaner_assessment"] = result.get("assessment") or {}
-    if result.get("submit_findings"):
-        self._stage = "reporter"
-        context["_analyst_findings"] = result.get("findings") or {}
-
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:
@@ -67,7 +59,6 @@ def respond(self, user_input: dict) -> dict[str, Any]:
 
     ctx = getattr(self, '_context', None)
     if ctx is not None:
-        ctx["_current_stage"] = self._stage
         if text:
             ctx["_pending_command_text"] = text
 

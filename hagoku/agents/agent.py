@@ -585,10 +585,6 @@ class DataAnalystAgent(BaseAgent):
                 ]
                 session.add_tool_call(txt, oai_calls, results)
 
-            # 控制工具已触发 → 不需要继续循环
-            if findings is not None or assessment is not None:
-                break
-
             # 让 LLM 看到工具结果，决定下一步
             phase_hint = context["_session"].infer_current_focus()
             agent_extra = f"【当前关注点：{phase_hint}】\n\n" + self.prompt

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # The WebSocket handler reads from this to subscribe.
 _shared_bus: EventBus | None = None
 _shared_orchestrator: "Orchestrator | None" = None
+_project_manager: Any = None  # ProjectManager 实例，v0.10 替代 _shared_orchestrator
 
 # 同一进程内只允许一条分析线程占用共享 Orchestrator（避免并发 run()）
 _analysis_busy_lock = threading.Lock()
@@ -43,6 +44,8 @@ def get_bus() -> EventBus | None:
 
 def get_orchestrator() -> "Orchestrator | None":
     """Return the shared orchestrator instance."""
+    if _project_manager is not None and _project_manager._current_orch is not None:
+        return _project_manager._current_orch
     return _shared_orchestrator
 
 
@@ -282,31 +285,38 @@ async def ws_handler(ws: WebSocket) -> None:
     """WebSocket lifecycle handler."""
     bridge = WSBridge.get()
     bridge.add_client(ws)
-    bridge.set_loop(asyncio.get_running_loop())  # 捕获正确的 event loop
-
-    # EventBus → WSBridge 仅在创建共享 Orchestrator 时订阅一次（见 _run_analysis）。
-    # 切勿在每个 WebSocket 连接上再次 subscribe(bridge.on_event)，否则同一回调在
-    # subscribers 中出现多条，一次 emit 会多次 broadcast，前端进度文案会成对重复。
+    bridge.set_loop(asyncio.get_running_loop())
 
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
 
-        # ── 状态恢复：优先从磁盘恢复，回退到内存 ──
+        # ── 初始化 ProjectManager ──
+        global _project_manager
+        if _project_manager is None:
+            from hagoku.manager.project_manager import ProjectManager
+            from hagoku.config import HaGoKuConfig
+            _project_manager = ProjectManager(HaGoKuConfig.load())
+
+        # ── 推送项目列表 ──
+        projects = _project_manager.list_projects()
+        await ws.send_json({"type": "project_list", "data": projects})
+
+        # ── 状态恢复：优先从磁盘恢复当前项目 ──
         global _shared_orchestrator
-        restored = _try_restore_session()
-        if restored:
-            orch = _shared_orchestrator
-        else:
-            orch = _shared_orchestrator
-        # 确保 EventBus → WSBridge 已连接
+        orch = _project_manager.get_current_orch() if _project_manager._current_project else None
+        if orch is None:
+            restored = _try_restore_session()
+            if restored:
+                orch = _shared_orchestrator
+                _project_manager._current_orch = orch
         if orch is not None:
             orch.event_bus.subscribe(bridge.on_event)
 
-        # ── 重连状态恢复：推送当前 pipeline 快照 ──
+        # ── 推送当前项目快照 ──
         if orch is not None:
             snapshot = _build_state_snapshot(orch)
             if snapshot:
-                    await ws.send_json({"type": "state_snapshot", "data": snapshot})
+                await ws.send_json({"type": "state_snapshot", "data": snapshot})
 
         while True:
             raw = await ws.receive_text()
@@ -322,6 +332,30 @@ async def ws_handler(ws: WebSocket) -> None:
             _wslog.info("%s %s", cmd, str({k: str(v)[:100] for k, v in msg.items() if k != 'cmd'})[:200])
             if cmd == "ping":
                 await ws.send_json({"type": "pong"})
+            elif cmd == "list_projects":
+                projects = _project_manager.list_projects()
+                await ws.send_json({"type": "project_list", "data": projects})
+            elif cmd == "switch_project":
+                name = msg.get("project", "")
+                if _project_manager.is_busy():
+                    await ws.send_json({"type": "error", "message": "当前项目分析进行中，请等待完成或停止后再切换"})
+                else:
+                    snap = _project_manager.switch_project(name)
+                    if snap:
+                        orch = _project_manager.get_current_orch()
+                        if orch:
+                            orch.event_bus.subscribe(bridge.on_event)
+                        await ws.send_json({"type": "state_snapshot", "data": snap})
+                    else:
+                        await ws.send_json({"type": "error", "message": f"项目 {name} 不存在或无法加载"})
+            elif cmd == "create_project":
+                name = msg.get("project", "")
+                ok = _project_manager.create_project(name)
+                await ws.send_json({"type": "ack", "cmd": "create_project", "data": {"ok": ok}})
+            elif cmd == "delete_project":
+                name = msg.get("project", "")
+                ok = _project_manager.delete_project(name)
+                await ws.send_json({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
                 # 清理整个 payload 中的 null 字节

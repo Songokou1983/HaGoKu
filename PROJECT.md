@@ -433,10 +433,11 @@ Session 持有 messages 数组；`to_llm_messages()` 统一 LLM 调用入口。
 
 ```
 ~/.hagoku/projects/{project}/
-├── context.md      ← 项目上下文
-├── data/           ← 数据制品 (Parquet)
-├── runs/           ← 分析运行记录
-└── progress.yaml   ← 项目记忆
+├── project.json       ← 项目元数据
+├── data/              ← 数据文件 (xlsx/csv)
+├── memory.json        ← 项目记忆（字段定义）
+├── reports/           ← 报告（latest.html）
+└── runs/              ← 分析运行记录
 ```
 
 ---
@@ -545,18 +546,86 @@ LLM 收到了用户输入但未产生任何有效工具调用（tool_calls 为�
 
 ## 存储架构
 
+### 全局目录
+
 ```
 ~/.hagoku/
-├── config.yaml
-├── hagoku.db                     # SQLite 元数据库
-└── projects/{name}/
-    ├── progress.yaml / context.md
-    ├── data/                     # raw/cleaned .parquet
-    ├── runs/{run_id}/
-    │   ├── run_meta.json / plan.json / events.jsonl
-    │   ├── results/ / diagnostics/ / output/
-    └── reports/                  # latest.html → runs 的符号链接
+├── config.yaml                   # 全局配置（LLM、输出目录等）
+├── hagoku.db                     # SQLite 元数据库（全局）
+└── projects/{name}/              # 每个项目一个独立文件夹
 ```
+
+### 项目文件夹（每个项目是独立的数据单元）
+
+```
+~/.hagoku/projects/{project_name}/
+├── project.json                  # 项目元数据
+│   ├── name: str                 #   项目名
+│   ├── created_at: str           #   创建时间
+│   ├── data_file: str            #   当前数据文件路径
+│   └── current_run_id: str       #   当前活跃 run
+│
+├── data/                         # 用户上传的数据文件
+│   └── *.xlsx, *.csv             #   原始格式保留
+│
+├── memory.json                   # 项目记忆（LLM 确认过的字段定义）
+│   └── fields: {                 #   字段名 → { display_name, description, confirmed_by_user }
+│       "Inc1": {
+│           "display_name": "店铺收入",
+│           "description": "店铺核心收入指标",
+│           "confirmed_by_user": true
+│       }
+│   }
+│
+├── reports/                      # 报告入口
+│   └── latest.html               #   符号链接 → runs/{latest}/output/report.html
+│
+└── runs/                         # 每次分析运行一个子目录
+    └── {run_id}/
+        ├── run_meta.json         #   运行元数据（query、时间、状态）
+        ├── orch_state.json       #   编排器状态快照（重连恢复用）
+        ├── session.json          #   对话历史（messages 数组）
+        ├── run.log               #   执行日志（JSONL）
+        ├── llm_dumps/            #   LLM 交互 dump（诊断用）
+        ├── df_raw.parquet        #   原始数据快照
+        ├── df_clean.parquet      #   清洗后数据快照（如有）
+        └── output/
+            ├── charts/           #   图表 HTML 片段
+            └── report.html       #   分析报告
+```
+
+### 多项目管理
+
+HaGoKu 是**多项目系统**。每个项目拥有独立的 Orchestrator、Session、DataFrame 和对话历史。前端切项目时，后端切换对应的 Orchestrator 实例。
+
+```
+项目管理器（ProjectManager）
+├── projects["项目A"] → Orchestrator_A
+│   ├── Session（对话历史）
+│   ├── DataFrames（数据快照）
+│   └── Agent（分析器）
+├── projects["项目B"] → Orchestrator_B
+│   └── ...
+└── projects["项目C"] → Orchestrator_C
+    └── ...
+```
+
+切项目时的行为：
+- 后端：当前项目状态自动保存到磁盘 → 切换目标项目 Orchestrator → 推送快照给前端
+- 前端：清空分析面板 → 接收快照 → 恢复目标项目的对话和状态
+- 项目文件夹独立：拷贝 `projects/{name}/` 即可迁移整个项目
+
+### 状态持久化
+
+关闭应用或重连时自动恢复：
+
+| 恢复路径 | 触发条件 | 数据来源 |
+|---------|---------|---------|
+| WebSocket 重连 | 网络断开重连 | 内存中的 Orchestrator（未丢失时）|
+| 应用重启 | 进程重启 | 磁盘 `orch_state.json` + `session.json` |
+| 项目切换 | 用户切项目 | 目标项目的 Orchestrator（内存）或磁盘恢复 |
+
+恢复内容：对话历史、当前数据快照、LLM 暂停状态（ask_user）、报告链接。
 
 ---
 

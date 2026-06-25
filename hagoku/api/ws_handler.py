@@ -125,7 +125,7 @@ def _respond_task(orch: "Orchestrator", user_text: str) -> dict[str, Any]:
 def _try_restore_session() -> bool:
     """检查是否有未完成的 session，有则恢复 orchestrator 状态。返回 True 表示已恢复。"""
     global _shared_orchestrator
-    if os.environ.get("HAGOKU_SKIP_AUTO_RESTORE", "1") != "0":
+    if os.environ.get("HAGOKU_SKIP_AUTO_RESTORE", "0") != "0":
         return False
     try:
         from pathlib import Path as _Path
@@ -150,10 +150,6 @@ def _try_restore_session() -> bool:
                 state_file = run_dir / "orch_state.json"
                 if not state_file.exists():
                     continue
-                # 检查是否已完成（有 report.html）
-                if (run_dir / "output" / "report.html").exists():
-                    continue
-                # 检查是否被取消标记
                 candidates.append((run_dir.stat().st_mtime, str(run_dir)))
         if not candidates:
             return False
@@ -190,9 +186,6 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
-        # Analyst 阶段：传最后一条 LLM 回复
-        if stage == "analyst" and ctx:
-            snapshot["analyst_message"] = ctx.get("_last_llm_reply", "")
 
         return snapshot
     except Exception:

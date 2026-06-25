@@ -105,6 +105,10 @@ function connect() {
         _lastPong = Date.now();
         return;
       }
+      // project_list → 更新全局项目列表
+      if (msg.type === "project_list" && Array.isArray((msg as any).data)) {
+        useWorkspaceStore.getState().setProjects((msg as any).data);
+      }
       broadcast(msg);
     } catch {
       /* ignore malformed messages */

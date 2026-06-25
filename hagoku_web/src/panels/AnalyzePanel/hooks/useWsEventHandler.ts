@@ -106,9 +106,21 @@ export function useWsEventHandler(deps: WsEventDeps) {
       if (msg.type === "state_snapshot") {
         const snap = (msg as any).data;
         if (!snap) continue;
-        if (snap.stage) {
-          setPhase("running");
+        // 项目切换时清空消息并恢复
+        setMessages([]);
+        setActiveFieldReviewId(null);
+        setActiveFieldReviewRevision(-1);
+        setActiveCleaningReviewId(null);
+        setActiveCleaningReviewRevision(-1);
+        setActiveAnalystReviewId(null);
+        setActiveAnalystReviewRevision(-1);
+        if (snap.project_name && setCurrentProject) {
+          setCurrentProject(snap.project_name);
         }
+        if (snap.data_path && setCurrentDataPath) {
+          setCurrentDataPath(snap.data_path);
+        }
+        if (snap.phase) setPhase("running");
         // 恢复 Scout 字段核对表
         if (snap.field_review) {
           const fr = parseFieldReview(snap.field_review);

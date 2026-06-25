@@ -245,6 +245,10 @@ class DataAnalystAgent(BaseAgent):
             "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
         }
         result = self.run_step(context, df, user_content)
+        # 传递 _pending_ask_user 到外层 context，供 _handle_reply 检测暂停
+        ask = context.get("_pending_ask_user")
+        if ask and self._context is not None:
+            self._context["_pending_ask_user"] = ask
         raw_text = result.get("text", "")
         cs = context.get("column_semantics", [])
         if cs and any("column_name" in s for s in cs):
@@ -582,6 +586,10 @@ class DataAnalystAgent(BaseAgent):
                     for tc in tool_records
                 ]
                 session.add_tool_call(txt, oai_calls, results)
+
+            # ask_user 被调用 → LLM 决定暂停等用户回复，停止工具循环
+            if context.get("_pending_ask_user"):
+                break
 
             # 让 LLM 看到工具结果，决定下一步
             agent_extra = self.prompt

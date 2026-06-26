@@ -130,6 +130,20 @@ async def create_project(req: CreateProjectRequest):
     return {"project": name, "created": True}
 
 
+# ── POST /api/projects/{name}/switch — 切换项目，返回快照 ──
+@app.post("/api/projects/{name}/switch")
+async def switch_project(name: str):
+    from hagoku.api.ws_handler import _project_manager
+    if _project_manager is None:
+        raise HTTPException(500, "ProjectManager not initialized")
+    if _project_manager.is_busy():
+        raise HTTPException(409, "当前项目分析进行中，请等待完成或停止后再切换")
+    snap = _project_manager.switch_project(name)
+    if snap is None:
+        raise HTTPException(404, f"项目 {name} 不存在或无法加载")
+    return snap
+
+
 # ── GET /api/reports/{project_name} — 列出该项目所有 run 的报告 ──
 @app.get("/api/reports/{project_name}")
 async def list_reports(project_name: str):

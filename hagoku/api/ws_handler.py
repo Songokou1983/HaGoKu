@@ -332,6 +332,11 @@ async def ws_handler(ws: WebSocket) -> None:
             _wslog.info("%s %s", cmd, str({k: str(v)[:100] for k, v in msg.items() if k != 'cmd'})[:200])
             if cmd == "ping":
                 await ws.send_json({"type": "pong"})
+            elif cmd == "__log":
+                # 前端内部日志 → 落盘
+                log_text = (msg.get("payload") or {}).get("text", "")
+                with open("/tmp/hagoku_frontend.log", "a") as f:
+                    f.write(log_text + "\n")
             elif cmd == "list_projects":
                 projects = _project_manager.list_projects()
                 await ws.send_json({"type": "project_list", "data": projects})

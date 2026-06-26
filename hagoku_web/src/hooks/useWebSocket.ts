@@ -173,12 +173,19 @@ export function useWebSocket() {
   const send = useCallback((cmd: string, payload?: unknown): boolean => {
     if (_ws?.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify({ cmd, payload }));
-      console.log("[hagoku:ws] send %s ok", cmd);
       return true;
     }
-    console.log("[hagoku:ws] send %s FAIL readyState=%s", cmd, _ws?.readyState);
     return false;
   }, []);
 
-  return { status, send, onMessage };
+  // 内部日志：通过 WS 发到后端文件 /tmp/hagoku_frontend.log
+  const log = useCallback((msg: string) => {
+    try {
+      if (_ws?.readyState === WebSocket.OPEN) {
+        _ws.send(JSON.stringify({ cmd: "__log", payload: { text: `[${new Date().toISOString()}] ${msg}` } }));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  return { status, send, log, onMessage };
 }

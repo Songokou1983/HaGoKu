@@ -27,7 +27,7 @@ import { sanitizeText } from "../utils/sanitize";
 import { uid } from "./AnalyzePanel/utils";
 
 export default function AnalyzePanel() {
-  const { send } = useWebSocket();
+  const { send, log } = useWebSocket();
   const status = useWorkspaceStore((s) => s.status);
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
@@ -155,9 +155,9 @@ export default function AnalyzePanel() {
   // Submit reply handler
   const submitUserReply = useCallback(
     (raw: string) => {
-      console.log("[hagoku] gateOpen=%s replyPending=%s", sess.gateOpen, replyPending);
+      log(`gateOpen=${sess.gateOpen} replyPending=${replyPending}`);
       if (!sess.gateOpen && !replyPending) {
-        console.log("[hagoku] BLOCKED — gate closed, no pending");
+        log(`BLOCKED — gate closed, no pending`);
         return;
       }
       const outgoing = sanitizeText(raw.trim());
@@ -167,7 +167,7 @@ export default function AnalyzePanel() {
         gate: sess.gateOpen,
       };
       const s = send("respond", { text: outgoing });
-      console.log("[hagoku] send('respond')=%s text=%s", s, outgoing.slice(0, 50));
+      log(`send('respond')=${s} text=${outgoing.slice(0, 50)}`);
       if (!s) {
         sess.replySnapshotRef.current = null;
         addSystemMsg(
@@ -182,7 +182,7 @@ export default function AnalyzePanel() {
       setReplyPending(true);
       sess.setGateOpen(false);
     },
-    [send, sess.gateOpen, replyPending],
+    [send, log, sess.gateOpen, replyPending],
   );
 
   const canStart =

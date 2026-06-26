@@ -60,7 +60,7 @@ export default function AnalyzePanel() {
       text: m.content || "",
       timestamp: m.timestamp || new Date().toISOString(),
     }));
-    sess.setMessages(msgs);
+    setMessages(msgs);
     setPhase(msgs.length > 0 ? "running" : "setup");
     if (snapshot.pendingAskUser) {
       sess.setGateOpen(true);

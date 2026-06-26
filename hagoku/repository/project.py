@@ -214,7 +214,12 @@ class ProjectRepository:
             raise ValueError(f"禁止在目录外创建项目: {project_dir}")
 
         if project_dir.exists():
-            raise FileExistsError(f"项目 '{name}' 已存在")
+            # 空目录可能是旧 REST API 创建失败的残留，允许覆盖
+            if not self._is_project_dir(project_dir) and not any(project_dir.iterdir()):
+                import shutil
+                shutil.rmtree(project_dir)
+            else:
+                raise FileExistsError(f"项目 '{name}' 已存在")
 
         for subdir in ("input", "process", "output", "memory", "runs"):
             (project_dir / subdir).mkdir(parents=True, exist_ok=True)
@@ -268,9 +273,10 @@ class ProjectRepository:
                     info = self._load_project_info(d)
                     if info is None and self._is_project_dir(d):
                         # 无元数据但目录结构像项目（旧格式兼容）
+                        from datetime import timezone as _tz
                         info = ProjectInfo(
                             name=d.name, description="",
-                            created_at=datetime.fromtimestamp(d.stat().st_mtime),
+                            created_at=datetime.fromtimestamp(d.stat().st_mtime, tz=_tz.utc),
                             project_dir=d,
                         )
                     if info:
@@ -280,7 +286,8 @@ class ProjectRepository:
                     continue
 
         return sorted(projects,
-                      key=lambda p: p.last_run or p.created_at, reverse=True)
+                      key=lambda p: (p.last_run or p.created_at).replace(tzinfo=None),
+                      reverse=True)
 
     @staticmethod
     def _is_project_dir(d: Path) -> bool:

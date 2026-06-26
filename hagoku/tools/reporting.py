@@ -322,7 +322,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         {% endif %}
 
         {% if section.content %}
-        <p>{{ section.content }}</p>
+        <p>{{ section.content | safe }}</p>
         {% endif %}
 
         {% if section.plain_explanation %}
@@ -464,7 +464,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ loop.index + 2 }}. {{ section.title | replace('🎯 ', '') | replace('📈 ', '') | replace('🔬 ', '') | replace('🔗 ', '') | replace('📊 ', '') | replace('🛡️ ', '') }}</h2>
-        {% if section.content %}<p>{{ section.content }}</p>{% endif %}
+        {% if section.content %}<p>{{ section.content | safe }}</p>{% endif %}
 
         {% for finding in section.findings %}
         <div class="finding">
@@ -572,17 +572,17 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 商业分析报告</title>
     <style>
         :root {
-            --bg: #0d1117;
-            --surface: #161b22;
-            --card: #1c2333;
-            --border: #30363d;
-            --text: #e6edf3;
-            --text-secondary: #8b949e;
-            --accent: #58a6ff;
-            --accent-dim: #1f6feb;
-            --success: #3fb950;
-            --warning: #d29922;
-            --error: #f85149;
+            --bg: #ffffff;
+            --surface: #f8f9fa;
+            --card: #ffffff;
+            --border: #dee2e6;
+            --text: #212529;
+            --text-secondary: #6c757d;
+            --accent: #0d6efd;
+            --accent-dim: #0b5ed7;
+            --success: #198754;
+            --warning: #fd7e14;
+            --error: #dc3545;
             --tier-1: rgba(63,185,80,0.15);
             --tier-2: rgba(88,166,255,0.15);
             --tier-3: rgba(210,153,34,0.15);
@@ -611,8 +611,8 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
         header .query { color: var(--accent); font-size: 0.95rem; margin-top: 0.5rem; }
 
         .headline-box {
-            background: linear-gradient(135deg, var(--accent-dim), #1a365d);
-            color: #e6edf3;
+            background: linear-gradient(135deg, #e7f1ff, #f0f7ff);
+            color: var(--text);
             padding: 1.25rem 1.5rem;
             border-radius: 12px;
             font-size: 1.15rem;
@@ -671,7 +671,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
             font-family: 'SF Mono', 'Consolas', monospace;
             font-size: 0.8rem;
             color: var(--accent);
-            background: rgba(88,166,255,0.08);
+            background: rgba(13,110,253,0.06);
             display: inline-block;
             padding: 0.15rem 0.5rem;
             border-radius: 4px;
@@ -691,7 +691,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
             border-bottom: 1px solid var(--border);
         }
         th { color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
-        tr:hover td { background: rgba(88,166,255,0.04); }
+        tr:hover td { background: rgba(13,110,253,0.03); }
 
         .chart {
             margin: 1rem 0;
@@ -701,7 +701,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .action-box {
-            background: linear-gradient(135deg, var(--card), var(--bg));
+            background: linear-gradient(135deg, #f8f9fa, #e7f1ff);
             border: 1px solid var(--accent-dim);
             border-radius: 12px;
             padding: 1.5rem;
@@ -746,7 +746,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ section.title }}</h2>
-        {% if section.content %}<div class="content">{{ section.content }}</div>{% endif %}
+        {% if section.content %}<div class="content">{{ section.content | safe }}</div>{% endif %}
 
         {% for finding in section.findings %}
         <div class="finding {% if finding.get('significance') == 'not_significant' %}warning{% endif %}">

@@ -75,8 +75,8 @@ export default function EventPanel() {
         <div className="px-3 py-2 border-b border-app-border shrink-0">
           <p className="text-ui-xs text-app-text-muted">
             {connectionStatus === "idle"
-              ? "正在连接服务器，建立后即可接收实时日志。"
-              : "分析运行时，各阶段的工作进展会实时显示在这里。"}
+              ? "正在连接服务器…"
+              : "分析运行时，工作进展和事件会实时显示在这里。等待分析启动。"}
           </p>
         </div>
       )}

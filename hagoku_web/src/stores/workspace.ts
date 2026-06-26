@@ -57,7 +57,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
       agents: { ...s.agents, [agent]: st },
     })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
-  setProjects: (projects) => set({ projects }),
+  setProjects: (projects) => set({ projects: Array.isArray(projects) ? projects : [] }),
   setCurrentProject: (currentProject) => {
     if (currentProject) localStorage.setItem('hagoku_active_project', currentProject);
     else localStorage.removeItem('hagoku_active_project');

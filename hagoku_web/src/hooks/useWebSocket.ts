@@ -173,8 +173,10 @@ export function useWebSocket() {
   const send = useCallback((cmd: string, payload?: unknown): boolean => {
     if (_ws?.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify({ cmd, payload }));
+      console.log("[hagoku:ws] send %s ok", cmd);
       return true;
     }
+    console.log("[hagoku:ws] send %s FAIL readyState=%s", cmd, _ws?.readyState);
     return false;
   }, []);
 

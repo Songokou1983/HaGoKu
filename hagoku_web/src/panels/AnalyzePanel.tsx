@@ -155,7 +155,11 @@ export default function AnalyzePanel() {
   // Submit reply handler
   const submitUserReply = useCallback(
     (raw: string) => {
-      if (!sess.gateOpen && !replyPending) return;
+      console.log("[hagoku] gateOpen=%s replyPending=%s", sess.gateOpen, replyPending);
+      if (!sess.gateOpen && !replyPending) {
+        console.log("[hagoku] BLOCKED — gate closed, no pending");
+        return;
+      }
       const outgoing = sanitizeText(raw.trim());
       if (!outgoing) return;
       sess.replySnapshotRef.current = {
@@ -163,6 +167,7 @@ export default function AnalyzePanel() {
         gate: sess.gateOpen,
       };
       const s = send("respond", { text: outgoing });
+      console.log("[hagoku] send('respond')=%s text=%s", s, outgoing.slice(0, 50));
       if (!s) {
         sess.replySnapshotRef.current = null;
         addSystemMsg(

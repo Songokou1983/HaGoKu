@@ -214,14 +214,12 @@ class WSBridge:
         """Callback subscribed to EventBus, called from orchestrator thread."""
         loop = self._loop
         if loop is None or not loop.is_running():
-            logging.getLogger("hagoku.ws").warning("on_event %s DROPPED — loop=%s running=%s",
+            logger.warning("on_event %s DROPPED — loop=%s running=%s",
                 event.event_type.value, loop is not None, loop.is_running() if loop else "N/A")
             return
-        logging.getLogger("hagoku.ws").info("on_event %s → broadcasting to %d clients",
+        logger.info("on_event %s → broadcasting to %d clients",
             event.event_type.value, len(self._clients))
         payload = _event_to_message(event)
-        import logging
-        logger = logging.getLogger("hagoku.ws.send")
         d = event.data or {}
         summary = {}
         if d.get("field_review"):

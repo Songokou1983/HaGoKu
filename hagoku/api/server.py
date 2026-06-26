@@ -156,16 +156,21 @@ async def list_reports(project_name: str):
     }
 
 
+# ── GET /api/reports/{project_name}/latest — 项目最新报告 ──
+@app.get("/api/reports/{project_name}/latest")
+async def get_latest_report(project_name: str):
+    path = _projects_root() / project_name / "reports" / "latest.html"
+    if not path.exists():
+        raise HTTPException(404, "No report generated yet")
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
 # ── GET /api/reports/{project_name}/{run_id}/{filename} — 返回 run 子目录报告或护栏说明 ──
 @app.get("/api/reports/{project_name}/{run_id}/{filename}")
 async def get_report_run(project_name: str, run_id: str, filename: str):
     if "/" in filename:
         raise HTTPException(400, "Invalid filename")
-    if run_id == "latest":
-        # 项目级最新报告
-        path = _projects_root() / project_name / "reports" / f"{filename}"
-    else:
-        path = _projects_root() / project_name / "runs" / run_id / "output" / filename
+    path = _projects_root() / project_name / "runs" / run_id / "output" / filename
     if not path.exists():
         raise HTTPException(404, "File not found")
     if filename.endswith(".html"):

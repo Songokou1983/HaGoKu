@@ -205,19 +205,18 @@ class Orchestrator(
             if self._df_clean is not None and self._df_clean is not self._df_raw:
                 self._df_clean.to_parquet(run_dir / "df_clean.parquet")
 
-            # ── 写入项目元数据 project.json ──
+            # ── 更新 project.json 的 current_run_id（不创建项目）──
             project_name = getattr(self, '_project_name', '')
             if project_name:
-                proj_dir = self.config.output.project_dir / project_name
-                proj_dir.mkdir(parents=True, exist_ok=True)
-                proj_file = proj_dir / "project.json"
-                if not proj_file.exists():
-                    _json.dump({
-                        "name": project_name,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                        "data_file": safe_ctx.get('data_path', ''),
-                        "current_run_id": run_id,
-                    }, proj_file.open("w", encoding="utf-8"), ensure_ascii=False, default=str)
+                proj_file = self.config.output.project_dir / project_name / "project.json"
+                if proj_file.exists():
+                    try:
+                        meta = _json.loads(proj_file.read_text(encoding="utf-8"))
+                    except Exception:
+                        meta = {}
+                    meta["current_run_id"] = run_id
+                    _json.dump(meta, proj_file.open("w", encoding="utf-8"),
+                              ensure_ascii=False, default=str)
 
             return str(run_dir / "orch_state.json")
         except Exception:
@@ -330,9 +329,15 @@ class Orchestrator(
         """
         run_start = datetime.now()
 
-        # 1. 创建项目
+        # 1. 验证项目存在（项目必须由用户通过界面创建，不自动生成）
         if project_name is None:
-            project_name = Path(data_path).stem.replace(" ", "_")
+            raise ValueError("缺少 project_name 参数，无法确定目标项目")
+        
+        proj_dir = self.config.output.project_dir / project_name
+        if not proj_dir.is_dir():
+            raise FileNotFoundError(
+                f"项目 '{project_name}' 不存在。请先在界面中创建项目。"
+            )
 
         self.event_bus.emit(EventType.RUN_STARTED, "manager", {
             "query": query,

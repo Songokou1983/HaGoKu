@@ -273,6 +273,7 @@ def demo_cmd(dataset: str | None, query: str | None) -> None:
         result = orch.run(
             data_path=str(resolved),
             query=effective_query,
+            project_name=f"demo_{dataset}",
         )
     except Exception:
         click.echo("❌ 分析过程中出现意外错误", err=True)

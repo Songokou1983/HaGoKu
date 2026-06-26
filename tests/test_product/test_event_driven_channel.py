@@ -261,7 +261,11 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
             "column_display_names": {"A": "列A", "B": "列B"},
             "query": "分析", "n_rows": 3, "n_cols": 2,
         }
-        result = orch.run(data_path=str(csv_path), query="分析")
+        # 确保项目目录存在（G12 修复：orch.run 不再自动创建项目）
+        proj_dir = orch.config.output.project_dir / "test_channel"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "project.json").write_text('{"name":"test_channel"}')
+        result = orch.run(data_path=str(csv_path), query="分析", project_name="test_channel")
 
         assert result.get("status") == "scout_review"
         assert isinstance(orch._df_raw, pd.DataFrame)

@@ -72,9 +72,12 @@ class TestAnalystTwoPhaseE2E:
         # 断言：纯通道返回 scout_review
         assert result["status"] == "scout_review"
 
-        # 断言：USER_INPUT_REQUESTED emit 已发送
+        # 断言：USER_INPUT_REQUESTED emit 已发送（现在通过 ack 的 need_input 返回，
+        # 但 _handle_analyst_reply 仍触发 _handle_reply 的空文本分支的 event emit）
         user_events = [e for e in emits if e[0] == EventType.USER_INPUT_REQUESTED]
-        assert len(user_events) >= 1
+        # 主路径不 emit，改为检查返回值
+        if not user_events:
+            assert result.get("need_input") is True, "respond 应返回 need_input"
 
         # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入
         user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]

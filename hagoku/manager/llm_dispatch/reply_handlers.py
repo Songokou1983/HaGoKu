@@ -24,12 +24,15 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     result = self._agent.run_step(context, df, user_input)
     self._log_channel("analyst", "run_step_done", text=result.get("text", ""))
 
-    # ── 返回暂停信号给 respond() 带回 ack ──
+    # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
-    response = {"status": "scout_review", "message": result.get("text", ""), "need_input": True}
     if ask:
-        response["ask"] = ask
-    return response
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
+        return {"status": "scout_review", "message": ""}
+
+    # ── 留在当前 ──
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
+    return {"status": "scout_review", "message": result.get("text", "")}
 
 
 # ── respond（外层入口）────────────────────────────

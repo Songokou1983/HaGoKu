@@ -231,29 +231,6 @@ export function useWsEventHandler(deps: WsEventDeps) {
       if (msg.type === "ack" && msg.cmd === "respond") {
         replySnapshotRef.current = null;
         setReplyPending?.(false);
-        // 从 ack 数据获取暂停信号
-        const ackData = (msg as any).data || {};
-        if (ackData.need_input) {
-          setGateOpen(true);
-          setPhase("running");
-          if (ackData.ask) {
-            // 显示 ask_user 提示
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: uid(),
-                role: "workflow",
-                text: "",
-                timestamp: new Date().toISOString(),
-                askUser: {
-                  question: ackData.ask.question,
-                  expected_format: ackData.ask.expected_format,
-                  options: ackData.ask.options,
-                },
-              },
-            ]);
-          }
-        }
         continue;
       }
       if (msg.type === "ack" && msg.cmd === "cancel_respond") {

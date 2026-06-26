@@ -120,7 +120,7 @@ export default function ReportPanel() {
           </button>
           {showDropdown && (
             <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-48 overflow-y-auto">
-              {projects.length === 0 ? (
+              {!projects?.length ? (
                 <div className="px-3 py-2 text-ui-xs text-app-text-muted">暂无项目</div>
               ) : (
                 projects.map((p) => (

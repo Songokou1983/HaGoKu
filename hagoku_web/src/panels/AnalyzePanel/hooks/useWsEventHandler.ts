@@ -106,16 +106,14 @@ export function useWsEventHandler(deps: WsEventDeps) {
       if (msg.type === "state_snapshot") {
         const snap = (msg as any).data;
         if (!snap) continue;
-        // 项目切换时清空消息并恢复（有 messages 数据时才清空重建）
-        if (snap.messages && snap.messages.length > 0) {
-          setMessages([]);
-          setActiveFieldReviewId(null);
-          setActiveFieldReviewRevision(-1);
-          setActiveCleaningReviewId(null);
-          setActiveCleaningReviewRevision(-1);
-          setActiveAnalystReviewId(null);
-          setActiveAnalystReviewRevision(-1);
-        }
+        // 项目切换：始终清空旧内容，再恢复快照
+        setMessages([]);
+        setActiveFieldReviewId(null);
+        setActiveFieldReviewRevision(-1);
+        setActiveCleaningReviewId(null);
+        setActiveCleaningReviewRevision(-1);
+        setActiveAnalystReviewId(null);
+        setActiveAnalystReviewRevision(-1);
         if (snap.project_name && setCurrentProject) {
           setCurrentProject(snap.project_name);
         }
@@ -123,6 +121,16 @@ export function useWsEventHandler(deps: WsEventDeps) {
           setCurrentDataPath(snap.data_path);
         }
         if (snap.phase) setPhase("running");
+        // 恢复对话历史
+        if (snap.messages && Array.isArray(snap.messages)) {
+          const replayed: ConvoMessage[] = snap.messages.map((m: any) => ({
+            id: uid(),
+            role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+            text: m.content || "",
+            timestamp: m.timestamp || new Date().toISOString(),
+          }));
+          setMessages(replayed);
+        }
         // 恢复 Scout 字段核对表
         if (snap.field_review) {
           const fr = parseFieldReview(snap.field_review);
@@ -201,24 +209,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
           }
         }
         // ── 回放对话历史（app 重启后恢复）
-        if (snap.messages && Array.isArray(snap.messages)) {
-          const replayed: ConvoMessage[] = snap.messages.map((m: any) => ({
-            id: uid(),
-            role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
-            text: m.content || "",
-            timestamp: m.timestamp || new Date().toISOString(),
-          }));
-          setMessages(replayed);
-        }
-        // 恢复项目和数据文件
-        if (snap.project_name && setCurrentProject) {
-          setCurrentProject(snap.project_name);
-        }
-        if (snap.data_path && setCurrentDataPath) {
-          setCurrentDataPath(snap.data_path);
-        }
-        if (snap.phase) setPhase("running");
-        if (snap.gate_open) setGateOpen(true);
+        // (已在 state_snapshot 块开头处理，此处不再重复)
         // Agent 状态恢复
         const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
         const doneIdx = agentOrder.indexOf(snap.stage);

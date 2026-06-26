@@ -6,6 +6,7 @@ import {
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
+import { useWebSocket } from "../hooks/useWebSocket";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 
@@ -113,8 +114,7 @@ function ProjectCard({
 
   return (
     <div
-      onClick={onSelect}
-      className={`relative cursor-pointer rounded border transition-all duration-150 overflow-hidden group
+      className={`relative rounded border transition-all duration-150 overflow-hidden group
         ${isSelected
           ? "border-app-accent bg-app-bg-secondary"
           : "border-app-border bg-app-bg-secondary hover:border-app-accent/40"
@@ -130,12 +130,18 @@ function ProjectCard({
             {name}
           </span>
 
-          {/* Actions: show on hover/selected */}
-          <div
-            className={`flex items-center gap-0.5 transition-opacity duration-150
-              ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+          {/* Actions */}
+          <div className="flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
+            {!isSelected && (
+              <button onClick={onSelect} title="切换到此项目"
+                className="px-2 py-0.5 text-ui-xs border border-app-accent text-app-accent rounded
+                  hover:bg-app-accent hover:text-white cursor-pointer transition-colors"
+              >
+                切换
+              </button>
+            )}
             <button onClick={startEdit} title="编辑描述"
               className="p-1 text-app-text-muted hover:text-app-text cursor-pointer rounded transition-colors">
               <Pencil size={12} />
@@ -238,6 +244,7 @@ function ProjectCard({
 }
 
 export default function ProjectPanel() {
+  const { send } = useWebSocket();
   const projects = useWorkspaceStore((s) => s.projects);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
   const agents = useWorkspaceStore((s) => s.agents);
@@ -479,6 +486,7 @@ export default function ProjectPanel() {
             onSelect={() => {
               if (p !== currentProject) {
                 setCurrentProject(p);
+                send("switch_project", { project: p });
               }
             }}
             onDeleted={() => {

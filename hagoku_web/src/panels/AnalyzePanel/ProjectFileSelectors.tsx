@@ -57,7 +57,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
           </button>
           {showProjectDropdown && (
             <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-48 overflow-y-auto">
-              {projects.length === 0
+              {!projects?.length
                 ? <div className="px-3 py-2 text-ui-xs text-app-text-muted">暂无项目</div>
                 : projects.map((p) => (
                   <button key={p} onClick={() => { setCurrentProject(p); setShowProjectDropdown(false); }}
@@ -98,7 +98,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
           </button>
           {showFileDropdown && currentProject && (
             <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-56 overflow-y-auto">
-              {projectFiles.length === 0
+              {!projectFiles?.length
                 ? <div className="px-3 py-3 text-ui-xs text-app-text-muted text-center">暂无数据文件，请上传</div>
                 : projectFiles.map((f) => (
                   <button key={f.path} onClick={() => { setDataPath(f.path); setShowFileDropdown(false); }}

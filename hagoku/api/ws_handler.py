@@ -413,7 +413,7 @@ async def ws_handler(ws: WebSocket) -> None:
                     with _analysis_busy_lock:
                         _analysis_in_progress = False
             elif cmd == "cancel_analysis":
-                orch = _shared_orchestrator
+                orch = get_orchestrator()
                 if orch is None:
                     await ws.send_json({
                         "type": "error",
@@ -443,7 +443,7 @@ async def ws_handler(ws: WebSocket) -> None:
                 user_text = payload.get("text", "").strip()
                 # Phase C: 空 text 是合法信号（"让 LLM 再想想"），不再 skip
                 # R6 防护：连续 3 次空回复 → emit error（不兜底，显式失败，铁律 7）
-                orch = _shared_orchestrator
+                orch = get_orchestrator()
                 if orch is None:
                     await ws.send_json({"type": "error", "message": "No active orchestrator"})
                 else:

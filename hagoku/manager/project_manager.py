@@ -84,7 +84,7 @@ class ProjectManager:
 
         import json as _json
         try:
-            meta = _json.loads(proj_file.open("r", encoding="utf-8"))
+            meta = _json.loads(proj_file.read_text(encoding="utf-8"))
             run_id = meta.get("current_run_id", "")
             if not run_id:
                 return None

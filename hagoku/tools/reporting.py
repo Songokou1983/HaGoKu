@@ -572,19 +572,153 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{{ report.project_name }} — 商业分析报告</title>
     <style>
         :root {
-            --primary: #0d47a1;
-            --accent: #ff6f00;
-            --bg: #ffffff;
-            --surface: #f5f7fa;
-            --text: #212121;
-            --text-secondary: #616161;
-            --border: #e0e0e0;
-            --success: #2e7d32;
-            --warning: #f57f17;
-            --error: #c62828;
+            --bg: #0d1117;
+            --surface: #161b22;
+            --card: #1c2333;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-dim: #1f6feb;
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+            --tier-1: rgba(63,185,80,0.15);
+            --tier-2: rgba(88,166,255,0.15);
+            --tier-3: rgba(210,153,34,0.15);
+            --tier-4: rgba(248,81,73,0.12);
+            --font: -apple-system, 'Microsoft YaHei', 'PingFang SC', sans-serif;
         }
-        </style>
-        <style>""" + _BASE_REPORT_CSS + """
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            line-height: 1.7;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+            -webkit-font-smoothing: antialiased;
+        }
+        header {
+            text-align: center;
+            padding: 3rem 0 2rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+        header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        header .meta { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem; }
+        header .query { color: var(--accent); font-size: 0.95rem; margin-top: 0.5rem; }
+
+        .headline-box {
+            background: linear-gradient(135deg, var(--accent-dim), #1a365d);
+            color: #e6edf3;
+            padding: 1.25rem 1.5rem;
+            border-radius: 12px;
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            border-left: 4px solid var(--accent);
+        }
+
+        .metric-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+        .metric-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent);
+            line-height: 1.2;
+        }
+        .metric-card .label { color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.3rem; }
+
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section h2 {
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .section p, .section .content { color: var(--text); font-size: 0.95rem; margin-bottom: 1rem; }
+
+        .finding {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .finding .headline { font-weight: 600; font-size: 1rem; margin-bottom: 0.3rem; color: var(--text); }
+        .finding .conclusion { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.3rem; }
+        .finding .stats {
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.8rem;
+            color: var(--accent);
+            background: rgba(88,166,255,0.08);
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.3rem;
+        }
+        .finding.warning .headline { color: var(--warning); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th { color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+        tr:hover td { background: rgba(88,166,255,0.04); }
+
+        .chart {
+            margin: 1rem 0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg);
+        }
+
+        .action-box {
+            background: linear-gradient(135deg, var(--card), var(--bg));
+            border: 1px solid var(--accent-dim);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        .action-box h3 { color: var(--accent); font-size: 1.05rem; margin-bottom: 0.75rem; }
+        .action-box ul { padding-left: 1.25rem; }
+        .action-box li { color: var(--text); font-size: 0.9rem; margin-bottom: 0.4rem; }
+
+        footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
     </style>
 </head>
 <body>
@@ -612,7 +746,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ section.title }}</h2>
-        {% if section.content %}<p>{{ section.content }}</p>{% endif %}
+        {% if section.content %}<div class="content">{{ section.content }}</div>{% endif %}
 
         {% for finding in section.findings %}
         <div class="finding {% if finding.get('significance') == 'not_significant' %}warning{% endif %}">
@@ -654,7 +788,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
         </ul>
     </div>
 
-    <footer>HaGoKu Studio 商业分析报告 — 用数学的力量，驱动商业决策</footer>
+    <footer>HaGoKu Studio 商业分析报告 · 用数据驱动决策</footer>
 </body>
 </html>
 """

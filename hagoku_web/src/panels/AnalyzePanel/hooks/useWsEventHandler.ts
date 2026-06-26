@@ -100,7 +100,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
   } = deps;
 
   useEffect(() => {
-    if (batch.length === 0) return;
+    if (!batch || batch.length === 0) return;
     for (const msg of batch) {
       // ── state_snapshot ──────────────────────────────────────────
       if (msg.type === "state_snapshot") {

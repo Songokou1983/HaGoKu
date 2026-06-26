@@ -11,6 +11,7 @@ import EventPanel from "./panels/EventPanel";
 import CommandsPanel from "./panels/CommandsPanel";
 import DoctorPanel from "./panels/DoctorPanel";
 import { TitleBar } from "./components/TitleBar";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useThemeStore } from "./stores/theme";
 import {
   FolderKanban,
@@ -59,7 +60,7 @@ const SECTION_LABELS: Record<NavSection, string> = {
 
 const PANEL_MAP: Record<PanelId, ReactNode> = {
   projects:  <ProjectPanel />,
-  analyze:   <AnalyzePanel />,
+  analyze:   <ErrorBoundary><AnalyzePanel /></ErrorBoundary>,
   report:    <ReportPanel />,
   knowledge: <KnowledgePanel />,
   events:    <EventPanel />,

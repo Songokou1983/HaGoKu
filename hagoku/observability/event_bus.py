@@ -50,6 +50,11 @@ class EventBus:
 
     def unsubscribe(self, callback: Callable[[Event], None]) -> None:
         """取消订阅"""
+        if callback in self.subscribers:
+            self.subscribers.remove(callback)
+
+    def unsubscribe(self, callback: Callable[[Event], None]) -> None:
+        """取消订阅"""
         self.subscribers.remove(callback)
 
     def get_timeline(self) -> list[Event]:

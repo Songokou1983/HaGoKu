@@ -340,8 +340,12 @@ async def ws_handler(ws: WebSocket) -> None:
                 if _project_manager.is_busy():
                     await ws.send_json({"type": "error", "message": "当前项目分析进行中，请等待完成或停止后再切换"})
                 else:
+                    old_orch = _project_manager.get_current_orch()
                     snap = _project_manager.switch_project(name)
                     if snap:
+                        # 切换 EventBus 订阅
+                        if old_orch:
+                            old_orch.event_bus.unsubscribe(bridge.on_event)
                         orch = _project_manager.get_current_orch()
                         if orch:
                             orch.event_bus.subscribe(bridge.on_event)

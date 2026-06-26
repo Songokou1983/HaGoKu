@@ -676,6 +676,7 @@ async def upload_project_file(project_name: str, file: UploadFile = File(...)):
     dest = data_dir / filename
     content = await file.read()
     dest.write_bytes(content)
+    logging.getLogger("hagoku.api").info("upload project=%s file=%s size=%d", project_name, filename, len(content))
     # Auto-bind data_path to project in DB
     try:
         from hagoku.storage.database import HaGoKuDB

@@ -775,19 +775,6 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     {% endfor %}
 
-    <div class="action-box">
-        <h3>📋 建议行动</h3>
-        <ul>
-        {% for section in report.sections %}
-            {% for finding in section.findings %}
-                {% if finding.get('significance') == 'significant' and finding.get('question') %}
-            <li>{{ finding.question }} — 基于数据支持，建议优先关注</li>
-                {% endif %}
-            {% endfor %}
-        {% endfor %}
-        </ul>
-    </div>
-
     <footer>HaGoKu Studio 商业分析报告 · 用数据驱动决策</footer>
 </body>
 </html>

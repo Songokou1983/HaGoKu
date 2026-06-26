@@ -7,18 +7,26 @@ description: 改代码前强制执行四行诊断+铁律检查，不可跳过
 
 每次改代码前必须完成，不可跳过。
 
-## ⛔ 强制第一步：查 dump
+## ⛔ 强制第一步：查 dump + 查日志
 
-**现在必须执行以下命令并贴出结果，完成前不许做任何其他事：**
+**每次用户反馈问题，必须先执行以下命令并贴出结果：**
 
+查 LLM dump：
 ```bash
 ls -lt ~/.hagoku/llm_dumps/ | head -5
+```
+
+查运行日志（时间线）：
+```bash
+tail -30 /tmp/hagoku.log
 ```
 
 如果 `~/.hagoku/llm_dumps/` 为空，改为查项目 run 目录：
 ```bash
 find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/dev/null | head -5
 ```
+
+**dump 回答 LLM 在想什么。日志回答系统在干什么。两者缺一不可。**
 
 ## 四行诊断（缺一不写代码）
 
@@ -39,6 +47,7 @@ find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/de
 | 改 prompt 不加 dump 对比 | 铁律 10 → 必须先 dump |
 | 说"可能是模型的问题" | 刹车 F → 贴代码证据 |
 | `return null` / `pass` 在渲染路径 | 检查 → 是否静默吞行为 |
+| 不看日志就说"后端没问题" | 铁律 12 → 先 `tail -30 /tmp/hagoku.log` |
 
 ## 系统认知
 

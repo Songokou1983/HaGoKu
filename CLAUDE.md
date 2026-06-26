@@ -90,7 +90,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 ## ⛔ 改代码前必须有这四行
 
 ```
-1. dump:   <paste exact dump content, line numbers>
+1. dump+log: <paste exact dump content + log key lines, line numbers>
 2. path:   <file:line → file:line → breakpoint>
 3. gap:    <what LLM received vs what it should have received>
 4. exists: <this system already handles this at file:line — yes/no>

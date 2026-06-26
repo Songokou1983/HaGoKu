@@ -21,7 +21,6 @@ from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
-from ..storage.project_manager import ProjectManager
 from ..tools.data_io import save_data
 
 from .command_parser import parse as parse_command, ParsedCommand
@@ -77,8 +76,10 @@ class Orchestrator(
         """通道日志——记录每个关键决策点。"""
         try:
             cl = getattr(self, "_channel_logger", None)
-            if cl: cl.log(agent, event, **kw)
-        except Exception: pass
+            if cl:
+                cl.log(agent, event, **kw)
+        except Exception:
+            logger.debug("_log_channel 失败", exc_info=True)
 
     # 兼容旧测试
     _STAGE_HANDLERS: dict[str, str] = {
@@ -98,7 +99,6 @@ class Orchestrator(
         self.display = TerminalDisplay(verbosity="normal")
         self.output_mgr: OutputManager | None = None  # 按项目初始化
         self.memory: MemoryManager | None = None  # 按项目初始化
-        self.project_mgr = ProjectManager(self.config.output.project_dir)  # 全局项目管理器
 
         # 订阅显示
         self.event_bus.subscribe(self.display)

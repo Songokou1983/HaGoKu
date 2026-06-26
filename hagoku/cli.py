@@ -711,10 +711,10 @@ def project_cmd() -> None:
 def project_create(name: str, desc: str) -> None:
     """创建新项目（立项）"""
     from .config import HaGoKuConfig
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
 
     try:
         info = pm.create(name, description=desc)
@@ -735,10 +735,10 @@ def project_create(name: str, desc: str) -> None:
 def project_add(project: str, file_path: str, link: bool) -> None:
     """向项目添加数据文件"""
     from .config import HaGoKuConfig
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
 
     try:
         info = pm.add_data(project, Path(file_path), copy=not link)
@@ -756,10 +756,10 @@ def project_add(project: str, file_path: str, link: bool) -> None:
 def project_list() -> None:
     """列出所有项目"""
     from .config import HaGoKuConfig
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
     projects = pm.list()
 
     if not projects:
@@ -784,10 +784,10 @@ def project_list() -> None:
 def project_info(project: str) -> None:
     """查看项目详情"""
     from .config import HaGoKuConfig
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
     info = pm.info(project)
 
     if info is None:
@@ -827,10 +827,10 @@ def project_info(project: str) -> None:
 def project_delete(project: str, force: bool) -> None:
     """删除项目"""
     from .config import HaGoKuConfig
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
 
     if not pm.exists(project):
         click.echo(f"❌ 项目不存在: {project}", err=True)
@@ -867,10 +867,10 @@ def project_run(
     """在项目上下文中运行分析（自动使用项目的 input/ 数据）"""
     from .config import HaGoKuConfig
     from .manager.orchestrator import Orchestrator
-    from .storage.project_manager import ProjectManager
+    from hagoku.repository.project import ProjectRepository
 
     config = HaGoKuConfig.load()
-    pm = ProjectManager(config.output.project_dir)
+    pm = ProjectRepository(config.output.project_dir)
 
     # 获取数据文件
     if data:

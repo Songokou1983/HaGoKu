@@ -31,7 +31,7 @@ find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/de
 ## 四行诊断（缺一不写代码）
 
 回答以下四行再调用 edit_file：
-1. **dump**: 粘贴 dump 原文（文件路径:行号:内容）
+1. **dump + 日志**: 粘贴 dump 原文 + 日志关键行（文件路径:行号:内容）
 2. **path**: 从入口到断裂点的代码路径（file:line → file:line）
 3. **gap**: LLM 收到了什么 vs 应该收到什么
 4. **exists**: 系统里已有代码可以解决这个问题吗？（grep 搜过后回答 file:line 或 none）
@@ -59,7 +59,7 @@ find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/de
 
 ## 流程
 
-1. 用户反馈问题 → 先读 dump（`ls -lt ~/.hagoku/.../llm_dumps/`）
+1. 用户反馈问题 → 先读 dump + 日志（`ls -lt ~/.hagoku/.../llm_dumps/` + `tail -30 /tmp/hagoku.log`）
 2. 贴 dump 证据 → 回答四行
 3. 用户确认 → 改代码
 4. 跑 `bash scripts/ci/self_check.sh` + `pytest`

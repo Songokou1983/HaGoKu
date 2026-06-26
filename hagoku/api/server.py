@@ -20,7 +20,7 @@ logging.basicConfig(
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,18 +37,20 @@ from hagoku.services.kb_content import parse_frontmatter, strip_frontmatter, loa
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """初始化 Orchestrator，确保每个 uvicorn 工作进程都正确绑定 EventBus。"""
+    """初始化 HaGoKuApp，存入 app.state。"""
     try:
-        from hagoku.api.ws_handler import set_orchestrator
+        from hagoku.app import HaGoKuApp
         from hagoku.config import HaGoKuConfig
-        from hagoku.manager.orchestrator import Orchestrator
+        from hagoku.api.ws_handler import set_app
 
         config = HaGoKuConfig.load()
-        orchestrator = Orchestrator(config)
-        set_orchestrator(orchestrator)
-    except Exception as exc:  # 配置缺失时降级为懒初始化
+        hagoku_app = HaGoKuApp(config)
+        app.state.hagoku_app = hagoku_app
+        set_app(app)
+    except Exception as exc:
         import logging
-        logging.getLogger(__name__).warning("Orchestrator lifespan init failed: %s", exc)
+        logging.getLogger(__name__).warning("HaGoKuApp lifespan init failed: %s", exc)
+        app.state.hagoku_app = None
     yield
 
 
@@ -98,7 +100,12 @@ def _projects_root() -> Path:
 
 # ── GET /api/projects — 列出所有项目名 ──────────────────────
 @app.get("/api/projects")
-async def list_projects():
+async def list_projects(request: Request = None):
+    from fastapi import Request as _R
+    app = request.app.state.hagoku_app if request else None
+    if app:
+        return {"projects": app.list_projects()}
+    # 回退：直接扫描目录
     root = _projects_root()
     if not root.exists():
         return {"projects": []}
@@ -113,36 +120,43 @@ class CreateProjectRequest(BaseModel):
 
 
 @app.post("/api/projects")
-async def create_project(req: CreateProjectRequest):
+async def create_project(req: CreateProjectRequest, request: Request):
+    app = request.app.state.hagoku_app
+    if app is None:
+        raise HTTPException(500, "App not initialized")
+    
     import re as _re
     name = req.name.strip()
     if not name or not _re.match(r'^[a-zA-Z0-9_-]+$', name):
         raise HTTPException(400, "项目名称只允许英文字母、数字、下划线和连字符")
-    proj_dir = _projects_root() / name
-    proj_dir.mkdir(parents=True, exist_ok=True)
-    # Persist to metadata DB
+    
+    ok = app.create_project(name)
+    if not ok:
+        raise HTTPException(409, f"项目 {name} 已存在")
+    
+    # 同步到元数据库
     try:
         from hagoku.storage.database import HaGoKuDB
         db = HaGoKuDB.get_instance()
         desc = req.description.strip()
-        # create_project uses INSERT OR IGNORE — if row already exists, update description explicitly
         db.create_project(name, description=desc)
         if desc:
             db.update_project(name, description=desc)
     except Exception:
         pass
+    
     return {"project": name, "created": True}
 
 
 # ── POST /api/projects/{name}/switch — 切换项目，返回快照 ──
 @app.post("/api/projects/{name}/switch")
-async def switch_project(name: str):
-    from hagoku.api.ws_handler import _project_manager
-    if _project_manager is None:
-        raise HTTPException(500, "ProjectManager not initialized")
-    if _project_manager.is_busy():
+async def switch_project(name: str, request: Request):
+    app = request.app.state.hagoku_app
+    if app is None:
+        raise HTTPException(500, "App not initialized")
+    if app.is_busy():
         raise HTTPException(409, "当前项目分析进行中，请等待完成或停止后再切换")
-    snap = _project_manager.switch_project(name)
+    snap = app.switch_project(name)
     if snap is None:
         raise HTTPException(404, f"项目 {name} 不存在或无法加载")
     return snap
@@ -437,6 +451,9 @@ async def clear_project_history(project_name: str):
         # 删除文件系统记录
         runs_dir = proj_dir / "runs"
         if runs_dir.exists():
+            from hagoku.repository.project import _safe_rmtree
+            import shutil
+            _safe_rmtree(runs_dir, _projects_root())
             shutil.rmtree(runs_dir)
         for f in ("progress.yaml", "process_log.md", "handover_notes.md", "context.md"):
             fp = proj_dir / f
@@ -461,13 +478,15 @@ async def clear_project_history(project_name: str):
 
 # ── DELETE /api/projects/{project_name} — 删除项目 ──────────
 @app.delete("/api/projects/{project_name}")
-async def delete_project(project_name: str):
-    import shutil
-    proj_dir = _projects_root() / project_name
-    if not proj_dir.exists():
+async def delete_project(project_name: str, request: Request):
+    app = request.app.state.hagoku_app
+    if app is None:
+        raise HTTPException(500, "App not initialized")
+    ok = app.delete_project(project_name)
+    if not ok:
         raise HTTPException(404, "Project not found")
+    # 清除数据库记录
     try:
-        shutil.rmtree(proj_dir)
         from hagoku.storage.database import HaGoKuDB
         db = HaGoKuDB.get_instance()
         db.conn.execute("DELETE FROM projects WHERE id = ?", (project_name,))

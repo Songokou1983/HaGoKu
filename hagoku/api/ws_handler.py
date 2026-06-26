@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 # The WebSocket handler reads from this to subscribe.
 _shared_bus: EventBus | None = None
 _shared_orchestrator: "Orchestrator | None" = None
-_project_manager: Any = None  # ProjectManager 实例，v0.10 替代 _shared_orchestrator
+
+# FastAPI app reference（set by lifespan，替代 _project_manager 全局）
+_fastapi_app: Any = None
 
 # 同一进程内只允许一条分析线程占用共享 Orchestrator（避免并发 run()）
 _analysis_busy_lock = threading.Lock()
@@ -43,10 +45,19 @@ def get_bus() -> EventBus | None:
 
 
 def get_orchestrator() -> "Orchestrator | None":
-    """Return the shared orchestrator instance."""
-    if _project_manager is not None and _project_manager._current_orch is not None:
-        return _project_manager._current_orch
+    """Return the shared orchestrator instance。优先从 App 获取。"""
+    global _fastapi_app
+    if _fastapi_app is not None:
+        hagoku_app = getattr(_fastapi_app.state, 'hagoku_app', None)
+        if hagoku_app is not None and hagoku_app.orch is not None:
+            return hagoku_app.orch
     return _shared_orchestrator
+
+
+def set_app(app: Any) -> None:
+    """Register the FastAPI app（lifespan 调用）。"""
+    global _fastapi_app
+    _fastapi_app = app
 
 
 def set_orchestrator(orchestrator: "Orchestrator") -> None:
@@ -71,49 +82,20 @@ def _event_to_message(event: Event) -> dict[str, Any]:
 
 # ── Analysis runner ─────────────────────────────────────────────
 
-def _run_analysis(data_path: str, query: str, project_name: str, phase: str) -> None:
-    """
-    在后台线程运行 Orchestrator.run()。
-    Orchestrator 会自动通过其 event_bus → WSBridge → WebSocket 推送事件到前端。
-    """
-    from hagoku.config import HaGoKuConfig
-    from hagoku.manager.orchestrator import Orchestrator
-
-    global _shared_orchestrator
-
-    # 创建或复用共享的 Orchestrator 实例
-    if _shared_orchestrator is None:
-        config = HaGoKuConfig.load()
-        _shared_orchestrator = Orchestrator(config)
-        set_bus(_shared_orchestrator.event_bus)
-
-    # 无论实例是本函数新建还是 lifespan 已创建，都保证 EventBus → WSBridge（subscribe 幂等）
-    bridge = WSBridge.get()
-    n_before = len(getattr(bridge, '_clients', [])) if hasattr(bridge, '_clients') else 0
-    _shared_orchestrator.event_bus.subscribe(bridge.on_event)
-    _logging.getLogger("hagoku.ws").info("_run_analysis subscribe bridge.on_event: clients=%d subs=%d",
-        len(bridge._clients), len(_shared_orchestrator.event_bus.subscribers))
-
-    # 运行分析（同步阻塞，在 executor 线程中执行）
-    _shared_orchestrator.run(
-        data_path=data_path,
-        query=query,
-        project_name=project_name,
-        phase=phase,
-    )
-
-
 def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str) -> None:
     """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
     global _analysis_in_progress
     try:
-        result = _shared_orchestrator.run(
+        orch = get_orchestrator()
+        if orch is None:
+            return
+        result = orch.run(
             data_path=data_path, query=query,
             project_name=project_name,
         )
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":
-            _shared_orchestrator.respond({"text": ""})
+            orch.respond({"text": ""})
     finally:
         with _analysis_busy_lock:
             _analysis_in_progress = False
@@ -126,52 +108,6 @@ def _respond_task(orch: "Orchestrator", user_text: str) -> dict[str, Any]:
     通过 WSBridge → WebSocket 实时推送到前端。
     """
     return orch.respond({"text": user_text})
-
-
-def _try_restore_session() -> bool:
-    """检查是否有未完成的 session，有则恢复 orchestrator 状态。返回 True 表示已恢复。"""
-    global _shared_orchestrator
-    if os.environ.get("HAGOKU_SKIP_AUTO_RESTORE", "0") != "0":
-        return False
-    try:
-        from pathlib import Path as _Path
-        from hagoku.config import HaGoKuConfig
-        from hagoku.manager.orchestrator import Orchestrator
-        from hagoku.storage.database import HaGoKuDB
-
-        config = HaGoKuConfig.load()
-        db = HaGoKuDB.get_instance(config.work_dir / "hagoku.db")
-        # 查找最近的非 completed run
-        projects_dir = _Path(config.output.project_dir)
-        if not projects_dir.exists():
-            return False
-        candidates = []
-        for proj_dir in projects_dir.iterdir():
-            if not proj_dir.is_dir():
-                continue
-            runs_dir = proj_dir / "runs"
-            if not runs_dir.exists():
-                continue
-            for run_dir in sorted(runs_dir.iterdir(), reverse=True):
-                state_file = run_dir / "orch_state.json"
-                if not state_file.exists():
-                    continue
-                candidates.append((run_dir.stat().st_mtime, str(run_dir)))
-        if not candidates:
-            return False
-        candidates.sort(reverse=True)
-        for run_dir_path in candidates:
-            run_dir = run_dir_path[1]
-            orch = Orchestrator.restore_session(config, run_dir)
-            if orch is not None:
-                _shared_orchestrator = orch
-                set_bus(orch.event_bus)
-                return True
-        return False
-    except Exception:
-        import logging
-        logging.getLogger("hagoku.ws").warning("_try_restore_session 失败", exc_info=True)
-        return False
 
 
 def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
@@ -294,34 +230,34 @@ async def ws_handler(ws: WebSocket) -> None:
     bridge.add_client(ws)
     bridge.set_loop(asyncio.get_running_loop())
 
+    # ── 获取 App 实例 ──
+    app = ws.app.state.hagoku_app if hasattr(ws.app.state, 'hagoku_app') else None
+
     try:
         await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
 
-        # ── 初始化 ProjectManager ──
-        global _project_manager
-        if _project_manager is None:
-            from hagoku.manager.project_manager import ProjectManager
-            from hagoku.config import HaGoKuConfig
-            _project_manager = ProjectManager(HaGoKuConfig.load())
-
         # ── 推送项目列表 ──
-        projects = _project_manager.list_projects()
-        await ws.send_json({"type": "project_list", "data": projects})
+        if app:
+            projects = app.list_projects()
+            await ws.send_json({"type": "project_list", "data": projects})
 
-        # ── 状态恢复：优先从磁盘恢复当前项目 ──
+        # ── 状态恢复：优先从 App 恢复当前项目 ──
         global _shared_orchestrator
-        orch = _project_manager.get_current_orch() if _project_manager._current_project else None
-        if orch is None:
-            restored = _try_restore_session()
+        orch = None
+        if app and app.active_project:
+            orch = app.orch
+        if orch is None and app:
+            restored = app.try_restore_session()
             if restored:
-                orch = _shared_orchestrator
-                _project_manager._current_orch = orch
+                orch = app.orch
+        if orch is None and _shared_orchestrator is not None:
+            orch = _shared_orchestrator
         if orch is not None:
             orch.event_bus.subscribe(bridge.on_event)
 
         # ── 推送当前项目快照 ──
         if orch is not None:
-            snapshot = _build_state_snapshot(orch)
+            snapshot = app.build_snapshot() if app else _build_state_snapshot(orch)
             if snapshot:
                 await ws.send_json({"type": "state_snapshot", "data": snapshot})
 
@@ -344,32 +280,37 @@ async def ws_handler(ws: WebSocket) -> None:
                 with open("/tmp/hagoku.log", "a") as f:
                     f.write(log_text + "\n")
             elif cmd == "list_projects":
-                projects = _project_manager.list_projects()
-                await ws.send_json({"type": "project_list", "data": projects})
+                if app:
+                    projects = app.list_projects()
+                    await ws.send_json({"type": "project_list", "data": projects})
+                else:
+                    await ws.send_json({"type": "error", "message": "App not initialized"})
             elif cmd == "switch_project":
                 name = msg.get("project", "")
-                if _project_manager.is_busy():
+                if app is None:
+                    await ws.send_json({"type": "error", "message": "App not initialized"})
+                elif app.is_busy():
                     await ws.send_json({"type": "error", "message": "当前项目分析进行中，请等待完成或停止后再切换"})
                 else:
-                    old_orch = _project_manager.get_current_orch()
-                    snap = _project_manager.switch_project(name)
+                    old_orch = app.orch if app.active_project else None
+                    snap = app.switch_project(name)
                     if snap:
                         # 切换 EventBus 订阅
                         if old_orch:
                             old_orch.event_bus.unsubscribe(bridge.on_event)
-                        orch = _project_manager.get_current_orch()
-                        if orch:
-                            orch.event_bus.subscribe(bridge.on_event)
+                        new_orch = app.orch
+                        if new_orch:
+                            new_orch.event_bus.subscribe(bridge.on_event)
                         await ws.send_json({"type": "state_snapshot", "data": snap})
                     else:
                         await ws.send_json({"type": "error", "message": f"项目 {name} 不存在或无法加载"})
             elif cmd == "create_project":
                 name = msg.get("project", "")
-                ok = _project_manager.create_project(name)
+                ok = app.create_project(name) if app else False
                 await ws.send_json({"type": "ack", "cmd": "create_project", "data": {"ok": ok}})
             elif cmd == "delete_project":
                 name = msg.get("project", "")
-                ok = _project_manager.delete_project(name)
+                ok = app.delete_project(name) if app else False
                 await ws.send_json({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
@@ -448,7 +389,7 @@ async def ws_handler(ws: WebSocket) -> None:
                     except Exception as e:
                         await ws.send_json({"type": "error", "message": str(e)})
             elif cmd == "cancel_respond":
-                orch = _shared_orchestrator
+                orch = get_orchestrator()
                 if orch is not None:
                     orch.request_cancel_respond()
                 await ws.send_json({"type": "ack", "cmd": "cancel_respond"})

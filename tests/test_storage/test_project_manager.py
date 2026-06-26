@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hagoku.storage.project_manager import ProjectManager
+from hagoku.repository.project import ProjectRepository as ProjectManager
 
 
 @pytest.fixture

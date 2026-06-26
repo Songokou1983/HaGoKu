@@ -120,9 +120,9 @@ export function useWsEventHandler(deps: WsEventDeps) {
         if (snap.data_path && setCurrentDataPath) {
           setCurrentDataPath(snap.data_path);
         }
-        if (snap.phase) setPhase("running");
-        // 恢复对话历史
-        if (snap.messages && Array.isArray(snap.messages)) {
+        // 有消息 → 恢复对话；无消息 → 显示启动页
+        if (Array.isArray(snap.messages) && snap.messages.length > 0) {
+          setPhase("running");
           const replayed: ConvoMessage[] = snap.messages.map((m: any) => ({
             id: uid(),
             role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
@@ -130,7 +130,10 @@ export function useWsEventHandler(deps: WsEventDeps) {
             timestamp: m.timestamp || new Date().toISOString(),
           }));
           setMessages(replayed);
+        } else {
+          setPhase("setup");
         }
+        if (snap.gate_open) setGateOpen(true);
         // 恢复 Scout 字段核对表
         if (snap.field_review) {
           const fr = parseFieldReview(snap.field_review);

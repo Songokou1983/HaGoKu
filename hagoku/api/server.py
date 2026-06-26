@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 import os
 
-# 全量日志——EventBus + WebSocket 全覆盖
+# 全量日志——EventBus + WebSocket 全覆盖；统一写入 /tmp/hagoku.log
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)-25s %(levelname)-8s %(message)s",
     datefmt="%H:%M:%S",
     force=True,
+    handlers=[
+        logging.FileHandler("/tmp/hagoku.log"),
+        logging.StreamHandler(),
+    ],
 )
 
 from contextlib import asynccontextmanager

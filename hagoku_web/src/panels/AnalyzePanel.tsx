@@ -148,6 +148,7 @@ export default function AnalyzePanel() {
     setReplyPending,
     setCurrentProject,
     setCurrentDataPath,
+    log,
   });
 
   useAgentStatusSync();

@@ -61,6 +61,8 @@ interface WsEventDeps {
   setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentProject?: (p: string) => void;
   setCurrentDataPath?: (p: string) => void;
+  /** 前端日志 */
+  log?: (msg: string) => void;
 }
 
 export function useWsEventHandler(deps: WsEventDeps) {
@@ -96,6 +98,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
     setReplyPending,
     setCurrentProject,
     setCurrentDataPath,
+    log,
     waitinAgent,
   } = deps;
 
@@ -427,6 +430,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
 
         // ── user_input_requested ──────────────────────────────────
         if (d.event_type === "user_input_requested") {
+          log(`user_input_requested received agent=${d.agent}`);
           setGateOpen(false);
           const dataObj = (d.data ?? {}) as Record<string, unknown>;
           const gatePayload = dataObj.gate as
@@ -655,6 +659,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
 
           const pausedAgent = resolveAgentKey(d.agent);
           setWaitingAgent(pausedAgent);
+          log(`setGateOpen(true) waitingAgent=${pausedAgent}`);
           setGateOpen(true);
           setPhase("running");
           setTimeout(() => replyInputRef.current?.focus(), 100);

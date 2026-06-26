@@ -266,6 +266,13 @@ class ProjectRepository:
                     continue
                 try:
                     info = self._load_project_info(d)
+                    if info is None and self._is_project_dir(d):
+                        # 无元数据但目录结构像项目（旧格式兼容）
+                        info = ProjectInfo(
+                            name=d.name, description="",
+                            created_at=datetime.fromtimestamp(d.stat().st_mtime),
+                            project_dir=d,
+                        )
                     if info:
                         projects.append(info)
                         seen.add(d.name)
@@ -274,6 +281,13 @@ class ProjectRepository:
 
         return sorted(projects,
                       key=lambda p: p.last_run or p.created_at, reverse=True)
+
+    @staticmethod
+    def _is_project_dir(d: Path) -> bool:
+        """判断目录是否像项目目录（有常见的项目子目录）。"""
+        markers = ("runs", "input", "data", "project.json", "project.yaml",
+                   "progress.yaml")
+        return any((d / m).exists() for m in markers)
 
     def get_info(self, name: str) -> ProjectInfo | None:
         """获取项目详情"""

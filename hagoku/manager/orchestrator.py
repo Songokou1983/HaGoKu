@@ -271,7 +271,7 @@ class Orchestrator(
             )
             orch._agent.prompt = orch._agent._load_prompt()
             # 注入 session 到 agent context
-            if orch._session:
+            if getattr(orch, '_session', None):
                 orch._agent._context = {"_session": orch._session}
 
             logger.info("restore_session: 恢复 session project=%s",

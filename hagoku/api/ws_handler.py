@@ -157,14 +157,14 @@ def _try_restore_session() -> bool:
         if not candidates:
             return False
         candidates.sort(reverse=True)
-        run_dir = candidates[0][1]
-
-        orch = Orchestrator.restore_session(config, run_dir)
-        if orch is None:
-            return False
-        _shared_orchestrator = orch
-        set_bus(orch.event_bus)
-        return True
+        for run_dir_path in candidates:
+            run_dir = run_dir_path[1]
+            orch = Orchestrator.restore_session(config, run_dir)
+            if orch is not None:
+                _shared_orchestrator = orch
+                set_bus(orch.event_bus)
+                return True
+        return False
     except Exception:
         import logging
         logging.getLogger("hagoku.ws").warning("_try_restore_session 失败", exc_info=True)

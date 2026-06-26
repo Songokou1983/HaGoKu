@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { WifiOff, Loader2 } from "lucide-react";
+import { WifiOff } from "lucide-react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -25,30 +25,26 @@ export default function EventPanel() {
   const [entries, setEntries] = useState<EventEntry[]>([]);
   const [sysLog, setSysLog] = useState<string[]>([]);
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
-  const loading = connectionStatus === "connecting" || connectionStatus === "reconnecting";
+  const disconnected = connectionStatus === "disconnected";
 
-  // 加载系统日志
   const loadSysLog = useCallback(() => {
-    fetch("/api/log?limit=50")
+    fetch("/api/log?limit=100")
       .then(r => r.json())
       .then(d => setSysLog(d.lines || []))
       .catch(() => {});
   }, []);
 
-  useEffect(() => { loadSysLog(); }, [loadSysLog]);
+  useEffect(() => { loadSysLog(); const t = setInterval(loadSysLog, 5000); return () => clearInterval(t); }, [loadSysLog]);
 
   useAgentStatusSync();
-
   const batch = useBatchEvents();
 
   useEffect(() => {
     if (batch.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- batch events from external WS, functional update is correct
     setEntries((prev) => {
       let next = prev;
       for (const msg of batch) {
         if (msg.type !== "event" || !msg.data) continue;
-
         const d = msg.data;
         const inner = (d.data ?? {}) as Record<string, unknown>;
         const gr = guardrailsRunCompletedInfo({
@@ -75,52 +71,77 @@ export default function EventPanel() {
   }, [batch]);
 
   return (
-    <div className="h-full flex flex-col bg-app-bg text-app-text max-md:min-h-[200px]">
+    <div className="h-full flex flex-col bg-app-bg text-app-text">
       <PanelHeader
-        title="运行日志"
+        title="事件与日志"
         badge={
-          <span className="text-app-text-muted font-normal">({entries.length})</span>
+          <span className="text-app-text-muted font-normal">
+            ({entries.length} 事件 · {sysLog.length} 日志)
+          </span>
         }
       />
-      {entries.length === 0 && !loading && (connectionStatus === "connected" || connectionStatus === "idle") && (
-        <div className="px-3 py-2 border-b border-app-border shrink-0">
-          <p className="text-ui-xs text-app-text-muted">
-            {connectionStatus === "idle"
-              ? "正在连接服务器…"
-              : "分析运行时，工作进展和事件会实时显示在这里。等待分析启动。"}
-          </p>
+
+      {/* ── 上半：运行事件 ── */}
+      <div className="flex-1 flex flex-col min-h-0 border-b border-app-border">
+        <div className="flex items-center justify-between px-3 py-1 bg-app-bg-secondary shrink-0">
+          <span className="text-ui-xs font-medium text-app-text">
+            📡 运行事件
+          </span>
+          <span className="text-ui-xs text-app-text-muted">
+            {entries.length} 条
+          </span>
         </div>
-      )}
-      <div className="flex-1 overflow-auto font-mono text-ui-sm relative">
-        <EventTable entries={entries} />
-        <div className="border-t border-app-border mt-1">
-          <div className="flex items-center justify-between px-3 py-1 bg-app-bg-secondary">
-            <span className="text-ui-xs text-app-text-muted">系统日志 ({sysLog.length})</span>
-            <button onClick={loadSysLog} className="text-ui-xs text-app-accent hover:underline cursor-pointer">刷新</button>
-          </div>
-          <div className="max-h-60 overflow-auto text-xs text-app-text-muted leading-relaxed">
-            {sysLog.map((line, i) => (
-              <div key={i} className="px-3 py-0.5 hover:bg-app-bg-secondary border-b border-app-border/30 whitespace-pre font-mono"
-                style={{fontSize: '0.68rem'}}>
+        <div className="flex-1 overflow-auto">
+          {entries.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-app-text-muted text-ui-sm">
+              {disconnected ? "连接断开，等待重连…" : "等待分析启动，事件将实时显示"}
+            </div>
+          ) : (
+            <EventTable entries={entries} />
+          )}
+        </div>
+      </div>
+
+      {/* ── 下半：系统日志 ── */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between px-3 py-1 bg-app-bg-secondary shrink-0">
+          <span className="text-ui-xs font-medium text-app-text">
+            📋 系统日志
+          </span>
+          <button
+            onClick={loadSysLog}
+            className="text-ui-xs text-app-accent hover:underline cursor-pointer"
+          >
+            刷新
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto font-mono">
+          {sysLog.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-app-text-muted text-ui-sm">
+              加载中…
+            </div>
+          ) : (
+            sysLog.map((line, i) => (
+              <div
+                key={i}
+                className="px-3 py-0.5 text-xs hover:bg-app-bg-secondary border-b border-app-border/20 whitespace-pre leading-relaxed"
+                style={{ fontSize: "0.68rem" }}
+              >
                 {line}
               </div>
-            ))}
-          </div>
+            ))
+          )}
         </div>
-        {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-app-bg/80 backdrop-blur-sm">
-            <Loader2 size={20} className="animate-spin text-app-accent" />
-            <span className="text-ui-xs text-app-text-muted">正在连接服务器…</span>
-          </div>
-        )}
-        {connectionStatus === "disconnected" && (
-          <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
-            <WifiOff size={28} className="text-app-text-muted" />
-            <span className="text-ui-base text-app-error">连接断开</span>
-            <span className="text-ui-xs text-app-text-muted">正在重新连接…</span>
-          </div>
-        )}
       </div>
+
+      {/* ── 断开遮罩 ── */}
+      {disconnected && (
+        <div className="absolute inset-0 bg-app-bg/90 flex flex-col items-center justify-center gap-2 z-10">
+          <WifiOff size={28} className="text-app-text-muted" />
+          <span className="text-ui-base text-app-error">连接断开</span>
+          <span className="text-ui-xs text-app-text-muted">正在重新连接…</span>
+        </div>
+      )}
     </div>
   );
 }

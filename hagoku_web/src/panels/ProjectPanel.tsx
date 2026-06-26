@@ -478,7 +478,12 @@ export default function ProjectPanel() {
             name={p}
             isSelected={p === currentProject}
             isRunning={isAgentRunning && p === currentProject}
-            onSelect={() => { setCurrentProject(p); send("switch_project", { project: p }); }}
+            onSelect={() => {
+              if (p !== currentProject) {
+                setCurrentProject(p);
+                send("switch_project", { project: p });
+              }
+            }}
             onDeleted={() => {
               if (currentProject === p) setCurrentProject(null);
               loadProjects();

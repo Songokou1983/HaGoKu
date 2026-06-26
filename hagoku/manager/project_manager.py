@@ -126,6 +126,14 @@ class ProjectManager:
         proj_dir.mkdir(parents=True, exist_ok=True)
         (proj_dir / "data").mkdir(exist_ok=True)
         (proj_dir / "runs").mkdir(exist_ok=True)
+        # 写入 project.json
+        from datetime import datetime, timezone
+        import json as _json
+        (proj_dir / "project.json").write_text(
+            _json.dumps({"name": name, "created_at": datetime.now(timezone.utc).isoformat(),
+                         "data_file": "", "current_run_id": ""},
+                        ensure_ascii=False, default=str),
+            encoding="utf-8")
         return True
 
     def delete_project(self, name: str) -> bool:

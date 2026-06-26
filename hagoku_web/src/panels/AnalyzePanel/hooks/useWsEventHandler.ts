@@ -106,14 +106,16 @@ export function useWsEventHandler(deps: WsEventDeps) {
       if (msg.type === "state_snapshot") {
         const snap = (msg as any).data;
         if (!snap) continue;
-        // 项目切换时清空消息并恢复
-        setMessages([]);
-        setActiveFieldReviewId(null);
-        setActiveFieldReviewRevision(-1);
-        setActiveCleaningReviewId(null);
-        setActiveCleaningReviewRevision(-1);
-        setActiveAnalystReviewId(null);
-        setActiveAnalystReviewRevision(-1);
+        // 项目切换时清空消息并恢复（有 messages 数据时才清空重建）
+        if (snap.messages && snap.messages.length > 0) {
+          setMessages([]);
+          setActiveFieldReviewId(null);
+          setActiveFieldReviewRevision(-1);
+          setActiveCleaningReviewId(null);
+          setActiveCleaningReviewRevision(-1);
+          setActiveAnalystReviewId(null);
+          setActiveAnalystReviewRevision(-1);
+        }
         if (snap.project_name && setCurrentProject) {
           setCurrentProject(snap.project_name);
         }

@@ -47,11 +47,18 @@ def get_bus() -> EventBus | None:
 def get_orchestrator() -> "Orchestrator | None":
     """Return the shared orchestrator instance。优先从 App 获取。"""
     global _fastapi_app
+    orch = None
     if _fastapi_app is not None:
         hagoku_app = getattr(_fastapi_app.state, 'hagoku_app', None)
         if hagoku_app is not None and hagoku_app.orch is not None:
-            return hagoku_app.orch
-    return _shared_orchestrator
+            orch = hagoku_app.orch
+    if orch is None:
+        orch = _shared_orchestrator
+    # 确保 WSBridge 已订阅（App 懒创建 or 切换后可能未订阅）
+    if orch is not None:
+        bridge = WSBridge.get()
+        orch.event_bus.subscribe(bridge.on_event)
+    return orch
 
 
 def set_app(app: Any) -> None:
@@ -89,6 +96,9 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         orch = get_orchestrator()
         if orch is None:
             return
+        # 确保 WSBridge 已订阅（App 懒创建时可能未订阅）
+        bridge = WSBridge.get()
+        orch.event_bus.subscribe(bridge.on_event)
         result = orch.run(
             data_path=data_path, query=query,
             project_name=project_name,

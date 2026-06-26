@@ -227,4 +227,57 @@ run_step() 内循环：for _round in range(99):
 停止按钮：replyPending 时显示，点它取消当前 respond
 AskUserPrompt：yes_no/choice 变体底部永远有文本输入框（全局 InputBar）
 状态标签：不显示"当前：XX 阶段"（代码不猜阶段）
+
+---
+
+## 日志系统（v0.9 统一）
+
+### 架构
+
+```
+前端 log() → WS __log → /tmp/hagoku.log
+后端 logger → FileHandler → /tmp/hagoku.log
+分析事件 → run.log（每 run 独立）
+对话历史 → session.json
+LLM 调用 → llm_dumps/
+```
+
+### 统一日志（/tmp/hagoku.log）
+
+所有运行时日志写入同一个文件，格式 `时间 模块 级别 内容`。一个 `grep` 串起完整事件链。
+
+| 模块名 | 记录内容 |
+|--------|---------|
+| `hagoku.ws.recv` | 前端发来的每条 WS 命令（ping/respond/analyze/select_project...）|
+| `hagoku.ws.send` | 发给前端的每条广播（事件类型 + 摘要）|
+| `hagoku.ws` | WSBridge on_event 入站、loop 检查、广播状态 |
+| `hagoku.observability.event_bus` | 每次 emit（含 subscribers 数量）|
+| `hagoku.api` | REST 操作（项目 CRUD、文件上传）|
+| `[frontend]` | 前端关键节点（gateOpen、守卫拦截、send 结果、事件接收）|
+
+### 追踪排查
+
+```
+# 完整用户输入链路
+grep "respond\|user_input\|gateOpen\|submitUserReply" /tmp/hagoku.log
+
+# 事件是否发射到前端
+grep "emit\|on_event\|broadcast" /tmp/hagoku.log
+
+# 前端状态变化
+grep "frontend" /tmp/hagoku.log
+```
+
+### 前端日志写入
+
+`useWebSocket.log(msg)` 通过 WS `__log` 命令发送到后端，写入 `/tmp/hagoku.log`。不依赖浏览器 console。
+
+### 不在统一日志中的
+
+| 数据 | 原因 |
+|------|------|
+| run.log | 按 run 独立存储，每条分析一个文件 |
+| session.json | 对话历史，结构完整，不是事件流 |
+| llm_dumps/ | LLM 完整交互，体积大，独立管理 |
+| df_*.parquet | 数据快照，非日志 |
 ```

@@ -22,6 +22,14 @@ interface WorkspaceStore {
   currentDataPath: string;
   reportFiles: { name: string; url: string; mtime: number }[];
   lastError: string | null;
+  /** 项目切换快照 */
+  snapshot: {
+    messages: any[];
+    reportUrl: string | null;
+    pendingAskUser: any | null;
+    projectName: string;
+    dataPath: string;
+  } | null;
 
   setActiveView: (view: PanelId) => void;
   setStatus: (s: "idle" | "running" | "done") => void;
@@ -30,6 +38,7 @@ interface WorkspaceStore {
   setProjects: (projects: string[]) => void;
   setCurrentProject: (name: string | null) => void;
   setCurrentDataPath: (path: string) => void;
+  setSnapshot: (snap: any | null) => void;
   setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
   setLastError: (msg: string | null) => void;
   /** 分析重置：全局运行状态 + Agent 状态条（与项目卡片「进行中」一致） */
@@ -46,6 +55,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   currentDataPath: localStorage.getItem('hagoku_active_data_path') || '',
   reportFiles: [],
   lastError: null,
+  snapshot: null,
 
   setActiveView: (activeView) => {
     if (activeView) localStorage.setItem('hagoku_active_view', activeView);
@@ -58,6 +68,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setProjects: (projects) => set({ projects: Array.isArray(projects) ? projects : [] }),
+  setSnapshot: (snap) => set({ snapshot: snap }),
   setCurrentProject: (currentProject) => {
     if (currentProject) localStorage.setItem('hagoku_active_project', currentProject);
     else localStorage.removeItem('hagoku_active_project');

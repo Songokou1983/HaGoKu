@@ -112,6 +112,19 @@ function connect() {
           useWorkspaceStore.getState().setProjects(data);
         }
       }
+      // state_snapshot → 更新全局快照（AnalyzePanel 监听恢复）
+      if (msg.type === "state_snapshot") {
+        const snap = (msg as any).data;
+        if (snap) {
+          useWorkspaceStore.getState().setSnapshot({
+            messages: Array.isArray(snap.messages) ? snap.messages : [],
+            reportUrl: snap.report_url || null,
+            pendingAskUser: snap.pending_ask_user || null,
+            projectName: snap.project_name || "",
+            dataPath: snap.data_path || "",
+          });
+        }
+      }
       broadcast(msg);
     } catch {
       /* ignore malformed messages */

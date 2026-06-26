@@ -24,6 +24,7 @@ import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
 import { sanitizeText } from "../utils/sanitize";
+import { uid } from "./AnalyzePanel/utils";
 
 export default function AnalyzePanel() {
   const { send } = useWebSocket();
@@ -46,6 +47,26 @@ export default function AnalyzePanel() {
 
   // CO-16: reply pending state
   const [replyPending, setReplyPending] = useState(false);
+
+  // ── 项目切换：监听 snapshot 恢复状态 ──
+  const snapshot = useWorkspaceStore((s) => s.snapshot);
+  useEffect(() => {
+    if (!snapshot) return;
+    useWorkspaceStore.getState().setCurrentProject(snapshot.projectName || null);
+    setCurrentDataPath(snapshot.dataPath || "");
+    const msgs = (snapshot.messages || []).map((m: any) => ({
+      id: uid(),
+      role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+      text: m.content || "",
+      timestamp: m.timestamp || new Date().toISOString(),
+    }));
+    sess.setMessages(msgs);
+    setPhase(msgs.length > 0 ? "running" : "setup");
+    if (snapshot.pendingAskUser) {
+      sess.setGateOpen(true);
+    }
+    useWorkspaceStore.getState().setSnapshot(null);
+  }, [snapshot]);
 
   // File upload hook
   const [dataPath, _setDataPath] = useState(currentDataPath);

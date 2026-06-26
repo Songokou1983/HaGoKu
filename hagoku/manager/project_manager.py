@@ -83,12 +83,21 @@ class ProjectManager:
             return None
 
         import json as _json
+        from pathlib import Path
         try:
             meta = _json.loads(proj_file.read_text(encoding="utf-8"))
             run_id = meta.get("current_run_id", "")
-            if not run_id:
-                return None
-            run_dir = str(proj_dir / "runs" / run_id)
+            run_dir = str(proj_dir / "runs" / run_id) if run_id else ""
+            # 指向的 run 不存在时，扫描目录找可用 run
+            if not run_dir or not Path(run_dir).exists():
+                runs_dir = proj_dir / "runs"
+                if runs_dir.exists():
+                    for rdir in sorted(runs_dir.iterdir(), reverse=True):
+                        if (rdir / "orch_state.json").exists():
+                            run_dir = str(rdir)
+                            break
+                if not run_dir:
+                    return None
             return Orchestrator.restore_session(self.config, run_dir)
         except Exception:
             logger.warning("恢复项目 %s 失败", project_name, exc_info=True)

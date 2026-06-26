@@ -359,9 +359,9 @@ export default function ProjectPanel() {
       </PanelHeader>
 
       {/* Summary bar */}
-      {projects.length > 0 && (
+      {(projects?.length ?? 0) > 0 && (
         <div className="flex items-center gap-4 px-4 py-2 border-b border-app-border text-ui-xs text-app-text-muted bg-app-bg-secondary">
-          <span>{projects.length} 个项目</span>
+          <span>{projects?.length ?? 0} 个项目</span>
           {currentProject && (
             <span className="text-app-accent font-mono">当前: {currentProject}</span>
           )}
@@ -462,7 +462,7 @@ export default function ProjectPanel() {
           </div>
         )}
 
-        {projects.length === 0 && !loading && !loadError && (
+        {!projects?.length && !loading && !loadError && (
           <div className="flex flex-col items-center py-20 gap-4 text-app-text-muted select-none">
             <FolderOpen size={48} strokeWidth={1} className="text-app-accent/40" />
             <div className="text-center space-y-1">

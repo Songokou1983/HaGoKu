@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { WifiOff, Loader2 } from "lucide-react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -23,8 +23,19 @@ function detailSnippet(data: Record<string, unknown>): string {
 
 export default function EventPanel() {
   const [entries, setEntries] = useState<EventEntry[]>([]);
+  const [sysLog, setSysLog] = useState<string[]>([]);
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
   const loading = connectionStatus === "connecting" || connectionStatus === "reconnecting";
+
+  // 加载系统日志
+  const loadSysLog = useCallback(() => {
+    fetch("/api/log?limit=50")
+      .then(r => r.json())
+      .then(d => setSysLog(d.lines || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { loadSysLog(); }, [loadSysLog]);
 
   useAgentStatusSync();
 
@@ -82,6 +93,20 @@ export default function EventPanel() {
       )}
       <div className="flex-1 overflow-auto font-mono text-ui-sm relative">
         <EventTable entries={entries} />
+        <div className="border-t border-app-border mt-1">
+          <div className="flex items-center justify-between px-3 py-1 bg-app-bg-secondary">
+            <span className="text-ui-xs text-app-text-muted">系统日志 ({sysLog.length})</span>
+            <button onClick={loadSysLog} className="text-ui-xs text-app-accent hover:underline cursor-pointer">刷新</button>
+          </div>
+          <div className="max-h-60 overflow-auto text-xs text-app-text-muted leading-relaxed">
+            {sysLog.map((line, i) => (
+              <div key={i} className="px-3 py-0.5 hover:bg-app-bg-secondary border-b border-app-border/30 whitespace-pre font-mono"
+                style={{fontSize: '0.68rem'}}>
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
         {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-app-bg/80 backdrop-blur-sm">
             <Loader2 size={20} className="animate-spin text-app-accent" />

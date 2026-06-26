@@ -183,6 +183,20 @@ async def get_latest_report(project_name: str):
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+# ── GET /api/log — 返回最近 N 行统一日志 ──
+@app.get("/api/log")
+async def get_system_log(limit: int = 100):
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tail", f"-n{min(limit, 500)}", "/tmp/hagoku.log"],
+            capture_output=True, text=True, timeout=2,
+        )
+        return {"lines": result.stdout.strip().split("\n") if result.stdout.strip() else []}
+    except Exception:
+        return {"lines": [], "error": "log unavailable"}
+
+
 # ── GET /api/reports/{project_name}/{run_id}/{filename} — 返回 run 子目录报告或护栏说明 ──
 @app.get("/api/reports/{project_name}/{run_id}/{filename}")
 async def get_report_run(project_name: str, run_id: str, filename: str):

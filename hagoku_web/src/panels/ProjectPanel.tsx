@@ -6,7 +6,6 @@ import {
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
-import { useWebSocket } from "../hooks/useWebSocket";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
 
@@ -239,7 +238,6 @@ function ProjectCard({
 }
 
 export default function ProjectPanel() {
-  const { send } = useWebSocket();
   const projects = useWorkspaceStore((s) => s.projects);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
   const agents = useWorkspaceStore((s) => s.agents);
@@ -481,7 +479,6 @@ export default function ProjectPanel() {
             onSelect={() => {
               if (p !== currentProject) {
                 setCurrentProject(p);
-                send("switch_project", { project: p });
               }
             }}
             onDeleted={() => {

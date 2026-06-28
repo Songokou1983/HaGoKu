@@ -215,7 +215,8 @@ def littles_mcar_test(
                         chi2_total += -2 * np.log(p)
                         df_total += 1
                 except Exception:
-                    pass
+                    import logging
+                    logging.getLogger("hagoku.tools").debug("列统计检验失败", exc_info=True)
 
     if df_total == 0:
         return {
@@ -226,6 +227,8 @@ def littles_mcar_test(
     try:
         p_value = float(1 - stats.chi2.cdf(chi2_total, df_total))
     except Exception:
+        import logging
+        logging.getLogger("hagoku.tools").warning("chi2 检验失败，使用默认 p=0.5", exc_info=True)
         p_value = 0.5
 
     is_mcar = p_value > alpha

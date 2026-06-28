@@ -310,7 +310,8 @@ def _handle_run_statistical_test(args: dict, ctx: dict, df: pd.DataFrame | None)
                     model = _sm.OLS(y, X).fit()
                     ctx["_last_regression_model"] = model
                 except Exception:
-                    pass
+                    import logging
+                    logging.getLogger("hagoku.tools").warning("OLS 回归失败", exc_info=True)
             # 统一返回字段
             if "effect_size" not in result:
                 result["effect_size"] = None

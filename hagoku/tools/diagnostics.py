@@ -276,6 +276,7 @@ def generate_diagnostic_plots(
             "hline": 4 / len(cooks_d),
         }
     except Exception:
-        pass
+        import logging
+        logging.getLogger("hagoku.tools").warning("Cook's distance 计算失败", exc_info=True)
 
     return plots

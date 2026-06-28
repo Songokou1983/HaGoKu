@@ -72,8 +72,7 @@ def set_orchestrator(orchestrator: "Orchestrator") -> None:
     global _shared_orchestrator
     _shared_orchestrator = orchestrator
     set_bus(orchestrator.event_bus)
-    # lifespan / main 会先于首次 analyze 创建 Orchestrator；须在此挂上 WSBridge，
-    # 否则 _run_analysis 因「实例已存在」跳过 subscribe，前端收不到任何事件。
+    # 确保 EventBus → WSBridge 订阅
     bridge = WSBridge.get()
     orchestrator.event_bus.subscribe(bridge.on_event)
 
@@ -330,8 +329,7 @@ async def ws_handler(ws: WebSocket) -> None:
                 phase = payload.get("phase", "full")
                 if phase in ("analyst_first", "cleaning_first"):
                     phase = "full"
-                import logging
-                logging.getLogger("hagoku.ws").warning(
+                _logging.getLogger("hagoku.ws").warning(
                     "WS analyze 收到: query=%r project=%s phase=%s payload_keys=%s",
                     query, project_name, phase, list(payload.keys()),
                 )

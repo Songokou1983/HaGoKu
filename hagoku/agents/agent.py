@@ -399,7 +399,8 @@ class DataAnalystAgent(BaseAgent):
         revision = context.get("interaction_revision", 0)
         session.add("user", intro)
 
-        context.setdefault("_column_info", {c: str(df[c].dtype) for c in df.columns})
+        if "_column_info" not in context:
+            context["_column_info"] = {c: str(df[c].dtype) for c in df.columns}
 
         # 循环 run_step 直到 LLM 调 submit_assessment（最多 5 轮）
         result = self.run_step(context, df, "")

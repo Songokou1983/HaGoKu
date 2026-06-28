@@ -143,7 +143,8 @@ async def create_project(req: CreateProjectRequest, request: Request):
         if desc:
             db.update_project(name, description=desc)
     except Exception:
-        pass
+        import logging
+        logging.getLogger(__name__).warning("create_project DB 写入失败: %s", name, exc_info=True)
     
     return {"project": name, "created": True}
 
@@ -536,7 +537,7 @@ async def get_project_detail(project_name: str):
                     if op.exists() and op.suffix.lower() == ".html":
                         html_exists = True
             except Exception:
-                pass
+                logger.warning("get_project_detail run_meta 解析失败", exc_info=True)
         if last_guardrails_blocked:
             last_status = "guardrails_blocked"
         elif html_exists:
@@ -561,7 +562,7 @@ async def get_project_detail(project_name: str):
                 data_path   = row[1] or ""
                 description = row[2] or ""
         except Exception:
-            pass
+            logger.warning("get_project_detail SQLite 查询失败", exc_info=True)
 
     return {
         "name": project_name,
@@ -669,7 +670,8 @@ async def get_run_conversation(project_name: str, run_id: str):
                 seen.add(key)
                 tc = m.get("tool_calls")
                 msgs.append({"role": r, "content": c[:500], "has_tool_calls": bool(tc)})
-        except Exception: pass
+        except Exception:
+            logger.warning("get_run_conversation 解析失败", exc_info=True)
     return {"messages": msgs, "run_id": run_id}
 
 

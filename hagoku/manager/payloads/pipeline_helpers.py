@@ -233,7 +233,9 @@ def _handle_command_if_present(
         })
         # 注入到 context 供下游 agent 使用
         if context is not None and rename_pairs:
-            context.setdefault("_user_column_renames", []).extend(rename_pairs)
+            if "_user_column_renames" not in context:
+                context["_user_column_renames"] = []
+            context["_user_column_renames"].extend(rename_pairs)
         return f"[用户通过 /rename 命令重命名字段] {rename_pairs}"
 
     if cmd.command == "use":

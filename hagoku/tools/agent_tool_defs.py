@@ -422,7 +422,8 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                 latest_link.unlink()
             latest_link.symlink_to(os.path.relpath(output_path, reports_dir))
         except Exception:
-            pass  # 非关键路径
+            import logging
+            logging.getLogger("hagoku.tools").debug("符号链接创建失败（非关键）", exc_info=True)
 
     return {"html_path": output_path, "sections_count": len(sections)}
 

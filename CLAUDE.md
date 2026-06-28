@@ -5,7 +5,7 @@
 ```
 步骤 0: 读 dump + 读日志（两者缺一不可）
    ls -lt ~/.hagoku/llm_dumps/ | head -5
-   tail -30 /tmp/hagoku.log
+   tail -30 ~/.hagoku/hagoku.log
    ↓ 贴出来，说明你看到了什么
 
 步骤 1: 定位断点

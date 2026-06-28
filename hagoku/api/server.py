@@ -5,14 +5,20 @@ from __future__ import annotations
 import logging
 import os
 
-# 全量日志——EventBus + WebSocket 全覆盖；统一写入 /tmp/hagoku.log
+# 全量日志——路径由 config.work_dir 决定，回退 /tmp
+try:
+    from hagoku.config import HaGoKuConfig as _LogCfg
+    _LOG_PATH = str(_LogCfg.load().work_dir / "hagoku.log")
+except Exception:
+    import tempfile
+    _LOG_PATH = str(Path(tempfile.gettempdir()) / "hagoku.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)-25s %(levelname)-8s %(message)s",
     datefmt="%H:%M:%S",
     force=True,
     handlers=[
-        logging.FileHandler("/tmp/hagoku.log"),
+        logging.FileHandler(_LOG_PATH),
         logging.StreamHandler(),
     ],
 )
@@ -95,7 +101,8 @@ def _projects_root() -> Path:
 
         return HaGoKuConfig.load().output.project_dir
     except Exception:
-        return Path(os.path.expanduser("~/.hagoku/projects"))
+        from hagoku.config import HaGoKuConfig
+        return HaGoKuConfig().work_dir / "projects"
 
 
 # ── GET /api/projects — 列出所有项目名 ──────────────────────
@@ -201,13 +208,13 @@ async def get_latest_report(project_name: str):
 # ── GET /api/log — 返回最近 N 行统一日志 ──
 @app.get("/api/log")
 async def get_system_log(limit: int = 100):
-    import subprocess
+    from hagoku.config import HaGoKuConfig as _Cfg
+    log_path = _Cfg.load().work_dir / "hagoku.log"
+    if not log_path.exists():
+        return {"lines": []}
     try:
-        result = subprocess.run(
-            ["tail", f"-n{min(limit, 500)}", "/tmp/hagoku.log"],
-            capture_output=True, text=True, timeout=2,
-        )
-        return {"lines": result.stdout.strip().split("\n") if result.stdout.strip() else []}
+        lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+        return {"lines": lines[-min(limit, 500):]}
     except Exception:
         return {"lines": [], "error": "log unavailable"}
 
@@ -545,7 +552,8 @@ async def get_project_detail(project_name: str):
         else:
             last_status = "unknown"
 
-    db_path = Path(os.path.expanduser("~/.hagoku/hagoku.db"))
+    from hagoku.config import HaGoKuConfig as _Cfg
+    db_path = _Cfg.load().work_dir / "hagoku.db"
     data_path = ""
     created_at = ""
     description = ""

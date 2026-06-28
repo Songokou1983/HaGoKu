@@ -192,10 +192,11 @@ def _dump_debug_context(
     import json as _json
     from pathlib import Path as _Path
     try:
-        from hagoku.observability.llm_dump import _run_dump_dir
-        out_dir = _run_dump_dir if _run_dump_dir is not None else _Path.home() / ".hagoku" / "llm_dumps"
+        from hagoku.observability.llm_dump import get_dump_dir
+        out_dir = get_dump_dir()
     except Exception:
-        out_dir = _Path.home() / ".hagoku" / "llm_dumps"
+        from hagoku.observability.llm_dump import _get_default_dump_dir
+        out_dir = _get_default_dump_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     # 取现有最大序号 + 1
     existing = list(out_dir.glob("debug_context_*.json"))

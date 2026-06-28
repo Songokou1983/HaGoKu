@@ -235,14 +235,14 @@ AskUserPrompt：yes_no/choice 变体底部永远有文本输入框（全局 Inpu
 ### 架构
 
 ```
-前端 log() → WS __log → /tmp/hagoku.log
-后端 logger → FileHandler → /tmp/hagoku.log
+前端 log() → WS __log → ~/.hagoku/hagoku.log
+后端 logger → FileHandler → ~/.hagoku/hagoku.log
 分析事件 → run.log（每 run 独立）
 对话历史 → session.json
 LLM 调用 → llm_dumps/
 ```
 
-### 统一日志（/tmp/hagoku.log）
+### 统一日志（~/.hagoku/hagoku.log）
 
 所有运行时日志写入同一个文件，格式 `时间 模块 级别 内容`。一个 `grep` 串起完整事件链。
 
@@ -259,18 +259,18 @@ LLM 调用 → llm_dumps/
 
 ```
 # 完整用户输入链路
-grep "respond\|user_input\|gateOpen\|submitUserReply" /tmp/hagoku.log
+grep "respond\|user_input\|gateOpen\|submitUserReply" ~/.hagoku/hagoku.log
 
 # 事件是否发射到前端
-grep "emit\|on_event\|broadcast" /tmp/hagoku.log
+grep "emit\|on_event\|broadcast" ~/.hagoku/hagoku.log
 
 # 前端状态变化
-grep "frontend" /tmp/hagoku.log
+grep "frontend" ~/.hagoku/hagoku.log
 ```
 
 ### 前端日志写入
 
-`useWebSocket.log(msg)` 通过 WS `__log` 命令发送到后端，写入 `/tmp/hagoku.log`。不依赖浏览器 console。
+`useWebSocket.log(msg)` 通过 WS `__log` 命令发送到后端，写入 `~/.hagoku/hagoku.log`。不依赖浏览器 console。
 
 ### 不在统一日志中的
 

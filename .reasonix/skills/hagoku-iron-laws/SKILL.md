@@ -18,7 +18,7 @@ ls -lt ~/.hagoku/llm_dumps/ | head -5
 
 查运行日志（时间线）：
 ```bash
-tail -30 /tmp/hagoku.log
+tail -30 ~/.hagoku/hagoku.log
 ```
 
 如果 `~/.hagoku/llm_dumps/` 为空，改为查项目 run 目录：
@@ -47,7 +47,7 @@ find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/de
 | 改 prompt 不加 dump 对比 | 铁律 10 → 必须先 dump |
 | 说"可能是模型的问题" | 刹车 F → 贴代码证据 |
 | `return null` / `pass` 在渲染路径 | 检查 → 是否静默吞行为 |
-| 不看日志就说"后端没问题" | 铁律 12 → 先 `tail -30 /tmp/hagoku.log` |
+| 不看日志就说"后端没问题" | 铁律 12 → 先 `tail -30 ~/.hagoku/hagoku.log` |
 
 ## 系统认知
 
@@ -59,7 +59,7 @@ find ~/.hagoku/projects -name "orch_state.json" -newer /tmp/hagoku_api.log 2>/de
 
 ## 流程
 
-1. 用户反馈问题 → 先读 dump + 日志（`ls -lt ~/.hagoku/.../llm_dumps/` + `tail -30 /tmp/hagoku.log`）
+1. 用户反馈问题 → 先读 dump + 日志（`ls -lt ~/.hagoku/.../llm_dumps/` + `tail -30 ~/.hagoku/hagoku.log`）
 2. 贴 dump 证据 → 回答四行
 3. 用户确认 → 改代码
 4. 跑 `bash scripts/ci/self_check.sh` + `pytest`

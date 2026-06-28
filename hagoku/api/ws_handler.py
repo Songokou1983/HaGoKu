@@ -284,7 +284,9 @@ async def ws_handler(ws: WebSocket) -> None:
                 await ws.send_json({"type": "pong"})
             elif cmd == "__log":
                 log_text = (msg.get("payload") or {}).get("text", "")
-                with open("/tmp/hagoku.log", "a") as f:
+                from hagoku.config import HaGoKuConfig as _Cfg
+                log_path = _Cfg.load().work_dir / "hagoku.log"
+                with open(str(log_path), "a") as f:
                     f.write(log_text + "\n")
             elif cmd == "list_projects":
                 if app:

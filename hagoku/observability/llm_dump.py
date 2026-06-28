@@ -19,9 +19,17 @@ from typing import Any
 _log = logging.getLogger("hagoku.llm_dump")
 
 # 历史遗留（仅作 get_dump_dir() fallback），新路径由 set_run_dir 设置
-_DEFAULT_DUMP_DIR = Path.home() / ".hagoku" / "llm_dumps"
+_DEFAULT_DUMP_DIR: Path | None = None  # lazy from config
 _run_dump_dir: Path | None = None
 _run_dump_seq: int = 0  # per-run 递增序号
+
+
+def _get_default_dump_dir() -> Path:
+    global _DEFAULT_DUMP_DIR
+    if _DEFAULT_DUMP_DIR is None:
+        from hagoku.config import HaGoKuConfig
+        _DEFAULT_DUMP_DIR = HaGoKuConfig.load().work_dir / "llm_dumps"
+    return _DEFAULT_DUMP_DIR
 
 
 def set_run_dir(run_dir: Path) -> None:
@@ -45,7 +53,7 @@ def _is_enabled() -> bool:
 
 def get_dump_dir() -> Path:
     """返回当前 dump 输出目录。"""
-    return _run_dump_dir or _DEFAULT_DUMP_DIR
+    return _run_dump_dir or _get_default_dump_dir()
 
 
 def dump_messages(
@@ -70,7 +78,7 @@ def dump_messages(
 
     try:
         global _run_dump_seq
-        out_dir = _run_dump_dir or _DEFAULT_DUMP_DIR
+        out_dir = _run_dump_dir or _get_default_dump_dir()
         out_dir.mkdir(parents=True, exist_ok=True)
 
         _run_dump_seq += 1

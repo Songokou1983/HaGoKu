@@ -13,7 +13,8 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/prompt-lab", tags=["prompt-lab"])
 
-DUMP_DIR = Path.home() / ".hagoku" / "llm_dumps"
+from hagoku.observability.llm_dump import _get_default_dump_dir
+DUMP_DIR = _get_default_dump_dir()
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "agents" / "prompt.md"
 GATE_SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "ci" / "prompt_gate.py"
 

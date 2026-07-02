@@ -121,12 +121,14 @@ function connect() {
       if (msg.type === "state_snapshot") {
         const snap = (msg as any).data;
         if (snap) {
+          const st = useWorkspaceStore.getState();
           useWorkspaceStore.getState().setSnapshot({
             messages: Array.isArray(snap.messages) ? snap.messages : [],
             reportUrl: snap.report_url || null,
             pendingAskUser: snap.pending_ask_user || null,
-            projectName: snap.project_name || "",
-            dataPath: snap.data_path || "",
+            // 只在有值时更新，避免空值覆盖用户的选择
+            projectName: snap.project_name || st.currentProject || "",
+            dataPath: snap.data_path || st.currentDataPath || "",
           });
         }
       }

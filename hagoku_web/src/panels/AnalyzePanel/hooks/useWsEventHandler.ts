@@ -421,7 +421,7 @@ export function useWsEventHandler(deps: WsEventDeps) {
             setAgentStates((prev) => ({ ...prev, reporter: "done" }));
             setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
             const proj =
-              (data?.project_name as string) ?? currentProject ?? "default";
+              (data?.project_name as string) || currentProject || "";
             setResultReportUrl(`/api/reports/${proj}`);
             setWaitingAgent(null);
             setPhase("done");

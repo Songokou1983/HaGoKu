@@ -65,7 +65,7 @@ export function useAnalyzeSession(
     send("analyze", {
       data_path: dataPath,
       query: q || "",
-      project_name: currentProject ?? "default",
+      project_name: currentProject || "",
       phase: "full",
     });
   }, [send, dataPath, currentProject, queryText, setPhase]);

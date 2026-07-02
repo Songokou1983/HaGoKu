@@ -110,6 +110,11 @@ function connect() {
         const data = (msg as any).data;
         if (Array.isArray(data)) {
           useWorkspaceStore.getState().setProjects(data);
+          // 当前项目不在列表中时清除（防止显示已删除的项目）
+          const cur = useWorkspaceStore.getState().currentProject;
+          if (cur && !data.includes(cur)) {
+            useWorkspaceStore.getState().setCurrentProject(null);
+          }
         }
       }
       // state_snapshot → 更新全局快照（AnalyzePanel 监听恢复）

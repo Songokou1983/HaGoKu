@@ -204,7 +204,7 @@ class TestAnalyzeCommand:
             mock_ws = AsyncMock()
             mock_ws.receive_text = AsyncMock(
                 side_effect=[
-                    json.dumps({"cmd": "analyze", "payload": {"query": "test"}}),
+                    json.dumps({"cmd": "analyze", "payload": {"query": "test", "project_name": "test_proj"}}),
                     Exception("Connection closed"),
                 ]
             )
@@ -236,6 +236,7 @@ class TestAnalyzeCommand:
                         "payload": {
                             "data_path": "/tmp/test.csv",
                             "query": "test query",
+                            "project_name": "test_proj",
                         },
                     }),
                     Exception("Connection closed"),

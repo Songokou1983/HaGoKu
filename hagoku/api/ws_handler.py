@@ -327,7 +327,13 @@ async def ws_handler(ws: WebSocket) -> None:
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 data_path = payload.get("data_path", "")
                 query = payload.get("query", "").strip()
-                project_name = payload.get("project_name", "default")
+                project_name = (payload.get("project_name") or "").strip()
+                if not project_name:
+                    await ws.send_json({
+                        "type": "error", "cmd": "analyze",
+                        "message": "请先在项目页面创建或选择项目"
+                    })
+                    continue
                 phase = payload.get("phase", "full")
                 if phase in ("analyst_first", "cleaning_first"):
                     phase = "full"

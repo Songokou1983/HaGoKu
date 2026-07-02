@@ -262,6 +262,8 @@ def test_G12_真端到端_cleaner_handler_不报_ValueError(orch, tmp_path):
             "query": "分析", "n_rows": 3, "n_cols": 2,
         }
         # 确保项目目录存在（G12 修复：orch.run 不再自动创建项目）
+        # 使用 tmp_path 避免污染真实项目目录
+        orch.config.output.project_dir = tmp_path / "projects"
         proj_dir = orch.config.output.project_dir / "test_channel"
         proj_dir.mkdir(parents=True, exist_ok=True)
         (proj_dir / "project.json").write_text('{"name":"test_channel"}')

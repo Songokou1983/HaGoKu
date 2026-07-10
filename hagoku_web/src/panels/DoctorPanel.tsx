@@ -229,9 +229,9 @@ ${summary}`);
       )}
 
       {/* ══════ 对话区 ══════ */}
-      <div className="flex flex-col px-4 pt-3">
-        {/* 消息列表 — 固定高度，不撑满全屏 */}
-        <div className="overflow-y-auto space-y-2 min-h-[8rem] max-h-[16rem]">
+      <div className="flex-1 flex flex-col px-4 overflow-hidden">
+        {/* 消息列表 — 撑满剩余空间 */}
+        <div className="flex-1 overflow-y-auto space-y-2 py-3">
           {chatMessages.length === 0 && (
             <p className="text-ui-xs text-app-text-muted text-center py-8">
               💬 向 HaGoKu Doctor 提问 — 诊断问题、理解审计报告、获取维护建议。
@@ -292,60 +292,33 @@ ${summary}`);
         </div>
       </div>
 
-      {/* ══════ 概览区 — 可折叠 ══════ */}
-      <details className="border-t border-app-border shrink-0">
-        <summary className="px-4 py-2 text-ui-sm text-app-text-muted cursor-pointer hover:text-app-text select-none">
-          📊 系统概览 · 审计工具
-        </summary>
-        <div className="px-4 pb-4 space-y-4 max-h-64 overflow-y-auto border-t border-app-border/50 pt-3">
-
-          {/* 健康汇总 */}
-          {healthLoading && !health && (
-            <p className="flex items-center gap-2 text-ui-sm text-app-text-muted">
-              <Loader2 size={14} className="animate-spin" /> 检查中…
-            </p>
-          )}
-          {health && (
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded text-ui-xs ${
-              hasBlocking ? "bg-app-error/10 text-app-error" :
-              health.ok ? "bg-green-500/10 text-green-400" : "bg-app-warning/10 text-app-warning"
-            }`}>
-              {hasBlocking ? <XCircle size={12} /> : health.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-              <span>{okCount}/{totalCount} 项通过</span>
-              <button onClick={loadHealth} className="ml-auto text-app-text-muted hover:text-app-text">
-                <RefreshCw size={12} className={healthLoading ? "animate-spin" : ""} />
-              </button>
-            </div>
-          )}
-
-          {/* 审计操作 */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => triggerAudit("methods")}
-              disabled={auditRunning !== null || !status?.meta_llm_configured}
-              className={btnClass + " text-ui-xs"}
-            >
-              {auditRunning === "methods" ? <Loader2 size={12} className="animate-spin" /> : <BookOpen size={12} />}
-              审知识库
-            </button>
-            <button
-              onClick={() => triggerAudit("tools")}
-              disabled={auditRunning !== null || !status?.meta_llm_configured}
-              className={btnClass + " text-ui-xs"}
-            >
-              {auditRunning === "tools" ? <Loader2 size={12} className="animate-spin" /> : <Cpu size={12} />}
-              审工具箱
-            </button>
-          </div>
-          {auditMessage && (
-            <p className={`text-ui-xs ${
-              auditMessage.startsWith("✅") ? "text-green-400" : "text-app-error"
-            }`}>{auditMessage}</p>
-          )}
-
-
-        </div>
-      </details>
+      {/* ══════ 工具栏 ══════ */}
+      <div className="flex items-center gap-3 px-4 py-1.5 border-t border-app-border shrink-0">
+        {health && (
+          <span className={`text-ui-xs ${hasBlocking ? "text-app-error" : health.ok ? "text-green-400" : "text-app-warning"}`}>
+            {hasBlocking ? "❌" : health.ok ? "✅" : "⚠️"} {okCount}/{totalCount}
+          </span>
+        )}
+        <button onClick={loadHealth} className="text-app-text-muted hover:text-app-text" title="刷新">
+          <RefreshCw size={12} className={healthLoading ? "animate-spin" : ""} />
+        </button>
+        <div className="flex-1" />
+        <button onClick={() => triggerAudit("methods")} disabled={auditRunning !== null}
+          className="px-2 py-1 text-ui-xs rounded border border-app-border text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50">
+          {auditRunning === "methods" ? <Loader2 size={12} className="animate-spin inline mr-1" /> : <BookOpen size={12} className="inline mr-1" />}
+          审知识库
+        </button>
+        <button onClick={() => triggerAudit("tools")} disabled={auditRunning !== null}
+          className="px-2 py-1 text-ui-xs rounded border border-app-border text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50">
+          {auditRunning === "tools" ? <Loader2 size={12} className="animate-spin inline mr-1" /> : <Cpu size={12} className="inline mr-1" />}
+          审工具箱
+        </button>
+        {auditMessage && (
+          <span className={`text-ui-xs ${auditMessage.startsWith("✅") ? "text-green-400" : "text-app-error"}`}>
+            {auditMessage.startsWith("✅") ? "✅" : "❌"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -315,12 +315,21 @@ export default function PromptLabPanel() {
             {presets.map((p) => (
               <div
                 key={p.id}
-                className={`border rounded-lg overflow-hidden transition-colors ${
+                className={`relative border rounded-lg overflow-hidden transition-colors ${
                   p.active
                     ? "border-app-accent bg-app-accent/5"
                     : "border-app-border bg-app-bg-secondary"
                 }`}
               >
+                {/* 启用中标记 */}
+                {p.active && (
+                  <div className="absolute top-0 right-0">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-bl-lg rounded-tr-lg bg-app-accent text-white text-ui-xs font-medium">
+                      <CheckCircle2 size={10} />
+                      启用中
+                    </span>
+                  </div>
+                )}
                 {/* 卡片头部 */}
                 <div className="flex items-start gap-3 p-3">
                   <span className="text-xl shrink-0 mt-0.5">
@@ -333,9 +342,6 @@ export default function PromptLabPanel() {
                       </span>
                       {p.id === "general" && (
                         <span className="text-ui-xs text-app-text-muted">默认</span>
-                      )}
-                      {p.active && (
-                        <CheckCircle2 size={12} className="text-app-accent shrink-0" />
                       )}
                     </div>
                     <p className="text-ui-xs text-app-text-muted leading-snug mt-0.5">

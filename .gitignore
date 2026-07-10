@@ -62,4 +62,4 @@ UI_CHANGELOG_backup_*
 reasonix.toml
 smoke_runs/
 desktop/node_modules/
-hagoku/tools/_doctor_stubs.py
+hagoku/tools/_doctor_tools.py

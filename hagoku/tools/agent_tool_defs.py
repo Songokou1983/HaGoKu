@@ -500,6 +500,6 @@ import hagoku.tools.viz_tools     # noqa: F401  — CO-T22: 可视化
 
 # Doctor 创建的临时工具桩（文件不存在时跳过）
 try:
-    import hagoku.tools._doctor_stubs  # noqa: F401
+    import hagoku.tools._doctor_tools  # noqa: F401
 except ImportError:
     pass

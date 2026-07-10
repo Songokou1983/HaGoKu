@@ -455,7 +455,7 @@ agent_tools.register(Tool(
         return {"ok": False, "message": f"未找到工具 {tool_name} 的注册代码"}
 
     if action == "create_tool_stub":
-        """创建工具桩——生成最小可运行的 handler + 注册，供后续实现。"""
+        """创建工具——有实现代码则生成完整工具，无实现则生成桩。"""
         import json as _j
         try:
             params = _j.loads(_fix_params) if _fix_params else {}
@@ -468,13 +468,31 @@ agent_tools.register(Tool(
         desc = params.get("description") or tool_name
         params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
         phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
+        implementation = params.get("implementation", "").strip()
         reason = params.get("reason", "预设扩展需要")
 
-        stub = f'''
-# Doctor: created stub for "{tool_name}" — {reason}
-# TODO: 替换为真实实现
+        tools_dir = _P(__file__).resolve().parent.parent / "tools"
+        stub_file = tools_dir / "_doctor_tools.py"
+        if not stub_file.exists():
+            stub_file.write_text(
+                "from __future__ import annotations\n"
+                + '"""Doctor 创建的工具。"""\n'
+                + "from typing import Any\n"
+                + "import pandas as pd\n"
+                + "from hagoku.tools.registry import Tool, agent_tools\n\n",
+                encoding="utf-8")
+
+        if implementation:
+            code = f"\n# Doctor: {tool_name} — {reason}\n{implementation}\n\n"
+            code += f"agent_tools.register(Tool(\n"
+            code += f'    name="{tool_name}",\n    description="{desc}",\n'
+            code += f"    parameters={params_schema},\n    handler={handler_name},\n"
+            code += f"    phase_tag={phase},\n))\n"
+        else:
+            code = f'''
+# Doctor: stub for "{tool_name}" — {reason}
 def {handler_name}(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
-    return {{"error": "{tool_name} 桩——此处需替换为真实实现"}}
+    return {{"error": "{tool_name} 桩——替换为真实实现"}}
 
 agent_tools.register(Tool(
     name="{tool_name}",
@@ -484,26 +502,11 @@ agent_tools.register(Tool(
     phase_tag={phase},
 ))
 '''
-        tools_dir = _P(__file__).resolve().parent.parent / "tools"
-        stub_file = tools_dir / "_doctor_stubs.py"
-        if not stub_file.exists():
-            stub_file.write_text(
-                "from __future__ import annotations
-" +
-                '"""Doctor 创建的工具桩。"""' + "
-" +
-                "from typing import Any
-" +
-                "import pandas as pd
-" +
-                "from hagoku.tools.registry import Tool, agent_tools
-" +
-                "
-",
-                encoding="utf-8")
+
         with open(stub_file, 'a') as f:
-            f.write(stub)
-        return {"ok": True, "message": f"已创建工具桩 {tool_name} → tools/_doctor_stubs.py。刷新后 LLM 可调用但会返回 '桩' 提示，请开发者替换为真实实现。"}
+            f.write(code)
+        kind = "已创建" if implementation else "已创建桩"
+        return {"ok": True, "message": f"{kind}工具 {tool_name} → tools/_doctor_tools.py"}
 
     return {"ok": False, "message": f"未知操作: {action}"}
 

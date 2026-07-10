@@ -492,7 +492,7 @@ agent_tools.register(Tool(
 
 
 
-# import hagoku.tools.memory_tools  # noqa: F401,E402 — 记忆工具暂不注册（等记忆系统稳定后加回）
+import hagoku.tools.memory_tools  # noqa: F401  — 项目记忆 + Agent 成长经验
 import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
 # biz_tools 已移除 — ROI/ROAS/LTV 等公式不是工具，LLM 训练数据自带
 import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强

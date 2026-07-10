@@ -259,10 +259,11 @@ def _doctor_do_fix(action: str, _fix_params: str = "") -> dict:
         try:
             from hagoku.tools.health import check_llm_health
             from hagoku.config import HaGoKuConfig
-            results = check_llm_health(HaGoKuConfig.load())
-            passed = sum(1 for r in results if r.ok)
-            details = " | ".join(f"{"✅" if r.ok else "❌"} {r.name}" for r in results)
-            return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(results)} 通过 — {details}"}
+            report = check_llm_health(HaGoKuConfig.load())
+            checks = report.checks
+            passed = sum(1 for r in checks if r.ok)
+            details = " | ".join(f"{"✅" if r.ok else "❌"} {r.name}" for r in checks)
+            return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(checks)} 通过 — {details}"}
         except Exception as e:
             return {"ok": False, "message": f"健康检查失败：{e}"}
 

@@ -556,19 +556,26 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     except Exception:
         health_ctx = "系统健康：无法获取\n"
 
-    # 收集审计上下文
+    # 收集审计上下文——方法库和工具箱各取最新一份
     audit_ctx = ""
     if AUDIT_DIR.exists():
-        reports = sorted(AUDIT_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if reports:
-            # 最新一份完整报告给 Doctor 分析
+        method_reports = sorted(AUDIT_DIR.glob("method_audit_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+        tool_reports = sorted(AUDIT_DIR.glob("tool_audit_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+        parts = []
+        if method_reports:
             try:
-                content = reports[0].read_text(encoding="utf-8")
-                audit_ctx = f"最新审计报告（{reports[0].name}）:\n{content[:3000]}\n"
-                if len(content) > 3000:
-                    audit_ctx += f"\n(报告共 {len(content)} 字，以上为前 3000 字)"
+                content = method_reports[0].read_text(encoding="utf-8")
+                parts.append(f"## 方法库审计（{method_reports[0].name}）\n{content[:2000]}")
             except Exception:
                 pass
+        if tool_reports:
+            try:
+                content = tool_reports[0].read_text(encoding="utf-8")
+                parts.append(f"## 工具箱审计（{tool_reports[0].name}）\n{content[:1500]}")
+            except Exception:
+                pass
+        if parts:
+            audit_ctx = "\n\n".join(parts)
 
     # 收集日志上下文
     log_ctx = ""

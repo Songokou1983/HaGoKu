@@ -213,7 +213,29 @@ ${summary}`);
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
-      <PanelHeader title="Doctor" icon={<Stethoscope size={16} />} />
+      <PanelHeader title="Doctor" icon={<Stethoscope size={16} />}>
+        <div className="flex items-center gap-2">
+          {health && (
+            <span className={`text-ui-xs ${hasBlocking ? "text-app-error" : health.ok ? "text-green-400" : "text-app-warning"}`}>
+              {hasBlocking ? "❌" : "✅"} {okCount}/{totalCount}
+            </span>
+          )}
+          <button
+            onClick={() => triggerAudit("methods")} disabled={auditRunning !== null}
+            className="px-2 py-0.5 text-ui-xs rounded border border-app-border/50 text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50"
+          >
+            {auditRunning === "methods" ? <Loader2 size={11} className="animate-spin inline mr-0.5" /> : <BookOpen size={11} className="inline mr-0.5" />}
+            审知识库
+          </button>
+          <button
+            onClick={() => triggerAudit("tools")} disabled={auditRunning !== null}
+            className="px-2 py-0.5 text-ui-xs rounded border border-app-border/50 text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50"
+          >
+            {auditRunning === "tools" ? <Loader2 size={11} className="animate-spin inline mr-0.5" /> : <Cpu size={11} className="inline mr-0.5" />}
+            审工具箱
+          </button>
+        </div>
+      </PanelHeader>
 
       {/* ── 状态条（紧凑） ── */}
       {status && (
@@ -292,33 +314,6 @@ ${summary}`);
         </div>
       </div>
 
-      {/* ══════ 工具栏 ══════ */}
-      <div className="flex items-center gap-3 px-4 py-1.5 border-t border-app-border shrink-0">
-        {health && (
-          <span className={`text-ui-xs ${hasBlocking ? "text-app-error" : health.ok ? "text-green-400" : "text-app-warning"}`}>
-            {hasBlocking ? "❌" : health.ok ? "✅" : "⚠️"} {okCount}/{totalCount}
-          </span>
-        )}
-        <button onClick={loadHealth} className="text-app-text-muted hover:text-app-text" title="刷新">
-          <RefreshCw size={12} className={healthLoading ? "animate-spin" : ""} />
-        </button>
-        <div className="flex-1" />
-        <button onClick={() => triggerAudit("methods")} disabled={auditRunning !== null}
-          className="px-2 py-1 text-ui-xs rounded border border-app-border text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50">
-          {auditRunning === "methods" ? <Loader2 size={12} className="animate-spin inline mr-1" /> : <BookOpen size={12} className="inline mr-1" />}
-          审知识库
-        </button>
-        <button onClick={() => triggerAudit("tools")} disabled={auditRunning !== null}
-          className="px-2 py-1 text-ui-xs rounded border border-app-border text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50">
-          {auditRunning === "tools" ? <Loader2 size={12} className="animate-spin inline mr-1" /> : <Cpu size={12} className="inline mr-1" />}
-          审工具箱
-        </button>
-        {auditMessage && (
-          <span className={`text-ui-xs ${auditMessage.startsWith("✅") ? "text-green-400" : "text-app-error"}`}>
-            {auditMessage.startsWith("✅") ? "✅" : "❌"}
-          </span>
-        )}
-      </div>
     </div>
   );
 }

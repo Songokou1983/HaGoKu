@@ -75,6 +75,7 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
 }
 
 规则：
+- 请直接返回 JSON 对象，不要包含 ```json 标记或其他文字
 - intent_type 必须从上面枚举中选一个，不明确的用 "exploration"
 - analysis_focus 由你根据意图直接推荐合适的分析方法列表
 - target / group_by / mentioned_columns 用中文写出用户的业务语言
@@ -92,34 +93,17 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
 
     from hagoku.channel import build_messages
 
-    try:
-        response = client.chat.completions.create(
-            model=config.model,
-            # EXEMPT: 辅助 LLM — 意图解析，非主对话通道
-            messages=build_messages(
-                query=query,
-                user_input=f"用户问题：{query}{hints_text}",
-                system_extra=system_prompt,
-            ),
-            temperature=0.0,
-            max_tokens=512,
-            response_format={"type": "json_object"},
-        )
-    except Exception as e:
-        # 只吞 response_format 不兼容，其他错误照常抛出（铁律 7）
-        msg = str(e).lower()
-        if "response_format" not in msg and "json_object" not in msg:
-            raise
-        response = client.chat.completions.create(
-            model=config.model,
-            messages=build_messages(
-                query=query,
-                user_input=f"用户问题：{query}{hints_text}",
-                system_extra=system_prompt,
-            ),
-            temperature=0.0,
-            max_tokens=[redacted],
-        )
+    response = client.chat.completions.create(
+        model=config.model,
+        # EXEMPT: 辅助 LLM — 意图解析，非主对话通道
+        messages=build_messages(
+            query=query,
+            user_input=f"用户问题：{query}{hints_text}",
+            system_extra=system_prompt,
+        ),
+        temperature=0.0,
+        max_tokens=[redacted],
+    )
 
     raw = response.choices[0].message.content or ""
     # 剥离 MiniMax 等模型的 <think>...</think> CoT 块

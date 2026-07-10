@@ -272,7 +272,6 @@ class MethodCurator:
             f"- Tools not registered (referenced but missing): {len(report.missing_tools)}",
             f"- Orphan tools (registered but no doc): {len(report.orphan_tools)}",
             "",
-            "**Important**: 以上数字由代码直接计算，准确无误。不要重新计数或质疑这些数字。",
             "",
         ]
 

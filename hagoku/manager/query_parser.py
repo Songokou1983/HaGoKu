@@ -105,7 +105,11 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
             max_tokens=512,
             response_format={"type": "json_object"},
         )
-    except Exception:
+    except Exception as e:
+        # 只吞 response_format 不兼容，其他错误照常抛出（铁律 7）
+        msg = str(e).lower()
+        if "response_format" not in msg and "json_object" not in msg:
+            raise
         response = client.chat.completions.create(
             model=config.model,
             messages=build_messages(

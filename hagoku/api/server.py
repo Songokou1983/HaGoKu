@@ -307,9 +307,13 @@ async def get_config():
                 "stream_enabled": cfg.llm.stream_enabled,
             },
             "meta_llm": {
-                "base_url": cfg.meta_llm.base_url or "",
-                "model": cfg.meta_llm.model or "",
-                "api_key_configured": bool(cfg.meta_llm.api_key and cfg.meta_llm.api_key != "none"),
+                # Doctor 未单独配置时复用 Pipeline LLM，UI 应显示实际生效的值
+                "base_url": cfg.meta_llm.base_url or cfg.llm.base_url or "",
+                "model": cfg.meta_llm.model or cfg.llm.model or "",
+                "api_key_configured": bool(
+                    (cfg.meta_llm.api_key and cfg.meta_llm.api_key != "none") or
+                    (cfg.llm.api_key and cfg.llm.api_key.lower() != "none")
+                ),
             },
         }
     except Exception:

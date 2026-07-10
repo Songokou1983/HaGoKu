@@ -178,8 +178,8 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                 try:
                     ping_body = {
                         "model": model,
-                        "messages": [{"role": "user", "content": "ping"}],
-                        "max_tokens": 8,
+                        "messages": [{"role": "user", "content": "回复 OK"}],
+                        "max_tokens": 32,
                         "temperature": 0,
                     }
                     ping_resp = client.post(
@@ -190,7 +190,7 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                     if ping_resp.status_code == 200:
                         data = ping_resp.json()
                         choices = data.get("choices", [])
-                        if choices and choices[0].get("message", {}).get("content"):
+                        if choices and choices[0].get("message") is not None:
                             report.model_available = model
                             # 提取 token 用量
                             usage = data.get("usage", {})

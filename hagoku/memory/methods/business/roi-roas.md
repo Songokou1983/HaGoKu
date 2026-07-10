@@ -4,8 +4,6 @@ category: business
 tags: [ROI, ROAS, 投资回报, 广告回报, 财务]
 summary: 投资回报率 (ROI) 和广告支出回报率 (ROAS) 的计算公式与业务解读
 tools:
-  - calc_roi
-  - calc_roas
 ---
 
 # ROI 与 ROAS 计算指南

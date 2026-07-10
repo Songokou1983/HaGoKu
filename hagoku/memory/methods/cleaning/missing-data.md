@@ -5,7 +5,6 @@ tags: [缺失值, MCAR, MAR, MNAR, 插补, 清洗]
 summary: 三种缺失机制（MCAR/MAR/MNAR）的识别与对应清洗策略
 tools:
   - detect_missing_pattern
-  - suggest_cleaning
 ---
 
 # 缺失数据处理指南

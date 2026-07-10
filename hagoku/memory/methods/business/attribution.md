@@ -4,7 +4,6 @@ category: business
 tags: [归因, 渠道, 转化, 营销, attribution]
 summary: 不同归因模型（最后触达/首次触达/线性）的选择与解读
 tools:
-  - attribution_analysis
 ---
 
 # 渠道归因分析指南

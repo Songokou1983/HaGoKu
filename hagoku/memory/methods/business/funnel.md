@@ -4,7 +4,6 @@ category: business
 tags: [漏斗, 转化率, 流失, 用户路径]
 summary: 各阶段转化率计算、步骤流失分析、瓶颈识别
 tools:
-  - funnel_analysis
 ---
 
 # 漏斗分析指南

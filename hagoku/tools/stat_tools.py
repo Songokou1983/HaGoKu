@@ -369,3 +369,55 @@ agent_tools.register(Tool(
     handler=_handle_run_statistical_test,
     phase_tag=["跑统计"],
 ))
+
+# ── CO-T13: assess_statistical_power ────────────────────────────────
+agent_tools.register(Tool(
+    name="assess_statistical_power",
+    description="评估已完成检验的统计功效。用于解读不显著结果时应先调用此工具。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "test_type": {"type": "string", "description": "检验类型"},
+            "n": {"type": "integer", "description": "样本量"},
+            "effect_size": {"type": "number", "description": "效应量（如 Cohen's d）"},
+            "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+        },
+        "required": ["test_type", "n"],
+    },
+    handler=_handle_assess_statistical_power,
+    phase_tag=["跑统计"],
+))
+
+# ── CO-T14: required_sample_size ────────────────────────────────────
+agent_tools.register(Tool(
+    name="required_sample_size",
+    description="估算达到目标功效所需的样本量。设计实验或判断已有数据是否足够时使用。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "test_type": {"type": "string", "description": "检验类型"},
+            "effect_size": {"type": "number", "description": "期望检测的最小效应量"},
+            "power": {"type": "number", "description": "目标功效，默认 0.8"},
+            "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+        },
+        "required": ["test_type", "effect_size"],
+    },
+    handler=_handle_required_sample_size,
+    phase_tag=["跑统计"],
+))
+
+# ── CO-T15: diagnose_regression ─────────────────────────────────────
+agent_tools.register(Tool(
+    name="diagnose_regression",
+    description="诊断线性回归模型：残差分析、多重共线性(VIF)、影响点。需先执行 run_statistical_test(test_type='linear_regression')。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "target": {"type": "string", "description": "因变量列名"},
+            "features": {"type": "array", "items": {"type": "string"}, "description": "自变量列名列表"},
+        },
+        "required": ["target", "features"],
+    },
+    handler=_handle_diagnose_regression,
+    phase_tag=["跑统计"],
+))

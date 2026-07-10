@@ -6,7 +6,6 @@ summary: 为什么分析前要做功效分析，如何计算所需样本量
 tools:
   - assess_statistical_power
   - required_sample_size
-  - interpret_nonsignificant
 ---
 
 # 统计功效与样本量（Power Analysis）

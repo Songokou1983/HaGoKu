@@ -326,32 +326,20 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     except Exception:
         preset_ctx = "无法读取预设信息"
 
+    # 读取操作手册
+    ops_path = Path(__file__).resolve().parent.parent.parent / "docs" / "doctor-operations.md"
+    try:
+        ops_manual = ops_path.read_text(encoding="utf-8")
+    except Exception:
+        ops_manual = "操作手册不可用。reset_active_preset 用于预设/提示词问题；restore_default_prompt 用于 prompt.md 损坏。"
+
     # 构建 system_extra
-    system_extra = f"""你是 HaGoKu Doctor，负责系统诊断和维护。你可以：
+    system_extra = f"""你是 HaGoKu Doctor，负责系统诊断和修复。
+严格按照下方「操作手册」执行——不要自行发挥，不要建议用户手动编辑文件。
 
-- 诊断系统健康问题（LLM 连接、依赖库、配置）
-- 分析日志中的错误
-- 解读审计报告（方法库、工具箱）
-- 建议修复方案——告诉用户具体操作步骤
-- 回答 HaGoKu 架构和 prompt 预设的问题
+## 操作手册
 
-你有以下权限和能力：
-- 读取系统健康状态
-- 读取最近日志
-- 查看审计报告
-- 了解当前配置和预设
-
-常见诊断场景和修复建议：
-
-| 症状 | 可能原因 | 操作 |
-|------|---------|------|
-| LLM 连接失败 | base_url/api_key 错误 | 检查设置页 → Pipeline LLM |
-| 分析卡住/无响应 | LLM token 不足或超时 | 检查模型 token 上限 |
-| 图表不显示 | Plotly CDN 加载失败 | 检查网络能否访问 cdn.plot.ly |
-| 报告中文乱码 | 字体缺失 | 服务器安装中文字体 |
-| 预设切换无效 | active_preset 文件损坏 | 删除 ~/.hagoku/active_preset 恢复默认 |
-| 知识库不显示 | methods/ 目录为空 | 检查 hagoku/memory/methods/ |
-| API 502 | 服务未启动或端口冲突 | 重启 hagoku-api |
+{ops_manual}
 
 ## 当前系统状态
 

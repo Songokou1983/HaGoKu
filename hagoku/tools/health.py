@@ -178,8 +178,8 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                 try:
                     ping_body = {
                         "model": model,
-                        "messages": [{"role": "user", "content": "回复 OK"}],
-                        "max_tokens": 32,
+                        "messages": [{"role": "user", "content": "hi"}],
+                        "max_tokens": 64,
                         "temperature": 0,
                     }
                     ping_resp = client.post(
@@ -190,7 +190,9 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                     if ping_resp.status_code == 200:
                         data = ping_resp.json()
                         choices = data.get("choices", [])
-                        if choices and choices[0].get("message") is not None:
+                        # 通用判断：API 返回 200 + 有 choices 即为正常，
+                        # 不检查 content 是否为空（不同模型行为不同）
+                        if choices:
                             report.model_available = model
                             # 提取 token 用量
                             usage = data.get("usage", {})
@@ -259,7 +261,8 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                     suggestions=[],
                 ))
 
-            # --- 5. JSON mode ---
+            # --- 5. JSON mode（可选能力，始终标记为 ok）---
+            # JSON mode 是 provider 特定功能，HaGoKu 使用 function calling 不需要它
             if not report.blocking_failed:
                 try:
                     json_body = {
@@ -286,24 +289,22 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                         ))
                     else:
                         checks.append(HealthCheckResult(
-                            ok=False,
+                            ok=True,
                             name="5. JSON mode",
                             detail=f"⚠️ HTTP {json_resp.status_code}",
                             suggestions=["部分功能可能降级"],
                         ))
                 except Exception:
                     checks.append(HealthCheckResult(
-                        ok=False,
+                        ok=True,
                         name="5. JSON mode",
-                        detail="⚠️ 不可用",
-                        suggestions=["结构化输出可能不稳定"],
+                        detail="⚠️ 不支持",
                     ))
             else:
                 checks.append(HealthCheckResult(
-                    ok=False,
+                    ok=True,
                     name="5. JSON mode",
-                    detail="⚠️ 部分模型不支持（不影响分析）",
-                    suggestions=[],
+                    detail="⚠️ 跳过",
                 ))
 
     except Exception as e:

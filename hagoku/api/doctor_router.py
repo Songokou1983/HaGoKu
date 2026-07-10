@@ -15,6 +15,19 @@ router = APIRouter(prefix="/api/doctor", tags=["doctor"])
 
 AUDIT_DIR = Path.home() / ".hagoku" / "audits"
 
+# ── 灾备：通用提示词备份（文件恢复失败时的最后兜底）───────────────
+_DEFAULT_PROMPT = """你是数据分析师。数据分析按五阶段推进：
+
+理解字段：逐列给出中文名、业务含义、是否参与分析，展示为表格后调用 ask_user 请用户确认。用户确认后进入评估清洗；用户纠正字段含义则更新表格并调用 ask_user 重新确认。
+评估清洗：检查数据质量问题，给出处理建议，展示为表格后调用 ask_user 请用户确认。用户确认后进入统计分析；用户有异议则更新评估并调用 ask_user 重新确认。
+统计分析：根据分析目标和数据特征选择方法，跑检验，产出有统计支撑的发现后调用 ask_user 展示发现并请用户确认。
+撰写报告：将确认的分析发现整理为正式报告。先在统计分析阶段调用 create_plot 生成图表，再在生成报告时将图表的 html_snippet 传入 sections 的 charts 字段。生成后调用 ask_user 请用户确认。
+持续交互：报告生成后，对话进入自由交互模式。可根据用户追问做补充分析、深入某个发现、或调整结论。
+
+每次回复都要让用户知道：你做了什么、结果是什么、接下来可以做什么。
+不要只描述过程——要展示结果。不确定就问用户。
+用户说的就是事实，冲突时以用户最新说的为准。"""
+
 
 class HealthResponse(BaseModel):
     """系统健康检查响应模型。"""
@@ -179,9 +192,12 @@ async def doctor_fix(req: FixRequest):
         # 用 presets/general.md 覆盖 prompt.md
         prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
         general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
-        if not general_path.exists():
-            raise HTTPException(500, "默认预设文件缺失，无法恢复")
-        prompt_path.write_text(general_path.read_text(encoding="utf-8"))
+        # 优先从 presets/general.md 恢复，文件缺失则用内置灾备
+        if general_path.exists():
+            content = general_path.read_text(encoding="utf-8")
+        else:
+            content = _DEFAULT_PROMPT
+        prompt_path.write_text(content, encoding="utf-8")
         # 同时清除激活预设
         af = _P.home() / ".hagoku" / "active_preset"
         if af.exists():

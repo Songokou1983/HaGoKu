@@ -386,9 +386,17 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     sections_data = args.get("sections") or []
     sections = []
     for s in sections_data:
+        content = s.get("content", "")
+        # 将 LLM 输出的 markdown 表格转为 HTML
+        if content and ("|---" in content or "| --" in content):
+            try:
+                import markdown as _md
+                content = _md.markdown(content, extensions=["tables"])
+            except Exception:
+                pass
         sections.append(ReportSection(
             title=s.get("title", ""),
-            content=s.get("content", ""),
+            content=content,
             findings=s.get("findings") or [],
             charts=s.get("charts") or [],
             headline=s.get("headline"),

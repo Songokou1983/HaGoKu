@@ -322,7 +322,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
         {% endif %}
 
         {% if section.content %}
-        <p>{{ section.content | safe }}</p>
+        <div class="section-content">{{ section.content | safe }}</div>
         {% endif %}
 
         {% if section.plain_explanation %}
@@ -464,7 +464,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ loop.index + 2 }}. {{ section.title | replace('🎯 ', '') | replace('📈 ', '') | replace('🔬 ', '') | replace('🔗 ', '') | replace('📊 ', '') | replace('🛡️ ', '') }}</h2>
-        {% if section.content %}<p>{{ section.content | safe }}</p>{% endif %}
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
 
         {% for finding in section.findings %}
         <div class="finding">

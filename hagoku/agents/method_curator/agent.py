@@ -297,12 +297,6 @@ class MethodCurator:
                 lines.append(f"- `{t}`")
             lines.append("")
 
-        # LLM findings
-        if report.llm_findings:
-            lines.append("## LLM Findings")
-            lines.append(report.llm_findings)
-            lines.append("")
-
         # Draft suggestions
         if report.draft_suggestions:
             lines.append("## Draft Suggestions")

@@ -291,14 +291,13 @@ class ToolCurator:
         lines = [
             "# Tool Audit",
             f"Time: {report.timestamp[:19]}",
-            f"Total tools: {report.total_tools}",
             "",
-            "## Summary",
-            f"- tools: {report.total_tools}",
-            f"- with tests: {report.tools_with_tests}",
-            f"- with method docs: {report.tools_with_docs}",
-            f"- prompt fake tools: {len(report.prompt_fake_tools)}",
-            f"- stat tools missing metrics: {len(report.stat_tools_without_metrics)}",
+            "## Deterministic Results (code-verified, authoritative)",
+            f"- Total tools: {report.total_tools}",
+            f"- With tests: {report.tools_with_tests}",
+            f"- With method docs: {report.tools_with_docs}",
+            f"- Prompt references unregistered tools: {len(report.prompt_fake_tools)}",
+            f"- Stat tools missing metrics: {len(report.stat_tools_without_metrics)}",
             "",
         ]
 
@@ -330,12 +329,6 @@ class ToolCurator:
                 lines.append(f"- `{t}`")
             if len(report.missing_docs) > 20:
                 lines.append(f"- ... and {len(report.missing_docs) - 20} more")
-            lines.append("")
-
-        # LLM findings
-        if report.llm_findings:
-            lines.append("## LLM Findings (TC-01, TC-02)")
-            lines.append(report.llm_findings)
             lines.append("")
 
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")

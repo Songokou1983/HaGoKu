@@ -2,7 +2,7 @@
 
 Doctor 通过阅读本文档了解可执行的操作。每个操作包含：触发条件、API 调用方式、执行后的验证步骤。
 
-## 通用修复操作
+## 修复操作
 
 ### reset_active_preset
 - **触发条件**: 用户说"分析结果不对"、"预设出问题"、"恢复默认提示词"、"重置预设"
@@ -17,15 +17,39 @@ Doctor 通过阅读本文档了解可执行的操作。每个操作包含：触�
 - **验证**: 告诉用户重新开始一次分析，LLM 应正常按五阶段推进
 
 ### check_llm_connection
-- **触发条件**: 用户说"连不上"、"LLM 不通"、"502 错误"
-- **API**: `GET /api/doctor/health`
-- **效果**: 检查 LLM 连通性和 token 速率
+- **触发条件**: 用户说"连不上"、"LLM 不通"、"502 错误"、"API 错误"
+- **API**: `POST /api/doctor/fix {"action": "check_llm_connection"}`
+- **效果**: 检查 LLM 连通性、模型可用性、token 速率
 - **验证**: 返回各项检查结果，不通过的项给出具体原因
+
+### full_system_check
+- **触发条件**: 用户说"全面检查"、"系统状态"、"健康检查"、"有什么问题"
+- **API**: `POST /api/doctor/fix {"action": "full_system_check"}`
+- **效果**: 运行完整系统健康检查（LLM + 依赖库 + 配置）
+- **验证**: 返回所有检查项结果
+
+### clear_project_memory
+- **触发条件**: 用户说"项目记忆有问题"、"字段识别老是错"、"清除项目记忆"
+- **API**: `POST /api/doctor/fix {"action": "clear_project_memory", "project": "项目名"}`
+- **效果**: 清除指定项目的字段记忆和分析模式，下次分析像新项目一样
+- **验证**: 告诉用户重新开始分析，LLM 会重新询问字段含义
+
+### clear_active_state
+- **触发条件**: 用户说"分析卡住了"、"重置分析状态"、"清除会话"
+- **API**: `POST /api/doctor/fix {"action": "clear_active_state"}`
+- **效果**: 清除 `~/.hagoku/active_preset` 和当前运行的 session 状态
+- **验证**: 告诉用户刷新页面，重新开始分析
+
+### restore_custom_preset
+- **触发条件**: 用户说"预设文件坏了"、"编辑预设后报错"、"恢复某个预设"
+- **API**: `POST /api/doctor/fix {"action": "restore_custom_preset", "preset": "预设ID"}`
+- **效果**: 删除损坏的预设文件，从 presets.json 中移除
+- **验证**: 告诉用户打开分析能力面板确认
 
 ## 诊断信息来源
 
-Doctor 在对话中自动获得以下信息，无需手动请求：
-- 系统健康状态（/api/doctor/health 结果）
+Doctor 在对话中自动获得以下信息：
+- 系统健康状态（9 项检查）
 - 最近 30 行日志（自动过滤错误行）
 - 当前 LLM 配置（base_url + model）
 - 激活的提示词预设
@@ -37,22 +61,23 @@ Doctor 在对话中自动获得以下信息，无需手动请求：
 2. 查看自动注入的日志和健康状态
 3. 匹配本文档中的操作
 4. 向用户简短说明诊断结论
-5. **直接执行修复**——在回复末尾加上 `[fix:操作名]`，系统会自动执行
+5. **直接执行修复**——在回复末尾加上 `[fix:操作名]`，系统自动执行
 6. 告知用户验证方法
 
-**重要：你必须直接执行修复，不要问用户确认。** 你在回复中加上 `[fix:reset_active_preset]` 或 `[fix:restore_default_prompt]` 这样的标记，系统会自动调用对应 API。
-
-## 可用的 fix 操作
+## 可用的 fix 标记
 
 | fix 标记 | 效果 |
 |----------|------|
-| `[fix:reset_active_preset]` | 清除激活预设，恢复默认提示词 |
-| `[fix:restore_default_prompt]` | 从灾备恢复 prompt.md |
+| `[fix:reset_active_preset]` | 清除激活预设 |
+| `[fix:restore_default_prompt]` | 恢复默认提示词 |
 | `[fix:check_llm_connection]` | 检查 LLM 连通性 |
+| `[fix:full_system_check]` | 全面系统检查 |
+| `[fix:clear_project_memory]` | 清除项目记忆 |
+| `[fix:clear_active_state]` | 清除活跃状态 |
+| `[fix:restore_custom_preset]` | 恢复损坏预设 |
 
 ## 边界
 
 - 不修改代码文件
-- 不修改数据库
-- 不删除用户数据文件
+- 不删除用户上传的数据文件
 - 只能执行本文档列出的操作

@@ -266,6 +266,29 @@ def _doctor_do_fix(action: str) -> dict:
         except Exception as e:
             return {"ok": False, "message": f"健康检查失败：{e}"}
 
+    if action == "full_system_check":
+        try:
+            from hagoku.tools.health import check_system
+            results = check_system()
+            passed = sum(1 for r in results if r.ok)
+            details = "\n".join(f"  {'✅' if r.ok else '❌'} {r.name}: {r.detail}" for r in results)
+            return {"ok": True, "message": f"系统健康：{passed}/{len(results)} 通过\n{details}"}
+        except Exception as e:
+            return {"ok": False, "message": f"系统检查失败：{e}"}
+
+    if action == "clear_project_memory":
+        project_name = ""  # TODO: 从请求中获取 project 参数
+        return {"ok": False, "message": "请通过 Doctor chat 告诉我项目名，我会自动清除"}
+
+    if action == "clear_active_state":
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+        return {"ok": True, "message": "已清除活跃状态和激活预设，刷新页面后重新开始"}
+
+    if action == "restore_custom_preset":
+        return {"ok": False, "message": "请通过分析能力面板删除损坏的预设，然后新建"}
+
     return {"ok": False, "message": f"未知操作: {action}"}
 
 

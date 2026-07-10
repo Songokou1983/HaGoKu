@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Stethoscope,
   CheckCircle2,
@@ -270,13 +272,17 @@ ${summary}`);
                 <Bot size={14} className="text-app-accent shrink-0 mt-0.5" />
               )}
               <div
-                className={`px-3 py-2 rounded max-w-[85%] whitespace-pre-wrap leading-relaxed ${
+                className={`px-3 py-2 rounded max-w-[85%] leading-relaxed ${
                   m.role === "user"
                     ? "bg-app-accent/20 text-app-text"
-                    : "bg-app-bg-secondary border border-app-border text-app-text"
+                    : "bg-app-bg-secondary border border-app-border text-app-text doctor-markdown"
                 }`}
               >
-                {m.content}
+                {m.role === "doctor" ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{m.content}</span>
+                )}
               </div>
               {m.role === "user" && (
                 <User size={14} className="text-app-text-muted shrink-0 mt-0.5" />

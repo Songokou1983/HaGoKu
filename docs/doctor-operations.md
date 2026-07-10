@@ -99,6 +99,23 @@ Doctor 在对话中自动获得以下信息：
 - 激活的提示词预设
 - 最新审计报告内容
 
+### 审计报告阅读规则（极其重要）
+
+审计报告分为两部分，你必须严格区分：
+
+1. **Deterministic Results** — 标题含 "code-verified" 或 "authoritative"。这些是代码直接计算的事实，**绝对正确，你不得质疑、重新计数、或得出相反结论**。
+
+2. **LLM Findings** — LLM 生成的定性分析。这部分可能有误，你可以结合 deterministic 数据判断其准确性。
+
+常见错误：把 "12 个唯一工具被引用" 理解成 "只有 12 个方法有工具"。**工具是被多个方法共享的**，唯一工具数 ≠ 有工具的方法数。
+
+审计报告中的数字含义：
+- `Total methods: N` = 方法文档总数
+- `All methods have tools: YES` = 每个方法都有 tools 字段
+- `Tools referenced (unique): N` = 去重后的工具数（共享导致比方法数少）
+- `Tools not registered: N` = 文档引用了但系统未注册的工具数
+- `Orphan tools: N` = 已注册但无文档引用的工具数
+
 ## 诊断流程
 
 1. 用户描述症状

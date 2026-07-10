@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PanelHeader } from "../components/PanelHeader";
 import { ActionButton } from "../components/ActionButton";
 import { StatusBanner } from "../components/StatusBanner";
@@ -6,10 +6,16 @@ import {
   Play,
   GitCompare,
   Save,
+  Plus,
+  Trash2,
+  Pencil,
   ChevronDown,
   ChevronRight,
   Sparkles,
   CheckCircle2,
+  FlaskConical,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -32,13 +38,8 @@ interface CompareResult {
   ok: boolean;
   baseline: LabResult;
   current: LabResult;
-  diff: {
-    changed_paths: string[];
-    similarity: number;
-  };
+  diff: { changed_paths: string[]; similarity: number };
 }
-
-// ── Icons ──────────────────────────────────────────────────────────
 
 const ICON_MAP: Record<string, string> = {
   "bar-chart": "📊",
@@ -50,137 +51,242 @@ const ICON_MAP: Record<string, string> = {
 
 export default function PromptLabPanel() {
   const [presets, setPresets] = useState<PresetInfo[]>([]);
-  const [activeId, setActiveId] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Editor (collapsed by default)
-  const [showEditor, setShowEditor] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [userMessage, setUserMessage] = useState("");
-
-  // Results
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<LabResult | null>(null);
-  const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState("");
 
-  // ── Load presets ──────────────────────────────────────────────
+  // ── 每个预设的展开状态 ──
+  const [expandedPresets, setExpandedPresets] = useState<Set<string>>(new Set());
 
-  const loadPresets = async () => {
+  // ── 新建/编辑弹窗 ──
+  const [editingPreset, setEditingPreset] = useState<PresetInfo | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editIcon, setEditIcon] = useState("bar-chart");
+  const [editDesc, setEditDesc] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+
+  // ── 模拟实验室 ──
+  const [showLab, setShowLab] = useState(false);
+  const [labBase, setLabBase] = useState("general"); // 基于哪个预设
+  const [labPrompt, setLabPrompt] = useState("");
+  const [labMessage, setLabMessage] = useState("");
+  const [labRunning, setLabRunning] = useState(false);
+  const [labResult, setLabResult] = useState<LabResult | null>(null);
+  const [labCompare, setLabCompare] = useState<CompareResult | null>(null);
+
+  // ── Load ──────────────────────────────────────────────────────
+
+  const loadPresets = useCallback(async () => {
     try {
       const r = await fetch("/api/prompt-lab/presets");
       const d = await r.json();
       setPresets(d.presets || []);
-      const active = (d.presets || []).find((p: PresetInfo) => p.active);
-      setActiveId(active?.id || "");
     } catch {}
-  };
-
-  useEffect(() => {
-    loadPresets();
   }, []);
+
+  useEffect(() => { loadPresets(); }, [loadPresets]);
+
+  // ── 激活 ──────────────────────────────────────────────────────
 
   const handleActivate = async (id: string) => {
     setLoading(true);
     try {
-      // If clicking the already-active preset, deactivate (back to default)
-      const targetId = id === activeId ? "" : id;
       await fetch("/api/prompt-lab/presets/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: targetId }),
+        body: JSON.stringify({ id }),
       });
       await loadPresets();
-    } catch (e: any) {
-      setError(e.message);
-    }
+    } catch (e: any) { setError(e.message); }
     setLoading(false);
   };
 
-  // ── Editor actions ────────────────────────────────────────────
-
-  const handleRun = async () => {
-    setRunning(true);
-    setError("");
-    setCompareResult(null);
+  const handleDeactivate = async () => {
+    setLoading(true);
     try {
-      const resp = await fetch("/api/prompt-lab/run", {
+      await fetch("/api/prompt-lab/presets/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt_md: prompt,
-          messages: userMessage
-            ? [{ role: "user", content: userMessage }]
-            : [],
-        }),
+        body: JSON.stringify({ id: "" }),
       });
-      const data = await resp.json();
-      if (data.ok) setResult(data);
-      else setError(data.detail || "运行失败");
-    } catch (e: any) {
-      setError(e.message);
-    }
-    setRunning(false);
+      await loadPresets();
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
   };
 
-  const handleCompare = async () => {
-    setRunning(true);
-    setError("");
-    setResult(null);
-    try {
-      const baseResp = await fetch("/api/prompt-lab/current-prompt");
-      const baseData = await baseResp.json();
-      const resp = await fetch("/api/prompt-lab/compare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseline_prompt: baseData.content || "",
-          current_prompt: prompt,
-          messages: userMessage
-            ? [{ role: "user", content: userMessage }]
-            : [],
-        }),
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        setResult(data.current);
-        setCompareResult(data);
-      } else setError(data.detail || "对比失败");
-    } catch (e: any) {
-      setError(e.message);
-    }
-    setRunning(false);
+  // ── 展开/折叠源码 ──
+
+  const toggleExpand = (id: string) => {
+    setExpandedPresets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const handleApply = async () => {
-    if (!confirm("应用后将覆盖当前预设的 prompt，确认？")) return;
-    setRunning(true);
-    setError("");
-    try {
-      const resp = await fetch("/api/prompt-lab/apply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt_md: prompt }),
-      });
-      const data = await resp.json();
-      if (!data.ok) setError(data.detail || "应用失败");
-    } catch (e: any) {
-      setError(e.message);
-    }
-    setRunning(false);
-  };
+  // ── 加载预设内容到编辑器 ──
 
   const loadPresetContent = async (id: string) => {
     try {
       const r = await fetch(`/api/prompt-lab/presets/${id}/content`);
       const d = await r.json();
-      if (d.ok) setPrompt(d.content);
+      if (d.ok) return d.content;
     } catch {}
+    return "";
   };
 
-  const handleEditPreset = async (id: string) => {
-    await loadPresetContent(id);
-    setShowEditor(true);
+  // ── 编辑预设（打开弹窗） ──
+
+  const handleStartEdit = async (preset: PresetInfo) => {
+    const content = await loadPresetContent(preset.id);
+    setEditingPreset(preset);
+    setEditName(preset.name);
+    setEditIcon(preset.icon);
+    setEditDesc(preset.description);
+    setEditPrompt(content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      if (editingPreset && editingPreset.id && editingPreset.id !== "general") {
+        // 编辑已有预设 → PUT 更新
+        const resp = await fetch(`/api/prompt-lab/presets/${editingPreset.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: editName.trim(), icon: editIcon, description: editDesc.trim(), prompt: editPrompt }),
+        });
+        const data = await resp.json();
+        if (!data.ok) { setError(data.detail || "保存失败"); return; }
+      } else {
+        // 编辑默认预设或新建 → 创建新预设
+        const resp = await fetch("/api/prompt-lab/presets/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: editName.trim(), icon: editIcon, description: editDesc.trim(), prompt: editPrompt }),
+        });
+        const data = await resp.json();
+        if (!data.ok) { setError(data.detail || "创建失败"); return; }
+      }
+      await loadPresets();
+      setEditingPreset(null);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  };
+
+  // ── 删除预设 ──
+
+  const handleDelete = async (preset: PresetInfo) => {
+    if (preset.id === "general") return;
+    if (!confirm(`确定删除「${preset.name}」？此操作不可撤销。`)) return;
+    setLoading(true);
+    try {
+      // 通过 API 删除：先反激活（如果是激活状态），然后删除文件
+      if (preset.active) await handleDeactivate();
+      const resp = await fetch(`/api/prompt-lab/presets/${preset.id}`, {
+        method: "DELETE",
+      });
+      if (!resp.ok) { setError("删除失败"); return; }
+      await loadPresets();
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  };
+
+  // ── 新建预设 ──
+
+  const handleNewPreset = () => {
+    setEditingPreset({ id: "", name: "", icon: "bar-chart", description: "", active: false });
+    setEditName("");
+    setEditIcon("bar-chart");
+    setEditDesc("");
+    setEditPrompt("你是数据分析师。数据分析按五阶段推进：\n\n理解字段：\n评估清洗：\n统计分析：\n撰写报告：\n持续交互：\n\n每次回复都要让用户知道：你做了什么、结果是什么、接下来可以做什么。\n不要只描述过程——要展示结果。不确定就问用户。");
+  };
+
+  const handleCreatePreset = async () => {
+    if (!editName.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/prompt-lab/presets/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          icon: editIcon,
+          description: editDesc.trim(),
+          prompt: editPrompt,
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) { setError(data.detail || "创建失败"); return; }
+      await loadPresets();
+      setEditingPreset(null);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  };
+
+  // ── 模拟实验室 ──
+
+  const handleOpenLab = async (baseId: string) => {
+    const content = await loadPresetContent(baseId);
+    setLabBase(baseId);
+    setLabPrompt(content);
+    setLabMessage("");
+    setLabResult(null);
+    setLabCompare(null);
+    setShowLab(true);
+  };
+
+  const handleLabRun = async () => {
+    setLabRunning(true);
+    setError("");
+    setLabCompare(null);
+    try {
+      const resp = await fetch("/api/prompt-lab/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt_md: labPrompt,
+          messages: labMessage ? [{ role: "user", content: labMessage }] : [],
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) setLabResult(data);
+      else setError(data.detail || "运行失败");
+    } catch (e: any) { setError(e.message); }
+    setLabRunning(false);
+  };
+
+  const handleLabCompare = async () => {
+    setLabRunning(true);
+    setError("");
+    setLabResult(null);
+    try {
+      const baseContent = await loadPresetContent(labBase);
+      const resp = await fetch("/api/prompt-lab/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseline_prompt: baseContent,
+          current_prompt: labPrompt,
+          messages: labMessage ? [{ role: "user", content: labMessage }] : [],
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) { setLabResult(data.current); setLabCompare(data); }
+      else setError(data.detail || "对比失败");
+    } catch (e: any) { setError(e.message); }
+    setLabRunning(false);
+  };
+
+  const handleLabSaveAsNew = () => {
+    setEditingPreset({ id: "", name: "", icon: "bar-chart", description: "", active: false });
+    setEditName("");
+    setEditIcon("bar-chart");
+    setEditDesc("");
+    setEditPrompt(labPrompt);
   };
 
   return (
@@ -191,45 +297,42 @@ export default function PromptLabPanel() {
         </span>
       </PanelHeader>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5">
-        {/* ── 预设卡片 ──────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {/* ── 预设列表 ──────────────────────────────────────────── */}
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <Sparkles size={14} className="text-app-accent" />
             <span className="text-ui-sm font-medium text-app-text">预设场景</span>
-            {activeId && (
-              <span className="text-ui-xs text-app-text-muted ml-1">
-                · 当前: {presets.find((p) => p.id === activeId)?.name}
+            {presets.find((p) => p.active) && (
+              <span className="text-ui-xs text-app-accent ml-1">
+                · 当前: {presets.find((p) => p.active)?.name}
               </span>
             )}
           </div>
-          <p className="text-ui-xs text-app-text-muted mb-3 leading-snug">
-            选择一个预设后，后续所有分析自动按该方向执行。选「通用」恢复默认。
-          </p>
-
-          {presets.length === 0 && (
-            <div className="text-ui-xs text-app-text-muted py-2">加载中…</div>
-          )}
 
           <div className="space-y-2">
             {presets.map((p) => (
               <div
                 key={p.id}
-                className={`border rounded-lg p-3 transition-colors ${
+                className={`border rounded-lg overflow-hidden transition-colors ${
                   p.active
                     ? "border-app-accent bg-app-accent/5"
-                    : "border-app-border bg-app-bg-secondary hover:border-app-accent/50"
+                    : "border-app-border bg-app-bg-secondary"
                 }`}
               >
-                <div className="flex items-start gap-3">
+                {/* 卡片头部 */}
+                <div className="flex items-start gap-3 p-3">
                   <span className="text-xl shrink-0 mt-0.5">
                     {ICON_MAP[p.icon] || "📋"}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-ui-sm font-medium text-app-text">
                         {p.name}
                       </span>
+                      {p.id === "general" && (
+                        <span className="text-ui-xs text-app-text-muted">默认</span>
+                      )}
                       {p.active && (
                         <CheckCircle2 size={12} className="text-app-accent shrink-0" />
                       )}
@@ -237,122 +340,286 @@ export default function PromptLabPanel() {
                     <p className="text-ui-xs text-app-text-muted leading-snug mt-0.5">
                       {p.description}
                     </p>
+                    {/* 源码展开 */}
+                    {expandedPresets.has(p.id) && (
+                      <PresetSource id={p.id} />
+                    )}
                   </div>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-1 px-3 pb-2.5 flex-wrap">
+                  {p.active ? (
+                    <button
+                      type="button" disabled={loading}
+                      onClick={handleDeactivate}
+                      className="px-2.5 py-1 text-ui-xs rounded bg-app-accent/10 text-app-accent hover:bg-app-accent/20 transition-colors cursor-pointer"
+                    >
+                      恢复默认
+                    </button>
+                  ) : (
+                    <button
+                      type="button" disabled={loading}
+                      onClick={() => handleActivate(p.id)}
+                      className="px-2.5 py-1 text-ui-xs rounded bg-app-accent text-white hover:bg-app-accent-hover transition-colors cursor-pointer"
+                    >
+                      使用
+                    </button>
+                  )}
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => handleActivate(p.id)}
-                    className={`shrink-0 px-3 py-1 text-ui-xs rounded transition-colors cursor-pointer ${
-                      p.active
-                        ? "bg-app-accent/10 text-app-accent hover:bg-app-accent/20"
-                        : "bg-app-accent text-white hover:bg-app-accent-hover"
-                    }`}
+                    onClick={() => toggleExpand(p.id)}
+                    className="px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer flex items-center gap-0.5"
                   >
-                    {p.active ? "恢复默认" : "使用"}
+                    {expandedPresets.has(p.id) ? <EyeOff size={10} /> : <Eye size={10} />}
+                    源码
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(p)}
+                    className="px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer flex items-center gap-0.5"
+                  >
+                    <Pencil size={10} />
+                    编辑
+                  </button>
+                  {p.id !== "general" && (
+                    <button
+                      type="button" disabled={loading}
+                      onClick={() => handleDelete(p)}
+                      className="px-2 py-1 text-ui-xs text-app-text-muted hover:text-red-500 cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Trash2 size={10} />
+                      删除
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenLab(p.id)}
+                    className="px-2 py-1 text-ui-xs text-app-accent hover:underline cursor-pointer flex items-center gap-0.5 ml-auto"
+                  >
+                    <FlaskConical size={10} />
+                    模拟
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleEditPreset(p.id)}
-                  className="mt-2 text-ui-xs text-app-text-muted hover:text-app-accent cursor-pointer"
-                >
-                  查看 / 编辑源码 →
-                </button>
               </div>
             ))}
+
+            {/* 新建按钮 */}
+            <button
+              type="button"
+              onClick={handleNewPreset}
+              className="w-full border border-dashed border-app-border rounded-lg p-3 flex items-center justify-center gap-2 text-ui-sm text-app-text-muted hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
+            >
+              <Plus size={14} />
+              新建场景
+            </button>
           </div>
         </div>
 
-        {/* ── 编辑器（折叠） ────────────────────────────────────── */}
+        {/* ── 模拟实验室 ────────────────────────────────────────── */}
         <div>
           <button
-            onClick={() => setShowEditor((v) => !v)}
-            className="flex items-center gap-1.5 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer mb-2"
+            onClick={() => setShowLab((v) => !v)}
+            className="flex items-center gap-1.5 text-ui-sm text-app-text-muted hover:text-app-text cursor-pointer"
           >
-            {showEditor ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            高级：编辑 Prompt 源码
+            <FlaskConical size={14} className="text-app-accent" />
+            提示词实验室
+            {showLab ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
 
-          {showEditor && (
-            <div className="space-y-3">
+          {showLab && (
+            <div className="mt-2 space-y-3 p-3 border border-app-border rounded-lg bg-app-bg-secondary">
+              <div className="text-ui-xs text-app-text-muted">
+                基于「{presets.find((p) => p.id === labBase)?.name || labBase}」进行模拟调试
+              </div>
+
               <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={12}
-                className="w-full bg-app-bg-secondary border border-app-border rounded p-3 text-ui-xs font-mono text-app-text resize-y focus:outline-none focus:border-app-accent"
-                placeholder="在此编辑 prompt…"
-              />
-              <input
-                type="text"
-                value={userMessage}
-                onChange={(e) => setUserMessage(e.target.value)}
-                placeholder="测试消息（可选）"
-                className="w-full bg-app-bg-secondary border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+                value={labPrompt}
+                onChange={(e) => setLabPrompt(e.target.value)}
+                rows={10}
+                className="w-full bg-app-bg border border-app-border rounded p-3 text-ui-xs font-mono text-app-text resize-y focus:outline-none focus:border-app-accent"
               />
 
-              <div className="flex items-center gap-2">
-                <ActionButton
-                  variant="primary"
-                  icon={Play}
-                  loading={running}
-                  onClick={handleRun}
-                >
+              <input
+                type="text"
+                value={labMessage}
+                onChange={(e) => setLabMessage(e.target.value)}
+                placeholder="测试消息（模拟用户输入，可选）"
+                className="w-full bg-app-bg border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+              />
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <ActionButton variant="primary" icon={Play} loading={labRunning} onClick={handleLabRun}>
                   试运行
                 </ActionButton>
-                <ActionButton
-                  variant="secondary"
-                  icon={GitCompare}
-                  disabled={running || !prompt}
-                  onClick={handleCompare}
-                >
+                <ActionButton variant="secondary" icon={GitCompare} disabled={labRunning} onClick={handleLabCompare}>
                   对比原版
                 </ActionButton>
-                <ActionButton
-                  variant="secondary"
-                  icon={Save}
-                  disabled={running || !prompt}
-                  onClick={handleApply}
-                >
-                  应用
+                <ActionButton variant="secondary" icon={Save} disabled={labRunning} onClick={handleLabSaveAsNew}>
+                  保存为新场景
                 </ActionButton>
               </div>
 
               {error && <StatusBanner type="error" message={error} />}
 
-              {result && (
-                <div className="bg-app-bg-secondary border border-app-border rounded p-3 max-h-64 overflow-y-auto">
-                  <div className="text-ui-xs font-medium text-app-text-muted mb-1">
-                    试运行结果
-                  </div>
-                  {result.tool_calls?.length > 0 && (
+              {labResult && (
+                <div className="bg-app-bg border border-app-border rounded p-3 max-h-48 overflow-y-auto">
+                  <div className="text-ui-xs font-medium text-app-text-muted mb-1">运行结果</div>
+                  {labResult.tool_calls?.length > 0 && (
                     <div className="text-ui-xs text-app-accent mb-1">
-                      工具调用: {result.tool_calls.map((t) => t.name).join(", ")}
+                      工具: {labResult.tool_calls.map((t) => t.name).join(", ")}
                     </div>
                   )}
                   <pre className="text-ui-xs text-app-text whitespace-pre-wrap leading-snug">
-                    {(result.content || "").slice(0, 1500)}
+                    {(labResult.content || "").slice(0, 1000)}
                   </pre>
                 </div>
               )}
 
-              {compareResult && (
-                <div className="bg-app-bg-secondary border border-app-border rounded p-3">
-                  <div className="text-ui-xs font-medium text-app-text-muted mb-1">
-                    对比结果
-                  </div>
+              {labCompare && (
+                <div className="bg-app-bg border border-app-border rounded p-3">
+                  <div className="text-ui-xs font-medium text-app-text-muted mb-1">对比结果</div>
                   <div className="text-ui-xs text-app-text">
-                    工具调用变化:{" "}
-                    {compareResult.diff.changed_paths.length > 0
-                      ? compareResult.diff.changed_paths.join(", ")
-                      : "无变化"}
-                  </div>
-                  <div className="text-ui-xs text-app-text-muted">
-                    相似度: {Math.round(compareResult.diff.similarity * 100)}%
+                    工具变化: {labCompare.diff.changed_paths.length > 0
+                      ? labCompare.diff.changed_paths.join(", ") : "无变化"}
+                    {" · "}相似度: {Math.round(labCompare.diff.similarity * 100)}%
                   </div>
                 </div>
               )}
             </div>
           )}
+        </div>
+
+        {/* ── 编辑弹窗 ── */}
+        {editingPreset !== null && (
+          <PresetEditor
+            preset={editingPreset}
+            name={editName} setName={setEditName}
+            icon={editIcon} setIcon={setEditIcon}
+            desc={editDesc} setDesc={setEditDesc}
+            prompt={editPrompt} setPrompt={setEditPrompt}
+            loading={loading}
+            onSave={editingPreset.id ? handleSaveEdit : handleCreatePreset}
+            onCancel={() => { setEditingPreset(null); setError(""); }}
+            error={error}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 源码展开组件 ────────────────────────────────────────────────
+
+function PresetSource({ id }: { id: string }) {
+  const [content, setContent] = useState("");
+  useEffect(() => {
+    fetch(`/api/prompt-lab/presets/${id}/content`)
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setContent(d.content); })
+      .catch(() => {});
+  }, [id]);
+
+  if (!content) return <div className="text-ui-xs text-app-text-muted mt-1">加载中…</div>;
+
+  return (
+    <pre className="mt-2 p-2 bg-app-bg border border-app-border rounded text-ui-xs text-app-text-muted whitespace-pre-wrap max-h-32 overflow-y-auto leading-snug">
+      {content.slice(0, 500)}{content.length > 500 ? "…" : ""}
+    </pre>
+  );
+}
+
+// ── 编辑弹窗 ────────────────────────────────────────────────────
+
+function PresetEditor({
+  preset, name, setName, icon, setIcon, desc, setDesc, prompt, setPrompt,
+  loading, onSave, onCancel, error,
+}: {
+  preset: PresetInfo;
+  name: string; setName: (v: string) => void;
+  icon: string; setIcon: (v: string) => void;
+  desc: string; setDesc: (v: string) => void;
+  prompt: string; setPrompt: (v: string) => void;
+  loading: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+  error: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+      <div
+        className="bg-app-bg-secondary border border-app-border rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Pencil size={14} className="text-app-accent" />
+            <span className="text-ui-sm font-medium text-app-text">
+              {preset.id ? `编辑「${preset.name}」` : "新建场景"}
+            </span>
+          </div>
+
+          <div>
+            <label className="text-ui-xs text-app-text-muted block mb-1">名称</label>
+            <input
+              type="text" value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="场景名称"
+              className="w-full bg-app-bg border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+            />
+          </div>
+
+          <div>
+            <label className="text-ui-xs text-app-text-muted block mb-1">图标</label>
+            <div className="flex gap-2">
+              {Object.entries(ICON_MAP).map(([key, emoji]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setIcon(key)}
+                  className={`w-10 h-10 rounded border text-lg flex items-center justify-center cursor-pointer transition-colors ${
+                    icon === key ? "border-app-accent bg-app-accent/10" : "border-app-border hover:border-app-accent"
+                  }`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-ui-xs text-app-text-muted block mb-1">描述</label>
+            <input
+              type="text" value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              placeholder="简短描述这个场景适合什么分析"
+              className="w-full bg-app-bg border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+            />
+          </div>
+
+          <div>
+            <label className="text-ui-xs text-app-text-muted block mb-1">提示词</label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={14}
+              className="w-full bg-app-bg border border-app-border rounded p-3 text-ui-xs font-mono text-app-text resize-y focus:outline-none focus:border-app-accent"
+            />
+          </div>
+
+          {error && <StatusBanner type="error" message={error} />}
+
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button" onClick={onCancel}
+              className="px-3 py-1.5 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
+            >
+              取消
+            </button>
+            <ActionButton variant="primary" icon={Save} loading={loading} onClick={onSave} disabled={!name.trim()}>
+              {preset.id ? "保存" : "创建"}
+            </ActionButton>
+          </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,8 @@ category: business
 tags: [LTV, CAC, 用户价值, 获客成本, 商业]
 summary: 用户生命周期价值 (LTV) 和客户获取成本 (CAC) 的计算与健康度判断
 tools:
+  - get_column_stats
+  - run_statistical_test
 ---
 
 # LTV 与 CAC 计算指南

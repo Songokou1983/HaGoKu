@@ -258,7 +258,8 @@ def _doctor_do_fix(action: str) -> dict:
     if action == "check_llm_connection":
         try:
             from hagoku.tools.health import check_llm_health
-            results = check_llm_health()
+            from hagoku.config import HaGoKuConfig
+            results = check_llm_health(HaGoKuConfig.load())
             passed = sum(1 for r in results if r.ok)
             details = " | ".join(f"{"✅" if r.ok else "❌"} {r.name}" for r in results)
             return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(results)} 通过 — {details}"}

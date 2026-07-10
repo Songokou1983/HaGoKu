@@ -234,6 +234,40 @@ async def doctor_status() -> dict[str, Any]:
     }
 
 
+def _doctor_do_fix(action: str) -> dict:
+    """执行 Doctor 修复操作。代码只做机械执行，决策由 LLM 完成。"""
+    from pathlib import Path as _P
+
+    if action == "reset_active_preset":
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+            return {"ok": True, "message": "已清除激活预设，下次分析使用默认提示词"}
+        return {"ok": True, "message": "当前已是默认提示词，无需操作"}
+
+    if action == "restore_default_prompt":
+        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
+        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
+        content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
+        prompt_path.write_text(content, encoding="utf-8")
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+        return {"ok": True, "message": "prompt.md 已从灾备恢复，同时清除了激活预设"}
+
+    if action == "check_llm_connection":
+        try:
+            from hagoku.tools.health import check_llm_health
+            results = check_llm_health()
+            passed = sum(1 for r in results if r.ok)
+            details = " | ".join(f"{"✅" if r.ok else "❌"} {r.name}" for r in results)
+            return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(results)} 通过 — {details}"}
+        except Exception as e:
+            return {"ok": False, "message": f"健康检查失败：{e}"}
+
+    return {"ok": False, "message": f"未知操作: {action}"}
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     """Doctor 对话 — 用 meta LLM 回复用户维护问题。
@@ -378,6 +412,17 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
             max_tokens=2048,
         )
         reply = resp.choices[0].message.content or ""
+
+        # ── 检测 LLM 回复中的 fix 指令并自动执行 ──
+        import re as _re
+        fix_match = _re.search(r"\[fix:(\w+)\]", reply)
+        if fix_match:
+            action = fix_match.group(1)
+            result = _doctor_do_fix(action)
+            reply = _re.sub(r"\[fix:\w+\]", "", reply).strip()
+            icon = "✅" if result["ok"] else "❌"
+            reply += f"\n\n---\n{icon} 已执行 {action}：{result['message']}"
+
         return {"reply": reply}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Meta LLM 调用失败: {e}")

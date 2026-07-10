@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hagoku.llm.client import create_meta_client
+from hagoku.llm.client import create_raw_client
 from hagoku.channel import build_messages
 from hagoku.memory.lessons import LESSON_RECALL_WARNING, LessonStore
 
@@ -97,9 +97,9 @@ class LessonAuditor:
             return None
         from hagoku.config import HaGoKuConfig
         cfg = HaGoKuConfig.load()
-        client = create_meta_client(cfg)
+        client = create_raw_client(cfg.llm)
         if client is None:
-            raise RuntimeError("LessonAuditor: Meta LLM 不可达，请配置 meta_llm")
+            raise RuntimeError("LessonAuditor: LLM 不可达")
         payload = {
             "recent": recent[:20],
             "total_count": len(all_lessons),

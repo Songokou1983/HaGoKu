@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hagoku.llm.client import create_meta_client
+from hagoku.llm.client import create_raw_client
 from hagoku.channel import build_messages
 
 logger = logging.getLogger("hagoku.method_curator")
@@ -223,9 +223,9 @@ class MethodCurator:
             return None
         from hagoku.config import HaGoKuConfig
         cfg = HaGoKuConfig.load()
-        client = create_meta_client(cfg)
+        client = create_raw_client(cfg.llm)
         if client is None:
-            raise RuntimeError("MethodCurator: Meta LLM 不可达，请配置 meta_llm")
+            raise RuntimeError("MethodCurator: LLM 不可达")
 
         payload = {
             "methods": [

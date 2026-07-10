@@ -238,19 +238,81 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
                 except Exception:
                     pass
 
+    # 收集日志上下文
+    log_ctx = ""
+    try:
+        log_path = cfg.work_dir / "hagoku.log"
+        if log_path.exists():
+            lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+            recent = lines[-30:]  # 最近 30 行
+            errors = [l for l in recent if "ERROR" in l or "error" in l.lower() or "Traceback" in l]
+            if errors:
+                log_ctx = f"最近日志中的错误（{len(errors)} 条）:\n" + "\n".join(f"  {e[:200]}" for e in errors[-5:])
+            else:
+                log_ctx = f"最近 {len(recent)} 行日志无错误"
+    except Exception:
+        log_ctx = "无法读取日志"
+
+    # 收集预设信息
+    preset_ctx = ""
+    try:
+        active_file = Path.home() / ".hagoku" / "active_preset"
+        if active_file.exists():
+            pid = active_file.read_text(encoding="utf-8").strip()
+            presets_json = Path(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
+            if presets_json.exists():
+                import json as _j
+                presets = _j.loads(presets_json.read_text(encoding="utf-8"))
+                p = next((x for x in presets if x["id"] == pid), None)
+                preset_ctx = f"激活预设: {p['name'] if p else pid}"
+            else:
+                preset_ctx = f"激活预设: {pid}"
+        else:
+            preset_ctx = "使用默认提示词 prompt.md"
+    except Exception:
+        preset_ctx = "无法读取预设信息"
+
     # 构建 system_extra
-    system_extra = f"""你是 HaGoKu Doctor，负责系统维护。你可以帮助用户：
+    system_extra = f"""你是 HaGoKu Doctor，负责系统诊断和维护。你可以：
 
-- 诊断系统健康问题（LLM 连接、依赖库）
-- 解释审计报告（方法库、工具箱）
-- 建议修复方案
-- 回答关于 HaGoKu 架构的问题
+- 诊断系统健康问题（LLM 连接、依赖库、配置）
+- 分析日志中的错误
+- 解读审计报告（方法库、工具箱）
+- 建议修复方案——告诉用户具体操作步骤
+- 回答 HaGoKu 架构和 prompt 预设的问题
 
-你只能建议和审阅，不能修改代码或配置。告诉用户应该做什么，让用户自己操作。
+你有以下权限和能力：
+- 读取系统健康状态
+- 读取最近日志
+- 查看审计报告
+- 了解当前配置和预设
 
-## 当前系统上下文
+常见诊断场景和修复建议：
+
+| 症状 | 可能原因 | 操作 |
+|------|---------|------|
+| LLM 连接失败 | base_url/api_key 错误 | 检查设置页 → Pipeline LLM |
+| 分析卡住/无响应 | LLM token 不足或超时 | 检查模型 token 上限 |
+| 图表不显示 | Plotly CDN 加载失败 | 检查网络能否访问 cdn.plot.ly |
+| 报告中文乱码 | 字体缺失 | 服务器安装中文字体 |
+| 预设切换无效 | active_preset 文件损坏 | 删除 ~/.hagoku/active_preset 恢复默认 |
+| 知识库不显示 | methods/ 目录为空 | 检查 hagoku/memory/methods/ |
+| API 502 | 服务未启动或端口冲突 | 重启 hagoku-api |
+
+## 当前系统状态
 
 {health_ctx}
+
+## 配置信息
+Pipeline LLM: {cfg.llm.model} @ {cfg.llm.base_url}
+Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cfg.llm.base_url}
+{preset_ctx}
+
+## 日志
+
+{log_ctx}
+
+## 审计
 
 {audit_ctx if audit_ctx else "暂无审计报告。"}
 """

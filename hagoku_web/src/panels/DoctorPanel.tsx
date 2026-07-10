@@ -83,6 +83,10 @@ export default function DoctorPanel() {
     const msg = chatInput.trim();
     if (!msg || chatLoading) return;
     setChatInput("");
+    await sendChatMessage(msg);
+  };
+
+  const sendChatMessage = async (msg: string) => {
     const userMsg: ChatMsg = { role: "user", content: msg };
     const updated = [...chatMessages, userMsg];
     setChatMessages(updated);
@@ -170,7 +174,10 @@ export default function DoctorPanel() {
         throw new Error(typeof d.detail === "string" ? d.detail : `审计失败 (${r.status})`);
       }
       setAuditMessage(`✅ 审计完成: ${d.report_path?.split("/").pop() || ""}`);
-      loadAudits(); // 刷新列表
+      loadAudits();
+      // 自动让 Doctor 分析审计结果
+      const tabLabel = tab === "methods" ? "方法库" : "工具箱";
+      await sendChatMessage(`我刚完成了${tabLabel}审计，报告在 ${d.report_path?.split("/").pop() || "审计报告"}。请帮我分析结果，指出问题和改进建议。`);
     } catch (e: unknown) {
       setAuditMessage(`❌ ${e instanceof Error ? e.message : "审计失败"}`);
     } finally {

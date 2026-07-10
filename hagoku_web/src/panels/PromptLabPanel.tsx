@@ -356,7 +356,7 @@ export default function PromptLabPanel() {
 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-1 px-3 pb-2.5 flex-wrap">
-                  {p.active ? (
+                  {p.active && p.id !== "general" ? (
                     <button
                       type="button" disabled={loading}
                       onClick={handleDeactivate}
@@ -364,7 +364,7 @@ export default function PromptLabPanel() {
                     >
                       恢复默认
                     </button>
-                  ) : (
+                  ) : !p.active ? (
                     <button
                       type="button" disabled={loading}
                       onClick={() => handleActivate(p.id)}
@@ -372,7 +372,7 @@ export default function PromptLabPanel() {
                     >
                       使用
                     </button>
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => toggleExpand(p.id)}

@@ -361,6 +361,69 @@ def _doctor_do_fix(action: str, _fix_params: str = "") -> dict:
             return {"ok": True, "message": f"已修复 {kb_path} 的 tools 字段"}
         return {"ok": False, "message": f"不支持的字段: {field}"}
 
+    # ── 工具管理操作 ──
+    if action == "register_tool":
+        import json as _j
+        try:
+            params = _j.loads(_fix_params) if _fix_params else {}
+        except Exception:
+            return {"ok": False, "message": "参数格式错误"}
+        tool_name = params.get("name", "").strip()
+        tool_file = params.get("file", "").strip()  # 如 "stat_tools.py"
+        if not tool_name or not tool_file:
+            return {"ok": False, "message": "name 和 file 不能为空"}
+        tools_dir = _P(__file__).resolve().parent.parent / "tools"
+        target = (tools_dir / tool_file).resolve()
+        if not str(target).startswith(str(tools_dir.resolve())):
+            return {"ok": False, "message": "非法路径"}
+        if not target.exists():
+            return {"ok": False, "message": f"文件不存在: {tool_file}"}
+        # 构建注册代码
+        handler = params.get("handler", f"_handle_{tool_name}")
+        desc = params.get("description") or tool_name
+        params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
+        phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
+        reg_block = f'''
+
+# Doctor: registered {tool_name}
+agent_tools.register(Tool(
+    name="{tool_name}",
+    description="{desc}",
+    parameters={params_schema},
+    handler={handler},
+    phase_tag={phase},
+))
+'''
+        with open(target, 'a') as f:
+            f.write(reg_block)
+        return {"ok": True, "message": f"已注册工具 {tool_name} 到 {tool_file}"}
+
+    if action == "unregister_tool":
+        import json as _j
+        try:
+            params = _j.loads(_fix_params) if _fix_params else {}
+        except Exception:
+            return {"ok": False, "message": "参数格式错误"}
+        tool_name = params.get("name", "").strip()
+        tool_file = params.get("file", "").strip()
+        if not tool_name or not tool_file:
+            return {"ok": False, "message": "name 和 file 不能为空"}
+        tools_dir = _P(__file__).resolve().parent.parent / "tools"
+        target = (tools_dir / tool_file).resolve()
+        if not str(target).startswith(str(tools_dir.resolve())):
+            return {"ok": False, "message": "非法路径"}
+        if not target.exists():
+            return {"ok": False, "message": f"文件不存在: {tool_file}"}
+        content = target.read_text(encoding="utf-8")
+        import re
+        # 找到工具的注册块并注释掉
+        pattern = rf"(agent_tools\.register\(Tool\(\s*\n\s*name=\"{re.escape(tool_name)}\".*?\)\s*\)\s*)"
+        if re.search(pattern, content, re.DOTALL):
+            content = re.sub(pattern, r"# Doctor: disabled \1", content, flags=re.DOTALL)
+            target.write_text(content, encoding="utf-8")
+            return {"ok": True, "message": f"已禁用工具 {tool_name}"}
+        return {"ok": False, "message": f"未找到工具 {tool_name} 的注册代码"}
+
     return {"ok": False, "message": f"未知操作: {action}"}
 
 

@@ -62,6 +62,22 @@ Doctor 不仅可以审计知识库，还可以创建和修复知识库条目。
 - **效果**: 修复指定知识库条目的 frontmatter 字段（补全缺失的 tools/tags/summary）
 - **验证**: 告诉用户重新打开知识库面板确认
 
+## 工具管理操作
+
+Doctor 可以管理工具的注册状态——审计发现的缺失或多余工具，直接修复。
+
+### register_tool
+- **触发条件**: 用户说"注册工具"、"这个工具没注册"、"把 XX 工具加回去"
+- **API**: `POST /api/doctor/fix {"action": "register_tool", "name": "工具名", "handler": "处理函数名", "file": "文件名.py", "description": "工具描述", "parameters": {...}, "phase_tag": ["阶段"]}`
+- **效果**: 在指定工具文件中追加 `agent_tools.register(Tool(...))` 调用，注册完成后工具立即可用
+- **验证**: 告诉用户刷新页面，下次分析 LLM 即可调用该工具
+
+### unregister_tool
+- **触发条件**: 用户说"移除工具"、"这个工具没用"、"删掉 XX 工具"
+- **API**: `POST /api/doctor/fix {"action": "unregister_tool", "name": "工具名", "file": "文件名.py"}`
+- **效果**: 在注册代码前后加 `# Doctor: disabled` 注释标记，工具不再可用
+- **验证**: 告诉用户刷新页面，该工具不再出现在工具列表中
+
 ## 诊断信息来源
 
 Doctor 在对话中自动获得以下信息：
@@ -91,9 +107,12 @@ Doctor 在对话中自动获得以下信息：
 | `[fix:clear_project_memory]` | 清除项目记忆 |
 | `[fix:clear_active_state]` | 清除活跃状态 |
 | `[fix:restore_custom_preset]` | 恢复损坏预设 |
+| `[fix:register_tool]` | 注册工具 |
+| `[fix:unregister_tool]` | 禁用工具 |
 
 ## 边界
 
-- 不修改代码文件
+- 不修改业务逻辑代码（仅可追加/注释工具注册块和修改 markdown 文档）
 - 不删除用户上传的数据文件
+- 不修改数据库
 - 只能执行本文档列出的操作

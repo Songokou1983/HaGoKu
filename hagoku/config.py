@@ -127,7 +127,7 @@ class EmbeddingConfig(BaseModel):
     base_url: str = ""
     api_key: str = "none"
     model: str = ""  # 用户配置（铁律 9：不写死模型名）
-    dimension: int = 1536
+    dimension: int = 1536  # 可通过 HAGOKU_EMBEDDING_DIMENSION 覆盖
 
 
 class HaGoKuConfig(BaseModel):
@@ -191,6 +191,11 @@ class HaGoKuConfig(BaseModel):
             config.embedding.api_key = v
         if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
             config.embedding.model = v
+        if v := os.getenv("HAGOKU_EMBEDDING_DIMENSION") or os.getenv("HAGOKYU_EMBEDDING_DIMENSION"):
+            try:
+                config.embedding.dimension = int(v)
+            except ValueError:
+                pass
         # CO-21: stream_enabled from env
         if (v := os.getenv("HAGOKU_LLM_STREAM_ENABLED")) is not None:
             config.llm.stream_enabled = v.strip().lower() in ("true", "1", "yes")

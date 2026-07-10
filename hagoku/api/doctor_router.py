@@ -454,6 +454,57 @@ agent_tools.register(Tool(
             return {"ok": True, "message": f"已禁用工具 {tool_name}"}
         return {"ok": False, "message": f"未找到工具 {tool_name} 的注册代码"}
 
+    if action == "create_tool_stub":
+        """创建工具桩——生成最小可运行的 handler + 注册，供后续实现。"""
+        import json as _j
+        try:
+            params = _j.loads(_fix_params) if _fix_params else {}
+        except Exception:
+            return {"ok": False, "message": "参数格式错误"}
+        tool_name = params.get("name", "").strip()
+        if not tool_name:
+            return {"ok": False, "message": "name 不能为空"}
+        handler_name = params.get("handler", f"_handle_{tool_name}")
+        desc = params.get("description") or tool_name
+        params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
+        phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
+        reason = params.get("reason", "预设扩展需要")
+
+        stub = f'''
+# Doctor: created stub for "{tool_name}" — {reason}
+# TODO: 替换为真实实现
+def {handler_name}(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
+    return {{"error": "{tool_name} 桩——此处需替换为真实实现"}}
+
+agent_tools.register(Tool(
+    name="{tool_name}",
+    description="{desc}",
+    parameters={params_schema},
+    handler={handler_name},
+    phase_tag={phase},
+))
+'''
+        tools_dir = _P(__file__).resolve().parent.parent / "tools"
+        stub_file = tools_dir / "_doctor_stubs.py"
+        if not stub_file.exists():
+            stub_file.write_text(
+                "from __future__ import annotations
+" +
+                '"""Doctor 创建的工具桩。"""' + "
+" +
+                "from typing import Any
+" +
+                "import pandas as pd
+" +
+                "from hagoku.tools.registry import Tool, agent_tools
+" +
+                "
+",
+                encoding="utf-8")
+        with open(stub_file, 'a') as f:
+            f.write(stub)
+        return {"ok": True, "message": f"已创建工具桩 {tool_name} → tools/_doctor_stubs.py。刷新后 LLM 可调用但会返回 '桩' 提示，请开发者替换为真实实现。"}
+
     return {"ok": False, "message": f"未知操作: {action}"}
 
 

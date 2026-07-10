@@ -78,6 +78,12 @@ Doctor 可以管理工具的注册状态——审计发现的缺失或多余工�
 - **效果**: 在指定工具文件中追加 `agent_tools.register(Tool(...))` 调用，注册完成后工具立即可用
 - **验证**: 告诉用户刷新页面，下次分析 LLM 即可调用该工具
 
+### create_tool_stub
+- **触发条件**: 用户说"创建工具桩"、"新预设需要 XX 工具"
+- **API**: `POST /api/doctor/fix {"action": "create_tool_stub", "name": "工具名", ...}`
+- **效果**: 在 `tools/_doctor_stubs.py` 中生成最小可运行的 handler（返回"桩"提示），同时注册
+- **验证**: 刷新后 LLM 可调用该工具但返回占位结果，开发者后续替换为真实实现
+
 ### unregister_tool
 - **触发条件**: 用户说"移除工具"、"这个工具没用"、"删掉 XX 工具"
 - **API**: `POST /api/doctor/fix {"action": "unregister_tool", "name": "工具名", "file": "文件名.py"}`
@@ -116,6 +122,7 @@ Doctor 在对话中自动获得以下信息：
 | `[fix:restore_custom_preset]` | 恢复损坏预设 |
 | `[fix:register_tool]` | 注册工具 |
 | `[fix:unregister_tool]` | 禁用工具 |
+| `[fix:create_tool_stub]` | 创建工具桩 |
 
 ## 边界
 

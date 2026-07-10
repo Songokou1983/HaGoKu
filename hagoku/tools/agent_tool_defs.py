@@ -497,3 +497,9 @@ import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/
 # biz_tools 已移除 — ROI/ROAS/LTV 等公式不是工具，LLM 训练数据自带
 import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强
 import hagoku.tools.viz_tools     # noqa: F401  — CO-T22: 可视化
+
+# Doctor 创建的临时工具桩（文件不存在时跳过）
+try:
+    import hagoku.tools._doctor_stubs  # noqa: F401
+except ImportError:
+    pass

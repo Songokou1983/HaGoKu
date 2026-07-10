@@ -274,10 +274,11 @@ export default function PromptLabPanel() {
           messages: labMessage ? [{ role: "user", content: labMessage }] : [],
         }),
       });
+      if (!resp.ok) { setError("对比请求失败 (" + resp.status + ")"); return; }
       const data = await resp.json();
-      if (data.ok) { setLabResult(data.current); setLabCompare(data); }
-      else setError(data.detail || "对比失败");
-    } catch (e: any) { setError(e.message); }
+      if (data?.ok) { setLabResult(data.current); setLabCompare(data); }
+      else setError(data?.detail || "对比失败");
+    } catch (e: any) { setError(e?.message || "网络错误"); }
     setLabRunning(false);
   };
 

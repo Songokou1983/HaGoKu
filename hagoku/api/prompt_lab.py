@@ -53,7 +53,7 @@ def _call_llm(messages: list[dict], tools: list[dict] | None, model_override: st
 
     cfg = HaGoKuConfig.load()
     base_url = cfg.meta_llm.base_url or cfg.llm.base_url
-    api_key = cfg.meta_llm.api_key or cfg.llm.api_key
+    api_key = cfg.meta_llm.api_key if cfg.meta_llm.api_key and cfg.meta_llm.api_key != "none" else cfg.llm.api_key
     model = model_override if model_override != "pipeline" else (cfg.meta_llm.model or cfg.llm.model)
 
     import openai

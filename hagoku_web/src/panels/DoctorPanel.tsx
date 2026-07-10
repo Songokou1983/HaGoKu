@@ -182,8 +182,7 @@ export default function DoctorPanel() {
         const r2 = await fetch(`/api/doctor/audits/${encodeURIComponent(reportName)}`);
         const d2 = await r2.json().catch(() => ({})) as { content?: string };
         const reportText = d2.content || "";
-        const summary = reportText.length > 2000 ? reportText.slice(0, 2000) + "
-...(已截断)" : reportText;
+        const summary = reportText.length > 2000 ? reportText.slice(0, 2000) + "\n...(已截断)" : reportText;
         await sendChatMessage(`请分析下面这份${tabLabel}审计报告，用中文指出关键问题和改进建议：
 
 ${summary}`);

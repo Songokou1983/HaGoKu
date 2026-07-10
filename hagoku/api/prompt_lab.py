@@ -165,10 +165,12 @@ async def list_presets():
     if not manifest.exists():
         return {"presets": []}
     presets = _json2.loads(manifest.read_text(encoding="utf-8"))
-    # 标记当前激活的
+    # 标记当前激活的。无预设时"通用商业分析"即为默认生效
     active = ""
     if ACTIVE_PRESET_FILE.exists():
         active = ACTIVE_PRESET_FILE.read_text(encoding="utf-8").strip()
+    if not active:
+        active = "general"
     for p in presets:
         p["active"] = (p["id"] == active)
     return {"presets": presets}

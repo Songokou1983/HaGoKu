@@ -289,6 +289,36 @@ def _doctor_do_fix(action: str, _fix_params: str = "") -> dict:
     if action == "restore_custom_preset":
         return {"ok": False, "message": "请通过分析能力面板删除损坏的预设，然后新建"}
 
+    if action == "emergency_recovery":
+        """紧急恢复——一键重置提示词系统到出厂状态。"""
+        results = []
+        # 1. 恢复 prompt.md
+        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
+        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
+        try:
+            content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
+            prompt_path.write_text(content, encoding="utf-8")
+            results.append("✅ prompt.md 已恢复")
+        except Exception as e:
+            results.append(f"❌ prompt.md 恢复失败: {e}")
+        # 2. 清除激活预设
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+            results.append("✅ 激活预设已清除")
+        # 3. 恢复 presets/general.md
+        if not general_path.exists():
+            general_path.parent.mkdir(parents=True, exist_ok=True)
+            general_path.write_text(_DEFAULT_PROMPT, encoding="utf-8")
+            results.append("✅ presets/general.md 已从灾备恢复")
+        # 4. 恢复 presets.json
+        presets_json = _P(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
+        default_presets = '[{"id":"general","name":"通用商业分析","icon":"bar-chart","description":"适合各类经营数据"},{"id":"stock","name":"股市技术分析","icon":"trending-up","description":"趋势分解、波动率检验"},{"id":"ecommerce","name":"电商运营分析","icon":"shopping-cart","description":"ROI分析、转化漏斗"}]'
+        presets_json.write_text(default_presets, encoding="utf-8")
+        results.append("✅ presets.json 已重置为默认")
+        msg = "紧急恢复完成:\n" + "\n".join(results) + "\n\n请刷新页面，分析功能已恢复出厂状态。"
+        return {"ok": True, "message": msg}
+
     # ── 知识库扩增操作 ──
     if action == "create_kb_entry":
         # 从 LLM 回复中提取的知识库内容通过额外参数传入

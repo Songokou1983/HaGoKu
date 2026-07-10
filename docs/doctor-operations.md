@@ -4,6 +4,12 @@ Doctor 通过阅读本文档了解可执行的操作。每个操作包含：触�
 
 ## 修复操作
 
+### emergency_recovery
+- **触发条件**: 用户说"紧急恢复"、"恢复出厂"、"全乱了"、"重置一切"、"救命"
+- **API**: `POST /api/doctor/fix {"action": "emergency_recovery"}`
+- **效果**: 一键重置提示词系统到出厂状态——恢复 prompt.md、清除激活预设、重置 presets.json 和 general.md
+- **验证**: 告诉用户刷新页面，系统已恢复到最初安装时的状态
+
 ### reset_active_preset
 - **触发条件**: 用户说"分析结果不对"、"预设出问题"、"恢复默认提示词"、"重置预设"
 - **API**: `POST /api/doctor/fix {"action": "reset_active_preset"}`
@@ -100,6 +106,7 @@ Doctor 在对话中自动获得以下信息：
 
 | fix 标记 | 效果 |
 |----------|------|
+| `[fix:emergency_recovery]` | 紧急恢复出厂 |
 | `[fix:reset_active_preset]` | 清除激活预设 |
 | `[fix:restore_default_prompt]` | 恢复默认提示词 |
 | `[fix:check_llm_connection]` | 检查 LLM 连通性 |

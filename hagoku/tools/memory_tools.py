@@ -135,11 +135,14 @@ def _handle_read_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dic
 
 def _handle_save_lesson(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     store = LessonStore()
+    wf = str(args.get("what_failed", "none") or "none").strip()
+    if not wf:
+        wf = "none"
     try:
         lid = store.save(
             scenario=str(args.get("scenario", "")),
             what_worked=str(args.get("what_worked", "")),
-            what_failed=str(args.get("what_failed", "")),
+            what_failed=wf,
             lesson=str(args.get("lesson", "")),
             conditions_to_recheck=args.get("conditions_to_recheck") or [],
             confidence=str(args.get("confidence", "medium")),
@@ -242,17 +245,17 @@ def _register_memory_tools() -> None:
             "properties": {"path": {"type": "string"}},
             "required": ["path"],
         }, _handle_read_method, _common_phase),
-        ("save_lesson", "追加一条跨项目成长经验（what_failed 不可为空，无则写 none）", {
+        ("save_lesson", "追加一条跨项目成长经验。what_failed 可选，填 none 表示无失败经验", {
             "type": "object",
             "properties": {
                 "scenario": {"type": "string"},
                 "what_worked": {"type": "string"},
-                "what_failed": {"type": "string"},
+                "what_failed": {"type": "string", "description": "失败经验，无则填 none"},
                 "lesson": {"type": "string"},
                 "conditions_to_recheck": {"type": "array", "items": {"type": "string"}},
                 "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
             },
-            "required": ["scenario", "what_worked", "what_failed", "lesson"],
+            "required": ["scenario", "what_worked", "lesson"],
         }, _handle_save_lesson, _common_phase),
         ("recall_lessons", "召回历史成长经验（参考用，不是结论）", {
             "type": "object",
@@ -262,26 +265,6 @@ def _register_memory_tools() -> None:
             },
             "required": ["context_query"],
         }, _handle_recall_lessons, _common_phase),
-        ("correct_lesson", "纠正或废弃一条成长经验", {
-            "type": "object",
-            "properties": {
-                "lesson_id": {"type": "string"},
-                "new_lesson": {"type": "string"},
-                "reason": {"type": "string"},
-            },
-            "required": ["lesson_id", "reason"],
-        }, _handle_correct_lesson, _common_phase),
-        ("remember_field", "写入本项目字段语义记忆", {
-            "type": "object",
-            "properties": {
-                "column": {"type": "string"},
-                "display_name": {"type": "string"},
-                "semantics": {"type": "string"},
-                "role": {"type": "string"},
-                "confirmed_by_user": {"type": "boolean"},
-            },
-            "required": ["column"],
-        }, _handle_remember_field, ["理解字段"]),
         ("query_project_memory", "查询本项目记忆（fields/history/corrections）", {
             "type": "object",
             "properties": {
@@ -290,10 +273,6 @@ def _register_memory_tools() -> None:
             },
             "required": ["aspect"],
         }, _handle_query_project_memory, _common_phase),
-        ("forget_project", "清空本项目记忆（等同 clear-history）", {
-            "type": "object",
-            "properties": {"project_id": {"type": "string"}},
-        }, _handle_forget_project, _common_phase),
     ]
     for name, desc, params, handler, tags in specs:
         agent_tools.register(Tool(

@@ -57,7 +57,7 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
         llm_config: LLM 连接配置
 
     Returns:
-        instructor 包装的 OpenAI 客户端，支持 response_model 参数
+        instructor 包装的 OpenAI 客户端，兼容所有支持 function calling 的模型
 
     Raises:
         ImportError: 如果 openai 未安装
@@ -73,7 +73,7 @@ def create_structured_llm_client(llm_config: LLMConfig) -> Any:
                 timeout=120.0,
                 http_client=_create_http_client(),
             ),
-            mode=instructor.Mode.JSON,
+            mode=instructor.Mode.TOOLS,
         )
         return client
     except ImportError:

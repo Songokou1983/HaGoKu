@@ -234,75 +234,6 @@ async def doctor_status() -> dict[str, Any]:
     }
 
 
-# ── 代码层：操作手册匹配 ──────────────────────────────────────────
-
-_OPS_MANUAL_RULES = [
-    # (关键词列表, 操作, 回复模板)
-    (
-        ["分析结果不对", "分析不按预期", "预设出问题", "重置预设", "恢复默认提示词",
-         "恢复默认预设", "active_preset", "预设有问题"],
-        "reset_active_preset",
-        "检测到预设相关问题。正在清除激活的预设，恢复默认提示词…"
-    ),
-    (
-        ["prompt被改坏", "提示词坏了", "提示词被改", "改提示词后", "prompt.md",
-         "分析崩溃", "改坏了", "不能用了"],
-        "restore_default_prompt",
-        "检测到提示词文件可能损坏。正在从灾备恢复默认提示词…"
-    ),
-    (
-        ["连不上", "LLM不通", "502", "连接失败", "请求失败", "服务不可用"],
-        "check_llm_connection",
-        "检测到连接问题。正在检查 LLM 连通性…"
-    ),
-]
-
-
-def _execute_fix(action: str) -> dict:
-    """执行修复操作（同步，文件 I/O 不需要异步）。"""
-    from pathlib import Path as _P
-
-    if action == "reset_active_preset":
-        af = _P.home() / ".hagoku" / "active_preset"
-        existed = af.exists()
-        if existed:
-            af.unlink()
-        return {"ok": True, "message": "已清除激活预设，恢复默认提示词" if existed else "当前已是默认提示词"}
-
-    if action == "restore_default_prompt":
-        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
-        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
-        content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
-        prompt_path.write_text(content, encoding="utf-8")
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-        return {"ok": True, "message": "已从灾备恢复默认提示词"}
-
-    if action == "check_llm_connection":
-        try:
-            from hagoku.tools.health import check_llm_health
-            results = check_llm_health()
-            passed = sum(1 for r in results if r.ok)
-            details = "\n".join(f"{"✅" if r.ok else "❌"} {r.name}: {r.detail}" for r in results)
-            return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(results)} 通过\n{details}"}
-        except Exception as e:
-            return {"ok": False, "message": f"健康检查失败：{e}"}
-
-    return {"ok": False, "message": f"未知操作: {action}"}
-
-
-def _match_ops_manual(user_message: str) -> str | None:
-    """代码层匹配操作手册。命中→直接执行修复；未命中→返回 None 交给 LLM。"""
-    msg = user_message.lower()
-    for keywords, action, intro in _OPS_MANUAL_RULES:
-        if any(kw in msg for kw in keywords):
-            result = _execute_fix(action)
-            ok = "✅" if result["ok"] else "❌"
-            return f"{intro}\n\n{ok} {result['message']}\n\n还有其他问题吗？"
-    return None
-
-
 @router.post("/chat", response_model=ChatResponse)
 async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     """Doctor 对话 — 用 meta LLM 回复用户维护问题。
@@ -430,13 +361,7 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
 
     history = req.history or []
 
-    # ── 代码层：先用操作手册匹配用户问题 ──
-    # 手册覆盖的场景由代码直接响应，不需要调 LLM
-    code_reply = _match_ops_manual(req.message)
-    if code_reply:
-        return {"reply": code_reply}
-
-    # ── LLM 兜底：手册没覆盖的复杂问题交给 LLM ──
+    # LLM 读操作手册 → 理解问题 → 决定修复操作
     # EXEMPT: 辅助 LLM — Doctor 维护对话，非主分析通道
     messages = build_messages(
         query="HaGoKu Doctor 维护对话",

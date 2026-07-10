@@ -545,6 +545,14 @@ BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
 
     <div class="findings">
     {% for section in report.sections %}
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
+        {% for chart in section.charts %}
+        <div class="chart">{% if chart.get('html_snippet') %}{{ chart.html_snippet | safe }}{% endif %}</div>
+        {% endfor %}
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
+        {% for chart in section.charts %}
+        <div class="chart">{% if chart.get('html_snippet') %}{{ chart.html_snippet | safe }}{% elif chart.get('path') %}<img src="{{ chart.path }}">{% endif %}</div>
+        {% endfor %}
         {% for finding in section.findings %}
         <div class="finding-item {% if finding.get('significance') == 'not_significant' %}warning{% endif %}">
             <div class="question">{{ finding.get('question', '') }}</div>
@@ -832,6 +840,7 @@ AB_TEST_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ section.title }}</h2>
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
         {% for finding in section.findings %}
         <div class="finding">
             {% if finding.get('headline') %}<strong>{{ finding.headline }}</strong><br>{% endif %}
@@ -901,6 +910,10 @@ EXECUTIVE_BRIEF_HTML_TEMPLATE = """<!DOCTYPE html>
     {% endif %}
 
     {% for section in report.sections %}
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
+        {% for chart in section.charts %}
+        <div class="chart">{% if chart.get('html_snippet') %}{{ chart.html_snippet | safe }}{% endif %}</div>
+        {% endfor %}
         {% for finding in section.findings %}
         <div class="insight">
             <div class="q">{{ finding.get('question', '') }}</div>
@@ -999,6 +1012,7 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in report.sections %}
     <div class="section">
         <h2>{{ section.title }}</h2>
+        {% if section.content %}<div class="section-content">{{ section.content | safe }}</div>{% endif %}
         {% for finding in section.findings %}
         <div class="finding">
             {% if finding.get('headline') %}<strong>{{ finding.headline }}</strong><br>{% endif %}

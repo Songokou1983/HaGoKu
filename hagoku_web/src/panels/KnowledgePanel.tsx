@@ -32,20 +32,26 @@ interface KbDetailPayload {
 
 const CATEGORY_LABEL: Record<string, string> = {
   stats: "统计学",
-  financial: "财务",
   business: "业务分析",
+  trading: "交易分析",
+  visualization: "可视化",
+  cleaning: "数据清洗",
 };
 
 const CATEGORY_ICON: Record<string, ReactNode> = {
   stats: <BarChart3 size={13} className="shrink-0" />,
-  financial: <DollarSign size={13} className="shrink-0" />,
   business: <TrendingUp size={13} className="shrink-0" />,
+  trading: <DollarSign size={13} className="shrink-0" />,
+  visualization: <BarChart3 size={13} className="shrink-0" />,
+  cleaning: <FileText size={13} className="shrink-0" />,
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
   stats: "text-app-accent bg-app-running",
-  financial: "text-app-success bg-app-done",
   business: "text-app-warning bg-app-status-waiting",
+  trading: "text-app-success bg-app-done",
+  visualization: "text-app-accent bg-app-running",
+  cleaning: "text-app-text-muted bg-app-bg-secondary",
 };
 
 export default function KnowledgePanel() {

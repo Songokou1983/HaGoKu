@@ -46,6 +46,22 @@ Doctor 通过阅读本文档了解可执行的操作。每个操作包含：触�
 - **效果**: 删除损坏的预设文件，从 presets.json 中移除
 - **验证**: 告诉用户打开分析能力面板确认
 
+## 知识库扩增操作
+
+Doctor 不仅可以审计知识库，还可以创建和修复知识库条目。
+
+### create_kb_entry
+- **触发条件**: 用户说"创建一个知识库条目"、"补充一个方法文档"、"加一个 XX 方法的说明"
+- **API**: `POST /api/doctor/fix {"action": "create_kb_entry", "category": "分类", "filename": "文件名.md", "title": "标题", "summary": "摘要", "tags": ["标签"], "tools": ["工具"], "content": "正文markdown"}`
+- **效果**: 在 `hagoku/memory/methods/{category}/` 下创建带 frontmatter 的 markdown 文件
+- **验证**: 告诉用户打开知识库面板查看新条目
+
+### fix_kb_frontmatter
+- **触发条件**: 用户说"修复知识库条目"、"补充 frontmatter"、"这个条目缺 tools"
+- **API**: `POST /api/doctor/fix {"action": "fix_kb_frontmatter", "path": "methods/xxx.md", "field": "tools", "value": ["tool1", "tool2"]}`
+- **效果**: 修复指定知识库条目的 frontmatter 字段（补全缺失的 tools/tags/summary）
+- **验证**: 告诉用户重新打开知识库面板确认
+
 ## 诊断信息来源
 
 Doctor 在对话中自动获得以下信息：

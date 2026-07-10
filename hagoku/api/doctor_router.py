@@ -234,7 +234,7 @@ async def doctor_status() -> dict[str, Any]:
     }
 
 
-def _doctor_do_fix(action: str) -> dict:
+def _doctor_do_fix(action: str, _fix_params: str = "") -> dict:
     """执行 Doctor 修复操作。代码只做机械执行，决策由 LLM 完成。"""
     from pathlib import Path as _P
 
@@ -288,6 +288,78 @@ def _doctor_do_fix(action: str) -> dict:
 
     if action == "restore_custom_preset":
         return {"ok": False, "message": "请通过分析能力面板删除损坏的预设，然后新建"}
+
+    # ── 知识库扩增操作 ──
+    if action == "create_kb_entry":
+        # 从 LLM 回复中提取的知识库内容通过额外参数传入
+        import json as _j
+        params_str = _fix_params  # 从 [fix:xxx {...}] 解析出的 JSON 参数
+        try:
+            params = _j.loads(params_str) if params_str else {}
+        except Exception:
+            return {"ok": False, "message": "参数格式错误，请提供有效的 JSON"}
+        category = params.get("category", "statistics")
+        filename = params.get("filename", "").strip()
+        if not filename:
+            return {"ok": False, "message": "filename 不能为空"}
+        methods_root = _P(__file__).resolve().parent.parent / "memory" / "methods"
+        target_dir = methods_root / category
+        target_dir.mkdir(parents=True, exist_ok=True)
+        # 构建 frontmatter + body
+        lines = ["---"]
+        if params.get("title"): lines.append(f"title: {params['title']}")
+        if params.get("summary"): lines.append(f"summary: {params['summary']}")
+        lines.append(f"category: {category}")
+        if params.get("tags"): lines.append(f"tags: [{', '.join(params['tags'])}]")
+        if params.get("tools"): lines.append(f"tools:")
+        for t in (params.get("tools") or []):
+            lines.append(f"  - {t}")
+        lines.append("---")
+        lines.append("")
+        if params.get("content"):
+            lines.append(params["content"])
+        (target_dir / filename).write_text("\n".join(lines), encoding="utf-8")
+        return {"ok": True, "message": f"已创建知识库条目: {category}/{filename}"}
+
+    if action == "fix_kb_frontmatter":
+        import json as _j
+        params_str = _fix_params
+        try:
+            params = _j.loads(params_str) if params_str else {}
+        except Exception:
+            return {"ok": False, "message": "参数格式错误"}
+        kb_path = params.get("path", "").strip()
+        if not kb_path:
+            return {"ok": False, "message": "path 不能为空"}
+        methods_root = _P(__file__).resolve().parent.parent / "memory" / "methods"
+        target = (methods_root / kb_path).resolve()
+        if not str(target).startswith(str(methods_root.resolve())):
+            return {"ok": False, "message": "非法路径"}
+        if not target.exists():
+            return {"ok": False, "message": f"文件不存在: {kb_path}"}
+        content = target.read_text(encoding="utf-8")
+        field = params.get("field", "")
+        value = params.get("value")
+        if field == "tools" and isinstance(value, list):
+            # 在 frontmatter 中替换或添加 tools 字段
+            import re
+            if re.search(r'^tools:', content, re.MULTILINE):
+                # 已有 tools 字段，替换
+                content = re.sub(
+                    r'^tools:.*(\n(?:  - .*\n)*)?',
+                    'tools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
+                    content, flags=re.MULTILINE
+                )
+            else:
+                # 在 frontmatter 结束前插入
+                content = re.sub(
+                    r'^(---\n)',
+                    f'---\ntools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
+                    content
+                )
+            target.write_text(content, encoding="utf-8")
+            return {"ok": True, "message": f"已修复 {kb_path} 的 tools 字段"}
+        return {"ok": False, "message": f"不支持的字段: {field}"}
 
     return {"ok": False, "message": f"未知操作: {action}"}
 
@@ -439,10 +511,11 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
 
         # ── 检测 LLM 回复中的 fix 指令并自动执行 ──
         import re as _re
-        fix_match = _re.search(r"\[fix:(\w+)\]", reply)
+        fix_match = _re.search(r"\[fix:(\w+)\s*(\{[^}]+\})?\]", reply)
         if fix_match:
             action = fix_match.group(1)
-            result = _doctor_do_fix(action)
+            params = fix_match.group(2) or ""
+            result = _doctor_do_fix(action, params)
             reply = _re.sub(r"\[fix:\w+\]", "", reply).strip()
             icon = "✅" if result["ok"] else "❌"
             reply += f"\n\n---\n{icon} 已执行 {action}：{result['message']}"

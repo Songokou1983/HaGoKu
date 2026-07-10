@@ -203,19 +203,6 @@ def _finish_run_cancelled(
     }
 
 
-    self,
-    agent: str,
-    payload: dict[str, Any],
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """不在暂停点注入任何固定/模型生成台词；仅保证 `message` 键存在（与结构化卡片分工）。"""
-    del agent, kwargs  # API 兼容旧调用点，不再使用
-    out = dict(payload)
-    if "message" not in out or out.get("message") is None:
-        out["message"] = ""
-    return out
-
-
 class PipelineHelpersMixin:
     """Mixin：pipeline_helpers 模块级函数注册为 Orchestrator 的方法。"""
     _check_mandatory_guardrails = _check_mandatory_guardrails

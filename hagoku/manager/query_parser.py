@@ -92,18 +92,30 @@ def _llm_parse_intent(query: str, context_hints: dict[str, Any] | None) -> dict[
 
     from hagoku.channel import build_messages
 
-    response = client.chat.completions.create(
-        model=config.model,
-        # EXEMPT: 辅助 LLM — 意图解析，非主对话通道
-        messages=build_messages(
-            query=query,
-            user_input=f"用户问题：{query}{hints_text}",
-            system_extra=system_prompt,
-        ),
-        temperature=0.0,
-        max_tokens=512,
-        response_format={"type": "json_object"},
-    )
+    try:
+        response = client.chat.completions.create(
+            model=config.model,
+            # EXEMPT: 辅助 LLM — 意图解析，非主对话通道
+            messages=build_messages(
+                query=query,
+                user_input=f"用户问题：{query}{hints_text}",
+                system_extra=system_prompt,
+            ),
+            temperature=0.0,
+            max_tokens=512,
+            response_format={"type": "json_object"},
+        )
+    except Exception:
+        response = client.chat.completions.create(
+            model=config.model,
+            messages=build_messages(
+                query=query,
+                user_input=f"用户问题：{query}{hints_text}",
+                system_extra=system_prompt,
+            ),
+            temperature=0.0,
+            max_tokens=[redacted],
+        )
 
     raw = response.choices[0].message.content or ""
     # 剥离 MiniMax 等模型的 <think>...</think> CoT 块

@@ -152,36 +152,35 @@ export default function DoctorPanel() {
     setAuditRunning(tab);
     setAuditMessage(null);
     if (tab === "all") {
-        // 合并审计：先跑方法库再跑工具箱
-        setAuditMessage("⏳ 方法库审计中…");
+        setAuditMessage("⏳ 全面检查中…");
         try {
-          const r1 = await fetch("/api/doctor/audit/methods", { method: "POST" });
-          const d1 = await r1.json().catch(() => ({}));
-          setAuditMessage("⏳ 工具箱审计中…");
-          const r2 = await fetch("/api/doctor/audit/tools", { method: "POST" });
-          const d2 = await r2.json().catch(() => ({}));
-          setAuditMessage("✅ 健康检查完成");
-          const reportName1 = (d1 as any).report_path?.split("/").pop() || "";
-          const reportName2 = (d2 as any).report_path?.split("/").pop() || "";
-          // 自动让 Doctor 分析
-          const reportPromises = [reportName1, reportName2].filter(Boolean).map(async (name) => {
-            const r = await fetch(`/api/doctor/audits/${encodeURIComponent(name)}`);
-            const d = await r.json().catch(() => ({})) as { content?: string };
-            return (d as any).content || "";
-          });
-          const contents = await Promise.all(reportPromises);
-          const summary = contents.map((c, i) => {
-            const label = i === 0 ? "方法库" : "工具箱";
-            return `## ${label}审计
-${(c || "").slice(0, 1500)}`;
-          }).join("
+          // 并行：系统健康 + 方法库审计 + 工具箱审计
+          const [healthR, methodR, toolR] = await Promise.all([
+            fetch("/api/doctor/health").then(r => r.json()).catch(() => null),
+            fetch("/api/doctor/audit/methods", { method: "POST" }).then(r => r.json()).catch(() => null),
+            fetch("/api/doctor/audit/tools", { method: "POST" }).then(r => r.json()).catch(() => null),
+          ]);
+          setAuditMessage("✅ 完成");
 
-");
-          await sendChatMessage(`请分析以下健康检查结果:
-
-${summary}`);
+          const parts: string[] = [];
+          // 系统健康
+          if (healthR?.checks) {
+            const h = healthR as any;
+            const items = h.checks.map((c: any) => `${c.ok ? "✅" : "❌"} ${c.name}`).join("\n");
+            parts.push(`## 系统健康 (${h.passed}/${h.total})\n${items}`);
+          }
+          // 方法库 + 工具箱
+          for (const [r, label] of [[methodR, "方法库"], [toolR, "工具箱"]] as const) {
+            if (r?.report_path) {
+              const name = r.report_path.split("/").pop();
+              const resp = await fetch(`/api/doctor/audits/${encodeURIComponent(name)}`);
+              const d = await resp.json().catch(() => ({})) as any;
+              if (d.content) parts.push(`## ${label}审计\n${(d.content || "").slice(0, 1200)}`);
+            }
+          }
+          await sendChatMessage(`请全面分析以下健康检查结果:\n\n${parts.join("\n\n")}`);
         } catch (e: unknown) {
-          setAuditMessage(`❌ ${e instanceof Error ? e.message : "审计失败"}`);
+          setAuditMessage(`❌ ${e instanceof Error ? e.message : "检查失败"}`);
         }
         setAuditRunning(null);
         return;

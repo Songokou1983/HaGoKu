@@ -387,11 +387,11 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     sections = []
     for s in sections_data:
         content = s.get("content", "")
-        # 将 LLM 输出的 markdown 表格转为 HTML
-        if content and ("|---" in content or "| --" in content):
+        # 将 LLM 输出的 markdown 转为 HTML
+        if content:
             try:
                 import markdown as _md
-                content = _md.markdown(content, extensions=["tables"])
+                content = _md.markdown(content, extensions=["tables", "fenced_code", "nl2br"])
             except Exception:
                 pass
         sections.append(ReportSection(

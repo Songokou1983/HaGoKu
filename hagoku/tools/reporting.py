@@ -145,6 +145,16 @@ h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
 .finding .evidence-trace { font-size: 0.8rem; color: #80868b; margin-top: 0.5rem; font-family: 'Courier New', monospace; }
 .chart { margin: 1rem 0; text-align: center; }
 .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+/* markdown 渲染 */
+.section-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
+.section-content th, .section-content td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+.section-content th { color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; }
+.section-content tr:nth-child(even) { background: rgba(0,0,0,0.02); }
+.section-content pre { background: var(--surface); padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; margin: 0.75rem 0; }
+.section-content code { background: var(--surface); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+.section-content blockquote { border-left: 3px solid var(--primary); padding-left: 1rem; margin: 0.75rem 0; color: var(--text-secondary); }
+.section-content ul, .section-content ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.section-content li { margin: 0.25rem 0; }
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
 .badge-pass { background: #e6f4ea; color: #137333; }
 .badge-warn { background: #fef7e0; color: #b06000; }

@@ -79,10 +79,10 @@ Doctor 可以管理工具的注册状态——审计发现的缺失或多余工�
 - **验证**: 告诉用户刷新页面，下次分析 LLM 即可调用该工具
 
 ### create_tool_stub
-- **触发条件**: 用户说"创建工具桩"、"新预设需要 XX 工具"
-- **API**: `POST /api/doctor/fix {"action": "create_tool_stub", "name": "工具名", ...}`
-- **效果**: 在 `tools/_doctor_stubs.py` 中生成最小可运行的 handler（返回"桩"提示），同时注册
-- **验证**: 刷新后 LLM 可调用该工具但返回占位结果，开发者后续替换为真实实现
+- **触发条件**: 用户说"创建工具"、"新预设需要 XX 工具"、"加一个 XX 分析功能"
+- **API**: `POST /api/doctor/fix {"action": "create_tool_stub", "name": "工具名", "description": "描述", "handler": "函数名", "implementation": "完整Python代码", "parameters": {...}, "phase_tag": ["阶段"]}`
+- **效果**: 在 `tools/_doctor_tools.py` 中创建工具。传入 `implementation` 则生成完整工具，不传则生成桩
+- **验证**: 刷新后 LLM 可调用该工具。如有 `implementation` 则可正常使用，无则为占位提示
 
 ### unregister_tool
 - **触发条件**: 用户说"移除工具"、"这个工具没用"、"删掉 XX 工具"
@@ -105,7 +105,7 @@ Doctor 在对话中自动获得以下信息：
 2. 查看自动注入的日志和健康状态
 3. 匹配本文档中的操作
 4. 向用户简短说明诊断结论
-5. **直接执行修复**——在回复末尾加上 `[fix:操作名]`，系统自动执行
+5. **直接执行修复**——在回复末尾加上 `[fix:操作名 {...}]`，系统自动执行。需要参数时用 JSON: `[fix:create_tool_stub {"name":"xxx","implementation":"def ..."}]`
 6. 告知用户验证方法
 
 ## 可用的 fix 标记
@@ -123,10 +123,38 @@ Doctor 在对话中自动获得以下信息：
 | `[fix:register_tool]` | 注册工具 |
 | `[fix:unregister_tool]` | 禁用工具 |
 | `[fix:create_tool_stub]` | 创建工具桩 |
+| `[fix:create_kb_entry]` | 创建知识库条目 |
+| `[fix:fix_kb_frontmatter]` | 修复frontmatter |
 
-## 边界
+## 边界与安全
 
-- 不修改业务逻辑代码（仅可追加/注释工具注册块和修改 markdown 文档）
-- 不删除用户上传的数据文件
-- 不修改数据库
-- 只能执行本文档列出的操作
+你有很高的权限——这份手册就是你的约束。严格遵守以下规则。
+
+### 可写
+- `hagoku/agents/presets/*.md` 和 `presets.json`
+- `hagoku/agents/prompt.md`
+- `hagoku/memory/methods/**/*.md`
+- `hagoku/tools/_doctor_tools.py`（你创建的工具）
+- `~/.hagoku/active_preset`
+- 工具文件中的 `agent_tools.register()` 调用（仅追加或注释）
+
+### 不可写
+- `hagoku/tools/` 下除 `_doctor_tools.py` 外的所有 `.py` 文件
+- `hagoku/agents/agent.py` — Agent 核心逻辑
+- `hagoku/channel.py` — 消息通道（基石）
+- `hagoku/manager/` — 编排层
+- `hagoku/storage/database.py`
+- 用户上传的数据文件
+
+### 工具创建规范
+- 只使用标准库 + pandas, numpy, scipy, plotly, pingouin, statsmodels
+- handler 签名: `def _handle_xxx(args, ctx, df) -> dict:`
+- 返回 dict，成功无 error 键，失败 `{"error": "说明"}`
+- 不执行 eval/exec/__import__ 或动态代码
+- 不访问文件系统、网络、数据库
+
+### 故障升级
+- 单操作失败 → 尝试更轻量的替代
+- 多操作失败 → 建议 emergency_recovery
+- 不确定 → 先 full_system_check
+- 任何修复后告知验证方法

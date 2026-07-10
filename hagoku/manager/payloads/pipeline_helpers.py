@@ -202,58 +202,7 @@ def _finish_run_cancelled(
         "duration_ms": duration_ms,
     }
 
-def _handle_command_if_present(
-    self, raw: str, agent: str, context: dict | None = None
-) -> str | None:
-    """检测用户输入是否为命令。若是则应用到 context 并返回 LLM 可理解的消息；否则返回 None。
 
-    命令绕过流程控制拦截，原样转发给当前阶段（或后续阶段）LLM。
-    返回的字符串应该被追加到 query 或注入到 agent 消息列表中，
-    确保 LLM 在下一轮交互中能理解命令意图。
-    """
-    cmd = parse_command(raw)
-    if cmd is None:
-        return None
-
-    if cmd.command == "goal":
-        goal_text = str(cmd.args).strip() if isinstance(cmd.args, str) else ""
-        self.event_bus.emit(EventType.AGENT_THINKING, agent, {
-            "thought": f"📋 已收到分析目标补充，待后续阶段整合：\n> {goal_text}",
-        })
-        # 注入到 context 供下游 agent 使用
-        if context is not None:
-            context["_user_goal_update"] = goal_text
-        return f"[用户通过 /goal 命令补充分析目标] {goal_text}"
-
-    if cmd.command == "rename":
-        rename_pairs: list[tuple[str, str]] = cmd.args if isinstance(cmd.args, list) else []
-        summary_lines = [f"  {k} → {v}" for k, v in rename_pairs]
-        self.event_bus.emit(EventType.AGENT_THINKING, agent, {
-            "thought": f"🏷️ 收到字段重命名：\n" + "\n".join(summary_lines),
-        })
-        # 注入到 context 供下游 agent 使用
-        if context is not None and rename_pairs:
-            if "_user_column_renames" not in context:
-                context["_user_column_renames"] = []
-            context["_user_column_renames"].extend(rename_pairs)
-        return f"[用户通过 /rename 命令重命名字段] {rename_pairs}"
-
-    if cmd.command == "use":
-        cols: list[str] = cmd.args if isinstance(cmd.args, list) else []
-        self.event_bus.emit(EventType.AGENT_THINKING, agent, {
-            "thought": f"🎯 用户指定参与分析字段：{', '.join(cols)}",
-        })
-        # 注入到 context 供下游 agent 使用
-        if context is not None and cols:
-            context["_user_specified_columns"] = cols
-        return f"[用户通过 /use 命令指定分析字段] {', '.join(cols)}"
-
-    return None
-
-
-
-
-def _attach_pause_dialogue_message(
     self,
     agent: str,
     payload: dict[str, Any],
@@ -272,5 +221,3 @@ class PipelineHelpersMixin:
     _check_mandatory_guardrails = _check_mandatory_guardrails
     _handle_mandatory_violations = _handle_mandatory_violations
     _finish_run_cancelled = _finish_run_cancelled
-    _handle_command_if_present = _handle_command_if_present
-    _attach_pause_dialogue_message = _attach_pause_dialogue_message

@@ -20,7 +20,6 @@ from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
-from .command_parser import parse as parse_command, ParsedCommand
 
 # ── CH-5 拆分：从子模块重导出，保持外部 import 路径不变 ─────────
 
@@ -56,10 +55,8 @@ from .llm_dispatch.reply_handlers import (  # noqa: F401
 from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
 from .payloads.pipeline_helpers import (  # noqa: F401
-    _attach_pause_dialogue_message,
     _check_mandatory_guardrails,
     _finish_run_cancelled,
-    _handle_command_if_present,
     _handle_mandatory_violations,
 )
 

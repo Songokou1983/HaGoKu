@@ -1,0 +1,20 @@
+[
+  {
+    "id": "general",
+    "name": "通用商业分析",
+    "icon": "bar-chart",
+    "description": "适合各类经营数据，自动选择合适的统计方法和分析路径"
+  },
+  {
+    "id": "stock",
+    "name": "股市技术分析",
+    "icon": "trending-up",
+    "description": "趋势分解、波动率检验、K线形态识别，适合股票/期货/加密货币等金融时间序列数据"
+  },
+  {
+    "id": "ecommerce",
+    "name": "电商运营分析",
+    "icon": "shopping-cart",
+    "description": "ROI分析、转化漏斗、用户分群、商品关联分析"
+  }
+]

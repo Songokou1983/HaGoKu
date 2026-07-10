@@ -8,7 +8,6 @@ import KnowledgePanel from "./panels/KnowledgePanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import PromptLabPanel from "./panels/PromptLabPanel";
 import EventPanel from "./panels/EventPanel";
-import CommandsPanel from "./panels/CommandsPanel";
 import DoctorPanel from "./panels/DoctorPanel";
 import { TitleBar } from "./components/TitleBar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -22,7 +21,6 @@ import {
   Activity,
   List,
   X,
-  BookOpenCheck,
   FlaskConical,
   Stethoscope,
 } from "lucide-react";
@@ -43,7 +41,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "report",    title: "报告",   Icon: FileText,      section: "work" },
   // ── 参考 ──
   { id: "knowledge", title: "知识库", Icon: BookOpen,      section: "ref" },
-  { id: "commands",  title: "命令指引", Icon: BookOpenCheck, section: "ref" },
   // ── 开发者 ──
   { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
   { id: "doctor",    title: "HaGoKu Doctor", Icon: Stethoscope,  section: "dev" },
@@ -65,7 +62,6 @@ const PANEL_MAP: Record<PanelId, ReactNode> = {
   events:    <EventPanel />,
   settings:  <SettingsPanel />,
   lab:       <PromptLabPanel />,
-  commands:  <CommandsPanel />,
   doctor:    <DoctorPanel />,
 };
 
@@ -75,7 +71,6 @@ const PANEL_ORDER: PanelId[] = [
   "analyze",
   "report",
   "knowledge",
-  "commands",
   "events",
   "lab",
   "doctor",

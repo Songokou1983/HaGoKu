@@ -9,7 +9,6 @@ export type PanelId =
   | "settings"
   | "lab"
   | "events"
-  | "commands"
   | "doctor";
 
 interface WorkspaceStore {

@@ -151,6 +151,52 @@ async def audit_lessons():
     path = run_ad_hoc_audit()
     return {"ok": True, "report_path": str(path)}
 
+# ── 预设管理 ─────────────────────────────────────────────────────
+import json as _json2
+from pathlib import Path as _Path2
+
+PRESETS_DIR = _Path2(__file__).resolve().parent.parent / "agents" / "presets"
+ACTIVE_PRESET_FILE = _Path2.home() / ".hagoku" / "active_preset"
+
+
+@router.get("/presets")
+async def list_presets():
+    manifest = PRESETS_DIR / "presets.json"
+    if not manifest.exists():
+        return {"presets": []}
+    presets = _json2.loads(manifest.read_text(encoding="utf-8"))
+    # 标记当前激活的
+    active = ""
+    if ACTIVE_PRESET_FILE.exists():
+        active = ACTIVE_PRESET_FILE.read_text(encoding="utf-8").strip()
+    for p in presets:
+        p["active"] = (p["id"] == active)
+    return {"presets": presets}
+
+
+@router.post("/presets/activate")
+async def activate_preset(data: dict):
+    preset_id = data.get("id", "").strip()
+    if preset_id:
+        preset_path = PRESETS_DIR / f"{preset_id}.md"
+        if not preset_path.exists():
+            raise HTTPException(404, f"预设 {preset_id} 不存在")
+        ACTIVE_PRESET_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ACTIVE_PRESET_FILE.write_text(preset_id, encoding="utf-8")
+    else:
+        # 传空 = 恢复默认
+        if ACTIVE_PRESET_FILE.exists():
+            ACTIVE_PRESET_FILE.unlink()
+    return {"ok": True}
+
+
+@router.get("/presets/{preset_id}/content")
+async def get_preset_content(preset_id: str):
+    path = PRESETS_DIR / f"{preset_id}.md"
+    if not path.exists():
+        raise HTTPException(404, f"预设 {preset_id} 不存在")
+    return {"ok": True, "content": path.read_text(encoding="utf-8")}
+
 
 @router.get("/dumps")
 async def list_dumps(limit: int = 20):

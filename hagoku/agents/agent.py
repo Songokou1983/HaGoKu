@@ -80,7 +80,19 @@ class DataAnalystAgent(BaseAgent):
     # ── prompt ──────────────────────────────────────────────────────
 
     def _load_prompt(self) -> str:
-        p = Path(__file__).parent / "prompt.md"
+        """加载 prompt。优先读取用户激活的预设，否则用默认 prompt.md。"""
+        from pathlib import Path as _Path
+        
+        # 检查用户激活的预设
+        active_file = _Path.home() / ".hagoku" / "active_preset"
+        if active_file.exists():
+            preset_id = active_file.read_text(encoding="utf-8").strip()
+            preset_path = _Path(__file__).parent / "presets" / f"{preset_id}.md"
+            if preset_path.exists():
+                return preset_path.read_text(encoding="utf-8")
+        
+        # 回退到默认 prompt.md
+        p = _Path(__file__).parent / "prompt.md"
         if p.exists():
             return p.read_text(encoding="utf-8")
         return ""

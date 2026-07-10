@@ -8,8 +8,6 @@ import {
   AlertTriangle,
   Loader2,
   RefreshCw,
-  Cpu,
-  BookOpen,
   Send,
   User,
   Bot,
@@ -41,7 +39,7 @@ interface DoctorStatus {
   audits_exist: boolean;
 }
 
-type AuditTab = "methods" | "tools";
+type AuditTab = "methods" | "tools" | "all";
 
 // ── 组件 ────────────────────────────────────────────────────────
 
@@ -153,7 +151,42 @@ export default function DoctorPanel() {
   const triggerAudit = async (tab: AuditTab) => {
     setAuditRunning(tab);
     setAuditMessage(null);
-    const endpoint = tab === "methods" ? "/api/doctor/audit/methods" : "/api/doctor/audit/tools";
+    if (tab === "all") {
+        // 合并审计：先跑方法库再跑工具箱
+        setAuditMessage("⏳ 方法库审计中…");
+        try {
+          const r1 = await fetch("/api/doctor/audit/methods", { method: "POST" });
+          const d1 = await r1.json().catch(() => ({}));
+          setAuditMessage("⏳ 工具箱审计中…");
+          const r2 = await fetch("/api/doctor/audit/tools", { method: "POST" });
+          const d2 = await r2.json().catch(() => ({}));
+          setAuditMessage("✅ 健康检查完成");
+          const reportName1 = (d1 as any).report_path?.split("/").pop() || "";
+          const reportName2 = (d2 as any).report_path?.split("/").pop() || "";
+          // 自动让 Doctor 分析
+          const reportPromises = [reportName1, reportName2].filter(Boolean).map(async (name) => {
+            const r = await fetch(`/api/doctor/audits/${encodeURIComponent(name)}`);
+            const d = await r.json().catch(() => ({})) as { content?: string };
+            return (d as any).content || "";
+          });
+          const contents = await Promise.all(reportPromises);
+          const summary = contents.map((c, i) => {
+            const label = i === 0 ? "方法库" : "工具箱";
+            return `## ${label}审计
+${(c || "").slice(0, 1500)}`;
+          }).join("
+
+");
+          await sendChatMessage(`请分析以下健康检查结果:
+
+${summary}`);
+        } catch (e: unknown) {
+          setAuditMessage(`❌ ${e instanceof Error ? e.message : "审计失败"}`);
+        }
+        setAuditRunning(null);
+        return;
+      }
+      const endpoint = tab === "methods" ? "/api/doctor/audit/methods" : "/api/doctor/audit/tools";
     try {
       const r = await fetch(endpoint, { method: "POST" });
       const d = await r.json().catch(() => ({})) as { ok?: boolean; report_path?: string; detail?: string };
@@ -223,18 +256,11 @@ ${summary}`);
             </span>
           )}
           <button
-            onClick={() => triggerAudit("methods")} disabled={auditRunning !== null}
+            onClick={() => triggerAudit("all")} disabled={auditRunning !== null}
             className="px-2 py-0.5 text-ui-xs rounded border border-app-border/50 text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50"
           >
-            {auditRunning === "methods" ? <Loader2 size={11} className="animate-spin inline mr-0.5" /> : <BookOpen size={11} className="inline mr-0.5" />}
-            审知识库
-          </button>
-          <button
-            onClick={() => triggerAudit("tools")} disabled={auditRunning !== null}
-            className="px-2 py-0.5 text-ui-xs rounded border border-app-border/50 text-app-text-muted hover:text-app-accent hover:border-app-accent cursor-pointer disabled:opacity-50"
-          >
-            {auditRunning === "tools" ? <Loader2 size={11} className="animate-spin inline mr-0.5" /> : <Cpu size={11} className="inline mr-0.5" />}
-            审工具箱
+            {auditRunning === "all" ? <Loader2 size={11} className="animate-spin inline mr-0.5" /> : <Stethoscope size={11} className="inline mr-0.5" />}
+            健康检查
           </button>
         </div>
       </PanelHeader>

@@ -256,7 +256,7 @@ async def ws_handler(ws: WebSocket) -> None:
     app = ws.app.state.hagoku_app if hasattr(ws.app.state, 'hagoku_app') else None
 
     try:
-        await _safe_send({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
+        await _safe_send({"type": "welcome", "message": "HaGoKu Studio connected", "version": "2.0.1"})
 
         # ── 推送项目列表 ──
         if app:

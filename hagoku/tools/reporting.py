@@ -205,7 +205,7 @@ DEFAULT_HTML_TEMPLATE = """<!DOCTYPE html>
     <header>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
-            生成时间: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0
+            生成时间: {{ report.generated_at[:19] }} | HaGoKu Studio v2.0.1
 
         </div>
         <div class="query">
@@ -432,7 +432,7 @@ ACADEMIC_HTML_TEMPLATE = """<!DOCTYPE html>
     <header>
         <h1>{{ report.project_name }}</h1>
         <div class="meta">
-            Generated: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0
+            Generated: {{ report.generated_at[:19] }} | HaGoKu Studio v2.0.1
         </div>
         <div class="query">Research Question: {{ report.query }}</div>
     </header>
@@ -940,7 +940,7 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <header>
         <h1>🔍 {{ report.project_name }} — 数据审计</h1>
-        <div class="meta">审计时间: {{ report.generated_at[:19] }} | HaGoKu Studio v0.1.0</div>
+        <div class="meta">审计时间: {{ report.generated_at[:19] }} | HaGoKu Studio v2.0.1</div>
     </header>
 
     <div class="audit-summary">

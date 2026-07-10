@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hagoku"
-version = "0.1.0"
+version = "2.0.1"
 description = "让每个小模型，都能做专业级商业分析"
 readme = "README.md"
 license = "MIT"

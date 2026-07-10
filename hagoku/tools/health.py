@@ -302,7 +302,7 @@ def check_llm_health(config: Any) -> LlmHealthReport:
                 checks.append(HealthCheckResult(
                     ok=False,
                     name="5. JSON mode",
-                    detail="⚠️ 跳过（LLM 不可用）",
+                    detail="⚠️ 部分模型不支持（不影响分析）",
                     suggestions=[],
                 ))
 

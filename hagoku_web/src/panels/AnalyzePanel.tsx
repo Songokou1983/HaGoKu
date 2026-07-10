@@ -48,6 +48,9 @@ export default function AnalyzePanel() {
   // CO-16: reply pending state
   const [replyPending, setReplyPending] = useState(false);
 
+  // 当前激活的提示词预设
+  const [presetName, setPresetName] = useState("");
+
   // ── 项目切换：监听 snapshot 恢复状态 ──
   const snapshot = useWorkspaceStore((s) => s.snapshot);
   useEffect(() => {
@@ -204,6 +207,11 @@ export default function AnalyzePanel() {
       <PanelHeader
         title="分析"
       >
+        {presetName && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-ui-xs bg-app-accent/10 text-app-accent font-medium mr-2">
+            {presetName}
+          </span>
+        )}
         <div className="flex items-center gap-2">
           <button
             type="button"

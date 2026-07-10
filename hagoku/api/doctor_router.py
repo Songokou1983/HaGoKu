@@ -171,6 +171,76 @@ async def get_audit_report(filename: str) -> dict[str, Any]:
 
 # ── 修复端点 ──────────────────────────────────────────────────────
 
+@router.post("/full-check")
+async def full_health_check() -> dict[str, Any]:
+    """全面健康检查——系统健康 + 方法库 + 工具箱一次跑完，返回统一报告。"""
+    from hagoku.tools.health import check_system
+    from hagoku.agents.method_curator.agent import MethodCurator
+    from hagoku.agents.tool_curator.agent import ToolCurator
+
+    report_lines = ["# HaGoKu 全面健康检查报告", ""]
+
+    # 1. 系统健康
+    report_lines.append("## 系统健康")
+    try:
+        results = check_system()
+        passed = sum(1 for r in results if r.ok)
+        report_lines.append(f"通过: {passed}/{len(results)}")
+        for r in results:
+            icon = "✅" if r.ok else "❌"
+            report_lines.append(f"- {icon} {r.name}: {r.detail}")
+    except Exception as e:
+        report_lines.append(f"❌ 系统检查失败: {e}")
+    report_lines.append("")
+
+    # 2. 方法库审计
+    report_lines.append("## 方法库")
+    try:
+        curator = MethodCurator()
+        report = curator.audit()
+        report_lines.append(f"- 方法文档: {report.total_methods}")
+        report_lines.append(f"- 全部有 frontmatter: {'✅' if len(report.missing_frontmatter) == 0 else '❌ ' + str(len(report.missing_frontmatter)) + ' 缺失'}")
+        report_lines.append(f"- 工具引用全部已注册: {'✅' if len(report.missing_tools) == 0 else '❌ ' + str(len(report.missing_tools)) + ' 未注册'}")
+        report_lines.append(f"- 被引用工具(去重): {len(report.tools_referenced)}")
+        report_lines.append(f"- 孤儿工具: {len(report.orphan_tools)}")
+    except Exception as e:
+        report_lines.append(f"❌ 方法库审计失败: {e}")
+    report_lines.append("")
+
+    # 3. 工具箱审计
+    report_lines.append("## 工具箱")
+    try:
+        from hagoku.agents.tool_curator.agent import ToolCurator as TC
+        tc = TC()
+        treport = tc.audit()
+        report_lines.append(f"- 已注册工具: {treport.total_tools}")
+        report_lines.append(f"- 有测试: {treport.tools_with_tests}")
+        report_lines.append(f"- 有方法文档: {treport.tools_with_docs}")
+        if treport.prompt_fake_tools:
+            report_lines.append(f"- ⚠️ prompt 引用但未注册: {', '.join(treport.prompt_fake_tools)}")
+    except Exception as e:
+        report_lines.append(f"❌ 工具箱审计失败: {e}")
+    report_lines.append("")
+
+    # 4. 预设状态
+    report_lines.append("## 预设")
+    try:
+        import json as _j
+        presets_path = Path(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
+        active_file = Path.home() / ".hagoku" / "active_preset"
+        presets = _j.loads(presets_path.read_text(encoding="utf-8")) if presets_path.exists() else []
+        active = active_file.read_text(encoding="utf-8").strip() if active_file.exists() else "默认(general)"
+        report_lines.append(f"- 可用预设: {len(presets)}")
+        report_lines.append(f"- 当前激活: {active}")
+        for p in presets:
+            report_lines.append(f"  - {p['name']} ({p['id']})")
+    except Exception as e:
+        report_lines.append(f"❌ 预设检查失败: {e}")
+
+    report_text = "\n".join(report_lines)
+    return {"ok": True, "report": report_text}
+
+
 class FixRequest(BaseModel):
     action: str  # reset_active_preset / restore_default_prompt / delete_preset
 

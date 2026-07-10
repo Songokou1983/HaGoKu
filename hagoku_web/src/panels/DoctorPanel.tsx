@@ -154,31 +154,12 @@ export default function DoctorPanel() {
     if (tab === "all") {
         setAuditMessage("⏳ 全面检查中…");
         try {
-          // 并行：系统健康 + 方法库审计 + 工具箱审计
-          const [healthR, methodR, toolR] = await Promise.all([
-            fetch("/api/doctor/health").then(r => r.json()).catch(() => null),
-            fetch("/api/doctor/audit/methods", { method: "POST" }).then(r => r.json()).catch(() => null),
-            fetch("/api/doctor/audit/tools", { method: "POST" }).then(r => r.json()).catch(() => null),
-          ]);
+          const r = await fetch("/api/doctor/full-check", { method: "POST" });
+          const d = await r.json().catch(() => ({})) as any;
           setAuditMessage("✅ 完成");
-
-          const parts: string[] = [];
-          // 系统健康
-          if (healthR?.checks) {
-            const h = healthR as any;
-            const items = h.checks.map((c: any) => `${c.ok ? "✅" : "❌"} ${c.name}`).join("\n");
-            parts.push(`## 系统健康 (${h.passed}/${h.total})\n${items}`);
+          if (d.report) {
+            await sendChatMessage(`请全面分析以下健康检查报告:\n\n${d.report}`);
           }
-          // 方法库 + 工具箱
-          for (const [r, label] of [[methodR, "方法库"], [toolR, "工具箱"]] as const) {
-            if (r?.report_path) {
-              const name = r.report_path.split("/").pop();
-              const resp = await fetch(`/api/doctor/audits/${encodeURIComponent(name)}`);
-              const d = await resp.json().catch(() => ({})) as any;
-              if (d.content) parts.push(`## ${label}审计\n${(d.content || "").slice(0, 1200)}`);
-            }
-          }
-          await sendChatMessage(`请全面分析以下健康检查结果:\n\n${parts.join("\n\n")}`);
         } catch (e: unknown) {
           setAuditMessage(`❌ ${e instanceof Error ? e.message : "检查失败"}`);
         }

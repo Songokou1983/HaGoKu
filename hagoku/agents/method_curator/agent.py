@@ -227,7 +227,10 @@ class MethodCurator:
         if client is None:
             raise RuntimeError("MethodCurator: LLM 不可达")
 
+        # 预先计算摘要，防止 LLM 数错
+        methods_with_tools = sum(1 for m in methods if m["frontmatter"].get("tools"))
         payload = {
+            "summary": f"共{len(methods)}个方法，全部{methods_with_tools}个都有tools字段。{len(registered)}个工具已注册，{len(report.tools_referenced)}个被引用。",
             "methods": [
                 {
                     "path": m["path"],

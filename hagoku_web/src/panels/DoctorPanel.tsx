@@ -217,7 +217,7 @@ ${summary}`);
         <div className="flex items-center gap-2">
           {health && (
             <span className={`text-ui-xs ${hasBlocking ? "text-app-error" : health.ok ? "text-green-400" : "text-app-warning"}`}>
-              {hasBlocking ? "❌" : "✅"} {okCount}/{totalCount}
+              健康 {okCount}/{totalCount}
             </span>
           )}
           <button

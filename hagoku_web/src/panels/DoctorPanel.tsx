@@ -173,11 +173,23 @@ export default function DoctorPanel() {
       if (!r.ok) {
         throw new Error(typeof d.detail === "string" ? d.detail : `审计失败 (${r.status})`);
       }
-      setAuditMessage(`✅ 审计完成: ${d.report_path?.split("/").pop() || ""}`);
+      setAuditMessage(`✅ 审计完成`);
       loadAudits();
-      // 自动让 Doctor 分析审计结果
+      // 读取审计报告内容，直接喂给 Doctor 分析
+      const reportName = d.report_path?.split("/").pop() || "";
       const tabLabel = tab === "methods" ? "方法库" : "工具箱";
-      await sendChatMessage(`我刚完成了${tabLabel}审计，报告在 ${d.report_path?.split("/").pop() || "审计报告"}。请帮我分析结果，指出问题和改进建议。`);
+      try {
+        const r2 = await fetch(`/api/doctor/audits/${encodeURIComponent(reportName)}`);
+        const d2 = await r2.json().catch(() => ({})) as { content?: string };
+        const reportText = d2.content || "";
+        const summary = reportText.length > 2000 ? reportText.slice(0, 2000) + "
+...(已截断)" : reportText;
+        await sendChatMessage(`请分析下面这份${tabLabel}审计报告，用中文指出关键问题和改进建议：
+
+${summary}`);
+      } catch {
+        await sendChatMessage(`我刚完成了${tabLabel}审计，请帮我分析结果。`);
+      }
     } catch (e: unknown) {
       setAuditMessage(`❌ ${e instanceof Error ? e.message : "审计失败"}`);
     } finally {

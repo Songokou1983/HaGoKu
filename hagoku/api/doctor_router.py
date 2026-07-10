@@ -230,13 +230,14 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     if AUDIT_DIR.exists():
         reports = sorted(AUDIT_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
         if reports:
-            audit_ctx = f"最近审计报告 ({len(reports)} 份):\n"
-            for rp in reports[:3]:
-                try:
-                    content = rp.read_text(encoding="utf-8")[:300]
-                    audit_ctx += f"\n### {rp.name}\n{content}\n"
-                except Exception:
-                    pass
+            # 最新一份完整报告给 Doctor 分析
+            try:
+                content = reports[0].read_text(encoding="utf-8")
+                audit_ctx = f"最新审计报告（{reports[0].name}）:\n{content[:3000]}\n"
+                if len(content) > 3000:
+                    audit_ctx += f"\n(报告共 {len(content)} 字，以上为前 3000 字)"
+            except Exception:
+                pass
 
     # 收集日志上下文
     log_ctx = ""

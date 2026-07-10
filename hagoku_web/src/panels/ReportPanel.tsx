@@ -17,6 +17,7 @@ interface ProjectRun {
 
 export default function ReportPanel() {
   const currentProject = useWorkspaceStore((s) => s.currentProject);
+  const activeView = useWorkspaceStore((s) => s.activeView);
   const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
   const projects = useWorkspaceStore((s) => s.projects);
   const reportFiles = useWorkspaceStore((s) => s.reportFiles);
@@ -78,6 +79,13 @@ export default function ReportPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshPanel(currentProject);
   }, [currentProject, refreshPanel]);
+
+  // 切换到报告面板时自动刷新（报告可能在分析面板期间生成，run_completed 事件可能未触发）
+  useEffect(() => {
+    if (activeView === "report" && currentProject) {
+      void refreshPanel(currentProject);
+    }
+  }, [activeView, currentProject, refreshPanel]);
 
   useEffect(() => {
     if (batch.length === 0 || !currentProject) return;
@@ -214,20 +222,49 @@ export default function ReportPanel() {
                   }
                   if (run.status === "completed" && run.report_url) {
                     return (
-                      <a
+                      <div
                         key={run.run_id}
-                        href={run.report_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors"
+                        className="p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors group"
                       >
                         <FileText size={14} className="text-app-accent shrink-0" />
                         <span className="text-ui-sm text-app-text flex-1 truncate">
                           报告 · {run.run_id}
                           {run.query ? ` — ${run.query}` : ""}
                         </span>
-                        <ArrowRight size={12} className="text-app-text-muted shrink-0" />
-                      </a>
+                        <a
+                          href={run.report_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 px-2 py-1 text-ui-xs text-app-accent hover:underline cursor-pointer"
+                        >
+                          查看
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => window.open(run.report_url, '_blank')?.print()}
+                          className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
+                          title="通过浏览器打印为 PDF"
+                        >
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm('确定删除此报告？')) return;
+                            const url = run.report_url!.replace('/api/reports/', '');
+                            const parts = url.split('/');
+                            const delUrl = `/api/reports/${parts[0]}/${parts[1]}/${parts[2]}`;
+                            try {
+                              const r = await fetch(delUrl, { method: 'DELETE' });
+                              if (r.ok) refreshPanel(currentProject!);
+                            } catch {}
+                          }}
+                          className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-red-500 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="删除报告"
+                        >
+                          删除
+                        </button>
+                      </div>
                     );
                   }
                   return (
@@ -244,24 +281,58 @@ export default function ReportPanel() {
               </div>
             )}
 
-            {!loading && runs.length === 0 && reportFiles.length > 0 && (
+            {!loading && reportFiles.length > 0 && (
               <div className="space-y-2">
-                <div className="text-ui-xs text-app-text-muted font-medium">历史 HTML（无 run 元数据时）</div>
-                {reportFiles.map((f) => (
-                  <a
-                    key={f.name}
-                    href={f.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mb-2 p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors duration-150"
-                  >
-                    <FileText size={14} className="text-app-accent shrink-0" />
-                    <span className="text-ui-base text-app-text flex-1 truncate">{f.name}</span>
-                    <span className="text-ui-xs text-app-text-muted shrink-0">
-                      {new Date(f.mtime * 1000).toLocaleString("zh-CN")}
-                    </span>
-                  </a>
-                ))}
+                <div className="text-ui-xs text-app-text-muted font-medium">所有报告版本（最新在前）</div>
+                {reportFiles.map((f) => {
+                  const parts = f.name.split("/");
+                  const displayName = parts.length > 1 ? f.name : f.name;
+                  return (
+                    <div
+                      key={f.name}
+                      className="p-3 bg-app-bg-secondary border border-app-border rounded flex items-center gap-2 hover:border-app-accent transition-colors group"
+                    >
+                      <FileText size={14} className="text-app-accent shrink-0" />
+                      <span className="text-ui-sm text-app-text flex-1 truncate" title={displayName}>
+                        {displayName}
+                      </span>
+                      <span className="text-ui-xs text-app-text-muted shrink-0 mr-2">
+                        {new Date(f.mtime * 1000).toLocaleString("zh-CN")}
+                      </span>
+                      <a
+                        href={f.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 px-2 py-1 text-ui-xs text-app-accent hover:underline cursor-pointer"
+                      >
+                        查看
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => window.open(f.url, '_blank')?.print()}
+                        className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
+                      >
+                        PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm('确定删除此报告？')) return;
+                          const url = f.url.replace('/api/reports/', '');
+                          const segs = url.split('/');
+                          const delUrl = `/api/reports/${segs[0]}/${segs[1]}/${segs[2]}`;
+                          try {
+                            const r = await fetch(delUrl, { method: 'DELETE' });
+                            if (r.ok) refreshPanel(currentProject!);
+                          } catch {}
+                        }}
+                        className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-red-500 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

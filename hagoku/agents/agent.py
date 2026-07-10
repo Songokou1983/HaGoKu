@@ -593,7 +593,7 @@ class DataAnalystAgent(BaseAgent):
                 break
 
             # 用户点了停止 → 中断处理
-            if getattr(getattr(self, 'orchestrator', None), '_respond_cancelled', False):
+            if self.orchestrator is not None and self.orchestrator.is_respond_cancelled():
                 break
 
             # 让 LLM 看到工具结果，决定下一步

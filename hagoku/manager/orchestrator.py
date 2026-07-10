@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +20,6 @@ from ..observability.events import EventType
 from ..storage.database import HaGoKuDB
 from ..storage.memory import MemoryManager
 from ..storage.output import OutputManager
-from ..tools.data_io import save_data
-
 from .command_parser import parse as parse_command, ParsedCommand
 
 # ── CH-5 拆分：从子模块重导出，保持外部 import 路径不变 ─────────
@@ -121,19 +118,13 @@ class Orchestrator(
         # 用户请求中止本轮分析（WebSocket cancel_analysis）
         self._cancel_lock = threading.Lock()
         self._cancel_requested_flag = False
+        # respond() 重入守卫 + _respond_cancelled 保护（共用锁）
+        self._respond_lock = threading.Lock()
+        self._respond_cancelled = False
         # 事件驱动状态机字段
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
         self._error: Exception | None = None
-
-
-    @property
-    def llm_deep(self) -> Any:
-        """深度推理客户端（懒初始化）"""
-
-    @property
-    def llm_quick(self) -> Any:
-        """快速客户端（懒初始化，instructor 包装，用于结构化输出）"""
 
 
     @property
@@ -289,10 +280,13 @@ class Orchestrator(
 
     def request_cancel_respond(self) -> None:
         """前端点「停止」：中断当前 respond 处理。"""
-        self._respond_cancelled = True
+        with self._respond_lock:
+            self._respond_cancelled = True
 
-    def _is_respond_cancelled(self) -> bool:
-        return getattr(self, '_respond_cancelled', False)
+    def is_respond_cancelled(self) -> bool:
+        """线程安全地检查 respond 是否已被取消。"""
+        with self._respond_lock:
+            return self._respond_cancelled
 
     def _is_cancel_requested(self) -> bool:
         with self._cancel_lock:

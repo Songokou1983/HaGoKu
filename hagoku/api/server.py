@@ -170,6 +170,15 @@ async def switch_project(name: str, request: Request):
     return snap
 
 
+def _latest_report_path(run_dir: Path) -> Path | None:
+    """扫描 run 输出目录，返回最新的 report_*.html 文件路径。"""
+    out_dir = run_dir / "output"
+    if not out_dir.exists():
+        return None
+    reports = sorted(out_dir.glob("report_*.html"), reverse=True)
+    return reports[0] if reports else None
+
+
 # ── GET /api/reports/{project_name} — 列出该项目所有 run 的报告 ──
 @app.get("/api/reports/{project_name}")
 async def list_reports(project_name: str):
@@ -243,6 +252,27 @@ async def get_report(project_name: str, filename: str):
     if not path.exists():
         raise HTTPException(404, "Report not found")
     return HTMLResponse(path.read_text(encoding="utf-8"))
+
+# ── DELETE /api/reports/{project_name}/{run_id}/{filename} ──
+@app.delete("/api/reports/{project_name}/{run_id}/{filename}")
+async def delete_report(project_name: str, run_id: str, filename: str):
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    path = proj_dir / "runs" / run_id / "output" / filename
+    if not path.exists():
+        raise HTTPException(404, "Report not found")
+    if not filename.endswith(".html"):
+        raise HTTPException(400, "Invalid filename")
+    path.unlink()
+    latest_link = proj_dir / "reports" / "latest.html"
+    if latest_link.is_symlink():
+        try:
+            if not latest_link.resolve().exists():
+                latest_link.unlink()
+        except Exception:
+            pass
+    return {"ok": True}
 
 
 def _hagoku_dotenv_path() -> Path:
@@ -531,7 +561,7 @@ async def get_project_detail(project_name: str):
         latest = run_dirs[0]
         out_dir = latest / "output"
         last_guardrails_blocked = (out_dir / "GUARDRAILS_BLOCKED.md").exists()
-        html_exists = (out_dir / "report.html").exists()
+        html_exists = _latest_report_path(latest) is not None
         last_run_at = latest.name
         meta_file = latest / "run_meta.json"
         if meta_file.exists():
@@ -627,7 +657,8 @@ async def get_project_runs(project_name: str):
         is_guardrails_blocked = meta.get("guardrails_blocked", False) or (
             (run_dir / "output" / "GUARDRAILS_BLOCKED.md").exists()
         )
-        has_report = (run_dir / "output" / "report.html").exists()
+        latest_rpt = _latest_report_path(run_dir)
+        has_report = latest_rpt is not None
         if is_guardrails_blocked:
             status = "guardrails_blocked"
         elif has_report:
@@ -639,7 +670,7 @@ async def get_project_runs(project_name: str):
         report_url = None
         guardrails_notice_url = None
         if has_report:
-            report_url = f"/api/reports/{project_name}/{rid}/report.html"
+            report_url = f"/api/reports/{project_name}/{rid}/{latest_rpt.name}"
         if is_guardrails_blocked:
             guardrails_notice_url = f"/api/reports/{project_name}/{rid}/GUARDRAILS_BLOCKED.md"
         runs.append({
@@ -698,6 +729,9 @@ async def list_project_files(project_name: str):
             continue
         for f in sorted(subdir.iterdir()):
             if f.is_file() and f.suffix.lower() in _DATA_EXTENSIONS:
+                # 排除项目元数据文件——project.json 是系统文件，不是用户数据
+                if f.name == "project.json":
+                    continue
                 files.append({
                     "name": f.name,
                     "path": str(f),

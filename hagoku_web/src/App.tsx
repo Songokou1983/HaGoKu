@@ -54,7 +54,6 @@ const NAV_ITEMS: NavItem[] = [
 const SECTION_LABELS: Record<NavSection, string> = {
   work: "工作区",
   ref:  "参考",
-  ops:  "运行",
   dev:  "开发者",
 };
 

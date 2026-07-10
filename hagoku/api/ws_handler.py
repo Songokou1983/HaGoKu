@@ -32,6 +32,7 @@ _fastapi_app: Any = None
 # 同一进程内只允许一条分析线程占用共享 Orchestrator（避免并发 run()）
 _analysis_busy_lock = threading.Lock()
 _analysis_in_progress = False
+_analysis_generation = 0  # 每次新分析+1，取消时+1，防止旧任务 finally 误清标志
 
 
 def set_bus(bus: EventBus) -> None:
@@ -88,9 +89,12 @@ def _event_to_message(event: Event) -> dict[str, Any]:
 
 # ── Analysis runner ─────────────────────────────────────────────
 
-def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str) -> None:
-    """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。"""
-    global _analysis_in_progress
+def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str, generation: int) -> None:
+    """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。
+    
+    generation 参数用于防止已取消的旧任务在 finally 中误清标志。
+    """
+    global _analysis_in_progress, _analysis_generation
     try:
         orch = get_orchestrator()
         if orch is None:
@@ -107,7 +111,8 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
             orch.respond({"text": ""})
     finally:
         with _analysis_busy_lock:
-            _analysis_in_progress = False
+            if _analysis_generation == generation:
+                _analysis_in_progress = False
 
 
 def _respond_task(orch: "Orchestrator", user_text: str) -> dict[str, Any]:
@@ -237,16 +242,26 @@ async def ws_handler(ws: WebSocket) -> None:
     bridge.add_client(ws)
     bridge.set_loop(asyncio.get_running_loop())
 
+    async def _safe_send(msg: dict) -> bool:
+        """安全发送——WS 已关闭时静默跳过，不抛异常。"""
+        try:
+            await ws.send_json(msg)
+            return True
+        except RuntimeError as e:
+            if "close message" in str(e).lower():
+                return False
+            raise
+
     # ── 获取 App 实例 ──
     app = ws.app.state.hagoku_app if hasattr(ws.app.state, 'hagoku_app') else None
 
     try:
-        await ws.send_json({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
+        await _safe_send({"type": "welcome", "message": "HaGoKu Studio connected", "version": "0.9.0"})
 
         # ── 推送项目列表 ──
         if app:
             projects = app.list_projects()
-            await ws.send_json({"type": "project_list", "data": projects})
+            await _safe_send({"type": "project_list", "data": projects})
 
         # ── 状态恢复：优先从 App 恢复当前项目 ──
         global _shared_orchestrator
@@ -266,14 +281,14 @@ async def ws_handler(ws: WebSocket) -> None:
         if orch is not None:
             snapshot = app.build_snapshot() if app else _build_state_snapshot(orch)
             if snapshot:
-                await ws.send_json({"type": "state_snapshot", "data": snapshot})
+                await _safe_send({"type": "state_snapshot", "data": snapshot})
 
         while True:
             raw = await ws.receive_text()
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
-                await ws.send_json({"type": "error", "message": "Invalid JSON"})
+                await _safe_send({"type": "error", "message": "Invalid JSON"})
                 continue
 
             import logging as _logging
@@ -281,7 +296,7 @@ async def ws_handler(ws: WebSocket) -> None:
             cmd = msg.get("cmd", "")
             _wslog.info("%s %s", cmd, str({k: str(v)[:100] for k, v in msg.items() if k != 'cmd'})[:200])
             if cmd == "ping":
-                await ws.send_json({"type": "pong"})
+                await _safe_send({"type": "pong"})
             elif cmd == "__log":
                 log_text = (msg.get("payload") or {}).get("text", "")
                 from hagoku.config import HaGoKuConfig as _Cfg
@@ -291,15 +306,15 @@ async def ws_handler(ws: WebSocket) -> None:
             elif cmd == "list_projects":
                 if app:
                     projects = app.list_projects()
-                    await ws.send_json({"type": "project_list", "data": projects})
+                    await _safe_send({"type": "project_list", "data": projects})
                 else:
-                    await ws.send_json({"type": "error", "message": "App not initialized"})
+                    await _safe_send({"type": "error", "message": "App not initialized"})
             elif cmd == "switch_project":
                 name = msg.get("project", "")
                 if app is None:
-                    await ws.send_json({"type": "error", "message": "App not initialized"})
+                    await _safe_send({"type": "error", "message": "App not initialized"})
                 elif app.is_busy():
-                    await ws.send_json({"type": "error", "message": "当前项目分析进行中，请等待完成或停止后再切换"})
+                    await _safe_send({"type": "error", "message": "当前项目分析进行中，请等待完成或停止后再切换"})
                 else:
                     old_orch = app.orch if app.active_project else None
                     snap = app.switch_project(name)
@@ -310,17 +325,17 @@ async def ws_handler(ws: WebSocket) -> None:
                         new_orch = app.orch
                         if new_orch:
                             new_orch.event_bus.subscribe(bridge.on_event)
-                        await ws.send_json({"type": "state_snapshot", "data": snap})
+                        await _safe_send({"type": "state_snapshot", "data": snap})
                     else:
-                        await ws.send_json({"type": "error", "message": f"项目 {name} 不存在或无法加载"})
+                        await _safe_send({"type": "error", "message": f"项目 {name} 不存在或无法加载"})
             elif cmd == "create_project":
                 name = msg.get("project", "")
                 ok = app.create_project(name) if app else False
-                await ws.send_json({"type": "ack", "cmd": "create_project", "data": {"ok": ok}})
+                await _safe_send({"type": "ack", "cmd": "create_project", "data": {"ok": ok}})
             elif cmd == "delete_project":
                 name = msg.get("project", "")
                 ok = app.delete_project(name) if app else False
-                await ws.send_json({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
+                await _safe_send({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
                 # 清理整个 payload 中的 null 字节
@@ -329,7 +344,7 @@ async def ws_handler(ws: WebSocket) -> None:
                 query = payload.get("query", "").strip()
                 project_name = (payload.get("project_name") or "").strip()
                 if not project_name:
-                    await ws.send_json({
+                    await _safe_send({
                         "type": "error", "cmd": "analyze",
                         "message": "请先在项目页面创建或选择项目"
                     })
@@ -343,26 +358,28 @@ async def ws_handler(ws: WebSocket) -> None:
                 )
 
                 if not data_path:
-                    await ws.send_json({
+                    await _safe_send({
                         "type": "error",
                         "cmd": "analyze",
                         "message": "Missing required field: data_path"
                     })
                     continue
 
-                global _analysis_in_progress
+                global _analysis_in_progress, _analysis_generation
                 with _analysis_busy_lock:
                     if _analysis_in_progress:
-                        await ws.send_json({
+                        await _safe_send({
                             "type": "error",
                             "cmd": "analyze",
                             "message": "已有分析进行中，请等待结束或点击「重置分析」。",
                         })
                         continue
                     _analysis_in_progress = True
+                    _analysis_generation += 1
+                    gen = _analysis_generation
 
                 # 发送初始 ack
-                await ws.send_json({
+                await _safe_send({
                     "type": "ack",
                     "cmd": "analyze",
                     "message": "Analysis started"
@@ -378,6 +395,7 @@ async def ws_handler(ws: WebSocket) -> None:
                         query,
                         project_name,
                         phase,
+                        gen,
                     )
                 except RuntimeError:
                     with _analysis_busy_lock:
@@ -385,7 +403,7 @@ async def ws_handler(ws: WebSocket) -> None:
             elif cmd == "cancel_analysis":
                 orch = get_orchestrator()
                 if orch is None:
-                    await ws.send_json({
+                    await _safe_send({
                         "type": "error",
                         "cmd": "cancel_analysis",
                         "message": "当前没有可取消的分析任务",
@@ -395,18 +413,19 @@ async def ws_handler(ws: WebSocket) -> None:
                         orch.request_cancel()
                         with _analysis_busy_lock:
                             _analysis_in_progress = False
-                        await ws.send_json({
+                            _analysis_generation += 1  # 旧任务的 finally 不会再清除标志
+                        await _safe_send({
                             "type": "ack",
                             "cmd": "cancel_analysis",
                             "message": "已中止分析",
                         })
                     except Exception as e:
-                        await ws.send_json({"type": "error", "message": str(e)})
+                        await _safe_send({"type": "error", "message": str(e)})
             elif cmd == "cancel_respond":
                 orch = get_orchestrator()
                 if orch is not None:
                     orch.request_cancel_respond()
-                await ws.send_json({"type": "ack", "cmd": "cancel_respond"})
+                await _safe_send({"type": "ack", "cmd": "cancel_respond"})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
@@ -415,18 +434,18 @@ async def ws_handler(ws: WebSocket) -> None:
                 # R6 防护：连续 3 次空回复 → emit error（不兜底，显式失败，铁律 7）
                 orch = get_orchestrator()
                 if orch is None:
-                    await ws.send_json({"type": "error", "message": "No active orchestrator"})
+                    await _safe_send({"type": "error", "message": "No active orchestrator"})
                 else:
                     try:
                         loop = asyncio.get_running_loop()
                         result = await loop.run_in_executor(
                             None, _respond_task, orch, user_text,
                         )
-                        await ws.send_json({"type": "ack", "cmd": "respond", "data": result})
+                        await _safe_send({"type": "ack", "cmd": "respond", "data": result})
                     except Exception as e:
-                        await ws.send_json({"type": "error", "message": str(e)})
+                        await _safe_send({"type": "error", "message": str(e)})
             else:
-                await ws.send_json({"type": "error", "message": f"Unknown command: {cmd}"})
+                await _safe_send({"type": "error", "message": f"Unknown command: {cmd}"})
 
     except Exception:
         logger.info("WebSocket closed", exc_info=True)

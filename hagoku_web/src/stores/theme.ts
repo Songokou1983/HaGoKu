@@ -5,7 +5,6 @@ export type ThemeId = "dark" | "light";
 interface ThemeStore {
   theme: ThemeId;
   setTheme: (t: ThemeId) => void;
-  toggle: () => void;
 }
 
 export const useThemeStore = create<ThemeStore>((set, get) => ({
@@ -13,9 +12,5 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   setTheme: (t) => {
     localStorage.setItem("hagoku_theme", t);
     set({ theme: t });
-  },
-  toggle: () => {
-    const next = get().theme === "dark" ? "light" : "dark";
-    get().setTheme(next);
   },
 }));

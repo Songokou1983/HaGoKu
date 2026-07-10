@@ -67,6 +67,13 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
                 html_snippet = fig.to_html(full_html=False, include_plotlyjs="cdn")
                 result["html_snippet"] = html_snippet
                 result["type"] = "inline_html"
+                # ── 自动存入 context，供 generate_report 读取 ──
+                charts = ctx.setdefault("_generated_charts", [])
+                charts.append({
+                    "type": "inline_html",
+                    "html_snippet": html_snippet,
+                    "title": title or f"{chart_type} 图",
+                })
             except Exception:
                 result["type"] = "plotly_figure"
                 result["note"] = "图表已生成 (Plotly Figure)，大图不进入 LLM context"

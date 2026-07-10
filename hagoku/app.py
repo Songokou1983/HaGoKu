@@ -77,10 +77,10 @@ class HaGoKuApp:
         return self._active_project
 
     def is_busy(self) -> bool:
-        """当前项目是否有活跃的 respond 处理。"""
+        """当前项目是否有活跃的分析处理。"""
         if self._active_orch is None:
             return False
-        return getattr(self._active_orch, '_respond_cancelled', True) is False
+        return not self._active_orch.is_respond_cancelled()
 
     def switch_project(self, project_name: str) -> dict | None:
         """切换到目标项目，返回状态快照。失败返回 None。"""

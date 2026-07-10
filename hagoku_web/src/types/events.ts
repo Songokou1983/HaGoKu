@@ -23,9 +23,6 @@ export type EventType =
   | "run_completed"
   | "run_failed";
 
-/** Known agent identifiers */
-export type AgentId = "scout" | "cleaner" | "analyst" | "reporter";
-
 /** Structured event payload sent from the backend */
 export interface EventData {
   event_id: string;
@@ -55,27 +52,6 @@ export interface WSMessage {
   version?: string;
 }
 
-// ── CO-23: 扩展事件载荷类型 ──────────────────────────────────────
-
-/** state_snapshot: 重连时后端返回的完整状态 */
-export interface StateSnapshotData {
-  stage?: string;
-  field_review?: unknown;
-  cleaning_review?: unknown;
-  analyst_message?: string;
-  pending_ask_user?: AskUserPayload;
-  agent_states?: Record<string, string>;
-}
-
-/** tool_exchange 事件载荷 */
-export interface ToolExchangePayload {
-  stage: string;
-  revision: number;
-  timestamp: string;
-  assistant_pre_text?: string | null;
-  tool_calls: ToolCallItem[];
-}
-
 export interface ToolCallItem {
   id: string;
   name: string;
@@ -83,24 +59,4 @@ export interface ToolCallItem {
   result_summary?: string;
   error?: string | null;
   duration_ms?: number;
-}
-
-/** ask_user 载荷（user_input_requested 中的纯 ask，无 review 表） */
-export interface AskUserPayload {
-  question: string;
-  expected_format: "yes_no" | "choice" | "free_text";
-  options?: string[];
-}
-
-/** agent_stream_delta 事件载荷 */
-export interface StreamDeltaPayload {
-  stream_id: string;
-  delta: string;
-  agent: string;
-}
-
-/** agent_stream_end 事件载荷 */
-export interface StreamEndPayload {
-  stream_id: string;
-  agent: string;
 }

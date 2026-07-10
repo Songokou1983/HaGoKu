@@ -394,6 +394,25 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             headline=s.get("headline"),
         ))
 
+    # ── 标准化图表格式：LLM 可能只传 html_snippet 缺 type，统一补全 ──
+    for s in sections:
+        normalized = []
+        for c in (s.charts or []):
+            if isinstance(c, dict):
+                if c.get("html_snippet") and not c.get("type"):
+                    c["type"] = "inline_html"
+                normalized.append(c)
+        s.charts = normalized
+
+    # ── 自动注入 context 中已生成的图表 ──
+    # 如果 LLM 没有手动给任何 section 分配 charts，则把 create_plot 生成的图表
+    # 自动追加到最后一个 section，确保图表不丢失
+    generated = ctx.get("_generated_charts") or []
+    if generated:
+        has_manual_charts = any(s.charts for s in sections)
+        if not has_manual_charts and sections:
+            sections[-1].charts = list(generated)
+
     report = ReportData(
         project_name=ctx.get("_project_name", ""),
         query=ctx.get("query", ""),
@@ -407,7 +426,12 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     )
 
     run_dir = ctx.get("_run_dir") or ""
-    output_path = str(Path(run_dir) / "output" / "report.html") if run_dir else ""
+    if run_dir:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = str(Path(run_dir) / "output" / f"report_{ts}.html")
+    else:
+        output_path = ""
     gen = ReportGenerator()
     gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
 
@@ -430,7 +454,7 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
 
 agent_tools.register(Tool(
     name="generate_report",
-    description="生成 HTML 分析报告。模板可选: default/academic/brief/business_analysis",
+    description="生成 HTML 分析报告。模板可选: default/academic/brief/business_analysis。create_plot 生成的图表自动注入——无需手动传 charts。",
     parameters={
         "type": "object",
         "properties": {

@@ -6,16 +6,9 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from hagoku.context.session import Session, ToolCallRecord  # noqa: F401
-
-
-@dataclass
-class ContextEntry:
-    """兼容旧测试的空类型桩。"""
-    pass
 
 
 class ProjectContext(Session):

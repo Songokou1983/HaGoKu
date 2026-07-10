@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -20,6 +21,7 @@ class EventBus:
     def __init__(self) -> None:
         self.events: list[Event] = []
         self.subscribers: list[Callable[[Event], None]] = []
+        self._lock = threading.Lock()
 
     def emit(self, event_type: EventType, agent: str, data: dict | None = None, parent_id: str | None = None) -> Event:
         """发射事件并通知所有订阅者"""
@@ -32,11 +34,14 @@ class EventBus:
             parent_id=parent_id,
         )
         self.events.append(event)
+        # 快照订阅者列表（锁内），然后锁外回调，避免回调中 subscribe/unsubscribe 死锁
+        with self._lock:
+            snapshot = list(self.subscribers)
         logger.info("EVENT %-30s agent=%-10s subs=%d data=%s",
             event_type.value, agent,
-            len(self.subscribers),
+            len(snapshot),
             str({k: str(v)[:80] for k, v in (data or {}).items() if k not in ('stream_id',)})[:200])
-        for callback in self.subscribers:
+        for callback in snapshot:
             try:
                 callback(event)
             except Exception as e:
@@ -45,18 +50,16 @@ class EventBus:
 
     def subscribe(self, callback: Callable[[Event], None]) -> None:
         """订阅事件（同一 callback 只注册一次，避免 WS 桥接等重复订阅）"""
-        if callback in self.subscribers:
-            return
-        self.subscribers.append(callback)
+        with self._lock:
+            if callback in self.subscribers:
+                return
+            self.subscribers.append(callback)
 
     def unsubscribe(self, callback: Callable[[Event], None]) -> None:
         """取消订阅"""
-        if callback in self.subscribers:
-            self.subscribers.remove(callback)
-
-    def unsubscribe(self, callback: Callable[[Event], None]) -> None:
-        """取消订阅"""
-        self.subscribers.remove(callback)
+        with self._lock:
+            if callback in self.subscribers:
+                self.subscribers.remove(callback)
 
     def get_timeline(self) -> list[Event]:
         """获取完整时间线（按时间排序）"""

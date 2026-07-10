@@ -156,6 +156,43 @@ async def get_audit_report(filename: str) -> dict[str, Any]:
     content = path.read_text(encoding="utf-8")
     return {"name": filename, "content": content, "size": len(content)}
 
+# ── 修复端点 ──────────────────────────────────────────────────────
+
+class FixRequest(BaseModel):
+    action: str  # reset_active_preset / restore_default_prompt / delete_preset
+
+
+@router.post("/fix")
+async def doctor_fix(req: FixRequest):
+    """Doctor 执行修复操作。仅限安全的、可逆的操作。"""
+    from pathlib import Path as _P
+
+    if req.action == "reset_active_preset":
+        # 清除激活预设 → 恢复默认 prompt.md
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+            return {"ok": True, "message": "已恢复默认提示词，下次分析生效"}
+        return {"ok": True, "message": "当前已是默认提示词，无需操作"}
+
+    if req.action == "restore_default_prompt":
+        # 用 presets/general.md 覆盖 prompt.md
+        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
+        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
+        if not general_path.exists():
+            raise HTTPException(500, "默认预设文件缺失，无法恢复")
+        prompt_path.write_text(general_path.read_text(encoding="utf-8"))
+        # 同时清除激活预设
+        af = _P.home() / ".hagoku" / "active_preset"
+        if af.exists():
+            af.unlink()
+        return {"ok": True, "message": "prompt.md 已从默认预设恢复"}
+
+    if req.action == "delete_preset":
+        raise HTTPException(400, "请通过「分析能力」面板删除预设，Doctor 不直接删除文件")
+
+    raise HTTPException(400, f"未知修复操作: {req.action}")
+
 
 @router.get("/status")
 async def doctor_status() -> dict[str, Any]:

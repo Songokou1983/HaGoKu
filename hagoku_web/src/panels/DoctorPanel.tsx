@@ -33,13 +33,6 @@ interface HealthResponse {
   token_rate_tok_s: number;
 }
 
-interface AuditItem {
-  name: string;
-  type: "method" | "tool" | "lesson" | "unknown";
-  size: number;
-  mtime: number;
-}
-
 interface DoctorStatus {
   meta_llm_configured: boolean;
   audits_dir: string;
@@ -59,13 +52,6 @@ export default function DoctorPanel() {
   // 审计
   const [auditRunning, setAuditRunning] = useState<AuditTab | null>(null);
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
-  const [audits, setAudits] = useState<AuditItem[]>([]);
-  const [auditsLoading, setAuditsLoading] = useState(false);
-
-  // 报告查看
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
-  const [reportContent, setReportContent] = useState<string | null>(null);
-  const [reportLoading, setReportLoading] = useState(false);
 
   // Doctor 状态
   const [status, setStatus] = useState<DoctorStatus | null>(null);
@@ -158,9 +144,8 @@ export default function DoctorPanel() {
   // 初始化
   useEffect(() => {
     loadHealth();
-    loadAudits();
     loadStatus();
-  }, [loadHealth, loadAudits, loadStatus]);
+  }, [loadHealth, loadStatus]);
 
   // ── 触发审计 ──
   const triggerAudit = async (tab: AuditTab) => {
@@ -174,7 +159,6 @@ export default function DoctorPanel() {
         throw new Error(typeof d.detail === "string" ? d.detail : `审计失败 (${r.status})`);
       }
       setAuditMessage(`✅ 审计完成`);
-      loadAudits();
       // 读取审计报告内容，直接喂给 Doctor 分析
       const reportName = d.report_path?.split("/").pop() || "";
       const tabLabel = tab === "methods" ? "方法库" : "工具箱";
@@ -359,35 +343,7 @@ ${summary}`);
             }`}>{auditMessage}</p>
           )}
 
-          {/* 审计报告列表 */}
-          {audits.length > 0 && (
-            <div className="space-y-1">
-              {audits.slice(0, 5).map((a) => (
-                <button
-                  key={a.name}
-                  onClick={() => viewReport(a.name)}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded text-ui-xs text-left cursor-pointer ${
-                    selectedReport === a.name
-                      ? "bg-app-accent/15 text-app-accent"
-                      : "hover:bg-app-bg text-app-text-muted hover:text-app-text"
-                  }`}
-                >
-                  <span className="shrink-0 w-10 text-center text-ui-xs px-1 rounded bg-app-bg-tertiary">
-                    {a.type}
-                  </span>
-                  <span className="flex-1 truncate">{a.name}</span>
-                  <span className="text-app-text-muted/50">{new Date(a.mtime * 1000).toLocaleDateString()}</span>
-                </button>
-              ))}
-            </div>
-          )}
 
-          {/* 报告内容 */}
-          {selectedReport && reportContent && (
-            <pre className="text-ui-xs text-app-text-muted whitespace-pre-wrap font-mono leading-relaxed bg-app-bg-secondary rounded p-2 max-h-32 overflow-auto">
-              {reportContent}
-            </pre>
-          )}
         </div>
       </details>
     </div>

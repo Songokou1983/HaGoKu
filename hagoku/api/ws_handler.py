@@ -174,7 +174,8 @@ class WSBridge:
         self._clients: dict[str, WebSocket] = {}  # keyed by id()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._delta_pending = False
-        self._latest_delta: dict | None = None
+        self._delta_text = ""
+        self._delta_template: dict | None = None
 
     @classmethod
     def get(cls) -> WSBridge:
@@ -225,9 +226,13 @@ class WSBridge:
             return
         payload = _event_to_message(event)
 
-        # ── 节流：AGENT_STREAM_DELTA 高频事件不逐条创建协程 ──
+        # ── 节流：AGENT_STREAM_DELTA 高频事件累积文本，不逐条建协程 ──
         if event.event_type == EventType.AGENT_STREAM_DELTA:
-            self._latest_delta = payload
+            d = (event.data or {})
+            delta = d.get("delta", "") if isinstance(d, dict) else ""
+            if self._delta_template is None:
+                self._delta_template = payload
+            self._delta_text += delta
             if not self._delta_pending:
                 self._delta_pending = True
                 loop.call_soon_threadsafe(self._flush_delta)
@@ -248,12 +253,16 @@ class WSBridge:
         asyncio.run_coroutine_threadsafe(self.broadcast(payload), loop)
 
     def _flush_delta(self):
-        """Called on event loop thread. Creates broadcast task for latest delta."""
+        """Called on event loop thread. Sends accumulated delta text as one broadcast."""
         self._delta_pending = False
-        payload = self._latest_delta
-        self._latest_delta = None
-        if payload:
-            asyncio.create_task(self.broadcast(payload))
+        text = self._delta_text
+        template = self._delta_template
+        self._delta_text = ""
+        self._delta_template = None
+        if text and template:
+            # Merge accumulated text into template payload
+            template["data"]["data"]["delta"] = text
+            asyncio.create_task(self.broadcast(template))
 
 
 async def ws_handler(ws: WebSocket) -> None:

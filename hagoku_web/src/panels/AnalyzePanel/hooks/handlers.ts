@@ -2,7 +2,7 @@
  * WebSocket event handlers — extracted from useWsEventHandler.
  * Each function receives the full WsEventDeps object and a message.
  */
-import { uid } from "../../utils";
+import { uid } from "../utils";
 import {
   resolveAgentKey,
   parsePauseInteractionRevision,
@@ -10,15 +10,15 @@ import {
   parseCleaningAssessment,
   parseCleaningReview,
   parseAnalystReview,
-} from "../../parsers";
+} from "../parsers";
 import {
   formatScoutUserInputFactLine,
   formatScoutAppliedUpdates,
   formatStageProceedFactLine,
-} from "../../utils";
-import { guardrailsRunCompletedInfo } from "../../../../utils/wsGuardrails";
-import { escapeHtml } from "../../../../utils/sanitize";
-import type { WsEventDeps, ConvoMessage } from "../../types";
+} from "../utils";
+import { guardrailsRunCompletedInfo } from "../../../utils/wsGuardrails";
+import { escapeHtml } from "../../../utils/sanitize";
+import type { WsEventDeps, ConvoMessage } from "../types";
 
 // ── state_snapshot ────────────────────────────────────────────
 

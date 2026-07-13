@@ -135,9 +135,7 @@ def _handle_read_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dic
 
 def _handle_save_lesson(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     store = LessonStore()
-    wf = str(args.get("what_failed", "none") or "none").strip()
-    if not wf:
-        wf = "none"
+    wf = str(args.get("what_failed", "") or "").strip()
     try:
         lid = store.save(
             scenario=str(args.get("scenario", "")),

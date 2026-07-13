@@ -30,7 +30,7 @@ HAGOKU_ROOT = Path(__file__).resolve().parent.parent / "hagoku"
 # F-057 修复：扫全仓 hagoku/，不再限定子目录白名单。
 # 原 _DOCTRINE_SUBDIRS 只覆盖 5/14 子目录（"memory" 死指向不存在目录），
 # 漏了 storage/tools/context/llm/observability 等 P0/P1 高发地。
-_DOCTRINE_SUBDIRS = ("agents", "manager", "api", "guardrails", "storage", "context", "llm", "observability", "tools")
+_DOCTRINE_SUBDIRS = ("agents", "manager", "api", "guardrails", "storage", "context", "llm", "observability", "tools", "services", "repository", "memory")
 
 # 已知合法例外文件（纯 IO / 纯计算 / 不含业务语义判断的模块）
 _EXEMPT_FILES: set[str] = {

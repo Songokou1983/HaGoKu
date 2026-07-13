@@ -1,4 +1,6 @@
 // ── Agent pipeline types ───────────────────────────────────────
+import type React from "react";
+
 export type AgentKey = "scout" | "cleaner" | "analyst" | "reporter";
 export type AgentRunState = "idle" | "running" | "done" | "error" | "skipped";
 
@@ -114,4 +116,44 @@ export interface ProjectFile {
   path: string;
   size: number;
   mtime: number;
+}
+
+// ── WebSocket Event Handler Deps ──────────────────────────────
+// 从 useWsEventHandler 提取，供 handler 函数共享。
+
+export interface WsEventDeps {
+  batch: any[];
+  setMessages: React.Dispatch<React.SetStateAction<ConvoMessage[]>>;
+  setAgentStates: React.Dispatch<React.SetStateAction<Record<AgentKey, AgentRunState>>>;
+  setAgentElapsed: React.Dispatch<React.SetStateAction<Record<AgentKey, number>>>;
+  agentStartTimes: React.MutableRefObject<Record<string, number>>;
+  setWaitingAgent: React.Dispatch<React.SetStateAction<AgentKey | null>>;
+  setPhase: React.Dispatch<React.SetStateAction<any>>;
+  setActiveFieldReviewId: React.Dispatch<React.SetStateAction<string | null>>;
+  setActiveFieldReviewRevision: React.Dispatch<React.SetStateAction<number>>;
+  setFieldReviewScrollNonce: React.Dispatch<React.SetStateAction<number>>;
+  setActiveCleaningReviewId: React.Dispatch<React.SetStateAction<string | null>>;
+  setActiveCleaningReviewRevision: React.Dispatch<React.SetStateAction<number>>;
+  setActiveAnalystReviewId: React.Dispatch<React.SetStateAction<string | null>>;
+  setActiveAnalystReviewRevision: React.Dispatch<React.SetStateAction<number>>;
+  setGateOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setGuardrailsBlocked: React.Dispatch<React.SetStateAction<boolean>>;
+  setBlockedRunId: React.Dispatch<React.SetStateAction<string | null>>;
+  setResultReportUrl: React.Dispatch<React.SetStateAction<string | null>>;
+  replySnapshotRef: React.MutableRefObject<{ agent: AgentKey; gate: boolean } | null>;
+  replyInputRef: React.MutableRefObject<HTMLTextAreaElement | null>;
+  waitinAgent: AgentKey | null;
+  gateOpen: boolean;
+  activeFieldReviewId: string | null;
+  activeFieldReviewRevision: number;
+  activeCleaningReviewId: string | null;
+  activeCleaningReviewRevision: number;
+  activeAnalystReviewId: string | null;
+  activeAnalystReviewRevision: number;
+  currentProject: string | null;
+  onThinking?: (text: string | null) => void;
+  setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
+  setCurrentProject?: (p: string) => void;
+  setCurrentDataPath?: (p: string) => void;
+  log?: (msg: string) => void;
 }

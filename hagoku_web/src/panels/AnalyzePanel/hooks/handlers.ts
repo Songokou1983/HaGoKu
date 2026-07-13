@@ -1,0 +1,402 @@
+/**
+ * WebSocket event handlers — extracted from useWsEventHandler.
+ * Each function receives the full WsEventDeps object and a message.
+ */
+import { uid } from "../../utils";
+import {
+  resolveAgentKey,
+  parsePauseInteractionRevision,
+  parseFieldReview,
+  parseCleaningAssessment,
+  parseCleaningReview,
+  parseAnalystReview,
+} from "../../parsers";
+import {
+  formatScoutUserInputFactLine,
+  formatScoutAppliedUpdates,
+  formatStageProceedFactLine,
+} from "../../utils";
+import { guardrailsRunCompletedInfo } from "../../../../utils/wsGuardrails";
+import { escapeHtml } from "../../../../utils/sanitize";
+import type { WsEventDeps, ConvoMessage } from "../../types";
+
+// ── state_snapshot ────────────────────────────────────────────
+
+export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
+  const snap = (msg as any).data;
+  if (!snap) return false;
+  const {
+    setMessages, setActiveFieldReviewId, setActiveFieldReviewRevision,
+    setActiveCleaningReviewId, setActiveCleaningReviewRevision,
+    setActiveAnalystReviewId, setActiveAnalystReviewRevision,
+    setGateOpen, setPhase, setWaitingAgent, setAgentStates,
+    setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
+  } = deps;
+
+  setMessages([]);
+  setActiveFieldReviewId(null);
+  setActiveFieldReviewRevision(-1);
+  setActiveCleaningReviewId(null);
+  setActiveCleaningReviewRevision(-1);
+  setActiveAnalystReviewId(null);
+  setActiveAnalystReviewRevision(-1);
+  if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
+  if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
+  if (Array.isArray(snap.messages) && snap.messages.length > 0) {
+    setPhase("running");
+    setMessages(snap.messages.map((m: any) => ({
+      id: uid(),
+      role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+      text: m.content || "",
+      timestamp: m.timestamp || new Date().toISOString(),
+    })));
+  } else {
+    setPhase("setup");
+  }
+  if (snap.gate_open) setGateOpen(true);
+  if (snap.field_review) {
+    const fr = parseFieldReview(snap.field_review);
+    if (fr) {
+      const wfId = uid();
+      setActiveFieldReviewId(wfId);
+      setMessages((prev) => [...prev, { id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview: fr }]);
+      setActiveFieldReviewRevision(0);
+      setFieldReviewScrollNonce((n: number) => n + 1);
+    }
+    setWaitingAgent("scout"); setGateOpen(true);
+  }
+  if (snap.cleaning_review) {
+    const cr = parseCleaningReview(snap.cleaning_review);
+    if (cr) {
+      const cid = uid();
+      setActiveCleaningReviewId(cid);
+      setMessages((prev) => [...prev, { id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview: cr }]);
+      setActiveCleaningReviewRevision(0);
+    }
+    setWaitingAgent("cleaner"); setGateOpen(true);
+  }
+  if (snap.analyst_message) {
+    setMessages((prev) => [...prev, { id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() }]);
+    setWaitingAgent("analyst"); setGateOpen(true);
+  }
+  if (snap.pending_ask_user) {
+    const ask = snap.pending_ask_user;
+    if (ask.question && ask.expected_format) {
+      setMessages((prev) => [...prev, { id: uid(), role: "workflow", text: "", timestamp: new Date().toISOString(), askUser: { question: ask.question, expected_format: ask.expected_format, options: ask.options } }]);
+    }
+  }
+  const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
+  const doneIdx = agentOrder.indexOf(snap.stage);
+  const states: Record<string, string> = {};
+  for (let i = 0; i < 4; i++) {
+    const a = agentOrder[i];
+    if (i < doneIdx) states[a] = "done";
+    else if (i === doneIdx) states[a] = "running";
+    else states[a] = "idle";
+  }
+  setAgentStates(states as any);
+  return true;
+}
+
+// ── ack ───────────────────────────────────────────────────────
+
+export function handleAck(deps: WsEventDeps, msg: any): boolean {
+  const { replySnapshotRef, setReplyPending } = deps;
+  if (msg.type === "ack" && msg.cmd === "respond") {
+    replySnapshotRef.current = null;
+    setReplyPending?.(false);
+    return true;
+  }
+  if (msg.type === "ack" && msg.cmd === "cancel_respond") {
+    setReplyPending?.(false);
+    return true;
+  }
+  return false;
+}
+
+// ── error ─────────────────────────────────────────────────────
+
+export function handleError(deps: WsEventDeps, msg: any): boolean {
+  const { setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
+  if (msg.type !== "error") return false;
+  const detail = typeof msg.message === "string" ? msg.message.trim() : "";
+  const iso = new Date().toISOString();
+  setMessages((prev) => [
+    ...prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+    { id: uid(), role: "system", text: detail || "服务器返回错误", timestamp: iso },
+  ]);
+  setReplyPending?.(false);
+  const snap = replySnapshotRef.current;
+  const recoverable = /No agent is waiting|No active orchestrator/i.test(detail);
+  if (recoverable && snap) {
+    setWaitingAgent(snap.agent);
+    setGateOpen(snap.gate);
+    replySnapshotRef.current = null;
+  }
+  return true;
+}
+
+// ── event (main dispatcher) ───────────────────────────────────
+
+export function handleEvent(deps: WsEventDeps, msg: any): void {
+  const d = msg.data;
+  const { waitinAgent } = deps;
+  let agentKey = resolveAgentKey(d.agent);
+  if (d.event_type === "agent_started" && !d.agent) {
+    agentKey = resolveAgentKey(waitinAgent ?? "scout") ?? "scout";
+  }
+
+  // agent lifecycle
+  if (d.event_type === "agent_started" && agentKey) {
+    deps.agentStartTimes.current[agentKey] = Date.now();
+    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "running" }));
+    deps.onThinking?.(null);
+  }
+  if (d.event_type === "agent_completed" && agentKey) {
+    const elapsed = Math.round((Date.now() - (deps.agentStartTimes.current[agentKey] ?? Date.now())) / 1000);
+    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "done" }));
+    deps.setAgentElapsed((prev) => ({ ...prev, [agentKey]: elapsed }));
+    deps.onThinking?.(null);
+  }
+  if (d.event_type === "agent_failed" && agentKey) {
+    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
+    deps.onThinking?.(null);
+    deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+    const detail = (d.data as Record<string, unknown>)?.error;
+    if (typeof detail === "string" && detail.trim()) {
+      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp }]);
+    }
+  }
+
+  // agent_thinking
+  if (d.event_type === "agent_thinking") {
+    const raw = (d.data as Record<string, unknown> | undefined)?.thought;
+    if (typeof raw === "string" && raw.trim()) deps.onThinking?.(raw.trim());
+  }
+
+  // tool_exchange
+  if (d.event_type === "tool_exchange") {
+    const data = (d.data ?? {}) as Record<string, unknown>;
+    const toolCalls = data.tool_calls as any[] | undefined;
+    if (toolCalls && toolCalls.length > 0) {
+      deps.setMessages((prev) => [...prev, {
+        id: uid(), role: "agent", text: "", timestamp: d.timestamp,
+        toolExchange: {
+          stage: (data.stage as string) || d.agent || "",
+          tool_calls: toolCalls.map((tc: any) => ({
+            id: tc.id || uid(), name: tc.name || "",
+            arguments_summary: tc.arguments_summary, result_summary: tc.result_summary,
+            error: tc.error, duration_ms: tc.duration_ms,
+          })),
+          assistant_pre_text: (data.assistant_pre_text as string) || null,
+        },
+      }]);
+    }
+  }
+
+  // agent_stream_delta
+  if (d.event_type === "agent_stream_delta") {
+    const data = (d.data ?? {}) as Record<string, unknown>;
+    const streamId = (data.stream_id as string) || "";
+    const delta = (data.delta as string) || "";
+    if (streamId && delta) {
+      deps.setMessages((prev) => {
+        const lastIdx = prev.length - 1;
+        if (lastIdx >= 0 && prev[lastIdx].streaming && prev[lastIdx].streamId === streamId) {
+          return prev.map((m, i) => i === lastIdx ? { ...m, text: m.text + delta, timestamp: d.timestamp } : m);
+        }
+        return [...prev, { id: uid(), role: "agent", text: delta, timestamp: d.timestamp, streaming: true, streamId }];
+      });
+    }
+  }
+
+  // agent_stream_end
+  if (d.event_type === "agent_stream_end") {
+    deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+  }
+
+  // reporter completed
+  if (d.agent === "reporter" && d.event_type === "agent_completed") {
+    const data = d.data as Record<string, unknown>;
+    const elapsed = Math.round((Date.now() - (deps.agentStartTimes.current["reporter"] ?? Date.now())) / 1000);
+    if (data?.skipped === true) {
+      deps.setAgentStates((prev) => ({ ...prev, reporter: "skipped" }));
+      deps.setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
+      deps.setWaitingAgent(null);
+      deps.setPhase("done");
+    } else {
+      deps.setAgentStates((prev) => ({ ...prev, reporter: "done" }));
+      deps.setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
+      const proj = (data?.project_name as string) || deps.currentProject || "";
+      deps.setResultReportUrl(`/api/reports/${proj}`);
+      deps.setWaitingAgent(null);
+      deps.setPhase("done");
+    }
+  }
+
+  // user_input_requested
+  if (d.event_type === "user_input_requested") {
+    deps.log?.(`user_input_requested received agent=${d.agent}`);
+    deps.setGateOpen(false);
+    const dataObj = (d.data ?? {}) as Record<string, unknown>;
+    const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
+    const fr = parseFieldReview(dataObj.field_review);
+    const ca = parseCleaningAssessment(dataObj.cleaning_assessment);
+    const cr = parseCleaningReview(dataObj.cleaning_review);
+    const ar = parseAnalystReview(dataObj.analyst_review);
+    const incRev = parsePauseInteractionRevision(dataObj);
+    const incomingRevision = incRev !== null ? incRev : Infinity;
+
+    const askQuestion = dataObj.question as string | undefined;
+    const askFmt = dataObj.expected_format as string | undefined;
+    const isPureAsk = !!askQuestion && !!askFmt && !fr && !cr && !ar && !dataObj.field_review && !dataObj.cleaning_review && !dataObj.analyst_review;
+
+    if (isPureAsk) {
+      deps.setMessages((prev) => [...prev, {
+        id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
+        askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
+      }]);
+    }
+
+    if (fr) {
+      const patchInPlace = deps.activeFieldReviewId !== null && (incomingRevision === deps.activeFieldReviewRevision || incomingRevision > deps.activeFieldReviewRevision);
+      if (patchInPlace) {
+        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m));
+      } else {
+        const wfId = uid();
+        deps.setActiveFieldReviewId(wfId);
+        deps.setMessages((prev) => [...prev, { id: wfId, role: "workflow", text: "", timestamp: d.timestamp, fieldReview: fr }]);
+      }
+      deps.setActiveFieldReviewRevision(incomingRevision);
+      deps.setFieldReviewScrollNonce((n) => n + 1);
+    } else if (!fr && dataObj.message) {
+      const msgText = String(dataObj.message);
+      if (msgText.trim()) {
+        deps.setMessages((prev) => {
+          if (prev.length > 0 && prev[prev.length - 1].text === msgText) return prev;
+          return [...prev, { id: uid(), role: "workflow", text: msgText, timestamp: d.timestamp }];
+        });
+      }
+    } else if (!gatePayload && !cr && !ar && !isPureAsk) {
+      deps.setActiveFieldReviewId(null);
+      deps.setActiveFieldReviewRevision(-1);
+      deps.setFieldReviewScrollNonce(0);
+    }
+
+    if (cr) {
+      const patchCleaning = deps.activeCleaningReviewId !== null && incRev !== null && (incRev === deps.activeCleaningReviewRevision || incRev > deps.activeCleaningReviewRevision);
+      if (patchCleaning) {
+        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeCleaningReviewId ? { ...m, cleaningReview: cr, timestamp: d.timestamp } : m));
+      } else {
+        const cid = uid();
+        deps.setActiveCleaningReviewId(cid);
+        deps.setMessages((prev) => [...prev, { id: cid, role: "workflow", text: "", timestamp: d.timestamp, cleaningReview: cr }]);
+      }
+      if (incRev !== null) deps.setActiveCleaningReviewRevision(incRev);
+    } else {
+      deps.setActiveCleaningReviewId(null);
+      deps.setActiveCleaningReviewRevision(-1);
+    }
+
+    if (ca) {
+      const cid = uid();
+      const colLines = ca.columns.map((c: any) => `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${escapeHtml(c.column)}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "清洗" : "不清洗"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${escapeHtml(c.reason)}</td></tr>`).join("");
+      const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">原因</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
+      deps.setMessages((prev) => [...prev, { id: cid, role: "agent", text: ca.summary, html: `<p><strong>${escapeHtml(ca.summary)}</strong></p>${tableHtml}`, timestamp: d.timestamp } as ConvoMessage]);
+    }
+
+    if (ar) {
+      const patchAnalyst = deps.activeAnalystReviewId !== null && incRev !== null && (incRev === deps.activeAnalystReviewRevision || incRev > deps.activeAnalystReviewRevision);
+      if (patchAnalyst) {
+        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeAnalystReviewId ? { ...m, analystReview: ar, timestamp: d.timestamp } : m));
+      } else {
+        const aid = uid();
+        deps.setActiveAnalystReviewId(aid);
+        deps.setMessages((prev) => [...prev, { id: aid, role: "workflow", text: "", timestamp: d.timestamp, analystReview: ar }]);
+      }
+      if (incRev !== null) deps.setActiveAnalystReviewRevision(incRev);
+    } else {
+      deps.setActiveAnalystReviewId(null);
+      deps.setActiveAnalystReviewRevision(-1);
+    }
+
+    if (gatePayload) {
+      deps.setGateOpen(true);
+      const prompt = typeof gatePayload.prompt === "string" ? gatePayload.prompt.trim() : "";
+      if (prompt) {
+        deps.setMessages((prev) => [...prev, { id: uid(), role: "workflow", text: prompt, timestamp: d.timestamp }]);
+      }
+    }
+
+    const raw = dataObj.message;
+    const agentMsg = typeof raw === "string" ? raw.trim() : "";
+    if (agentMsg) {
+      deps.setMessages((prev) => [...prev, { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp }]);
+    }
+
+    const pausedAgent = resolveAgentKey(d.agent);
+    deps.setWaitingAgent(pausedAgent);
+    deps.log?.(`setGateOpen(true) waitingAgent=${pausedAgent}`);
+    deps.setGateOpen(true);
+    deps.setPhase("running");
+    setTimeout(() => deps.replyInputRef.current?.focus(), 100);
+  }
+
+  // user_input_received
+  if (d.event_type === "user_input_received") {
+    const inner = (d.data ?? {}) as Record<string, unknown>;
+    if (agentKey === "scout") {
+      const hasNewFields = "parse_applied_count" in inner || "columns_still_needing_input" in inner || "pure_confirm" in inner;
+      let line = "";
+      if (hasNewFields) {
+        line = formatScoutUserInputFactLine(inner);
+      } else {
+        const applied = inner.applied_field_updates;
+        const lines = Array.isArray(applied) ? applied.filter((x): x is string => typeof x === "string" && x !== null && (x as string).trim() !== "") : [];
+        if (lines.length > 0) line = formatScoutAppliedUpdates(lines);
+      }
+      if (line) {
+        deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: line, timestamp: d.timestamp }]);
+      }
+    } else if (agentKey === "cleaner" && typeof inner.proceed_accepted === "boolean") {
+      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("清洗", inner), timestamp: d.timestamp }]);
+    } else if (agentKey === "analyst" && typeof inner.proceed_accepted === "boolean") {
+      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("统计", inner), timestamp: d.timestamp }]);
+    }
+  }
+
+  // run_completed
+  if (d.event_type === "run_completed") {
+    const runPayload = (d.data ?? {}) as Record<string, unknown>;
+    if (runPayload.cancelled === true) {
+      deps.setWaitingAgent(null);
+      deps.setActiveFieldReviewId(null); deps.setActiveFieldReviewRevision(-1); deps.setFieldReviewScrollNonce(0);
+      deps.setActiveCleaningReviewId(null); deps.setActiveCleaningReviewRevision(-1);
+      deps.setActiveAnalystReviewId(null); deps.setActiveAnalystReviewRevision(-1);
+      deps.setGateOpen(false);
+      deps.setPhase("setup");
+      deps.setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
+      deps.setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
+      deps.setResultReportUrl(null);
+      deps.setGuardrailsBlocked(false);
+      deps.setBlockedRunId(null);
+      deps.setReplyPending?.(false);
+      deps.onThinking?.(null);
+      return;
+    }
+    const gr = guardrailsRunCompletedInfo({
+      event_type: d.event_type, agent: d.agent,
+      data: d.data as Record<string, unknown> | undefined,
+    });
+    if (gr.guardrailsBlocked) {
+      deps.setGuardrailsBlocked(true);
+      if (gr.runId) deps.setBlockedRunId(gr.runId);
+      deps.setWaitingAgent(null);
+      deps.setActiveFieldReviewId(null); deps.setActiveFieldReviewRevision(-1); deps.setFieldReviewScrollNonce(0);
+      deps.setActiveCleaningReviewId(null); deps.setActiveCleaningReviewRevision(-1);
+      deps.setActiveAnalystReviewId(null); deps.setActiveAnalystReviewRevision(-1);
+      deps.setGateOpen(false);
+      deps.setPhase("done");
+    }
+  }
+}

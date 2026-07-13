@@ -173,8 +173,6 @@ class WSBridge:
     def __init__(self):
         self._clients: dict[str, WebSocket] = {}  # keyed by id()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._delta_pending = False
-        self._latest_delta: dict | None = None
 
     @classmethod
     def get(cls) -> WSBridge:
@@ -223,19 +221,9 @@ class WSBridge:
             logger.warning("on_event %s DROPPED — loop=%s running=%s",
                 event.event_type.value, loop is not None, loop.is_running() if loop else "N/A")
             return
-        payload = _event_to_message(event)
-
-        # ── 节流：AGENT_STREAM_DELTA 高频事件不逐条创建协程 ──
-        if event.event_type == EventType.AGENT_STREAM_DELTA:
-            self._latest_delta = payload
-            if not self._delta_pending:
-                self._delta_pending = True
-                loop.call_soon_threadsafe(self._flush_delta)
-            return
-
-        # 其他事件：照常广播
         logger.info("on_event %s → broadcasting to %d clients",
             event.event_type.value, len(self._clients))
+        payload = _event_to_message(event)
         d = event.data or {}
         summary = {}
         if d.get("field_review"):
@@ -246,14 +234,6 @@ class WSBridge:
         logger.info("%s → %d clients %s", event.event_type.value, len(self._clients),
             str(summary) if summary else "")
         asyncio.run_coroutine_threadsafe(self.broadcast(payload), loop)
-
-    def _flush_delta(self):
-        """Called on event loop thread. Creates broadcast task for latest delta."""
-        self._delta_pending = False
-        payload = self._latest_delta
-        self._latest_delta = None
-        if payload:
-            asyncio.create_task(self.broadcast(payload))
 
 
 async def ws_handler(ws: WebSocket) -> None:

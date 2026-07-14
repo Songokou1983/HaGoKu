@@ -905,6 +905,8 @@ def main():
         host="0.0.0.0",
         port=8000,
         reload=os.environ.get("HAGOKU_API_RELOAD", "").strip().lower() in ("1", "true", "yes"),
+        ws_ping_interval=None,
+        ws_ping_timeout=None,
     )
 
 

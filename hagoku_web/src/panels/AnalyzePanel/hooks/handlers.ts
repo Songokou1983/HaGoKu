@@ -33,28 +33,37 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
   } = deps;
 
-  setMessages([]);
-  setActiveFieldReviewId(null);
-  setActiveFieldReviewRevision(-1);
-  setActiveCleaningReviewId(null);
-  setActiveCleaningReviewRevision(-1);
-  setActiveAnalystReviewId(null);
-  setActiveAnalystReviewRevision(-1);
+  // 项目切换时清空旧消息，断连重连不动已有消息
+  if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {
+    setMessages([]);
+    setActiveFieldReviewId(null);
+    setActiveFieldReviewRevision(-1);
+    setActiveCleaningReviewId(null);
+    setActiveCleaningReviewRevision(-1);
+    setActiveAnalystReviewId(null);
+    setActiveAnalystReviewRevision(-1);
+  }
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   if (Array.isArray(snap.messages) && snap.messages.length > 0) {
-    setPhase("running");
-    setMessages(snap.messages.map((m: any) => ({
-      id: uid(),
-      role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
-      text: m.content || "",
-      timestamp: m.timestamp || new Date().toISOString(),
-    })));
-  } else {
+    setMessages((prev) => {
+      if (prev.length === 0) {
+        setPhase("running");
+        return snap.messages.map((m: any) => ({
+          id: uid(),
+          role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+          text: m.content || "",
+          timestamp: m.timestamp || new Date().toISOString(),
+        }));
+      }
+      return prev;
+    });
+  } else if (snap.messages && snap.messages.length === 0) {
     setPhase("setup");
   }
   if (snap.gate_open) setGateOpen(true);
-  if (snap.field_review) {
+  // 断连恢复：只在当前没有时才从 snapshot 恢复，避免重复
+  if (snap.field_review && !deps.activeFieldReviewId) {
     const fr = parseFieldReview(snap.field_review);
     if (fr) {
       const wfId = uid();
@@ -65,7 +74,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     }
     setWaitingAgent("scout"); setGateOpen(true);
   }
-  if (snap.cleaning_review) {
+  if (snap.cleaning_review && !deps.activeCleaningReviewId) {
     const cr = parseCleaningReview(snap.cleaning_review);
     if (cr) {
       const cid = uid();

@@ -138,34 +138,18 @@ function connect() {
     }
   };
 
-  ws.onclose = (ev: CloseEvent) => {
-    // 诊断日志：记录断连原因
-    try {
-      const info = JSON.stringify({
-        code: ev.code, reason: ev.reason, wasClean: ev.wasClean,
-        readyState: ws.readyState,
-      });
-      // 发到后端日志（用 fetch 避免依赖已断的 WS）
-      fetch("/api/log", { method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `[frontend] WS onclose ${info}` }),
-      }).catch(() => {});
-    } catch {}
+  ws.onclose = () => {
     _ws = null;
     clearTimers();
     setStatus("disconnected");
+    // Schedule reconnect with exponential backoff
     const delay = backoffMs(_reconnectAttempt);
     _reconnectAttempt++;
     _reconnectTimer = setTimeout(connect, delay);
   };
 
-  ws.onerror = (ev: Event) => {
-    try {
-      fetch("/api/log", { method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `[frontend] WS onerror` }),
-      }).catch(() => {});
-    } catch {}
+  ws.onerror = () => {
+    // onclose will fire after onerror; we just let onclose handle reconnect
     ws.close();
   };
 }

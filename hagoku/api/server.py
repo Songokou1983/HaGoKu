@@ -214,6 +214,18 @@ async def get_latest_report(project_name: str):
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+# ── POST /api/log — 前端诊断日志写入 ──
+@app.post("/api/log")
+async def post_frontend_log(req: dict):
+    from hagoku.config import HaGoKuConfig as _Cfg
+    log_path = _Cfg.load().work_dir / "hagoku.log"
+    text = (req or {}).get("text", "")
+    if text:
+        with open(str(log_path), "a") as f:
+            f.write(text + "\n")
+    return {"ok": True}
+
+
 # ── GET /api/log — 返回最近 N 行统一日志 ──
 @app.get("/api/log")
 async def get_system_log(limit: int = 100):

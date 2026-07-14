@@ -38,7 +38,16 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 # ── respond（外层入口）────────────────────────────
 
 def respond(self, user_input: dict) -> dict[str, Any]:
-    """处理用户回复 — 写 Session → 调 handler → 处理 stage 切换。"""
+    """处理用户回复 — 写 Session → 调 handler → 处理 stage 切换。
+
+    加锁防止并发：用户在前一次 respond 未完成时再提交，
+    第二次 respond 会排队等待，不会同时操作同一个 session/agent。
+    """
+    with self._respond_lock:
+        return _respond_impl(self, user_input)
+
+
+def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     text = user_input.get("text", "").strip()
     self._log_channel("orchestrator", "respond_enter", text=text)
 
@@ -58,8 +67,7 @@ def respond(self, user_input: dict) -> dict[str, Any]:
         setattr(self, '_empty_respond_count', 0)
 
     # ── 清除上次停止标记 ──
-    with self._respond_lock:
-        self._respond_cancelled = False
+    self._respond_cancelled = False
 
     ctx = getattr(self, '_context', None)
     if ctx is not None:

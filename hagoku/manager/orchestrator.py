@@ -277,13 +277,11 @@ class Orchestrator(
 
     def request_cancel_respond(self) -> None:
         """前端点「停止」：中断当前 respond 处理。"""
-        with self._respond_lock:
-            self._respond_cancelled = True
+        self._respond_cancelled = True
 
     def is_respond_cancelled(self) -> bool:
         """线程安全地检查 respond 是否已被取消。"""
-        with self._respond_lock:
-            return self._respond_cancelled
+        return self._respond_cancelled
 
     def _is_cancel_requested(self) -> bool:
         with self._cancel_lock:

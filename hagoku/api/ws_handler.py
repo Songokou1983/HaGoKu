@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -196,10 +197,11 @@ class WSBridge:
         if not self._clients:
             return
         pairs = list(self._clients.items())
+        timeout = float(os.environ.get("HAGOKU_WS_SEND_TIMEOUT", "5"))
 
         async def _send_one(key: str, ws: WebSocket) -> str | None:
             try:
-                await ws.send_json(msg)
+                await asyncio.wait_for(ws.send_json(msg), timeout=timeout)
                 return None
             except Exception:
                 return key

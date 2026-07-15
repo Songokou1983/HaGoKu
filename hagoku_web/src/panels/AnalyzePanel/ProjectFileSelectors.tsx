@@ -28,6 +28,8 @@ interface ProjectFileSelectorsProps {
   excelSheets: string[];
   sheetName: string;
   setSheetName: (v: string) => void;
+  auxSheets: string[];
+  setAuxSheets: (v: string[]) => void;
 }
 
 export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
@@ -38,7 +40,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
     showProjectDropdown, setShowProjectDropdown,
     uploading, uploadError, setUploadError,
     fileInputRef, dropdownRef, projectDropdownRef, handleUpload, phase,
-    excelSheets, sheetName, setSheetName,
+    excelSheets, sheetName, setSheetName, auxSheets, setAuxSheets,
   } = props;
 
   return (
@@ -144,18 +146,42 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
         </div>
       )}
       {excelSheets.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-ui-xs text-app-text-muted w-12 shrink-0">表单</span>
-          <select
-            value={sheetName}
-            onChange={(e) => setSheetName(e.target.value)}
-            className="flex-1 px-2 py-1.5 bg-app-bg border border-app-border rounded text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
-          >
-            {excelSheets.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-ui-xs text-app-text-muted w-12 shrink-0">主表单</span>
+            <select
+              value={sheetName}
+              onChange={(e) => setSheetName(e.target.value)}
+              className="flex-1 px-2 py-1.5 bg-app-bg border border-app-border rounded text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+            >
+              {excelSheets.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-ui-xs text-app-text-muted w-12 shrink-0 pt-1">副表单</span>
+            <div className="flex-1 flex flex-wrap gap-x-3 gap-y-1">
+              {excelSheets.filter(s => s !== sheetName).map((s) => (
+                <label key={s} className="flex items-center gap-1 text-ui-xs text-app-text-muted cursor-pointer hover:text-app-text">
+                  <input
+                    type="checkbox"
+                    checked={auxSheets.includes(s)}
+                    onChange={(e) => {
+                      if (e.target.checked) setAuxSheets([...auxSheets, s]);
+                      else setAuxSheets(auxSheets.filter(x => x !== s));
+                    }}
+                    className="accent-app-accent"
+                  />
+                  {s}
+                </label>
+              ))}
+              {excelSheets.filter(s => s !== sheetName).length === 0 && (
+                <span className="text-ui-xs text-app-text-muted">无其他表单</span>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

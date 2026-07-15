@@ -293,6 +293,7 @@ class Orchestrator(
         query: str = "",
         *,
         sheet_name: int | str = 0,
+        aux_sheets: list[str] | None = None,
         project_name: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
@@ -421,6 +422,7 @@ class Orchestrator(
                     data_path, query, project_id=project_name,
                     memory_project=memory_project,
                     sheet_name=sheet_name,
+                    aux_sheets=aux_sheets,
                 )
                 context.update(result)
                 if context.get("error"):

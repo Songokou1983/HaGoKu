@@ -102,6 +102,7 @@ export default function AnalyzePanel() {
   // ── Excel 多 sheet 选择 ──
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [sheetName, setSheetName] = useState<string>("");
+  const [auxSheets, setAuxSheets] = useState<string[]>([]);
   useEffect(() => {
     setExcelSheets([]);
     setSheetName("");
@@ -119,8 +120,7 @@ export default function AnalyzePanel() {
   }, [dataPath, currentProject]);
 
   const startAnalysis = () => {
-    const sn = excelSheets.length > 1 ? sheetName : undefined;
-    sess.handleStartSession(sn);
+    sess.handleStartSession(sheetName, auxSheets);
   };
 
   // Conversation hook
@@ -299,6 +299,8 @@ export default function AnalyzePanel() {
         excelSheets={excelSheets}
         sheetName={sheetName}
         setSheetName={setSheetName}
+        auxSheets={auxSheets}
+        setAuxSheets={setAuxSheets}
       />
       {/* ── Setup idle: start button ── */}
       <StartPanel

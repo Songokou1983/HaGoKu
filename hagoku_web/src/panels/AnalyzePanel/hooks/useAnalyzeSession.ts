@@ -40,7 +40,7 @@ export function useAnalyzeSession(
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
   const queryRef = useRef("");
 
-  const handleStartSession = useCallback((sheetName?: string | number) => {
+  const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
     if (!currentProject || !dataPath) return;
     setMessages([]);
     setReplyPending(false);
@@ -68,6 +68,7 @@ export function useAnalyzeSession(
       project_name: currentProject || "",
       phase: "full",
       sheet_name: sheetName ?? 0,
+      aux_sheets: auxSheets ?? [],
     });
   }, [send, dataPath, currentProject, queryText, setPhase]);
 

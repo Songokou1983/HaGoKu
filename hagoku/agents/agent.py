@@ -120,6 +120,7 @@ class DataAnalystAgent(BaseAgent):
         project_id: str | None = None,
         memory_project: dict | None = None,
         sheet_name: int | str = 0,
+        aux_sheets: list[str] | None = None,
     ) -> dict:
         """执行「理解字段」关注点——加载数据、画像、推断语义、构建上下文。
 
@@ -145,6 +146,22 @@ class DataAnalystAgent(BaseAgent):
 
             df = load_data(data_path, sheet_name=sheet_name)
             self._emit(EventType.TOOL_CALLED, {"tool": "load_data", "args_summary": data_path})
+
+            # 加载辅助 sheet（参考数据）
+            aux_info: list[dict] = []
+            for sn in (aux_sheets or []):
+                if sn == sheet_name:
+                    continue
+                try:
+                    aux_df = load_data(data_path, sheet_name=sn)
+                    aux_info.append({
+                        "sheet": sn,
+                        "rows": len(aux_df),
+                        "cols": len(aux_df.columns),
+                        "columns": list(aux_df.columns),
+                    })
+                except Exception:
+                    pass
             self._emit(EventType.TOOL_RESULT, {"summary": f"加载成功: {len(df)} 行, {len(df.columns)} 列"})
             self._df = df
 
@@ -165,6 +182,7 @@ class DataAnalystAgent(BaseAgent):
                 "warnings": [],
                 "column_descriptions": {},
                 "_column_info": {c: str(df[c].dtype) for c in df.columns},
+                "_aux_sheets": aux_info,
             }
             # 传播 ask_user 到 orchestrator
             agent_ctx = self._context or {}
@@ -560,6 +578,10 @@ class DataAnalystAgent(BaseAgent):
         if col_info:
             cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
             agent_extra += f"\n数据集字段: {cols_str}\n"
+        aux_info = context.get("_aux_sheets")
+        if aux_info:
+            aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
+            agent_extra += "\n参考数据（副表单，需用户明确指示才用）：\n" + "\n".join(aux_lines) + "\n"
 
         messages = session.to_llm_messages(
             system_extra=agent_extra,
@@ -652,6 +674,9 @@ class DataAnalystAgent(BaseAgent):
             if col_info:
                 cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
                 agent_extra += f"\n数据集字段: {cols_str}\n"
+            if aux_info:
+                aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
+                agent_extra += "\n参考数据（副表单，需用户明确指示才用）：\n" + "\n".join(aux_lines) + "\n"
             msgs_next = session.to_llm_messages(
                 system_extra=agent_extra,
                 user_input="",

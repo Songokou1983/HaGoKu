@@ -14,18 +14,16 @@ from typing import Any
 
 import pandas as pd
 
-from hagoku.config import LLMConfig
-from hagoku.observability.event_bus import EventBus
-from hagoku.observability.events import EventType
-from hagoku.context.session import ToolCallRecord
 from hagoku.agents.base import BaseAgent
 from hagoku.agents.constants import (
     SCOUT_INFER_MAX_TOKENS,
-    SCOUT_INFER_TEMPERATURE,
-    SCOUT_LABEL_PREVIEW_LEN,
     SCOUT_LABEL_TRUNCATE_LEN,
     SCOUT_TOP_VALUES_MAX_UNIQUE,
 )
+from hagoku.config import LLMConfig
+from hagoku.context.session import ToolCallRecord
+from hagoku.observability.event_bus import EventBus
+from hagoku.observability.events import EventType
 
 logger = logging.getLogger("hagoku.agent")
 
@@ -94,7 +92,7 @@ class DataAnalystAgent(BaseAgent):
     def _load_prompt(self) -> str:
         """加载 prompt。优先读取用户激活的预设，否则用默认 prompt.md。"""
         from pathlib import Path as _Path
-        
+
         # 检查用户激活的预设
         active_file = _Path.home() / ".hagoku" / "active_preset"
         if active_file.exists():
@@ -102,7 +100,7 @@ class DataAnalystAgent(BaseAgent):
             preset_path = _Path(__file__).parent / "presets" / f"{preset_id}.md"
             if preset_path.exists():
                 return preset_path.read_text(encoding="utf-8")
-        
+
         # 回退到默认 prompt.md
         p = _Path(__file__).parent / "prompt.md"
         if p.exists():
@@ -135,12 +133,11 @@ class DataAnalystAgent(BaseAgent):
         self._emit(EventType.AGENT_STARTED, {"goal": "理解数据字段和质量问题"})
         try:
             # ── 多 sheet Excel 检测 ──
-            excel_sheets: list[str] = []
             data_path_obj = Path(data_path)
             if data_path_obj.suffix.lower() in (".xlsx", ".xls"):
                 try:
                     xl = pd.ExcelFile(data_path)
-                    excel_sheets = xl.sheet_names
+                    _ = xl.sheet_names  # 触发读取以验证文件有效
                 except Exception:
                     pass
 
@@ -416,7 +413,6 @@ class DataAnalystAgent(BaseAgent):
         if not descriptions and not display_names:
             return
         try:
-            from hagoku.memory.projects._manager import MemoryManager
             mm = context.get("_memory_manager")
             if mm is None:
                 return
@@ -449,7 +445,6 @@ class DataAnalystAgent(BaseAgent):
         intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
         if user_feedback:
             intro += f"\n用户反馈：{user_feedback}"
-        revision = context.get("interaction_revision", 0)
         session.add("user", intro)
 
         if "_column_info" not in context:
@@ -506,7 +501,8 @@ class DataAnalystAgent(BaseAgent):
                     if delta:
                         if safe_emitted == len(delta):
                             ch = getattr(self, '_log_channel', None)
-                            if ch: ch(agent_key, "stream_start", stream_id=stream_id)
+                            if ch:
+                                ch(agent_key, "stream_start", stream_id=stream_id)
                         self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id, "delta": delta,
                             "agent": agent_key,
@@ -515,7 +511,8 @@ class DataAnalystAgent(BaseAgent):
                     full_text = chunk.get("content", full_text)
                     final_tool_calls_raw = chunk.get("tool_calls") or []
                     ch = getattr(self, '_log_channel', None)
-                    if ch: ch(agent_key, "stream_end", stream_id=stream_id, text_len=len(full_text))
+                    if ch:
+                        ch(agent_key, "stream_end", stream_id=stream_id, text_len=len(full_text))
                     self._emit(EventType.AGENT_STREAM_END, {
                         "stream_id": stream_id, "agent": agent_key,
                     })
@@ -554,8 +551,8 @@ class DataAnalystAgent(BaseAgent):
 
         Phase D：统一 tool dispatch。
         """
-        from hagoku.tools.registry import agent_tools as _agt
         from hagoku.llm.client import create_raw_client
+        from hagoku.tools.registry import agent_tools as _agt
 
         if df is None:
             df = getattr(self, '_df', None)

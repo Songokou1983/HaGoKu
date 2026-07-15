@@ -413,13 +413,14 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
         s.charts = normalized
 
     # ── 自动注入 context 中已生成的图表 ──
-    # 如果 LLM 没有手动给任何 section 分配 charts，则把 create_plot 生成的图表
-    # 自动追加到最后一个 section，确保图表不丢失
+    # 将 create_plot 生成的图表分配到没有手动 charts 的 section，
+    # 按顺序轮流分配，避免全堆在最后一个 section
     generated = ctx.get("_generated_charts") or []
     if generated:
-        has_manual_charts = any(s.charts for s in sections)
-        if not has_manual_charts and sections:
-            sections[-1].charts = list(generated)
+        empty_sections = [s for s in sections if not s.charts]
+        if empty_sections:
+            for i, chart in enumerate(generated):
+                empty_sections[i % len(empty_sections)].charts.append(chart)
 
     report = ReportData(
         project_name=ctx.get("_project_name", ""),

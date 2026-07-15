@@ -8,12 +8,16 @@ interface StartPanelProps {
   canStart: boolean;
   queryText: string;
   setQueryText: (v: string) => void;
-  handleStartSession: () => void;
+  handleStartSession: (sheetName?: string) => void;
+  excelSheets: string[];
+  sheetName: string;
+  setSheetName: (v: string) => void;
 }
 
 export function StartPanel({
   phase, currentProject, dataPath, canStart,
   queryText, setQueryText, handleStartSession,
+  excelSheets, sheetName, setSheetName,
 }: StartPanelProps) {
   if (phase !== "setup") return null;
 
@@ -43,10 +47,24 @@ export function StartPanel({
               className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-ui-sm text-app-text placeholder:text-app-text-muted focus:outline-none focus:border-app-accent resize-none transition-colors"
             />
           </div>
+          {excelSheets.length > 1 && (
+            <div className="w-full max-w-md">
+              <label className="block text-ui-xs text-app-text-muted mb-1">选择 Sheet</label>
+              <select
+                value={sheetName}
+                onChange={(e) => setSheetName(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+              >
+                {excelSheets.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </>
       )}
       <button
-        onClick={handleStartSession}
+        onClick={() => handleStartSession(excelSheets.length > 1 ? sheetName : undefined)}
         disabled={!canStart}
         className={`flex items-center gap-2 px-6 py-3 rounded-lg text-ui-base font-medium transition-all duration-200
           ${canStart

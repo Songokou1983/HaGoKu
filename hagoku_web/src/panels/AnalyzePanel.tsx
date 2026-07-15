@@ -99,6 +99,30 @@ export default function AnalyzePanel() {
     : null;
   void loadFiles;
 
+  // ── Excel 多 sheet 选择 ──
+  const [excelSheets, setExcelSheets] = useState<string[]>([]);
+  const [sheetName, setSheetName] = useState<string>("");
+  useEffect(() => {
+    setExcelSheets([]);
+    setSheetName("");
+    if (!dataPath || !dataPath.match(/\.(xlsx|xls)$/i)) return;
+    const fn = dataPath.split("/").pop() || dataPath;
+    fetch(`/api/projects/${currentProject}/sheets?file=${encodeURIComponent(fn)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.sheets && d.sheets.length > 1) {
+          setExcelSheets(d.sheets);
+          setSheetName(d.sheets[0]);
+        }
+      })
+      .catch(() => {});
+  }, [dataPath, currentProject]);
+
+  const startAnalysis = () => {
+    const sn = excelSheets.length > 1 ? sheetName : undefined;
+    sess.handleStartSession(sn);
+  };
+
   // Conversation hook
   const { messages, setMessages, addSystemMsg, addUserMsg } =
     useConversation();
@@ -281,7 +305,10 @@ export default function AnalyzePanel() {
         canStart={canStart}
         queryText={queryText}
         setQueryText={setQueryText}
-        handleStartSession={sess.handleStartSession}
+        handleStartSession={startAnalysis}
+        excelSheets={excelSheets}
+        sheetName={sheetName}
+        setSheetName={setSheetName}
       />
 
       {/* ── Query / running / done: conversation view ── */}

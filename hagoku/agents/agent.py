@@ -119,6 +119,7 @@ class DataAnalystAgent(BaseAgent):
         query: str = "",
         project_id: str | None = None,
         memory_project: dict | None = None,
+        sheet_name: int | str = 0,
     ) -> dict:
         """执行「理解字段」关注点——加载数据、画像、推断语义、构建上下文。
 
@@ -132,7 +133,17 @@ class DataAnalystAgent(BaseAgent):
 
         self._emit(EventType.AGENT_STARTED, {"goal": "理解数据字段和质量问题"})
         try:
-            df = load_data(data_path)
+            # ── 多 sheet Excel 检测 ──
+            excel_sheets: list[str] = []
+            data_path_obj = Path(data_path)
+            if data_path_obj.suffix.lower() in (".xlsx", ".xls"):
+                try:
+                    xl = pd.ExcelFile(data_path)
+                    excel_sheets = xl.sheet_names
+                except Exception:
+                    pass
+
+            df = load_data(data_path, sheet_name=sheet_name)
             self._emit(EventType.TOOL_CALLED, {"tool": "load_data", "args_summary": data_path})
             self._emit(EventType.TOOL_RESULT, {"summary": f"加载成功: {len(df)} 行, {len(df.columns)} 列"})
             self._df = df

@@ -89,7 +89,7 @@ def _event_to_message(event: Event) -> dict[str, Any]:
 
 # ── Analysis runner ─────────────────────────────────────────────
 
-def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str, generation: int) -> None:
+def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str, generation: int, sheet_name: int | str = 0) -> None:
     """Executor 入口：保证无论成功失败都会释放 `_analysis_in_progress`。
     
     generation 参数用于防止已取消的旧任务在 finally 中误清标志。
@@ -105,6 +105,7 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         result = orch.run(
             data_path=data_path, query=query,
             project_name=project_name,
+            sheet_name=sheet_name,
         )
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":
@@ -341,6 +342,7 @@ async def ws_handler(ws: WebSocket) -> None:
                 # 清理整个 payload 中的 null 字节
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 data_path = payload.get("data_path", "")
+                sheet_name = payload.get("sheet_name", 0)
                 query = payload.get("query", "").strip()
                 project_name = (payload.get("project_name") or "").strip()
                 if not project_name:
@@ -396,6 +398,7 @@ async def ws_handler(ws: WebSocket) -> None:
                         project_name,
                         phase,
                         gen,
+                        sheet_name,
                     )
                 except RuntimeError:
                     with _analysis_busy_lock:

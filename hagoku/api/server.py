@@ -745,6 +745,26 @@ async def list_project_files(project_name: str):
     return {"files": files}
 
 
+# ── GET /api/projects/{project_name}/sheets — 列出 Excel 文件的 sheet 名 ──
+@app.get("/api/projects/{project_name}/sheets")
+async def list_excel_sheets(project_name: str, file: str = ""):
+    import pandas as pd
+    if not file:
+        raise HTTPException(400, "缺少 file 参数")
+    proj_dir = _projects_root() / project_name
+    file_path = proj_dir / file
+    if not file_path.exists():
+        file_path = proj_dir / "data" / file
+    if not file_path.exists():
+        raise HTTPException(404, f"文件不存在: {file}")
+    if file_path.suffix.lower() not in (".xlsx", ".xls"):
+        return {"sheets": []}
+    try:
+        xl = pd.ExcelFile(file_path)
+        return {"sheets": xl.sheet_names}
+    except Exception as e:
+        return {"sheets": [], "error": str(e)}
+
 
 
 # ── POST /api/projects/{project_name}/upload — 上传数据文件 ───

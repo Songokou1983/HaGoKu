@@ -292,6 +292,7 @@ class Orchestrator(
         data_path: str,
         query: str = "",
         *,
+        sheet_name: int | str = 0,
         project_name: str | None = None,
         output_dir: str | None = None,
         formats: list[str] | None = None,
@@ -419,6 +420,7 @@ class Orchestrator(
                 result = self._agent.run_scout_phase(
                     data_path, query, project_id=project_name,
                     memory_project=memory_project,
+                    sheet_name=sheet_name,
                 )
                 context.update(result)
                 if context.get("error"):

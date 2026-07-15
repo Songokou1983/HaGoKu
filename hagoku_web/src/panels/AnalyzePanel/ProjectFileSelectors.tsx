@@ -162,7 +162,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
       {excelSheets.length > 1 && (
         <>
           <div className="flex items-center gap-2">
-            <span className="text-ui-xs text-app-text-muted w-12 shrink-0">主表单</span>
+            <span className="text-ui-xs text-app-text-muted w-12 shrink-0">主表</span>
             <select
               value={sheetName}
               onChange={(e) => setSheetName(e.target.value)}
@@ -174,7 +174,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
             </select>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-ui-xs text-app-text-muted w-12 shrink-0 pt-1">副表单</span>
+            <span className="text-ui-xs text-app-text-muted w-12 shrink-0 pt-1">辅表</span>
             <div className="flex-1 flex flex-wrap gap-x-3 gap-y-1">
               {excelSheets.filter(s => s !== sheetName).map((s) => (
                 <label key={s} className="flex items-center gap-1 text-ui-xs text-app-text-muted cursor-pointer hover:text-app-text">

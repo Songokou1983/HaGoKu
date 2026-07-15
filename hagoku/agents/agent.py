@@ -581,7 +581,7 @@ class DataAnalystAgent(BaseAgent):
         aux_info = context.get("_aux_sheets")
         if aux_info:
             aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
-            agent_extra += "\n参考数据（副表单，需用户明确指示才用）：\n" + "\n".join(aux_lines) + "\n"
+            agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
 
         messages = session.to_llm_messages(
             system_extra=agent_extra,
@@ -676,7 +676,7 @@ class DataAnalystAgent(BaseAgent):
                 agent_extra += f"\n数据集字段: {cols_str}\n"
             if aux_info:
                 aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
-                agent_extra += "\n参考数据（副表单，需用户明确指示才用）：\n" + "\n".join(aux_lines) + "\n"
+                agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
             msgs_next = session.to_llm_messages(
                 system_extra=agent_extra,
                 user_input="",

@@ -296,6 +296,9 @@ export default function AnalyzePanel() {
         projectDropdownRef={projectDropdownRef}
         handleUpload={handleUpload}
         phase={phase}
+        excelSheets={excelSheets}
+        sheetName={sheetName}
+        setSheetName={setSheetName}
       />
       {/* ── Setup idle: start button ── */}
       <StartPanel
@@ -306,9 +309,6 @@ export default function AnalyzePanel() {
         queryText={queryText}
         setQueryText={setQueryText}
         handleStartSession={startAnalysis}
-        excelSheets={excelSheets}
-        sheetName={sheetName}
-        setSheetName={setSheetName}
       />
 
       {/* ── Query / running / done: conversation view ── */}

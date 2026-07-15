@@ -24,6 +24,10 @@ interface ProjectFileSelectorsProps {
   projectDropdownRef: React.RefObject<HTMLDivElement | null>;
   handleUpload: (f: File) => Promise<void>;
   phase: string;
+  // Excel 多 sheet 选择
+  excelSheets: string[];
+  sheetName: string;
+  setSheetName: (v: string) => void;
 }
 
 export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
@@ -34,6 +38,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
     showProjectDropdown, setShowProjectDropdown,
     uploading, uploadError, setUploadError,
     fileInputRef, dropdownRef, projectDropdownRef, handleUpload, phase,
+    excelSheets, sheetName, setSheetName,
   } = props;
 
   return (
@@ -136,6 +141,20 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
         <div className="flex items-center gap-1 text-ui-xs text-app-error">
           <X size={11} />{uploadError}
           <button onClick={() => setUploadError(null)} className="ml-auto text-app-text-muted hover:text-app-text cursor-pointer">忽略</button>
+        </div>
+      )}
+      {excelSheets.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-ui-xs text-app-text-muted w-12 shrink-0">表单</span>
+          <select
+            value={sheetName}
+            onChange={(e) => setSheetName(e.target.value)}
+            className="flex-1 px-2 py-1.5 bg-app-bg border border-app-border rounded text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+          >
+            {excelSheets.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2 } from "lucide-react";
+import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2, Trash2 } from "lucide-react";
 import type { ProjectFile } from "./types";
 import { fmtSize } from "./utils";
 
@@ -30,6 +30,7 @@ interface ProjectFileSelectorsProps {
   setSheetName: (v: string) => void;
   auxSheets: string[];
   setAuxSheets: (v: string[]) => void;
+  onDeleteFile?: () => void;
 }
 
 export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
@@ -41,6 +42,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
     uploading, uploadError, setUploadError,
     fileInputRef, dropdownRef, projectDropdownRef, handleUpload, phase,
     excelSheets, sheetName, setSheetName, auxSheets, setAuxSheets,
+    onDeleteFile,
   } = props;
 
   return (
@@ -108,15 +110,27 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
               {!projectFiles?.length
                 ? <div className="px-3 py-3 text-ui-xs text-app-text-muted text-center">暂无数据文件，请上传</div>
                 : projectFiles.map((f) => (
-                  <button key={f.path} onClick={() => { setDataPath(f.path); setShowFileDropdown(false); }}
-                    className={`w-full text-left px-3 py-2 hover:bg-app-bg cursor-pointer border-b border-app-border/50 last:border-0
+                  <div key={f.path}
+                    className={`w-full text-left px-3 py-2 hover:bg-app-bg cursor-pointer border-b border-app-border/50 last:border-0 flex items-center gap-2
                       ${f.path === dataPath ? "text-app-accent" : "text-app-text"}`}>
-                    <div className="flex items-center gap-2">
+                    <button onClick={() => { setDataPath(f.path); setShowFileDropdown(false); }}
+                      className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
                       {f.path === dataPath && <CheckCircle2 size={11} className="text-app-accent shrink-0" />}
                       <span className="text-ui-xs font-mono truncate flex-1">{f.name}</span>
                       <span className="text-ui-xs text-app-text-muted shrink-0">{fmtSize(f.size)}</span>
-                    </div>
-                  </button>
+                    </button>
+                    <button onClick={(e) => {
+                      e.stopPropagation();
+                      if (!confirm(`删除 ${f.name}？`)) return;
+                      fetch(`/api/projects/${currentProject}/files/${encodeURIComponent(f.name)}`, { method: "DELETE" })
+                        .then(r => { if (r.ok) { if (dataPath === f.path) setDataPath(""); onDeleteFile?.(); } })
+                        .catch(() => {});
+                    }}
+                      className="text-app-text-muted hover:text-app-error shrink-0 cursor-pointer p-0.5"
+                      title="删除文件">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 ))}
             </div>
           )}

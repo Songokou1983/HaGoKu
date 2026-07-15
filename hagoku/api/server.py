@@ -793,6 +793,27 @@ async def upload_project_file(project_name: str, file: UploadFile = File(...)):
     return {"name": filename, "path": str(dest), "size": len(content)}
 
 
+# ── DELETE /api/projects/{project_name}/files/{filename} — 删除数据文件 ──
+@app.delete("/api/projects/{project_name}/files/{filename}")
+async def delete_project_file(project_name: str, filename: str):
+    proj_dir = _projects_root() / project_name
+    if not proj_dir.exists():
+        raise HTTPException(404, "Project not found")
+    # 安全检查：只允许删除 data/ 下的文件，防止路径穿越
+    safe_name = Path(filename).name
+    data_dir = proj_dir / "data"
+    file_path = data_dir / safe_name
+    if not file_path.exists():
+        file_path = proj_dir / safe_name
+    if not file_path.exists():
+        raise HTTPException(404, f"文件不存在: {safe_name}")
+    if file_path.suffix.lower() not in _DATA_EXTENSIONS:
+        raise HTTPException(400, "不允许删除非数据文件")
+    file_path.unlink()
+    logging.getLogger("hagoku.api").info("delete project=%s file=%s", project_name, safe_name)
+    return {"ok": True}
+
+
 # ── GET /api/kb — 学术方法库（memory/methods/） ───────────────
 def _methods_root() -> Path:
     return Path(__file__).resolve().parent.parent / "memory" / "methods"

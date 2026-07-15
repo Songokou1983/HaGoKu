@@ -97,7 +97,7 @@ export default function AnalyzePanel() {
   const selectedFileName = dataPath
     ? dataPath.split("/").pop() ?? dataPath
     : null;
-  void loadFiles;
+  const reloadFiles = useCallback(() => loadFiles(currentProject!), [loadFiles, currentProject]);
 
   // ── Excel 多 sheet 选择 ──
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
@@ -301,6 +301,7 @@ export default function AnalyzePanel() {
         setSheetName={setSheetName}
         auxSheets={auxSheets}
         setAuxSheets={setAuxSheets}
+        onDeleteFile={() => reloadFiles()}
       />
       {/* ── Setup idle: start button ── */}
       <StartPanel

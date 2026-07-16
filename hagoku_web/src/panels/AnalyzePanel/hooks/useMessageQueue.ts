@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { sanitizeText } from "../../../utils/sanitize";
 
 interface QueueDeps {
@@ -12,30 +12,28 @@ interface QueueDeps {
 
 export function useMessageQueue(deps: QueueDeps) {
   const { send, gateOpen, replyPending, setReplyPending, setGateOpen, addUserMsg } = deps;
-  const pending = useRef<string[]>([]);
+  const [queue, setQueue] = useState<string[]>([]);
 
-  const flush = useCallback(() => {
-    if (!gateOpen || replyPending) return;
-    const msgs = pending.current;
-    if (msgs.length === 0) return;
-    const next = msgs.shift()!;
+  const enqueue = useCallback((text: string) => {
+    setQueue(prev => [...prev, text]);
+    addUserMsg(text);
+  }, [addUserMsg]);
+
+  // 出队：gate 开 + 不在处理中 + 队列非空
+  useEffect(() => {
+    if (!gateOpen || replyPending || queue.length === 0) return;
+    const next = queue[0];
+    setQueue(prev => prev.slice(1));
     send("respond", { text: next });
     setReplyPending(true);
     setGateOpen(false);
-  }, [send, gateOpen, replyPending, setReplyPending, setGateOpen]);
-
-  // gate 或处理状态变化时尝试消费队列
-  useEffect(() => { flush(); }, [flush]);
+  }, [gateOpen, replyPending, queue.length]);
 
   const submit = useCallback((raw: string) => {
     const outgoing = sanitizeText(raw.trim());
     if (!outgoing) return;
-    addUserMsg(outgoing);
-    pending.current.push(outgoing);
-    flush();
-  }, [addUserMsg, flush]);
+    enqueue(outgoing);
+  }, [enqueue]);
 
-  const pendingCount = pending.current.length;
-
-  return { submit, pendingCount };
+  return { submit, queue };
 }

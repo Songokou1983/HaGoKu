@@ -179,7 +179,7 @@ export default function AnalyzePanel() {
   });
 
   // ── 消息队列 ──
-  const { submit: submitUserReply, pendingCount } = useMessageQueue({
+  const { submit: submitUserReply, queue: msgQueue } = useMessageQueue({
     send,
     gateOpen: sess.gateOpen,
     replyPending,
@@ -314,7 +314,7 @@ export default function AnalyzePanel() {
           {replyPending && (
             <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 shrink-0 text-ui-xs text-app-text-muted">
               <Loader2 size={13} className="animate-spin text-app-accent" />
-              <span>分析师正在处理你的回复{pendingCount > 0 ? ` · 待处理 ${pendingCount}` : ""}…</span>
+              <span>分析师正在处理你的回复{msgQueue.length > 0 ? ` · 待处理 ${msgQueue.length}` : ""}…</span>
               <button
                 type="button"
                 onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}

@@ -19,15 +19,21 @@ export function useMessageQueue(deps: QueueDeps) {
     addUserMsg(text);
   }, [addUserMsg]);
 
-  // 出队：gate 开 + 不在处理中 + 队列非空
+  // 出队条件：gate 开 且 不在处理中
   useEffect(() => {
-    if (!gateOpen || replyPending || queue.length === 0) return;
-    const next = queue[0];
-    setQueue(prev => prev.slice(1));
-    send("respond", { text: next });
-    setReplyPending(true);
-    setGateOpen(false);
-  }, [gateOpen, replyPending, queue.length]);
+    if (!gateOpen || replyPending) return;
+    let next: string | null = null;
+    setQueue(prev => {
+      if (prev.length === 0) return prev;
+      next = prev[0];
+      return prev.slice(1);
+    });
+    if (next) {
+      send("respond", { text: next });
+      setReplyPending(true);
+      setGateOpen(false);
+    }
+  }, [gateOpen, replyPending]);
 
   const submit = useCallback((raw: string) => {
     const outgoing = sanitizeText(raw.trim());

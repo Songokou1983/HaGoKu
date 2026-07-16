@@ -190,7 +190,7 @@ export default function AnalyzePanel() {
         gate: sess.gateOpen,
       };
       const s = send("respond", { text: outgoing });
-      log(`send('respond')=${s} text=${outgoing.slice(0, 50)}`);
+      log(`[submit] gateOpen=${sess.gateOpen} replyPending=${replyPending} send=${s} text=${outgoing.slice(0, 40)}`);
       if (!s) {
         sess.replySnapshotRef.current = null;
         addSystemMsg(

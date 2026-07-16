@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -45,9 +45,45 @@ export default function AnalyzePanel() {
   // CO-15: Thinking text (external from useWsEventHandler)
   const [thinkingText, setThinkingText] = useState<string | null>(null);
 
-  // CO-16: reply pending state
+  // ── 消息队列：排队发送，不直接发 ──
+  const [msgQueue, setMsgQueue] = useState<string[]>([]);
   const [replyPending, setReplyPending] = useState(false);
-  const pendingMsgsRef = useRef<string[]>([]);
+
+  const enqueue = useCallback((text: string) => {
+    setMsgQueue(prev => [...prev, text]);
+    addUserMsg(text);  // 立刻显示在对话中
+    sess.setReplyText("");
+    setQueryText("");
+  }, [addUserMsg, sess, setQueryText]);
+
+  const processQueue = useCallback(() => {
+    setMsgQueue(prev => {
+      if (prev.length === 0) return prev;
+      if (replyPending) return prev;  // LLM 还在处理中，等着
+      if (!sess.gateOpen && !replyPending && phase !== "setup") return prev;  // 还没到可发送状态
+      const [next, ...rest] = prev;
+      if (next) {
+        send("respond", { text: next });
+        setReplyPending(true);
+        sess.setGateOpen(false);
+      }
+      return rest;
+    });
+  }, [send, replyPending, sess.gateOpen, phase, setReplyPending]);
+
+  // gateOpen 时触发队列处理
+  useEffect(() => { if (sess.gateOpen) processQueue(); }, [sess.gateOpen]);
+  // replyPending 清除时也触发（上一个 respond 完成）
+  useEffect(() => { if (!replyPending) processQueue(); }, [replyPending]);
+
+  const submitUserReply = useCallback(
+    (raw: string) => {
+      const outgoing = sanitizeText(raw.trim());
+      if (!outgoing) return;
+      enqueue(outgoing);
+    },
+    [enqueue],
+  );
 
   // 当前激活的提示词预设
   const [presetName, setPresetName] = useState("");
@@ -179,48 +215,7 @@ export default function AnalyzePanel() {
     log,
   });
 
-  // 当 replyPending 从 true→false 时，插入排队消息
-  useEffect(() => {
-    if (!replyPending && pendingMsgsRef.current.length > 0) {
-      const msgs = pendingMsgsRef.current;
-      pendingMsgsRef.current = [];
-      msgs.forEach(m => addUserMsg(m));
-    }
-  }, [replyPending]);
-
   useAgentStatusSync();
-
-  // Submit reply handler — 不拦截，后端 respond 锁保证排队
-  const submitUserReply = useCallback(
-    (raw: string) => {
-      const outgoing = sanitizeText(raw.trim());
-      if (!outgoing) return;
-      sess.replySnapshotRef.current = {
-        agent: "analyst",
-        gate: sess.gateOpen,
-      };
-      const s = send("respond", { text: outgoing });
-      log(`send('respond')=${s} text=${outgoing.slice(0, 50)}`);
-      if (!s) {
-        sess.replySnapshotRef.current = null;
-        addSystemMsg(
-          "当前未连接到服务器，回复未发出。请确认右上角连接状态后重试。",
-        );
-        return;
-      }
-      // 如果 LLM 仍在输出，加入排队队列
-      if (replyPending) {
-        pendingMsgsRef.current.push(outgoing);
-      } else {
-        addUserMsg(outgoing);
-      }
-      sess.setReplyText("");
-      setQueryText("");
-      setReplyPending(true);
-      sess.setGateOpen(false);
-    },
-    [send, log, sess.gateOpen, replyPending],
-  );
 
   const canStart =
     !!currentProject &&

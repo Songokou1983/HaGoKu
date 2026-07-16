@@ -50,7 +50,11 @@ export function InputBar({
 
   const handleSend = useCallback(() => {
     const text = sanitizeText(value).trim();
-    if (!text || disabled) return;
+    if (!text || disabled) {
+      console.log("[InputBar] handleSend blocked: textEmpty=", !text, "disabled=", disabled, "value.length=", value?.length ?? 0);
+      return;
+    }
+    console.log("[InputBar] handleSend → onSend, text=", text.slice(0, 40));
     onSend(text);
     if (!isControlled) setInternalValue("");
     if (textareaRef.current) {
@@ -61,15 +65,17 @@ export function InputBar({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key !== "Enter" || e.shiftKey) return;
-      const ne = e.nativeEvent as unknown as {
-        isComposing?: boolean;
-        keyCode?: number;
-      };
-      if (e.nativeEvent.isComposing || ne.keyCode === 229) return;
+      const composing = e.nativeEvent.isComposing;
+      const keyCode229 = (e.nativeEvent as any).keyCode === 229;
+      if (composing || keyCode229) {
+        console.log("[InputBar] keyDown Enter blocked: isComposing=", composing, "keyCode229=", keyCode229);
+        return;
+      }
       e.preventDefault();
+      console.log("[InputBar] keyDown Enter → handleSend, value.length=", value?.length ?? 0, "disabled=", disabled);
       handleSend();
     },
-    [handleSend],
+    [handleSend, value, disabled],
   );
 
   const autoResize = useCallback(() => {

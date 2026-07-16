@@ -23,6 +23,7 @@ import { useFileUpload } from "./AnalyzePanel/hooks/useFileUpload";
 import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
+import { useMessageQueue } from "./AnalyzePanel/hooks/useMessageQueue";
 import { sanitizeText } from "../utils/sanitize";
 import { uid } from "./AnalyzePanel/utils";
 
@@ -44,46 +45,6 @@ export default function AnalyzePanel() {
 
   // CO-15: Thinking text (external from useWsEventHandler)
   const [thinkingText, setThinkingText] = useState<string | null>(null);
-
-  // ── 消息队列：排队发送，不直接发 ──
-  const [msgQueue, setMsgQueue] = useState<string[]>([]);
-  const [replyPending, setReplyPending] = useState(false);
-
-  const enqueue = useCallback((text: string) => {
-    setMsgQueue(prev => [...prev, text]);
-    addUserMsg(text);  // 立刻显示在对话中
-    sess.setReplyText("");
-    setQueryText("");
-  }, [addUserMsg, sess, setQueryText]);
-
-  const processQueue = useCallback(() => {
-    setMsgQueue(prev => {
-      if (prev.length === 0) return prev;
-      if (replyPending) return prev;  // LLM 还在处理中，等着
-      if (!sess.gateOpen && !replyPending && phase !== "setup") return prev;  // 还没到可发送状态
-      const [next, ...rest] = prev;
-      if (next) {
-        send("respond", { text: next });
-        setReplyPending(true);
-        sess.setGateOpen(false);
-      }
-      return rest;
-    });
-  }, [send, replyPending, sess.gateOpen, phase, setReplyPending]);
-
-  // gateOpen 时触发队列处理
-  useEffect(() => { if (sess.gateOpen) processQueue(); }, [sess.gateOpen]);
-  // replyPending 清除时也触发（上一个 respond 完成）
-  useEffect(() => { if (!replyPending) processQueue(); }, [replyPending]);
-
-  const submitUserReply = useCallback(
-    (raw: string) => {
-      const outgoing = sanitizeText(raw.trim());
-      if (!outgoing) return;
-      enqueue(outgoing);
-    },
-    [enqueue],
-  );
 
   // 当前激活的提示词预设
   const [presetName, setPresetName] = useState("");
@@ -213,6 +174,17 @@ export default function AnalyzePanel() {
     setCurrentProject,
     setCurrentDataPath,
     log,
+  });
+
+  // ── 消息队列 ──
+  const [replyPending, setReplyPending] = useState(false);
+  const { submit: submitUserReply, queue: msgQueue } = useMessageQueue({
+    send,
+    gateOpen: sess.gateOpen,
+    replyPending,
+    setReplyPending,
+    setGateOpen: sess.setGateOpen,
+    addUserMsg,
   });
 
   useAgentStatusSync();

@@ -20,6 +20,8 @@ export interface InputBarProps {
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Show send button with label */
   sendLabel?: string;
+  /** Log function (WS __log channel) */
+  log?: (msg: string) => void;
 }
 
 export function InputBar({
@@ -31,6 +33,7 @@ export function InputBar({
   footerHint,
   inputRef: externalRef,
   sendLabel,
+  log,
 }: InputBarProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const [internalValue, setInternalValue] = useState("");
@@ -51,10 +54,10 @@ export function InputBar({
   const handleSend = useCallback(() => {
     const text = sanitizeText(value).trim();
     if (!text || disabled) {
-      console.log("[InputBar] handleSend blocked: textEmpty=", !text, "disabled=", disabled, "value.length=", value?.length ?? 0);
+      log?.(`[InputBar] handleSend blocked: textEmpty=${!text} disabled=${disabled} value.length=${value?.length ?? 0}`);
       return;
     }
-    console.log("[InputBar] handleSend → onSend, text=", text.slice(0, 40));
+    log?.(`[InputBar] handleSend → onSend text="${text.slice(0, 40)}"`);
     onSend(text);
     if (!isControlled) setInternalValue("");
     if (textareaRef.current) {
@@ -68,11 +71,11 @@ export function InputBar({
       const composing = e.nativeEvent.isComposing;
       const keyCode229 = (e.nativeEvent as any).keyCode === 229;
       if (composing || keyCode229) {
-        console.log("[InputBar] keyDown Enter blocked: isComposing=", composing, "keyCode229=", keyCode229);
+        log?.(`[InputBar] keyDown Enter blocked: isComposing=${composing} keyCode229=${keyCode229}`);
         return;
       }
       e.preventDefault();
-      console.log("[InputBar] keyDown Enter → handleSend, value.length=", value?.length ?? 0, "disabled=", disabled);
+      log?.(`[InputBar] keyDown Enter → handleSend value.length=${value?.length ?? 0} disabled=${disabled}`);
       handleSend();
     },
     [handleSend, value, disabled],

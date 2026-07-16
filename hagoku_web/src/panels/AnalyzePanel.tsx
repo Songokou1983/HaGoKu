@@ -407,6 +407,7 @@ export default function AnalyzePanel() {
                 onSend={submitUserReply}
                 inputRef={sess.replyInputRef}
                 sendLabel="发送"
+                log={log}
                 footerHint={
                   scoutFieldReviewOpen
                     ? "用自然语言说明字段理解即可 · Enter 发送 · Shift+Enter 换行"

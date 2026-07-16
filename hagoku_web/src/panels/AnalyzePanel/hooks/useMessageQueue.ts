@@ -22,14 +22,17 @@ export function useMessageQueue(deps: QueueDeps) {
   // 出队条件：gate 开 且 不在处理中
   useEffect(() => {
     if (!gateOpen || replyPending) return;
+    let next: string | null = null;
     setQueue(prev => {
       if (prev.length === 0) return prev;
-      const [next, ...rest] = prev;
+      next = prev[0];
+      return prev.slice(1);
+    });
+    if (next) {
       send("respond", { text: next });
       setReplyPending(true);
       setGateOpen(false);
-      return rest;
-    });
+    }
   }, [gateOpen, replyPending]);
 
   const submit = useCallback((raw: string) => {

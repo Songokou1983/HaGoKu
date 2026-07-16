@@ -337,11 +337,11 @@ export default function AnalyzePanel() {
             onAskReply={submitUserReply}
           />
 
-          {/* CO-16: reply pending processing bar — shown after user sends reply */}
+          {/* CO-16: reply pending processing bar */}
           {replyPending && (
             <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 shrink-0 text-ui-xs text-app-text-muted">
               <Loader2 size={13} className="animate-spin text-app-accent" />
-              <span>分析师正在处理你的回复…</span>
+              <span>分析师正在处理你的回复{msgQueue.length > 0 ? ` · 待处理 ${msgQueue.length}` : ""}…</span>
               <button
                 type="button"
                 onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}

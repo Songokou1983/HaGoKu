@@ -43,7 +43,7 @@ export function useAnalyzeSession(
   const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
     if (!currentProject || !dataPath) return;
     setMessages([]);
-    setReplyPending(false);
+    setReplyPending(true);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
     setGuardrailsBlocked(false);

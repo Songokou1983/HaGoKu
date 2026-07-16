@@ -125,8 +125,6 @@ export default function AnalyzePanel() {
   const { messages, setMessages, addSystemMsg, addUserMsg } =
     useConversation();
 
-  const [replyPending, setReplyPending] = useState(false);
-
   // Analyze session hook
   const sess = useAnalyzeSession(
     send,
@@ -179,6 +177,7 @@ export default function AnalyzePanel() {
   });
 
   // ── 消息队列 ──
+  const [replyPending, setReplyPending] = useState(false);
   const { submit: submitUserReply, queue: msgQueue } = useMessageQueue({
     send,
     gateOpen: sess.gateOpen,

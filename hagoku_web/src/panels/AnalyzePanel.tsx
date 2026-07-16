@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -47,6 +47,7 @@ export default function AnalyzePanel() {
 
   // CO-16: reply pending state
   const [replyPending, setReplyPending] = useState(false);
+  const pendingMsgsRef = useRef<string[]>([]);
 
   // 当前激活的提示词预设
   const [presetName, setPresetName] = useState("");
@@ -178,6 +179,15 @@ export default function AnalyzePanel() {
     log,
   });
 
+  // 当 replyPending 从 true→false 时，插入排队消息
+  useEffect(() => {
+    if (!replyPending && pendingMsgsRef.current.length > 0) {
+      const msgs = pendingMsgsRef.current;
+      pendingMsgsRef.current = [];
+      msgs.forEach(m => addUserMsg(m));
+    }
+  }, [replyPending]);
+
   useAgentStatusSync();
 
   // Submit reply handler — 不拦截，后端 respond 锁保证排队
@@ -198,13 +208,18 @@ export default function AnalyzePanel() {
         );
         return;
       }
-      addUserMsg(outgoing);
+      // 如果 LLM 仍在输出，加入排队队列
+      if (replyPending) {
+        pendingMsgsRef.current.push(outgoing);
+      } else {
+        addUserMsg(outgoing);
+      }
       sess.setReplyText("");
       setQueryText("");
       setReplyPending(true);
       sess.setGateOpen(false);
     },
-    [send, log, sess.gateOpen],
+    [send, log, sess.gateOpen, replyPending],
   );
 
   const canStart =

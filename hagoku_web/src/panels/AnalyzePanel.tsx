@@ -180,14 +180,9 @@ export default function AnalyzePanel() {
 
   useAgentStatusSync();
 
-  // Submit reply handler
+  // Submit reply handler — 不拦截，后端 respond 锁保证排队
   const submitUserReply = useCallback(
     (raw: string) => {
-      log(`gateOpen=${sess.gateOpen} replyPending=${replyPending}`);
-      if (!sess.gateOpen && !replyPending) {
-        log(`BLOCKED — gate closed, no pending`);
-        return;
-      }
       const outgoing = sanitizeText(raw.trim());
       if (!outgoing) return;
       sess.replySnapshotRef.current = {
@@ -206,11 +201,10 @@ export default function AnalyzePanel() {
       addUserMsg(outgoing);
       sess.setReplyText("");
       setQueryText("");
-      // CO-16: set replyPending instead of instantly clearing waitingAgent
       setReplyPending(true);
       sess.setGateOpen(false);
     },
-    [send, log, sess.gateOpen, replyPending],
+    [send, log, sess.gateOpen],
   );
 
   const canStart =

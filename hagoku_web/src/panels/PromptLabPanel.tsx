@@ -60,7 +60,6 @@ export default function PromptLabPanel() {
   const [showLab, setShowLab] = useState(false);
   const [labBase, setLabBase] = useState("general"); // 基于哪个预设
   const [labPrompt, setLabPrompt] = useState("");
-  const [labMessage, setLabMessage] = useState("");
   const [labRunning, setLabRunning] = useState(false);
   const [labResult, setLabResult] = useState<LabResult | null>(null);
 
@@ -224,9 +223,7 @@ export default function PromptLabPanel() {
     const content = await loadPresetContent(baseId);
     setLabBase(baseId);
     setLabPrompt(content);
-    setLabMessage("");
     setLabResult(null);
-    setLabCompare(null);
     setShowLab(true);
   };
 
@@ -234,11 +231,12 @@ export default function PromptLabPanel() {
     setLabRunning(true);
     setError("");
     try {
+      const presetName = presets.find((p) => p.id === labBase)?.name || labBase;
       const resp = await fetch("/api/doctor/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `评估这个预设的提示词质量，给出改进建议：\n\n${labPrompt}`,
+          message: `评估预设「${presetName}」的提示词质量。只输出诊断结论和改进建议，不要反问、不要询问是否需要修改——用户在此界面无法回复你。\n\n${labPrompt}`,
         }),
       });
       const data = await resp.json();
@@ -370,7 +368,7 @@ export default function PromptLabPanel() {
                     className="px-2 py-1 text-ui-xs text-app-accent hover:underline cursor-pointer flex items-center gap-0.5 ml-auto"
                   >
                     <FlaskConical size={10} />
-                    模拟
+                    评估
                   </button>
                 </div>
               </div>
@@ -388,7 +386,7 @@ export default function PromptLabPanel() {
           </div>
         </div>
 
-        {/* ── 模拟实验室 ────────────────────────────────────────── */}
+        {/* ── 提示词实验室 ────────────────────────────────────────── */}
         <div>
           <button
             onClick={() => setShowLab((v) => !v)}
@@ -402,7 +400,7 @@ export default function PromptLabPanel() {
           {showLab && (
             <div className="mt-2 space-y-3 p-3 border border-app-border rounded-lg bg-app-bg-secondary">
               <div className="text-ui-xs text-app-text-muted">
-                基于「{presets.find((p) => p.id === labBase)?.name || labBase}」进行模拟调试
+                基于「{presets.find((p) => p.id === labBase)?.name || labBase}」进行 Doctor 评估
               </div>
 
               <textarea
@@ -410,14 +408,6 @@ export default function PromptLabPanel() {
                 onChange={(e) => setLabPrompt(e.target.value)}
                 rows={10}
                 className="w-full bg-app-bg border border-app-border rounded p-3 text-ui-xs font-mono text-app-text resize-y focus:outline-none focus:border-app-accent"
-              />
-
-              <input
-                type="text"
-                value={labMessage}
-                onChange={(e) => setLabMessage(e.target.value)}
-                placeholder="测试消息（模拟用户输入，可选）"
-                className="w-full bg-app-bg border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
               />
 
               <div className="flex items-center gap-2 flex-wrap">

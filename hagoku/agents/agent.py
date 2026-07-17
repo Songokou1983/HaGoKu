@@ -185,15 +185,6 @@ class DataAnalystAgent(BaseAgent):
             agent_ctx = self._context or {}
             if agent_ctx.get("_pending_ask_user"):
                 context["_pending_ask_user"] = agent_ctx["_pending_ask_user"]
-            context["_scout_conclusions"] = {
-                "participating": [],
-                "excluded": [],
-            }
-            if column_semantics and "column_name" in column_semantics[0]:
-                context["_scout_conclusions"] = {
-                    "participating": [s["column_name"] for s in column_semantics if s.get("used_in_analysis")],
-                    "excluded": [s["column_name"] for s in column_semantics if s.get("used_in_analysis") is False],
-                }
 
             # Phase D: 项目记忆 / 角色派生 / 质量警告
             if memory_project and project_id:
@@ -424,39 +415,6 @@ class DataAnalystAgent(BaseAgent):
             logger.debug("项目记忆更新失败（非关键路径）", exc_info=True)
 
     # ═══════════════════════════════════════════════════════════════
-    # 关注点 2：评估清洗
-    # ═══════════════════════════════════════════════════════════════
-
-    def assess(self, df: pd.DataFrame, context: dict) -> dict:
-        """评估清洗需求——复用 run_step 统一路径。"""
-        query = context.get("query", "") or context.get("analysis_goal", "")
-        user_feedback = context.get("_user_feedback", "") or ""
-
-        analysis_cols = {str(s["column_name"]) for s in context.get("column_semantics", [])
-                         if s.get("used_in_analysis") is True}
-        col_names = [c for c in df.columns if not analysis_cols or c in analysis_cols]
-
-        session = context.get("_session")
-        if session is None:
-            from hagoku.context.session import Session
-            session = Session(analysis_goal=context.get("query", ""))
-            context["_session"] = session
-
-        intro = f"【核心任务】根据分析目标评估每列是否需要清洗。\n分析目标：{query or '未指定'}\n可用列：{', '.join(col_names)}\n数据行数：{len(df)}"
-        if user_feedback:
-            intro += f"\n用户反馈：{user_feedback}"
-        session.add("user", intro)
-
-        if "_column_info" not in context:
-            context["_column_info"] = {c: str(df[c].dtype) for c in df.columns}
-
-        # 循环 run_step 直到 LLM 调 submit_assessment（最多 5 轮）
-        result = self.run_step(context, df, "")
-        if result.get("submit_assessment"):
-            return result["assessment"]
-        return {"summary": "", "columns": []}
-
-    # ═══════════════════════════════════════════════════════════════
     # 通用：_call_llm_step（从 run_step 提取——消除第1轮/后续轮重复）
     # ═══════════════════════════════════════════════════════════════
 
@@ -657,6 +615,21 @@ class DataAnalystAgent(BaseAgent):
                     for tc in tool_records
                 ]
                 session.add_tool_call(txt, oai_calls, results)
+
+                # ── 工具执行进度：每轮 emit TOOL_EXCHANGE，前端渲染为内联工具卡片 ──
+                self._emit(EventType.TOOL_EXCHANGE, {
+                    "stage": f"第 {_round + 1} 轮",
+                    "tool_calls": [
+                        {
+                            "id": tc.tool_call_id,
+                            "name": tc.name,
+                            "arguments_summary": tc.arguments[:120] if tc.arguments else "",
+                            "result_summary": (tc.result or "")[:200],
+                            "error": tc.error,
+                        }
+                        for tc in tool_records
+                    ],
+                })
 
             # ask_user 被调用 → LLM 决定暂停等用户回复，停止工具循环
             if context.get("_pending_ask_user"):

@@ -1,11 +1,14 @@
 from __future__ import annotations
 # Auto-split from analysis.py
+import logging
 import numpy as np
 import pandas as pd
 from typing import Any
 from scipy import stats as _scipy_stats
 
 from .config import _insufficient_data, _config
+
+logger = logging.getLogger(__name__)
 
 def check_test_assumptions(
     df: pd.DataFrame,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 # Auto-split from analysis.py
+import logging
 import numpy as np
 from typing import Any
 from scipy import stats as _scipy_stats
 from .config import _insufficient_data, _config
+
+logger = logging.getLogger(__name__)
 
 import statsmodels.api as _sm
 import pandas as _pd

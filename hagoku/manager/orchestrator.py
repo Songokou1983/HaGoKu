@@ -167,7 +167,7 @@ class Orchestrator(
 
             return str(run_dir / "orch_state.json")
         except Exception:
-            logger.warning("save_state 失败", exc_info=True)
+            logger.error("save_state 失败——刷新页面将丢失分析进度", exc_info=True)
             return None
 
     @classmethod

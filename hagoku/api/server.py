@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import os
 
+logger = logging.getLogger(__name__)
+
 # 全量日志——路径由 config.work_dir 决定，回退 /tmp
 try:
     from hagoku.config import HaGoKuConfig as _LogCfg

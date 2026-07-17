@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import json as _json
 import re
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,10 +13,6 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/prompt-lab", tags=["prompt-lab"])
 
-from hagoku.observability.llm_dump import _get_default_dump_dir
-DUMP_DIR = _get_default_dump_dir()
-PROMPT_PATH = Path(__file__).resolve().parent.parent / "agents" / "prompt.md"
-GATE_SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "ci" / "prompt_gate.py"
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "agents" / "presets"
 ACTIVE_PRESET_FILE = Path.home() / ".hagoku" / "active_preset"
 
@@ -35,10 +29,6 @@ class CompareRequest(BaseModel):
     current_prompt: str
     messages: list[dict[str, Any]] = []
     tools: list[dict[str, Any]] | None = None
-
-
-class ApplyRequest(BaseModel):
-    prompt_md: str
 
 
 def _build_messages(prompt: str, history: list[dict], query: str = "Prompt Lab") -> list[dict]:
@@ -78,13 +68,6 @@ def _call_llm(messages: list[dict], tools: list[dict] | None, model_override: st
     }
 
 
-@router.get("/current-prompt")
-async def get_current_prompt():
-    if not PROMPT_PATH.exists():
-        raise HTTPException(404, "prompt.md not found")
-    return {"ok": True, "content": PROMPT_PATH.read_text(encoding="utf-8")}
-
-
 @router.post("/run")
 async def run_prompt(req: RunRequest):
     try:
@@ -119,42 +102,6 @@ async def compare_prompts(req: CompareRequest):
         raise HTTPException(502, f"LLM 调用失败: {e}")
 
 
-@router.post("/apply")
-async def apply_prompt(req: ApplyRequest):
-    """应用 prompt.md: 先跑 prompt_gate → 检查通过 → 写盘。"""
-    if not PROMPT_PATH.exists():
-        raise HTTPException(404, "prompt.md not found")
-
-    try:
-        result = subprocess.run(
-            [sys.executable, str(GATE_SCRIPT), str(PROMPT_PATH), "/dev/stdin"],
-            input=req.prompt_md, capture_output=True, text=True, timeout=30,
-            cwd=PROMPT_PATH.parent.parent,
-        )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(500, "prompt_gate 超时")
-    except FileNotFoundError:
-        raise HTTPException(500, "prompt_gate 脚本未找到")
-
-    if result.returncode != 0:
-        raise HTTPException(400, f"prompt_gate 未通过: {result.stderr.strip() or result.stdout.strip()}")
-
-    PROMPT_PATH.write_text(req.prompt_md, encoding="utf-8")
-    return {
-        "ok": True,
-        "gate_output": result.stdout.strip(),
-        "message": "prompt.md 已更新。",
-    }
-
-
-@router.post("/audit-lessons")
-async def audit_lessons():
-    """触发 LessonAuditor 即时质量审（Meta-3.3 UI 按钮）。"""
-    from hagoku.agents.lesson_auditor.agent import run_ad_hoc_audit
-    path = run_ad_hoc_audit()
-    return {"ok": True, "report_path": str(path)}
-
-# ── 预设管理 ─────────────────────────────────────────────────────
 
 @router.get("/presets")
 async def list_presets():
@@ -305,26 +252,3 @@ def _write_presets_manifest(manifest: list[dict]) -> None:
         _json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-@router.get("/dumps")
-async def list_dumps(limit: int = 20):
-    files = sorted(
-        DUMP_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True
-    )[:limit] if DUMP_DIR.exists() else []
-    return {
-        "dumps": [
-            {"filename": f.name, "seq": i + 1, "mtime": int(f.stat().st_mtime)}
-            for i, f in enumerate(files)
-        ]
-    }
-
-
-@router.get("/dump/{filename}")
-async def get_dump(filename: str):
-    path = DUMP_DIR / filename
-    if not path.exists():
-        raise HTTPException(404, "Dump not found")
-    try:
-        data = _json.loads(path.read_text(encoding="utf-8"))
-        return {"ok": True, **data}
-    except Exception:
-        raise HTTPException(500, "Dump parse error")

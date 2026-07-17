@@ -18,12 +18,6 @@ describe("PromptLabPanel", () => {
     mockFetch.mockReset();
     // Default: return empty dumps + current prompt (for useEffect on mount)
     mockFetch.mockImplementation((url: string) => {
-      if (url.includes("/dumps")) {
-        return mockFetchResponse({ dumps: [] });
-      }
-      if (url.includes("/current-prompt")) {
-        return mockFetchResponse({ ok: true, content: "# Test prompt" });
-      }
       if (url.includes("/run")) {
         return mockFetchResponse({
           ok: true,
@@ -31,12 +25,6 @@ describe("PromptLabPanel", () => {
           tokens: 42,
           model: "test-model",
           tool_calls: [{ name: "get_stats", arguments: '{"col":"x"}' }],
-        });
-      }
-      if (url.includes("/audit-lessons")) {
-        return mockFetchResponse({
-          ok: true,
-          report_path: "/tmp/audit.json",
         });
       }
       return mockFetchResponse({ ok: true });

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hagoku.config import HaGoKuConfig, LLMConfig, ManagerModeConfig, OutputConfig
+from hagoku.config import HaGoKuConfig, LLMConfig, OutputConfig
 
 
 class TestLLMConfig:
@@ -21,29 +21,20 @@ class TestLLMConfig:
         assert config.model == "custom-model"
 
 
-class TestManagerModeConfig:
-    def test_defaults(self):
-        config = ManagerModeConfig()
-        assert config.cleaning_impact_warning == 0.3
-
-
 class TestHaGoKuConfig:
     def test_defaults(self):
         config = HaGoKuConfig()
         assert config.llm.model == ""
-        assert config.manager.cleaning_impact_warning == 0.3
+        assert config.output.project_dir is not None
 
     def test_from_yaml(self, tmp_path):
         yaml_path = tmp_path / "config.yaml"
         yaml_path.write_text("""
 llm:
   model: test-model
-manager:
-  cleaning_impact_warning: 0.5
 """)
         config = HaGoKuConfig.from_yaml(yaml_path)
         assert config.llm.model == "test-model"
-        assert config.manager.cleaning_impact_warning == 0.5
 
     def test_from_yaml_nonexistent(self):
         config = HaGoKuConfig.from_yaml(Path("/nonexistent/config.yaml"))

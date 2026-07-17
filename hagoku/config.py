@@ -43,12 +43,6 @@ class MetaLLMConfig(BaseModel):
 
 
 
-class ManagerModeConfig(BaseModel):
-    """Manager 模式配置"""
-
-    cleaning_impact_warning: float = 0.3  # 清洗影响率阈值（超过此比例触发警告）
-
-
 class OutputConfig(BaseModel):
     """输出配置"""
 
@@ -109,22 +103,11 @@ class CleaningConfig(BaseModel):
     random_state: int = 42
 
 
-class EmbeddingConfig(BaseModel):
-    """向量嵌入配置"""
-
-    base_url: str = ""
-    api_key: str = "none"
-    model: str = ""  # 用户配置（铁律 9：不写死模型名）
-    dimension: int = 1536  # 可通过 HAGOKU_EMBEDDING_DIMENSION 覆盖
-
-
 class HaGoKuConfig(BaseModel):
     """HaGoKu Studio 全局配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     meta_llm: MetaLLMConfig = Field(default_factory=MetaLLMConfig)
-    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
-    manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
@@ -172,17 +155,6 @@ class HaGoKuConfig(BaseModel):
             config.work_dir = Path(v).expanduser()
         if v := os.getenv("HAGOKU_PROJECT_DIR") or os.getenv("HAGOKYU_PROJECT_DIR"):
             config.output.project_dir = Path(v).expanduser()
-        if v := os.getenv("HAGOKU_EMBEDDING_BASE_URL") or os.getenv("HAGOKYU_EMBEDDING_BASE_URL"):
-            config.embedding.base_url = v
-        if v := os.getenv("HAGOKU_EMBEDDING_API_KEY") or os.getenv("HAGOKYU_EMBEDDING_API_KEY"):
-            config.embedding.api_key = v
-        if v := os.getenv("HAGOKU_EMBEDDING_MODEL") or os.getenv("HAGOKYU_EMBEDDING_MODEL"):
-            config.embedding.model = v
-        if v := os.getenv("HAGOKU_EMBEDDING_DIMENSION") or os.getenv("HAGOKYU_EMBEDDING_DIMENSION"):
-            try:
-                config.embedding.dimension = int(v)
-            except ValueError:
-                pass
         # CO-21: stream_enabled from env
         if (v := os.getenv("HAGOKU_LLM_STREAM_ENABLED")) is not None:
             config.llm.stream_enabled = v.strip().lower() in ("true", "1", "yes")
@@ -214,7 +186,6 @@ class HaGoKuConfig(BaseModel):
         """返回敏感字段的脱敏值（用于日志/调试输出）"""
         return {
             "api_key": f"{self.llm.api_key[:8]}***" if self.llm.api_key else "(未设置)",
-            "embedding_api_key": f"{self.embedding.api_key[:8]}***" if self.embedding.api_key else "(未设置)",
         }
 
     def __repr__(self) -> str:

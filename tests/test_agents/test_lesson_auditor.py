@@ -66,6 +66,6 @@ def test_low_confidence_flag(tmp_path):
 
 
 def test_audit_api_endpoint():
-    resp = client.post("/api/prompt-lab/audit-lessons")
+    resp = client.post("/api/doctor/audit/methods")
     assert resp.status_code == 200
     assert "report_path" in resp.json()

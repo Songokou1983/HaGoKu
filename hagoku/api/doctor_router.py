@@ -245,39 +245,306 @@ class FixRequest(BaseModel):
     action: str  # reset_active_preset / restore_default_prompt / delete_preset
 
 
+# ── Fix 动作注册表 ──────────────────────────────────────────────────
+
+def _fix_reset_active_preset(_params: str) -> dict:
+    af = Path.home() / ".hagoku" / "active_preset"
+    if af.exists():
+        af.unlink()
+        return {"ok": True, "message": "已恢复默认提示词，下次分析生效"}
+    return {"ok": True, "message": "当前已是默认提示词，无需操作"}
+
+
+def _fix_restore_default_prompt(_params: str) -> dict:
+    prompt_path = Path(__file__).resolve().parent.parent / "agents" / "prompt.md"
+    general_path = Path(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
+    content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
+    prompt_path.write_text(content, encoding="utf-8")
+    af = Path.home() / ".hagoku" / "active_preset"
+    if af.exists():
+        af.unlink()
+    return {"ok": True, "message": "prompt.md 已从默认预设恢复"}
+
+
+def _fix_check_llm_connection(_params: str) -> dict:
+    try:
+        from hagoku.tools.health import check_llm_health
+        from hagoku.config import HaGoKuConfig
+        report = check_llm_health(HaGoKuConfig.load())
+        passed = sum(1 for r in report.checks if r.ok)
+        details = " | ".join(f"{'✅' if r.ok else '❌'} {r.name}" for r in report.checks)
+        return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(report.checks)} 通过 — {details}"}
+    except Exception as e:
+        return {"ok": False, "message": f"健康检查失败：{e}"}
+
+
+def _fix_full_system_check(_params: str) -> dict:
+    try:
+        from hagoku.tools.health import check_system
+        results = check_system()
+        passed = sum(1 for r in results if r.ok)
+        details = "\n".join(f"  {'✅' if r.ok else '❌'} {r.name}: {r.detail}" for r in results)
+        return {"ok": True, "message": f"系统健康：{passed}/{len(results)} 通过\n{details}"}
+    except Exception as e:
+        return {"ok": False, "message": f"系统检查失败：{e}"}
+
+
+def _fix_clear_project_memory(_params: str) -> dict:
+    return {"ok": False, "message": "请通过 Doctor chat 告诉我项目名，我会自动清除"}
+
+
+def _fix_clear_active_state(_params: str) -> dict:
+    af = Path.home() / ".hagoku" / "active_preset"
+    if af.exists():
+        af.unlink()
+    return {"ok": True, "message": "已清除活跃状态和激活预设，刷新页面后重新开始"}
+
+
+def _fix_restore_custom_preset(_params: str) -> dict:
+    return {"ok": False, "message": "请通过分析能力面板删除损坏的预设，然后新建"}
+
+
+def _fix_emergency_recovery(_params: str) -> dict:
+    results = []
+    prompt_path = Path(__file__).resolve().parent.parent / "agents" / "prompt.md"
+    general_path = Path(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
+    try:
+        content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
+        prompt_path.write_text(content, encoding="utf-8")
+        results.append("✅ prompt.md 已恢复")
+    except Exception as e:
+        results.append(f"❌ prompt.md 恢复失败: {e}")
+    af = Path.home() / ".hagoku" / "active_preset"
+    if af.exists():
+        af.unlink()
+        results.append("✅ 激活预设已清除")
+    if not general_path.exists():
+        general_path.parent.mkdir(parents=True, exist_ok=True)
+        general_path.write_text(_DEFAULT_PROMPT, encoding="utf-8")
+        results.append("✅ presets/general.md 已从灾备恢复")
+    presets_json = Path(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
+    default_presets = '[{"id":"general","name":"通用商业分析","icon":"bar-chart","description":"适合各类经营数据"},{"id":"stock","name":"股市技术分析","icon":"trending-up","description":"趋势分解、波动率检验"},{"id":"ecommerce","name":"电商运营分析","icon":"shopping-cart","description":"ROI分析、转化漏斗"}]'
+    presets_json.write_text(default_presets, encoding="utf-8")
+    results.append("✅ presets.json 已重置为默认")
+    msg = "紧急恢复完成:\n" + "\n".join(results) + "\n\n请刷新页面，分析功能已恢复出厂状态。"
+    return {"ok": True, "message": msg}
+
+
+def _fix_create_kb_entry(params_str: str) -> dict:
+    import json as _j
+    try:
+        params = _j.loads(params_str) if params_str else {}
+    except Exception:
+        return {"ok": False, "message": "参数格式错误，请提供有效的 JSON"}
+    category = params.get("category", "statistics")
+    filename = params.get("filename", "").strip()
+    if not filename:
+        return {"ok": False, "message": "filename 不能为空"}
+    methods_root = Path(__file__).resolve().parent.parent / "memory" / "methods"
+    target_dir = methods_root / category
+    target_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["---"]
+    if params.get("title"): lines.append(f"title: {params['title']}")
+    if params.get("summary"): lines.append(f"summary: {params['summary']}")
+    lines.append(f"category: {category}")
+    if params.get("tags"): lines.append(f"tags: [{', '.join(params['tags'])}]")
+    if params.get("tools"):
+        lines.append("tools:")
+        for t in params["tools"]:
+            lines.append(f"  - {t}")
+    lines.append("---")
+    lines.append("")
+    if params.get("content"):
+        lines.append(params["content"])
+    (target_dir / filename).write_text("\n".join(lines), encoding="utf-8")
+    return {"ok": True, "message": f"已创建知识库条目: {category}/{filename}"}
+
+
+def _fix_fix_kb_frontmatter(params_str: str) -> dict:
+    import json as _j, re
+    try:
+        params = _j.loads(params_str) if params_str else {}
+    except Exception:
+        return {"ok": False, "message": "参数格式错误"}
+    kb_path = params.get("path", "").strip()
+    if not kb_path:
+        return {"ok": False, "message": "path 不能为空"}
+    methods_root = Path(__file__).resolve().parent.parent / "memory" / "methods"
+    target = (methods_root / kb_path).resolve()
+    if not str(target).startswith(str(methods_root.resolve())):
+        return {"ok": False, "message": "非法路径"}
+    if not target.exists():
+        return {"ok": False, "message": f"文件不存在: {kb_path}"}
+    content = target.read_text(encoding="utf-8")
+    field = params.get("field", "")
+    value = params.get("value")
+    if field == "tools" and isinstance(value, list):
+        if re.search(r'^tools:', content, re.MULTILINE):
+            content = re.sub(
+                r'^tools:.*(\n(?:  - .*\n)*)?',
+                'tools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
+                content, flags=re.MULTILINE,
+            )
+        else:
+            content = re.sub(
+                r'^(---\n)',
+                f'---\ntools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
+                content,
+            )
+        target.write_text(content, encoding="utf-8")
+        return {"ok": True, "message": f"已修复 {kb_path} 的 tools 字段"}
+    return {"ok": False, "message": f"不支持的字段: {field}"}
+
+
+def _fix_register_tool(params_str: str) -> dict:
+    import json as _j
+    try:
+        params = _j.loads(params_str) if params_str else {}
+    except Exception:
+        return {"ok": False, "message": "参数格式错误"}
+    tool_name = params.get("name", "").strip()
+    tool_file = params.get("file", "").strip()
+    if not tool_name or not tool_file:
+        return {"ok": False, "message": "name 和 file 不能为空"}
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    target = (tools_dir / tool_file).resolve()
+    if not str(target).startswith(str(tools_dir.resolve())):
+        return {"ok": False, "message": "非法路径"}
+    if not target.exists():
+        return {"ok": False, "message": f"文件不存在: {tool_file}"}
+    handler = params.get("handler", f"_handle_{tool_name}")
+    desc = params.get("description") or tool_name
+    params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
+    phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
+    reg_block = (
+        f'\n# Doctor: registered {tool_name}\n'
+        f'agent_tools.register(Tool(\n'
+        f'    name="{tool_name}",\n'
+        f'    description="{desc}",\n'
+        f'    parameters={params_schema},\n'
+        f'    handler={handler},\n'
+        f'    phase_tag={phase},\n'
+        f'))\n'
+    )
+    with open(target, 'a') as f:
+        f.write(reg_block)
+    return {"ok": True, "message": f"已注册工具 {tool_name} 到 {tool_file}"}
+
+
+def _fix_unregister_tool(params_str: str) -> dict:
+    import json as _j, re
+    try:
+        params = _j.loads(params_str) if params_str else {}
+    except Exception:
+        return {"ok": False, "message": "参数格式错误"}
+    tool_name = params.get("name", "").strip()
+    tool_file = params.get("file", "").strip()
+    if not tool_name or not tool_file:
+        return {"ok": False, "message": "name 和 file 不能为空"}
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    target = (tools_dir / tool_file).resolve()
+    if not str(target).startswith(str(tools_dir.resolve())):
+        return {"ok": False, "message": "非法路径"}
+    if not target.exists():
+        return {"ok": False, "message": f"文件不存在: {tool_file}"}
+    content = target.read_text(encoding="utf-8")
+    pattern = rf"(agent_tools\.register\(Tool\(\s*\n\s*name=\"{re.escape(tool_name)}\".*?\)\s*\)\s*)"
+    if re.search(pattern, content, re.DOTALL):
+        content = re.sub(pattern, r"# Doctor: disabled \1", content, flags=re.DOTALL)
+        target.write_text(content, encoding="utf-8")
+        return {"ok": True, "message": f"已禁用工具 {tool_name}"}
+    return {"ok": False, "message": f"未找到工具 {tool_name} 的注册代码"}
+
+
+def _fix_create_tool_stub(params_str: str) -> dict:
+    import json as _j
+    try:
+        params = _j.loads(params_str) if params_str else {}
+    except Exception:
+        return {"ok": False, "message": "参数格式错误"}
+    tool_name = params.get("name", "").strip()
+    if not tool_name:
+        return {"ok": False, "message": "name 不能为空"}
+    handler_name = params.get("handler", f"_handle_{tool_name}")
+    desc = params.get("description") or tool_name
+    params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
+    phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
+    implementation = params.get("implementation", "").strip()
+    reason = params.get("reason", "预设扩展需要")
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    stub_file = tools_dir / "_doctor_tools.py"
+    if not stub_file.exists():
+        stub_file.write_text(
+            "from __future__ import annotations\n"
+            + '"""Doctor 创建的工具。"""\n'
+            + "from typing import Any\n"
+            + "import pandas as pd\n"
+            + "from hagoku.tools.registry import Tool, agent_tools\n\n",
+            encoding="utf-8",
+        )
+    if implementation:
+        code = (
+            f"\n# Doctor: {tool_name} — {reason}\n{implementation}\n\n"
+            f"agent_tools.register(Tool(\n"
+            f'    name="{tool_name}",\n    description="{desc}",\n'
+            f"    parameters={params_schema},\n    handler={handler_name},\n"
+            f"    phase_tag={phase},\n))\n"
+        )
+    else:
+        code = (
+            f'\n# Doctor: stub for "{tool_name}" — {reason}\n'
+            f"def {handler_name}(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:\n"
+            f'    return {{"error": "{tool_name} 桩——替换为真实实现"}}\n'
+            f"\nagent_tools.register(Tool(\n"
+            f'    name="{tool_name}",\n'
+            f'    description="{desc}",\n'
+            f"    parameters={params_schema},\n"
+            f"    handler={handler_name},\n"
+            f"    phase_tag={phase},\n"
+            f"))\n"
+        )
+    with open(stub_file, 'a') as f:
+        f.write(code)
+    kind = "已创建" if implementation else "已创建桩"
+    return {"ok": True, "message": f"{kind}工具 {tool_name} → tools/_doctor_tools.py"}
+
+
+_FIX_ACTIONS: dict[str, Any] = {
+    "reset_active_preset":    _fix_reset_active_preset,
+    "restore_default_prompt": _fix_restore_default_prompt,
+    "check_llm_connection":   _fix_check_llm_connection,
+    "full_system_check":      _fix_full_system_check,
+    "clear_project_memory":   _fix_clear_project_memory,
+    "clear_active_state":     _fix_clear_active_state,
+    "restore_custom_preset":  _fix_restore_custom_preset,
+    "emergency_recovery":     _fix_emergency_recovery,
+    "create_kb_entry":        _fix_create_kb_entry,
+    "fix_kb_frontmatter":     _fix_fix_kb_frontmatter,
+    "register_tool":          _fix_register_tool,
+    "unregister_tool":        _fix_unregister_tool,
+    "create_tool_stub":       _fix_create_tool_stub,
+}
+
+# 需要 admin 权限才能执行的操作（后续设置页面控制）
+_ADMIN_ACTIONS = {
+    "clear_project_memory", "emergency_recovery",
+    "register_tool", "unregister_tool", "create_tool_stub",
+}
+
+
+def _run_fix(action: str, params: str = "") -> dict:
+    """执行修复操作。两个入口（API + chat）共用。"""
+    fn = _FIX_ACTIONS.get(action)
+    if fn is None:
+        return {"ok": False, "message": f"未知操作: {action}"}
+    return fn(params)
+
+
 @router.post("/fix")
 async def doctor_fix(req: FixRequest):
-    """Doctor 执行修复操作。仅限安全的、可逆的操作。"""
-    from pathlib import Path as _P
-
-    if req.action == "reset_active_preset":
-        # 清除激活预设 → 恢复默认 prompt.md
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-            return {"ok": True, "message": "已恢复默认提示词，下次分析生效"}
-        return {"ok": True, "message": "当前已是默认提示词，无需操作"}
-
-    if req.action == "restore_default_prompt":
-        # 用 presets/general.md 覆盖 prompt.md
-        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
-        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
-        # 优先从 presets/general.md 恢复，文件缺失则用内置灾备
-        if general_path.exists():
-            content = general_path.read_text(encoding="utf-8")
-        else:
-            content = _DEFAULT_PROMPT
-        prompt_path.write_text(content, encoding="utf-8")
-        # 同时清除激活预设
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-        return {"ok": True, "message": "prompt.md 已从默认预设恢复"}
-
     if req.action == "delete_preset":
         raise HTTPException(400, "请通过「分析能力」面板删除预设，Doctor 不直接删除文件")
-
-    raise HTTPException(400, f"未知修复操作: {req.action}")
+    return _run_fix(req.action)
 
 
 @router.get("/status")
@@ -305,281 +572,8 @@ async def doctor_status() -> dict[str, Any]:
 
 
 def _doctor_do_fix(action: str, _fix_params: str = "") -> dict:
-    """执行 Doctor 修复操作。代码只做机械执行，决策由 LLM 完成。"""
-    from pathlib import Path as _P
-
-    if action == "reset_active_preset":
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-            return {"ok": True, "message": "已清除激活预设，下次分析使用默认提示词"}
-        return {"ok": True, "message": "当前已是默认提示词，无需操作"}
-
-    if action == "restore_default_prompt":
-        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
-        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
-        content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
-        prompt_path.write_text(content, encoding="utf-8")
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-        return {"ok": True, "message": "prompt.md 已从灾备恢复，同时清除了激活预设"}
-
-    if action == "check_llm_connection":
-        try:
-            from hagoku.tools.health import check_llm_health
-            from hagoku.config import HaGoKuConfig
-            report = check_llm_health(HaGoKuConfig.load())
-            checks = report.checks
-            passed = sum(1 for r in checks if r.ok)
-            details = " | ".join(f"{"✅" if r.ok else "❌"} {r.name}" for r in checks)
-            return {"ok": True, "message": f"LLM 健康检查：{passed}/{len(checks)} 通过 — {details}"}
-        except Exception as e:
-            return {"ok": False, "message": f"健康检查失败：{e}"}
-
-    if action == "full_system_check":
-        try:
-            from hagoku.tools.health import check_system
-            results = check_system()
-            passed = sum(1 for r in results if r.ok)
-            details = "\n".join(f"  {'✅' if r.ok else '❌'} {r.name}: {r.detail}" for r in results)
-            return {"ok": True, "message": f"系统健康：{passed}/{len(results)} 通过\n{details}"}
-        except Exception as e:
-            return {"ok": False, "message": f"系统检查失败：{e}"}
-
-    if action == "clear_project_memory":
-        project_name = ""  # TODO: 从请求中获取 project 参数
-        return {"ok": False, "message": "请通过 Doctor chat 告诉我项目名，我会自动清除"}
-
-    if action == "clear_active_state":
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-        return {"ok": True, "message": "已清除活跃状态和激活预设，刷新页面后重新开始"}
-
-    if action == "restore_custom_preset":
-        return {"ok": False, "message": "请通过分析能力面板删除损坏的预设，然后新建"}
-
-    if action == "emergency_recovery":
-        """紧急恢复——一键重置提示词系统到出厂状态。"""
-        results = []
-        # 1. 恢复 prompt.md
-        prompt_path = _P(__file__).resolve().parent.parent / "agents" / "prompt.md"
-        general_path = _P(__file__).resolve().parent.parent / "agents" / "presets" / "general.md"
-        try:
-            content = general_path.read_text(encoding="utf-8") if general_path.exists() else _DEFAULT_PROMPT
-            prompt_path.write_text(content, encoding="utf-8")
-            results.append("✅ prompt.md 已恢复")
-        except Exception as e:
-            results.append(f"❌ prompt.md 恢复失败: {e}")
-        # 2. 清除激活预设
-        af = _P.home() / ".hagoku" / "active_preset"
-        if af.exists():
-            af.unlink()
-            results.append("✅ 激活预设已清除")
-        # 3. 恢复 presets/general.md
-        if not general_path.exists():
-            general_path.parent.mkdir(parents=True, exist_ok=True)
-            general_path.write_text(_DEFAULT_PROMPT, encoding="utf-8")
-            results.append("✅ presets/general.md 已从灾备恢复")
-        # 4. 恢复 presets.json
-        presets_json = _P(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
-        default_presets = '[{"id":"general","name":"通用商业分析","icon":"bar-chart","description":"适合各类经营数据"},{"id":"stock","name":"股市技术分析","icon":"trending-up","description":"趋势分解、波动率检验"},{"id":"ecommerce","name":"电商运营分析","icon":"shopping-cart","description":"ROI分析、转化漏斗"}]'
-        presets_json.write_text(default_presets, encoding="utf-8")
-        results.append("✅ presets.json 已重置为默认")
-        msg = "紧急恢复完成:\n" + "\n".join(results) + "\n\n请刷新页面，分析功能已恢复出厂状态。"
-        return {"ok": True, "message": msg}
-
-    # ── 知识库扩增操作 ──
-    if action == "create_kb_entry":
-        # 从 LLM 回复中提取的知识库内容通过额外参数传入
-        import json as _j
-        params_str = _fix_params  # 从 [fix:xxx {...}] 解析出的 JSON 参数
-        try:
-            params = _j.loads(params_str) if params_str else {}
-        except Exception:
-            return {"ok": False, "message": "参数格式错误，请提供有效的 JSON"}
-        category = params.get("category", "statistics")
-        filename = params.get("filename", "").strip()
-        if not filename:
-            return {"ok": False, "message": "filename 不能为空"}
-        methods_root = _P(__file__).resolve().parent.parent / "memory" / "methods"
-        target_dir = methods_root / category
-        target_dir.mkdir(parents=True, exist_ok=True)
-        # 构建 frontmatter + body
-        lines = ["---"]
-        if params.get("title"): lines.append(f"title: {params['title']}")
-        if params.get("summary"): lines.append(f"summary: {params['summary']}")
-        lines.append(f"category: {category}")
-        if params.get("tags"): lines.append(f"tags: [{', '.join(params['tags'])}]")
-        if params.get("tools"): lines.append(f"tools:")
-        for t in (params.get("tools") or []):
-            lines.append(f"  - {t}")
-        lines.append("---")
-        lines.append("")
-        if params.get("content"):
-            lines.append(params["content"])
-        (target_dir / filename).write_text("\n".join(lines), encoding="utf-8")
-        return {"ok": True, "message": f"已创建知识库条目: {category}/{filename}"}
-
-    if action == "fix_kb_frontmatter":
-        import json as _j
-        params_str = _fix_params
-        try:
-            params = _j.loads(params_str) if params_str else {}
-        except Exception:
-            return {"ok": False, "message": "参数格式错误"}
-        kb_path = params.get("path", "").strip()
-        if not kb_path:
-            return {"ok": False, "message": "path 不能为空"}
-        methods_root = _P(__file__).resolve().parent.parent / "memory" / "methods"
-        target = (methods_root / kb_path).resolve()
-        if not str(target).startswith(str(methods_root.resolve())):
-            return {"ok": False, "message": "非法路径"}
-        if not target.exists():
-            return {"ok": False, "message": f"文件不存在: {kb_path}"}
-        content = target.read_text(encoding="utf-8")
-        field = params.get("field", "")
-        value = params.get("value")
-        if field == "tools" and isinstance(value, list):
-            # 在 frontmatter 中替换或添加 tools 字段
-            import re
-            if re.search(r'^tools:', content, re.MULTILINE):
-                # 已有 tools 字段，替换
-                content = re.sub(
-                    r'^tools:.*(\n(?:  - .*\n)*)?',
-                    'tools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
-                    content, flags=re.MULTILINE
-                )
-            else:
-                # 在 frontmatter 结束前插入
-                content = re.sub(
-                    r'^(---\n)',
-                    f'---\ntools:\n' + '\n'.join(f'  - {t}' for t in value) + '\n',
-                    content
-                )
-            target.write_text(content, encoding="utf-8")
-            return {"ok": True, "message": f"已修复 {kb_path} 的 tools 字段"}
-        return {"ok": False, "message": f"不支持的字段: {field}"}
-
-    # ── 工具管理操作 ──
-    if action == "register_tool":
-        import json as _j
-        try:
-            params = _j.loads(_fix_params) if _fix_params else {}
-        except Exception:
-            return {"ok": False, "message": "参数格式错误"}
-        tool_name = params.get("name", "").strip()
-        tool_file = params.get("file", "").strip()  # 如 "stat_tools.py"
-        if not tool_name or not tool_file:
-            return {"ok": False, "message": "name 和 file 不能为空"}
-        tools_dir = _P(__file__).resolve().parent.parent / "tools"
-        target = (tools_dir / tool_file).resolve()
-        if not str(target).startswith(str(tools_dir.resolve())):
-            return {"ok": False, "message": "非法路径"}
-        if not target.exists():
-            return {"ok": False, "message": f"文件不存在: {tool_file}"}
-        # 构建注册代码
-        handler = params.get("handler", f"_handle_{tool_name}")
-        desc = params.get("description") or tool_name
-        params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
-        phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
-        reg_block = f'''
-
-# Doctor: registered {tool_name}
-agent_tools.register(Tool(
-    name="{tool_name}",
-    description="{desc}",
-    parameters={params_schema},
-    handler={handler},
-    phase_tag={phase},
-))
-'''
-        with open(target, 'a') as f:
-            f.write(reg_block)
-        return {"ok": True, "message": f"已注册工具 {tool_name} 到 {tool_file}"}
-
-    if action == "unregister_tool":
-        import json as _j
-        try:
-            params = _j.loads(_fix_params) if _fix_params else {}
-        except Exception:
-            return {"ok": False, "message": "参数格式错误"}
-        tool_name = params.get("name", "").strip()
-        tool_file = params.get("file", "").strip()
-        if not tool_name or not tool_file:
-            return {"ok": False, "message": "name 和 file 不能为空"}
-        tools_dir = _P(__file__).resolve().parent.parent / "tools"
-        target = (tools_dir / tool_file).resolve()
-        if not str(target).startswith(str(tools_dir.resolve())):
-            return {"ok": False, "message": "非法路径"}
-        if not target.exists():
-            return {"ok": False, "message": f"文件不存在: {tool_file}"}
-        content = target.read_text(encoding="utf-8")
-        import re
-        # 找到工具的注册块并注释掉
-        pattern = rf"(agent_tools\.register\(Tool\(\s*\n\s*name=\"{re.escape(tool_name)}\".*?\)\s*\)\s*)"
-        if re.search(pattern, content, re.DOTALL):
-            content = re.sub(pattern, r"# Doctor: disabled \1", content, flags=re.DOTALL)
-            target.write_text(content, encoding="utf-8")
-            return {"ok": True, "message": f"已禁用工具 {tool_name}"}
-        return {"ok": False, "message": f"未找到工具 {tool_name} 的注册代码"}
-
-    if action == "create_tool_stub":
-        """创建工具——有实现代码则生成完整工具，无实现则生成桩。"""
-        import json as _j
-        try:
-            params = _j.loads(_fix_params) if _fix_params else {}
-        except Exception:
-            return {"ok": False, "message": "参数格式错误"}
-        tool_name = params.get("name", "").strip()
-        if not tool_name:
-            return {"ok": False, "message": "name 不能为空"}
-        handler_name = params.get("handler", f"_handle_{tool_name}")
-        desc = params.get("description") or tool_name
-        params_schema = _j.dumps(params.get("parameters", {"type": "object", "properties": {}, "required": []}))
-        phase = _j.dumps(params.get("phase_tag", ["跑统计"]))
-        implementation = params.get("implementation", "").strip()
-        reason = params.get("reason", "预设扩展需要")
-
-        tools_dir = _P(__file__).resolve().parent.parent / "tools"
-        stub_file = tools_dir / "_doctor_tools.py"
-        if not stub_file.exists():
-            stub_file.write_text(
-                "from __future__ import annotations\n"
-                + '"""Doctor 创建的工具。"""\n'
-                + "from typing import Any\n"
-                + "import pandas as pd\n"
-                + "from hagoku.tools.registry import Tool, agent_tools\n\n",
-                encoding="utf-8")
-
-        if implementation:
-            code = f"\n# Doctor: {tool_name} — {reason}\n{implementation}\n\n"
-            code += f"agent_tools.register(Tool(\n"
-            code += f'    name="{tool_name}",\n    description="{desc}",\n'
-            code += f"    parameters={params_schema},\n    handler={handler_name},\n"
-            code += f"    phase_tag={phase},\n))\n"
-        else:
-            code = f'''
-# Doctor: stub for "{tool_name}" — {reason}
-def {handler_name}(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
-    return {{"error": "{tool_name} 桩——替换为真实实现"}}
-
-agent_tools.register(Tool(
-    name="{tool_name}",
-    description="{desc}",
-    parameters={params_schema},
-    handler={handler_name},
-    phase_tag={phase},
-))
-'''
-
-        with open(stub_file, 'a') as f:
-            f.write(code)
-        kind = "已创建" if implementation else "已创建桩"
-        return {"ok": True, "message": f"{kind}工具 {tool_name} → tools/_doctor_tools.py"}
-
-    return {"ok": False, "message": f"未知操作: {action}"}
+    """执行 Doctor 修复操作。两个入口共用 _run_fix。"""
+    return _run_fix(action, _fix_params)
 
 
 @router.post("/chat", response_model=ChatResponse)

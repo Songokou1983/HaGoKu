@@ -3,12 +3,16 @@ import { PanelHeader } from "../components/PanelHeader";
 import { ActionButton } from "../components/ActionButton";
 import { StatusBanner } from "../components/StatusBanner";
 import {
+  Play,
   Save,
   Plus,
   Trash2,
   Pencil,
+  ChevronDown,
+  ChevronRight,
   Sparkles,
   CheckCircle2,
+  FlaskConical,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -21,6 +25,12 @@ interface PresetInfo {
   icon: string;
   description: string;
   active: boolean;
+}
+
+interface LabResult {
+  content: string;
+  tool_calls: Array<{ name: string; arguments: string }>;
+  model?: string;
 }
 
 const ICON_MAP: Record<string, string> = {
@@ -45,6 +55,14 @@ export default function PromptLabPanel() {
   const [editIcon, setEditIcon] = useState("bar-chart");
   const [editDesc, setEditDesc] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
+
+  // ── 模拟实验室 ──
+  const [showLab, setShowLab] = useState(false);
+  const [labBase, setLabBase] = useState("general"); // 基于哪个预设
+  const [labPrompt, setLabPrompt] = useState("");
+  const [labMessage, setLabMessage] = useState("");
+  const [labRunning, setLabRunning] = useState(false);
+  const [labResult, setLabResult] = useState<LabResult | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────
 
@@ -200,6 +218,43 @@ export default function PromptLabPanel() {
     setLoading(false);
   };
 
+  // ── 模拟实验室 ──
+
+  const handleOpenLab = async (baseId: string) => {
+    const content = await loadPresetContent(baseId);
+    setLabBase(baseId);
+    setLabPrompt(content);
+    setLabMessage("");
+    setLabResult(null);
+    setLabCompare(null);
+    setShowLab(true);
+  };
+
+  const handleLabRun = async () => {
+    setLabRunning(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/doctor/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `评估这个预设的提示词质量，给出改进建议：\n\n${labPrompt}`,
+        }),
+      });
+      const data = await resp.json();
+      setLabResult({ content: data.reply || "Doctor 未返回评估", tool_calls: [] });
+    } catch (_e) { setError("Doctor 不可用"); }
+    setLabRunning(false);
+  };
+
+  const handleLabSaveAsNew = () => {
+    setEditingPreset({ id: "", name: "", icon: "bar-chart", description: "", active: false });
+    setEditName("");
+    setEditIcon("bar-chart");
+    setEditDesc("");
+    setEditPrompt(labPrompt);
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <PanelHeader title="分析能力">
@@ -309,6 +364,14 @@ export default function PromptLabPanel() {
                       删除
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenLab(p.id)}
+                    className="px-2 py-1 text-ui-xs text-app-accent hover:underline cursor-pointer flex items-center gap-0.5 ml-auto"
+                  >
+                    <FlaskConical size={10} />
+                    模拟
+                  </button>
                 </div>
               </div>
             ))}
@@ -323,6 +386,61 @@ export default function PromptLabPanel() {
               新建场景
             </button>
           </div>
+        </div>
+
+        {/* ── 模拟实验室 ────────────────────────────────────────── */}
+        <div>
+          <button
+            onClick={() => setShowLab((v) => !v)}
+            className="flex items-center gap-1.5 text-ui-sm text-app-text-muted hover:text-app-text cursor-pointer"
+          >
+            <FlaskConical size={14} className="text-app-accent" />
+            提示词实验室
+            {showLab ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </button>
+
+          {showLab && (
+            <div className="mt-2 space-y-3 p-3 border border-app-border rounded-lg bg-app-bg-secondary">
+              <div className="text-ui-xs text-app-text-muted">
+                基于「{presets.find((p) => p.id === labBase)?.name || labBase}」进行模拟调试
+              </div>
+
+              <textarea
+                value={labPrompt}
+                onChange={(e) => setLabPrompt(e.target.value)}
+                rows={10}
+                className="w-full bg-app-bg border border-app-border rounded p-3 text-ui-xs font-mono text-app-text resize-y focus:outline-none focus:border-app-accent"
+              />
+
+              <input
+                type="text"
+                value={labMessage}
+                onChange={(e) => setLabMessage(e.target.value)}
+                placeholder="测试消息（模拟用户输入，可选）"
+                className="w-full bg-app-bg border border-app-border rounded px-3 py-2 text-ui-sm text-app-text focus:outline-none focus:border-app-accent"
+              />
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <ActionButton variant="primary" icon={Play} loading={labRunning} onClick={handleLabRun}>
+                  Doctor 评估
+                </ActionButton>
+                <ActionButton variant="secondary" icon={Save} disabled={labRunning} onClick={handleLabSaveAsNew}>
+                  保存为新场景
+                </ActionButton>
+              </div>
+
+              {error && <StatusBanner type="error" message={error} />}
+
+              {labResult && (
+                <div className="bg-app-bg border border-app-border rounded p-3 max-h-64 overflow-y-auto">
+                  <div className="text-ui-xs font-medium text-app-text-muted mb-1">Doctor 评估</div>
+                  <pre className="text-ui-xs text-app-text whitespace-pre-wrap leading-snug">
+                    {labResult.content}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── 编辑弹窗 ── */}
@@ -444,27 +562,7 @@ function PresetEditor({
 
           {error && <StatusBanner type="error" message={error} />}
 
-          <div className="flex items-center gap-2 justify-between">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const resp = await fetch("/api/doctor/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      message: `评估这个预设的提示词质量，给出改进建议：\n\n${prompt}`,
-                    }),
-                  });
-                  const data = await resp.json();
-                  alert(data.reply || "Doctor 评估完成，请查看 Doctor 面板");
-                } catch (_e) { alert("Doctor 不可用"); }
-              }}
-              className="px-2.5 py-1 text-ui-xs rounded bg-app-accent/10 text-app-accent hover:bg-app-accent/20 transition-colors cursor-pointer"
-            >
-              Doctor 评估
-            </button>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-end">
             <button
               type="button" onClick={onCancel}
               className="px-3 py-1.5 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
@@ -474,7 +572,6 @@ function PresetEditor({
             <ActionButton variant="primary" icon={Save} loading={loading} onClick={onSave} disabled={!name.trim()}>
               {preset.id ? "保存" : "创建"}
             </ActionButton>
-          </div>
           </div>
         </div>
       </div>

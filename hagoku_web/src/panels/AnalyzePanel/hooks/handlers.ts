@@ -55,11 +55,11 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
         text: m.content || "",
         timestamp: m.timestamp || new Date().toISOString(),
       }));
-      // 后端 session 是唯一真相源。localStorage 仅首屏加速，snapshot 到达后覆盖。
-      const workflows = prev.filter(m => m.role === "workflow");
-      eventLog("snapshot", `restore msgs=${snapMsgs.length} workflows=${workflows.length}`);
+      // 后端 session 是唯一真相源，全量覆盖文本消息
+      // workflow 卡片由 snapshot 的 field_review 字段单独恢复，此处不保留旧卡
+      eventLog("snapshot", `restore msgs=${snapMsgs.length}`);
       setPhase("running");
-      return [...snapMsgs, ...workflows];
+      return snapMsgs;
     });
   } else if (snap.messages && snap.messages.length === 0) {
     setPhase("setup");

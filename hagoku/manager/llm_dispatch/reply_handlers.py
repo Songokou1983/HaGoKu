@@ -50,7 +50,11 @@ def respond(self, user_input: dict) -> dict[str, Any]:
         ctx = getattr(self, '_context', None)
         session = ctx.get("_session") if ctx else None
         if session:
-            session.add("user", text)
+            # 去重：HTTP POST 可能已写入相同消息
+            msgs = getattr(session, 'messages', [])
+            last = msgs[-1] if msgs else None
+            if not (last and last.get("role") == "user" and last.get("content", "").strip() == text):
+                session.add("user", text)
 
     with self._respond_lock:
         return _respond_impl(self, user_input)

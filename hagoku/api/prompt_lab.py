@@ -1,8 +1,10 @@
-"""Prompt Lab API — prompt 模拟器后端（Phase E CO-M2 ✅）"""
+"""Prompt Lab API — prompt 实验与预设管理（Phase E CO-M2 ✅）"""
 
 from __future__ import annotations
 
+import hashlib
 import json as _json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +19,8 @@ from hagoku.observability.llm_dump import _get_default_dump_dir
 DUMP_DIR = _get_default_dump_dir()
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "agents" / "prompt.md"
 GATE_SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "ci" / "prompt_gate.py"
+PRESETS_DIR = Path(__file__).resolve().parent.parent / "agents" / "presets"
+ACTIVE_PRESET_FILE = Path.home() / ".hagoku" / "active_preset"
 
 
 class RunRequest(BaseModel):
@@ -117,12 +121,10 @@ async def compare_prompts(req: CompareRequest):
 
 @router.post("/apply")
 async def apply_prompt(req: ApplyRequest):
-    """应用 prompt.md: 先跑 prompt_gate → 返回 diff → 写盘（用户确认在 UI 做）。"""
+    """应用 prompt.md: 先跑 prompt_gate → 检查通过 → 写盘。"""
     if not PROMPT_PATH.exists():
         raise HTTPException(404, "prompt.md not found")
 
-    # 跑 prompt_gate 对比 baseline vs new
-    baseline = PROMPT_PATH.read_text(encoding="utf-8")
     try:
         result = subprocess.run(
             [sys.executable, str(GATE_SCRIPT), str(PROMPT_PATH), "/dev/stdin"],
@@ -134,13 +136,14 @@ async def apply_prompt(req: ApplyRequest):
     except FileNotFoundError:
         raise HTTPException(500, "prompt_gate 脚本未找到")
 
-    gate_output = result.stdout.strip()
-    # 写盘
+    if result.returncode != 0:
+        raise HTTPException(400, f"prompt_gate 未通过: {result.stderr.strip() or result.stdout.strip()}")
+
     PROMPT_PATH.write_text(req.prompt_md, encoding="utf-8")
     return {
         "ok": True,
-        "gate_output": gate_output,
-        "message": "prompt.md 已更新。gate 输出见 gate_output 字段。",
+        "gate_output": result.stdout.strip(),
+        "message": "prompt.md 已更新。",
     }
 
 
@@ -152,19 +155,13 @@ async def audit_lessons():
     return {"ok": True, "report_path": str(path)}
 
 # ── 预设管理 ─────────────────────────────────────────────────────
-import json as _json2
-from pathlib import Path as _Path2
-
-PRESETS_DIR = _Path2(__file__).resolve().parent.parent / "agents" / "presets"
-ACTIVE_PRESET_FILE = _Path2.home() / ".hagoku" / "active_preset"
-
 
 @router.get("/presets")
 async def list_presets():
     manifest = PRESETS_DIR / "presets.json"
     if not manifest.exists():
         return {"presets": []}
-    presets = _json2.loads(manifest.read_text(encoding="utf-8"))
+    presets = _json.loads(manifest.read_text(encoding="utf-8"))
     # 标记当前激活的。无预设时"通用商业分析"即为默认生效
     active = ""
     if ACTIVE_PRESET_FILE.exists():
@@ -213,7 +210,6 @@ async def create_preset(req: CreatePresetRequest):
     if not req.name.strip():
         raise HTTPException(400, "名称不能为空")
     # 生成安全的 ID（纯中文名用 hash）
-    import re, hashlib
     preset_id = re.sub(r"[^a-z0-9_]", "", req.name.lower().replace(" ", "_"))
     if not preset_id:
         preset_id = "p" + hashlib.md5(req.name.encode()).hexdigest()[:7]
@@ -300,13 +296,13 @@ def _load_presets_manifest() -> list[dict]:
     manifest = PRESETS_DIR / "presets.json"
     if not manifest.exists():
         return []
-    return _json2.loads(manifest.read_text(encoding="utf-8"))
+    return _json.loads(manifest.read_text(encoding="utf-8"))
 
 
 def _write_presets_manifest(manifest: list[dict]) -> None:
     PRESETS_DIR.mkdir(parents=True, exist_ok=True)
     (PRESETS_DIR / "presets.json").write_text(
-        _json2.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        _json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 @router.get("/dumps")

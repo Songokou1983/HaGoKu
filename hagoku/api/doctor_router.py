@@ -14,6 +14,49 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/doctor", tags=["doctor"])
 
 AUDIT_DIR = Path.home() / ".hagoku" / "audits"
+CASES_PATH = Path.home() / ".hagoku" / "doctor" / "cases.jsonl"
+
+# ── 病历 ──────────────────────────────────────────────────────────
+
+def _record_case(symptom: str, fix: str, ok: bool, detail: str) -> None:
+    """追加一条病历。"""
+    import json as _j
+    CASES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "symptom": symptom,
+        "fix": fix,
+        "ok": ok,
+        "detail": detail,
+    }
+    with open(CASES_PATH, "a", encoding="utf-8") as f:
+        f.write(_j.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _recent_cases(limit: int = 20) -> str:
+    """读取最近病历，格式化为 Markdown 表格。"""
+    if not CASES_PATH.exists():
+        return ""
+    lines = []
+    try:
+        import json as _j
+        with open(CASES_PATH, encoding="utf-8") as f:
+            all_cases = [_j.loads(line) for line in f if line.strip()]
+    except Exception:
+        return ""
+    if not all_cases:
+        return ""
+    recent = all_cases[-limit:]
+    lines.append("## 历史病历（最近修复记录）")
+    lines.append("| 时间 | 症状 | 修复 | 结果 |")
+    lines.append("|------|------|------|------|")
+    for c in reversed(recent):
+        ts = c.get("timestamp", "")[:16].replace("T", " ")
+        symptom = (c.get("symptom", "") or "")[:50]
+        fix = c.get("fix", "")
+        icon = "✅" if c.get("ok") else "❌"
+        lines.append(f"| {ts} | {symptom} | {fix} | {icon} |")
+    return "\n".join(lines)
 
 # ── 灾备：通用提示词备份（文件恢复失败时的最后兜底）───────────────
 _DEFAULT_PROMPT = """你是数据分析师。数据分析按五阶段推进：
@@ -706,6 +749,10 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
 ## 审计
 
 {audit_ctx if audit_ctx else "暂无审计报告。"}
+
+## 历史病历
+
+{_recent_cases() if _recent_cases() else "暂无历史病历。"}
 """
 
     history = req.history or []
@@ -738,6 +785,13 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
             reply = _re.sub(r"\[fix:\w+\]", "", reply).strip()
             icon = "✅" if result["ok"] else "❌"
             reply += f"\n\n---\n{icon} 已执行 {action}：{result['message']}"
+            # 记录病历
+            _record_case(
+                symptom=req.message,
+                fix=action,
+                ok=result["ok"],
+                detail=result.get("message", ""),
+            )
 
         return {"reply": reply}
     except Exception as e:

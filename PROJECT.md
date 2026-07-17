@@ -639,6 +639,14 @@ HaGoKu 是**多项目系统**。每个项目拥有独立的 Orchestrator、Sessi
 
 恢复内容：对话历史、当前数据快照、LLM 暂停状态（ask_user）、报告链接。
 
+**会话系统架构原则**（2026-07-16 重构确认）：
+
+- **后端 `session.json` 是用户消息的唯一真相源**。前端不维护独立的真相存储（不使用 localStorage 作为权威数据源）。
+- 用户输入通过 HTTP POST `/api/save_user_msg` 立即落盘（不依赖 WebSocket），然后通过 respond 触发 LLM 处理。
+- WebSocket 重连时，`state_snapshot` 从 `session.json` 全量恢复前端消息列表，不依赖前端的 localStorage 缓存。
+- 前端的 localStorage 仅用于首屏加速（减少白屏时间），snapshot 到达后覆盖。
+- 消息写入和 LLM 处理解耦：写入不等 LLM 锁，LLM 处理不阻塞 WebSocket 消息循环（fire-and-forget）。
+
 ---
 
 ## 可观测性

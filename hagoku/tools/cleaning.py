@@ -41,7 +41,7 @@ class MissingMechanism(Enum):
 
 
 class CleaningStrategy(Enum):
-    """数据清洗策略枚举（用于 `suggest_cleaning_strategy` 和 `clean_data`）
+    """数据清洗策略枚举（用于 `clean_data`）
 
     策略映射文档（标准化命名 → 行为说明）：
 
@@ -61,8 +61,7 @@ class CleaningStrategy(Enum):
     | WINSORIZE         | "winsorize"            | 异常值处理 (不删除行)      | 数值型               | 低       |
     | SKIP              | "skip"                 | 无需处理                 | 任意                 | 无       |
 
-    注：`suggest_cleaning_strategy()` 按 缺失机制（MCAR/MAR/MNAR）+ 缺失率 自动选择，
-    用户/Agent 可覆盖为任意策略。偏差风险等级见 `assess_bias_risk()`。
+    注：用户/Agent 可覆盖为任意策略。偏差风险等级见 `assess_bias_risk()`。
     """
 
     DROP_ROWS = "drop_rows"
@@ -520,55 +519,6 @@ def winsorize_column(
     low_val = series.quantile(lower)
     high_val = series.quantile(1 - upper)
     return series.clip(lower=low_val, upper=high_val)
-
-
-# ── 清洗策略推荐 ──────────────────────────────────────────────
-
-
-def suggest_cleaning_strategy(
-    df: pd.DataFrame,
-    column: str,
-    null_rate: float | None = None,
-    missing_mechanism: str | None = None,
-) -> tuple[CleaningStrategy, str]:
-    """
-    建议清洗策略
-
-    Args:
-        df: 数据
-        column: 目标列
-        null_rate: 缺失率（如不提供则自动计算）
-        missing_mechanism: 缺失机制（如不提供则自动检测）
-
-    Returns:
-        (策略, 理由)
-    """
-    if null_rate is None:
-        null_rate = df[column].isnull().mean()
-
-    if missing_mechanism is None:
-        missing_mechanism = detect_missing_mechanism(df, column)
-
-    # 高缺失率 → 删除列
-    if null_rate > _config.drop_column_null_rate:
-        return CleaningStrategy.DROP_COLUMN, f"缺失率 {null_rate:.1%} > {_config.drop_column_null_rate:.0%}，建议删除列"
-
-    # 极低缺失率 → 删除行
-    if null_rate < _config.drop_rows_null_rate:
-        return CleaningStrategy.DROP_ROWS, f"缺失率 {null_rate:.1%} < {_config.drop_rows_null_rate:.0%}，删除行影响极小"
-
-    # MCAR → 可以安全删除或简单填充
-    if missing_mechanism == "mcar":
-        if null_rate < _config.mcar_drop_rows_null_rate:
-            return CleaningStrategy.DROP_ROWS, f"MCAR 且缺失率 {null_rate:.1%} < {_config.mcar_drop_rows_null_rate:.0%}，删除行安全"
-        return CleaningStrategy.FILL_MEDIAN, f"MCAR 但缺失率 {null_rate:.1%} 较高，中位数填充"
-
-    # MAR → 需要更谨慎
-    if missing_mechanism == "mar":
-        return CleaningStrategy.MULTIPLE_IMPUTATION, "MAR 缺失，建议多重插补以减少偏差"
-
-    # MNAR → 最谨慎
-    return CleaningStrategy.FLAG_AND_KEEP, "MNAR 缺失，建议标记缺失而非删除，避免引入偏差"
 
 
 # ── 清洗前后对比 ──────────────────────────────────────────────

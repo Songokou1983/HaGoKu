@@ -1,9 +1,8 @@
-"""清洗增强工具 — CO-T19～T21
+"""清洗增强工具 — CO-T19～T20
 
 注册：
   CO-T19 detect_outliers         → cleaning.detect_outliers_iqr / zscore
   CO-T20 detect_missing_pattern  → cleaning.detect_missing_mechanism
-  CO-T21 suggest_cleaning        → cleaning.suggest_cleaning_strategy
 """
 
 from __future__ import annotations

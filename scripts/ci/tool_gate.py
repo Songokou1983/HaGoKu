@@ -49,7 +49,7 @@ _NON_TOOL_NAMES = {
     "get_column_stats", "get_sample_rows", "list_columns",
     "group_stats", "check_test_assumptions", "run_statistical_test",
     "assess_statistical_power", "required_sample_size",
-    "interpret_nonsignificant", "multiple_comparison_correction",
+    "multiple_comparison_correction",
     "diagnose_regression", "create_plot",
     # Phase D collapsed agent names that may appear in historical docs
     "Scout", "Cleaner", "Analyst", "Reporter", "Manager",

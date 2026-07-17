@@ -4,7 +4,6 @@
   CO-T05 check_test_assumptions    → analysis.diagnostics.check_test_assumptions
   CO-T06 assess_statistical_power  → power_analysis (统一入口)
   CO-T07 required_sample_size      → power_analysis (统一入口)
-  CO-T08 interpret_nonsignificant  → power_analysis.interpret_nonsignificant_result
   CO-T09 correct_multiple_comparisons → analysis.advanced.multiple_comparison_correction
   CO-T10 diagnose_regression       → diagnostics.diagnose_regression
   CO-T11 run_statistical_test      → 重构委托 analysis/* 模块

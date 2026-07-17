@@ -37,7 +37,6 @@ from .cleaning import (
     detect_missing_mechanism,
     detect_outliers_iqr,
     detect_outliers_zscore,
-    suggest_cleaning_strategy,
 )
 from .data_io import (
     compute_data_hash,
@@ -53,7 +52,6 @@ from .diagnostics import (
 from .power_analysis import (
     assess_power_for_data,
     interpret_effect_size,
-    interpret_nonsignificant_result,
     power_anova,
     power_correlation,
     power_regression,
@@ -106,7 +104,6 @@ __all__ = [
     "detect_missing_mechanism",
     "detect_outliers_iqr",
     "detect_outliers_zscore",
-    "suggest_cleaning_strategy",
     # data_io
     "compute_data_hash",
     "get_data_info",
@@ -119,7 +116,6 @@ __all__ = [
     # power
     "assess_power_for_data",
     "interpret_effect_size",
-    "interpret_nonsignificant_result",
     "power_anova",
     "power_correlation",
     "power_regression",

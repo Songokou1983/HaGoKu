@@ -13,7 +13,6 @@ from hagoku.tools.cleaning import (
     clean_data,
     detect_outliers_iqr,
     detect_outliers_zscore,
-    suggest_cleaning_strategy,
     CleaningStrategy,
 )
 from hagoku.tools.analysis import ttest, correlation, chi_square, regression, anova
@@ -129,10 +128,9 @@ class TestCleaning:
             "x": [1, 2, None, 4, 5, 6, 7, 8, 9, 10],
             "y": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
         })
-        # auto_strategy 已移除，LLM 主导需提供 operations
-        strategy, reason = suggest_cleaning_strategy(df, "x", null_rate=0.1)
+        # LLM 主导清洗——直接指定策略
         df_clean, report = clean_data(df, operations=[
-            {"column": "x", "strategy": strategy.value, "reason": reason},
+            {"column": "x", "strategy": "drop_rows", "reason": "test"},
         ])
         # 应该自动检测并处理 x 的缺失
         assert report.total_rows_after > 0
@@ -143,11 +141,6 @@ class TestCleaning:
         })
         outliers = detect_outliers_iqr(df)
         assert outliers["x"]["count"] >= 1
-
-    def test_suggest_cleaning_strategy_low_null(self):
-        df = pd.DataFrame({"x": [1, 2, 3, 4, None]})
-        strategy, reason = suggest_cleaning_strategy(df, "x", null_rate=0.01)
-        assert strategy == CleaningStrategy.DROP_ROWS
 
 
 class TestAnalysis:
@@ -424,8 +417,4 @@ class TestEdgeCases:
         assert outliers["x"]["count"] == 0
         assert "零方差" in outliers["x"].get("note", "")
 
-    def test_suggest_strategy_no_missing(self):
-        df = pd.DataFrame({"x": [1, 2, 3]})
-        strategy, reason = suggest_cleaning_strategy(df, "x", null_rate=0)
-        # 无缺失 → 返回某种策略（不应崩溃）
-        assert isinstance(strategy, CleaningStrategy)
+

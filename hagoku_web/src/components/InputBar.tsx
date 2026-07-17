@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { Send, Loader2 } from "lucide-react";
 
 import { sanitizeText } from "../utils/sanitize";
+import { eventLog } from "../utils/eventLog";
 
 export interface InputBarProps {
   /** Placeholder text */
@@ -54,10 +55,10 @@ export function InputBar({
   const handleSend = useCallback(() => {
     const text = sanitizeText(value).trim();
     if (!text || disabled) {
-      log?.(`[InputBar] handleSend blocked: textEmpty=${!text} disabled=${disabled} value.length=${value?.length ?? 0}`);
+      eventLog("input", `send_blocked empty=${!text} disabled=${disabled}`);
       return;
     }
-    log?.(`[InputBar] handleSend → onSend text="${text.slice(0, 40)}"`);
+    eventLog("input", `send ${text.slice(0,40)}`);
     onSend(text);
     if (!isControlled) setInternalValue("");
     if (textareaRef.current) {
@@ -71,11 +72,11 @@ export function InputBar({
       const composing = e.nativeEvent.isComposing;
       const keyCode229 = (e.nativeEvent as any).keyCode === 229;
       if (composing || keyCode229) {
-        log?.(`[InputBar] keyDown Enter blocked: isComposing=${composing} keyCode229=${keyCode229}`);
+        eventLog("input", `enter_blocked composing=${composing} keyCode229=${keyCode229}`);
         return;
       }
       e.preventDefault();
-      log?.(`[InputBar] keyDown Enter → handleSend value.length=${value?.length ?? 0} disabled=${disabled}`);
+      eventLog("input", `enter value.length=${value?.length ?? 0}`);
       handleSend();
     },
     [handleSend, value, disabled],

@@ -26,7 +26,7 @@ logging.basicConfig(
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +69,20 @@ app.include_router(prompt_lab_router)
 # Doctor API（CO-D09）
 from hagoku.api.doctor_router import router as doctor_router
 app.include_router(doctor_router)
+
+# 前端消息落盘 — HTTP POST，不依赖 WebSocket
+@app.post("/api/save_user_msg")
+async def save_user_msg(text: str = Form(...)):
+    from hagoku.api.ws_handler import get_orchestrator
+    orch = get_orchestrator()
+    if orch is None:
+        return {"ok": False, "error": "no orchestrator"}
+    ctx = getattr(orch, '_context', None) or {}
+    session = ctx.get("_session") if ctx else None
+    if session and text.strip():
+        session.add("user", text.strip())
+        return {"ok": True}
+    return {"ok": False, "error": "no session or empty text"}
 
 # 环境区分：生产环境锁定 CORS，开发环境开放
 _hagoku_env = os.environ.get("HAGOKU_ENV", "").strip().lower()

@@ -1,4 +1,5 @@
 import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+import { eventLog } from "../utils/eventLog";
 
 interface Props {
   children: ReactNode;
@@ -17,6 +18,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    eventLog("error", `${error.message} stack=${info.componentStack?.slice(0,100)}`);
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { eventLog } from "../utils/eventLog";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -189,8 +190,14 @@ export default function AnalyzePanel() {
         agent: "analyst",
         gate: sess.gateOpen,
       };
+      // 先保存到后端 session（HTTP POST，不依赖 WS）
+      eventLog("submit", `gateOpen=${sess.gateOpen} replyPending=${replyPending} text=${outgoing.slice(0, 40)}`);
+      fetch("/api/save_user_msg", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ text: outgoing }),
+      }).catch(() => {});
       const s = send("respond", { text: outgoing });
-      log(`[submit] gateOpen=${sess.gateOpen} replyPending=${replyPending} send=${s} text=${outgoing.slice(0, 40)}`);
       if (!s) {
         sess.replySnapshotRef.current = null;
         addSystemMsg(

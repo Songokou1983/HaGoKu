@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { ConvoMessage } from "../types";
 import { uid } from "../utils";
+import { eventLog } from "../../../utils/eventLog";
+
+eventLog("load", "useConversation");
 
 const SESSION_KEY = "hagoku_session_messages";
 
@@ -12,53 +15,70 @@ function loadSession(): ConvoMessage[] {
   return [];
 }
 
-function saveSession(msgs: ConvoMessage[]) {
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(msgs.slice(-100)));
-  } catch {}
-}
-
-export function useConversation() {
+export function useConversation(_log?: (msg: string) => void) {
   const [messages, setMessages] = useState<ConvoMessage[]>(loadSession);
 
-  // 每次消息变化自动持久化
-  useEffect(() => { saveSession(messages); }, [messages]);
+  // 同步持久化 — useEffect 是异步的，断连时可能没来得及执行
+  // 改为每次写入时直接在 setMessages 回调中同步写 localStorage
+  function persist(next: ConvoMessage[]) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-100))); } catch {}
+    eventLog("persist", `${next.length} msgs`);
+  }
 
   const addSystemMsg = (text: string, timestamp?: string) => {
     const ts = timestamp ?? new Date().toISOString();
-    setMessages((prev) => [...prev, { id: uid(), role: "system", text, timestamp: ts }]);
+    setMessages((prev) => {
+      const next = [...prev, { id: uid(), role: "system", text, timestamp: ts }];
+      persist(next);
+      return next;
+    });
   };
 
   const addUserMsg = (text: string) => {
     const ts = new Date().toISOString();
-    setMessages((prev) => [...prev, { id: uid(), role: "user", text, timestamp: ts }]);
+    eventLog("msg", `send ${text.slice(0,40)}`);
+    setMessages((prev) => {
+      const next = [...prev, { id: uid(), role: "user", text, timestamp: ts }];
+      persist(next);
+      return next;
+    });
   };
 
   const addAgentMsg = (text: string, html?: string, timestamp?: string) => {
     const ts = timestamp ?? new Date().toISOString();
     const msg: ConvoMessage = { id: uid(), role: "agent", text, timestamp: ts };
     if (html) (msg as any).html = html;
-    setMessages((prev) => [...prev, msg]);
+    setMessages((prev) => {
+      const next = [...prev, msg];
+      persist(next);
+      return next;
+    });
   };
 
   const addWorkflowCard = (card: Partial<ConvoMessage> & { id?: string }) => {
     const id = card.id ?? uid();
     const ts = card.timestamp ?? new Date().toISOString();
-    setMessages((prev) => [...prev, {
-      id, role: "workflow", text: card.text ?? "", timestamp: ts,
-      fieldReview: card.fieldReview,
-      cleaningReview: card.cleaningReview,
-      analystReview: card.analystReview,
-    }]);
+    setMessages((prev) => {
+      const next = [...prev, {
+        id, role: "workflow", text: card.text ?? "", timestamp: ts,
+        fieldReview: card.fieldReview,
+        cleaningReview: card.cleaningReview,
+        analystReview: card.analystReview,
+      }];
+      persist(next);
+      return next;
+    });
   };
 
   const updateWorkflowCard = (id: string, updates: Partial<ConvoMessage>) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...updates } : m)),
-    );
+    setMessages((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, ...updates } : m));
+      persist(next);
+      return next;
+    });
   };
 
-  const clearMessages = () => setMessages([]);
+  const clearMessages = () => { eventLog("state", "clear_messages"); setMessages([]); persist([]); };
 
   return {
     messages, setMessages,

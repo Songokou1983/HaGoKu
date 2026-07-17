@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useWorkspaceStore } from "../stores/workspace";
 import type { WSMessage, ConnectionStatus } from "../types/events";
+import { eventLog, flushOfflineLog } from "../utils/eventLog";
 
 type Listener = (msg: WSMessage) => void;
 
@@ -67,6 +68,7 @@ function startPing() {
       // 延迟 10 秒后再检查：只有 pong 在此次 ping 发送之后仍未到达，才判定超时断开
       const pongCheck = setTimeout(() => {
         if (_lastPong < pingSentAt && _ws?.readyState === WebSocket.OPEN) {
+          eventLog("ws", `ping_timeout lastPong=${_lastPong} pingSent=${pingSentAt}`);
           _ws.close();
         }
       }, 10_000);
@@ -88,14 +90,18 @@ function connect() {
   }
 
   setStatus(_reconnectAttempt === 0 ? "connecting" : "reconnecting");
+  eventLog("ws", _reconnectAttempt === 0 ? "connect" : `reconnect_${_reconnectAttempt}`);
   const ws = new WebSocket(BASE_URL);
   _ws = ws;
+  (window as any).__hagoku_ws = ws;
 
   ws.onopen = () => {
     _reconnectAttempt = 0;
     _lastPong = Date.now();
     setStatus("connected");
     startPing();
+    eventLog("ws", "connected");
+    flushOfflineLog();
   };
 
   ws.onmessage = (ev) => {
@@ -138,11 +144,12 @@ function connect() {
     }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (e: CloseEvent) => {
+    eventLog("ws", `closed code=${e.code} reason=${e.reason?.slice(0,40) || '-'}`);
     _ws = null;
+    (window as any).__hagoku_ws = null;
     clearTimers();
     setStatus("disconnected");
-    // Schedule reconnect with exponential backoff
     const delay = backoffMs(_reconnectAttempt);
     _reconnectAttempt++;
     _reconnectTimer = setTimeout(connect, delay);
@@ -182,14 +189,21 @@ export function useWebSocket() {
       _ws.send(JSON.stringify({ cmd, payload }));
       return true;
     }
+    eventLog("ws", `send_fail cmd=${cmd} readyState=${_ws?.readyState ?? 'null'}`);
     return false;
   }, []);
 
-  // 内部日志：通过 WS 发到后端文件 /tmp/hagoku_frontend.log
+  // 前端日志：双写 — WS __log（连上时发后端）+ console（始终留痕）
+  // WS 断开/重连中仍可从浏览器 console 回溯完整动作链
   const log = useCallback((msg: string) => {
+    const ts = new Date().toISOString();
+    const line = `[frontend] [${ts}] ${msg}`;
+    // 始终写 console，WS 状态不影响日志留痕
+    try { console.log(line); } catch { /* ignore */ }
+    // 尝试发 WS __log，连上时同步到后端统一日志
     try {
       if (_ws?.readyState === WebSocket.OPEN) {
-        _ws.send(JSON.stringify({ cmd: "__log", payload: { text: `[${new Date().toISOString()}] ${msg}` } }));
+        _ws.send(JSON.stringify({ cmd: "__log", payload: { text: line } }));
       }
     } catch { /* ignore */ }
   }, []);

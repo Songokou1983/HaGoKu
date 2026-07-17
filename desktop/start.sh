@@ -13,7 +13,7 @@ sleep 1
 # 1. API
 echo "🔧 HaGoKu API..."
 cd "$PROJECT"
-.venv/bin/python3 -m uvicorn hagoku.api.server:app --host 0.0.0.0 --port 8000 --reload &
+.venv/bin/python3 -m uvicorn hagoku.api.server:app --host 0.0.0.0 --port 8000 &
 API_PID=$!
 sleep 3
 

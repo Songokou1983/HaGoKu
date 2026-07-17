@@ -42,7 +42,16 @@ def respond(self, user_input: dict) -> dict[str, Any]:
 
     加锁防止并发：用户在前一次 respond 未完成时再提交，
     第二次 respond 会排队等待，不会同时操作同一个 session/agent。
+
+    消息立即写入 session（不等锁）——断连重连后 snapshot 包含排队中的消息。
     """
+    text = user_input.get("text", "").strip()
+    if text:
+        ctx = getattr(self, '_context', None)
+        session = ctx.get("_session") if ctx else None
+        if session:
+            session.add("user", text)
+
     with self._respond_lock:
         return _respond_impl(self, user_input)
 
@@ -74,10 +83,7 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
         if text:
             ctx["_pending_command_text"] = text
 
-    # 写 Session
-    session = ctx.get("_session") if ctx else None
-    if session and text:
-        session.add("user", text)
+    # 写 Session（外层 respond 已提前写入，此处不重复）
 
     result = _handle_reply(self, text, ctx or {})
     self.save_state()

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type { AgentKey, AgentRunState, SessionPhase } from "../types";
 import type { ConvoMessage } from "../types";
 import { sanitizeText } from "../../../utils/sanitize";
+import { eventLog } from "../../../utils/eventLog";
 
 const SESSION_KEY = "hagoku_session";
 
@@ -42,6 +43,7 @@ export function useAnalyzeSession(
 
   const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
     if (!currentProject || !dataPath) return;
+    eventLog("analysis", `start project=${currentProject} data=${dataPath} sheet=${sheetName ?? 0}`);
     setMessages([]);
     setReplyPending(true);
     setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
@@ -73,6 +75,7 @@ export function useAnalyzeSession(
   }, [send, dataPath, currentProject, queryText, setPhase]);
 
   const handleReset = useCallback(() => {
+    eventLog("analysis", "stop");
     send("cancel_analysis", {});
     resetRunUiState();
     setPhase("setup");

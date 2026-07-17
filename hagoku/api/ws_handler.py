@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import threading
 from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from hagoku.observability.event_bus import EventBus
 from hagoku.observability.events import Event
@@ -195,15 +195,14 @@ class WSBridge:
         self._clients.pop(str(id(ws)), None)
 
     async def broadcast(self, msg: dict):
-        """向所有 WS 客户端推送；单客户端慢/死连接不得阻塞整条事件循环（否则 HTTP 也会卡死）。"""
+        """向所有 WS 客户端推送。"""
         if not self._clients:
             return
         pairs = list(self._clients.items())
-        timeout = float(os.environ.get("HAGOKU_WS_SEND_TIMEOUT", "5"))
 
         async def _send_one(key: str, ws: WebSocket) -> str | None:
             try:
-                await asyncio.wait_for(ws.send_json(msg), timeout=timeout)
+                await ws.send_json(msg)
                 return None
             except Exception:
                 return key
@@ -432,27 +431,42 @@ async def ws_handler(ws: WebSocket) -> None:
                 if orch is not None:
                     orch.request_cancel_respond()
                 await _safe_send({"type": "ack", "cmd": "cancel_respond"})
+            elif cmd == "save_msg":
+                orch = get_orchestrator()
+                if orch is not None:
+                    text = (msg.get("payload", {}) or {}).get("text", "").strip()
+                    if text:
+                        ctx = getattr(orch, '_context', None) or {}
+                        session = ctx.get("_session") if ctx else None
+                        if session:
+                            session.add("user", text)
+                await _safe_send({"type": "ack", "cmd": "save_msg"})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
                 user_text = payload.get("text", "").strip()
-                # Phase C: 空 text 是合法信号（"让 LLM 再想想"），不再 skip
-                # R6 防护：连续 3 次空回复 → emit error（不兜底，显式失败，铁律 7）
                 orch = get_orchestrator()
                 if orch is None:
                     await _safe_send({"type": "error", "message": "No active orchestrator"})
                 else:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        result = await loop.run_in_executor(
-                            None, _respond_task, orch, user_text,
-                        )
-                        await _safe_send({"type": "ack", "cmd": "respond", "data": result})
-                    except Exception as e:
-                        await _safe_send({"type": "error", "message": str(e)})
+                    # 立即确认收到，不阻塞 ws_handler 协程
+                    # 否则 ping/pong 堆积在 TCP 缓冲区 → 超时断连
+                    await _safe_send({"type": "ack", "cmd": "respond_received"})
+                    async def _process():
+                        try:
+                            loop = asyncio.get_running_loop()
+                            result = await loop.run_in_executor(
+                                None, _respond_task, orch, user_text,
+                            )
+                            await _safe_send({"type": "ack", "cmd": "respond", "data": result})
+                        except Exception as e:
+                            await _safe_send({"type": "error", "message": str(e)})
+                    asyncio.create_task(_process())
             else:
                 await _safe_send({"type": "error", "message": f"Unknown command: {cmd}"})
 
+    except WebSocketDisconnect as e:
+        logger.info("WebSocket closed code=%s reason=%s", e.code, str(e.reason)[:80])
     except Exception:
         logger.info("WebSocket closed", exc_info=True)
     finally:

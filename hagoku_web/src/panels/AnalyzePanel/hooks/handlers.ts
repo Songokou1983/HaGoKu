@@ -3,6 +3,7 @@
  * Each function receives the full WsEventDeps object and a message.
  */
 import { uid } from "../utils";
+import { eventLog } from "../../../utils/eventLog";
 import {
   resolveAgentKey,
   parsePauseInteractionRevision,
@@ -24,6 +25,7 @@ import type { WsEventDeps, ConvoMessage } from "../types";
 
 export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   const snap = (msg as any).data;
+  eventLog("snapshot", `arrived msgs=${Array.isArray(snap?.messages) ? snap.messages.length : 'N/A'} gate=${snap?.gate_open}`);
   if (!snap) return false;
   const {
     setMessages, setActiveFieldReviewId, setActiveFieldReviewRevision,
@@ -47,16 +49,17 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   if (Array.isArray(snap.messages) && snap.messages.length > 0) {
     setMessages((prev) => {
-      if (prev.length === 0) {
-        setPhase("running");
-        return snap.messages.map((m: any) => ({
-          id: uid(),
-          role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
-          text: m.content || "",
-          timestamp: m.timestamp || new Date().toISOString(),
-        }));
-      }
-      return prev;
+      const snapMsgs: ConvoMessage[] = snap.messages.map((m: any) => ({
+        id: uid(),
+        role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
+        text: m.content || "",
+        timestamp: m.timestamp || new Date().toISOString(),
+      }));
+      // 后端 session 是唯一真相源。localStorage 仅首屏加速，snapshot 到达后覆盖。
+      const workflows = prev.filter(m => m.role === "workflow");
+      eventLog("snapshot", `restore msgs=${snapMsgs.length} workflows=${workflows.length}`);
+      setPhase("running");
+      return [...snapMsgs, ...workflows];
     });
   } else if (snap.messages && snap.messages.length === 0) {
     setPhase("setup");
@@ -111,6 +114,10 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
 
 export function handleAck(deps: WsEventDeps, msg: any): boolean {
   const { replySnapshotRef, setReplyPending } = deps;
+  if (msg.type === "ack" && msg.cmd === "respond_received") {
+    eventLog("ack", "respond_received");
+    return true;
+  }
   if (msg.type === "ack" && msg.cmd === "respond") {
     replySnapshotRef.current = null;
     setReplyPending?.(false);
@@ -203,17 +210,21 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     }
   }
 
-  // agent_stream_delta
+  // agent_stream_delta — 用 streamId 搜索，不依赖 lastIdx
+  // 用户在 LLM 流式输出中发消息时 addUserMsg 插入末尾，lastIdx 指向用户消息
+  // 用 streamId 从后往前搜匹配的流式消息，避免输出被拆成两条
   if (d.event_type === "agent_stream_delta") {
     const data = (d.data ?? {}) as Record<string, unknown>;
     const streamId = (data.stream_id as string) || "";
     const delta = (data.delta as string) || "";
     if (streamId && delta) {
       deps.setMessages((prev) => {
-        const lastIdx = prev.length - 1;
-        if (lastIdx >= 0 && prev[lastIdx].streaming && prev[lastIdx].streamId === streamId) {
-          return prev.map((m, i) => i === lastIdx ? { ...m, text: m.text + delta, timestamp: d.timestamp } : m);
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].streaming && prev[i].streamId === streamId) {
+            return prev.map((m, idx) => idx === i ? { ...m, text: m.text + delta, timestamp: d.timestamp } : m);
+          }
         }
+        eventLog("delta", `NEW streamId=${streamId.slice(0,12)} msgs=${prev.length} last=${prev[prev.length-1]?.role}`);
         return [...prev, { id: uid(), role: "agent", text: delta, timestamp: d.timestamp, streaming: true, streamId }];
       });
     }
@@ -221,6 +232,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
 
   // agent_stream_end
   if (d.event_type === "agent_stream_end") {
+    eventLog("stream", "end");
     deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
   }
 
@@ -245,7 +257,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
 
   // user_input_requested
   if (d.event_type === "user_input_requested") {
-    deps.log?.(`user_input_requested received agent=${d.agent}`);
+    eventLog("gate", `open agent=${d.agent}`);
     deps.setGateOpen(false);
     const dataObj = (d.data ?? {}) as Record<string, unknown>;
     const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
@@ -345,7 +357,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
 
     const pausedAgent = resolveAgentKey(d.agent);
     deps.setWaitingAgent(pausedAgent);
-    deps.log?.(`setGateOpen(true) waitingAgent=${pausedAgent}`);
+    eventLog("gate", `open waitingAgent=${pausedAgent}`);
     deps.setGateOpen(true);
     deps.setPhase("running");
     setTimeout(() => deps.replyInputRef.current?.focus(), 100);

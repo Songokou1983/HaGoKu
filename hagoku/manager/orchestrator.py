@@ -24,12 +24,10 @@ from ..storage.output import OutputManager
 # ── CH-5 拆分：从子模块重导出，保持外部 import 路径不变 ─────────
 
 from .llm_dispatch.reply_handlers import ReplyHandlersMixin  # noqa: F401
-from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
 
 class Orchestrator(
     ReplyHandlersMixin,
-    PipelineHelpersMixin,
 ):
     """HaGoKu Studio 编排器"""
 
@@ -418,4 +416,41 @@ class Orchestrator(
             self.db.fail_run(run_id, duration_ms=duration_ms)
             self.event_bus.emit(EventType.RUN_FAILED, "manager", {"error": str(e)})
             raise
+
+    def _finish_run_cancelled(
+        self,
+        run_id: str,
+        project_name: str,
+        run_start: datetime,
+        run_dir: Path,
+    ) -> dict[str, Any]:
+        duration_ms = int((datetime.now() - run_start).total_seconds() * 1000)
+        now = datetime.now().isoformat()
+        self.db.update_run(
+            run_id,
+            status="cancelled",
+            completed_at=now,
+            duration_ms=duration_ms,
+        )
+        self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
+            "thought": "分析已由用户中止。",
+        })
+        self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
+            "duration": f"{duration_ms / 1000:.1f}s",
+            "cancelled": True,
+            "run_id": run_id,
+            "project": project_name,
+        })
+        try:
+            events_path = run_dir / "events.jsonl"
+            self.event_bus.save_to_file(events_path)
+        except Exception:
+            pass
+        return {
+            "status": "cancelled",
+            "message": "分析已中止",
+            "run_id": run_id,
+            "project": project_name,
+            "duration_ms": duration_ms,
+        }
 

@@ -56,19 +56,9 @@ export default function AnalyzePanel() {
   const snapshot = useWorkspaceStore((s) => s.snapshot);
   useEffect(() => {
     if (!snapshot) return;
-    useWorkspaceStore.getState().setCurrentProject(snapshot.projectName || null);
+    // project/data path 由 handleStateSnapshot 统一处理消息恢复
+    // 此处只管理组件级状态
     setCurrentDataPath(snapshot.dataPath || "");
-    const msgs = (snapshot.messages || []).map((m: any) => ({
-      id: uid(),
-      role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
-      text: m.content || "",
-      timestamp: m.timestamp || new Date().toISOString(),
-    }));
-    setMessages(msgs);
-    setPhase(msgs.length > 0 ? "running" : "setup");
-    if (snapshot.pendingAskUser) {
-      sess.setGateOpen(true);
-    }
     useWorkspaceStore.getState().setSnapshot(null);
   }, [snapshot]);
 

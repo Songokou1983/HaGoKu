@@ -94,20 +94,6 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     return result
 
 
-# ── 存根（兼容旧测试）─────────────────────
-
-def _handle_scout_reply(self, user_input, context):
-    return _handle_reply(self, user_input, context)
-
-def _handle_cleaner_reply(self, user_input, context):
-    return _handle_reply(self, user_input, context)
-
-def _handle_analyst_reply(self, user_input, context):
-    return _handle_reply(self, user_input, context)
-
-def _handle_reporter_reply(self, user_input, context):
-    return _handle_reply(self, user_input, context)
-
 
 # ── Mixin ──────────────────────────────────────
 
@@ -125,9 +111,5 @@ def _ensure_memory_for_respond(self, project_name: str) -> None:
 
 class ReplyHandlersMixin:
     _handle_reply = _handle_reply
-    _handle_scout_reply = _handle_scout_reply
-    _handle_cleaner_reply = _handle_cleaner_reply
-    _handle_analyst_reply = _handle_analyst_reply
-    _handle_reporter_reply = _handle_reporter_reply
     respond = respond
     _ensure_memory_for_respond = _ensure_memory_for_respond

@@ -2,14 +2,23 @@ import { useState } from "react";
 import type { ConvoMessage } from "../types";
 import { uid } from "../utils";
 import { eventLog } from "../../../utils/eventLog";
+import { useWorkspaceStore } from "../../../stores/workspace";
 
 eventLog("load", "useConversation");
 
-const SESSION_KEY = "hagoku_session_messages";
+const BASE_KEY = "hagoku_session";
+
+function _storageKey(): string {
+  const proj = useWorkspaceStore.getState().currentProject;
+  return proj ? `${BASE_KEY}_${proj}` : BASE_KEY;
+}
 
 function loadSession(): ConvoMessage[] {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    // 优先读项目隔离的 key，回退旧的非隔离 key（迁移兼容）
+    const key = _storageKey();
+    const raw = localStorage.getItem(key)
+      ?? (key !== BASE_KEY ? localStorage.getItem(BASE_KEY) : null);
     if (raw) return JSON.parse(raw) as ConvoMessage[];
   } catch {}
   return [];
@@ -21,7 +30,7 @@ export function useConversation(_log?: (msg: string) => void) {
   // 同步持久化 — useEffect 是异步的，断连时可能没来得及执行
   // 改为每次写入时直接在 setMessages 回调中同步写 localStorage
   function persist(next: ConvoMessage[]) {
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-100))); } catch {}
+    try { localStorage.setItem(_storageKey(), JSON.stringify(next.slice(-100))); } catch {}
     eventLog("persist", `${next.length} msgs`);
   }
 

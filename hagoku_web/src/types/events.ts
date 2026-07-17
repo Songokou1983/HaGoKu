@@ -1,10 +1,6 @@
 /** Event types mirrored from hagoku.observability.events.EventType */
 export type EventType =
-  | "plan_created"
-  | "task_assigned"
   | "quality_check"
-  | "mode_switched"
-  | "plan_adjusted"
   | "agent_started"
   | "agent_thinking"
   | "agent_completed"
@@ -12,8 +8,6 @@ export type EventType =
   | "tool_called"
   | "tool_result"
   | "tool_error"
-  | "data_passed"
-  | "data_artifact_created"
   | "user_input_requested"
   | "user_input_received"
   | "tool_exchange"

@@ -54,7 +54,6 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
         )
 
         # 大图不进 LLM context，只返 artifact 路径/摘要
-        artifact_path = ctx.get("_artifact_dir", "")
         result: dict[str, Any] = {
             "chart_type": chart_type,
             "title": title or f"{chart_type} 图",

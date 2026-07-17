@@ -45,7 +45,7 @@ def test_scout_user_input_received_payload_has_machine_fields():
 
     pure_confirm 字段已移除——确认判断由 LLM 通道完成，不在此载荷中。
     """
-    from hagoku.manager.orchestrator import scout_user_input_received_state
+    from hagoku.manager.payloads.scout_payload import scout_user_input_received_state
 
     ctx = {
         "column_semantics": [

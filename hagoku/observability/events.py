@@ -12,11 +12,7 @@ class EventType(Enum):
     """事件类型"""
 
     # Manager 事件
-    PLAN_CREATED = "plan_created"
-    TASK_ASSIGNED = "task_assigned"
     QUALITY_CHECK = "quality_check"
-    MODE_SWITCHED = "mode_switched"
-    PLAN_ADJUSTED = "plan_adjusted"
 
     # Agent 事件
     AGENT_STARTED = "agent_started"
@@ -28,10 +24,6 @@ class EventType(Enum):
     TOOL_CALLED = "tool_called"
     TOOL_RESULT = "tool_result"
     TOOL_ERROR = "tool_error"
-
-    # Data 事件
-    DATA_PASSED = "data_passed"
-    DATA_ARTIFACT_CREATED = "data_artifact_created"
 
     # User 事件
     USER_INPUT_REQUESTED = "user_input_requested"
@@ -48,9 +40,6 @@ class EventType(Enum):
     # Stream 事件（CO-18）
     AGENT_STREAM_DELTA = "agent_stream_delta"
     AGENT_STREAM_END = "agent_stream_end"
-
-    # System 事件
-    HEALTH_CHECK = "health_check"
 
 
 @dataclass

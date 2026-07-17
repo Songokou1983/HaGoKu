@@ -110,7 +110,7 @@ def test_G7_StageHandlers_完整性(orch):
 def test_G8_analyst_run_step_正常返回(orch):
     """G8: Analyst.run_step 正常处理 submit_analysis（Phase B 升级版）。"""
     from hagoku.agents.agent import DataAnalystAgent as AnalystAgent
-    from hagoku.context.project_context import ProjectContext
+    from hagoku.context.session import Session
     import json
 
     agent = AnalystAgent.__new__(AnalystAgent)
@@ -119,8 +119,8 @@ def test_G8_analyst_run_step_正常返回(orch):
     agent.event_bus = orch.event_bus
     agent.prompt = "test"
 
-    pc = ProjectContext(run_id="test", analysis_goal="分析测试")
-    context = {"query": "test", "column_semantics": [], "_project_context": pc}
+    session = Session(analysis_goal="分析测试")
+    context = {"query": "test", "column_semantics": [], "_session": session}
 
     # Mock LLM: 直接返回 submit_analysis
     mock_client = MagicMock()

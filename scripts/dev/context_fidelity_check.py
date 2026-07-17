@@ -80,8 +80,8 @@ _SCENARIOS = {
 
 
 def _build_scenario(scenario_name: str) -> dict[str, Any]:
-    """构建指定场景的 ProjectContext 并运行 to_messages_for_llm，返回快照。"""
-    from hagoku.context.project_context import ProjectContext
+    """构建指定场景的 Session 并运行 to_llm_messages，返回快照。"""
+    from hagoku.context.session import Session
 
     s = _SCENARIOS[scenario_name]
     stage = s["stage"]
@@ -89,36 +89,34 @@ def _build_scenario(scenario_name: str) -> dict[str, Any]:
     pre_stage = s.get("pre_stage")
     extra_corrections = s.get("extra_corrections", [])
 
-    pc = ProjectContext(run_id=f"fidelity-{scenario_name}", analysis_goal=_GOAL)
+    session = Session(analysis_goal=_GOAL)
     context: dict[str, Any] = {
         "query": _GOAL,
         "column_semantics": _COLUMNS,
         "target": "Inc1",
         "features": ["Period"],
-        "_project_context": pc,
+        "_session": session,
     }
 
     # 如果有前置阶段（cross-stage 测试）
     if pre_stage:
         for i, c in enumerate(corrections, 1):
-            pc.add_user_feedback(pre_stage, i, raw_text=c)
-            pc.add_agent_response(pre_stage, i, content=f"已处理_{pre_stage}_{i}",
-                                  snapshot={"target": "Inc1", "features": ["Period"]})
-        pc.add_stage_transition(stage)
+            session.add("user", c)
+            session.add("assistant", f"已处理_{pre_stage}_{i}")
+        session.add("system", f"[进入 {stage} 阶段]")
         # 额外其他阶段
         for extra_stage, extra_text in extra_corrections:
-            pc.add_user_feedback(extra_stage, 1, raw_text=extra_text)
-            pc.add_agent_response(extra_stage, 1, content=f"已处理_{extra_stage}",
-                                  snapshot={"target": "Inc1"})
-            pc.add_stage_transition(stage)
+            session.add("user", extra_text)
+            session.add("assistant", f"已处理_{extra_stage}")
+            session.add("system", f"[进入 {stage} 阶段]")
         user_input = "开始分析"
     else:
         for i, c in enumerate(corrections, 1):
-            pc.add_user_feedback(stage, i, raw_text=c)
-            pc.add_agent_response(stage, i, content=f"已处理_{i}")
+            session.add("user", c)
+            session.add("assistant", f"已处理_{i}")
         user_input = "确认以上修改"
 
-    msgs = pc.to_messages_for_llm(stage, context, user_input)
+    msgs = session.to_llm_messages(user_input=user_input)
 
     # 收集快照
     snapshot: dict[str, Any] = {
@@ -286,7 +284,7 @@ def cmd_compare() -> int:
             print(f"  • {r}")
         print(
             "\n如何修复："
-            "\n  1. 找到导致退化的代码变更（to_messages_for_llm / build_prompt / ProjectContext）"
+            "\n  1. 找到导致退化的代码变更（to_llm_messages / Session）"
             "\n  2. 恢复被压缩或截断的 messages 历史"
             "\n  3. 重新运行 --compare 直到无退化"
             "\n  注意：修复方式是恢复上下文，而不是调低基线。"

@@ -149,16 +149,16 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     import pandas as pd
     from hagoku.agents.agent import DataAnalystAgent as ScoutAgent  # Phase D
     from hagoku.config import HaGoKuConfig
-    from hagoku.context.project_context import ProjectContext
+    from hagoku.context.session import Session
 
     df = pd.DataFrame({"Inc1": [100, 200, 300], "Period": [1, 2, 3]})
     intent = "分析每个店铺收入的增长趋势"
 
     cfg = HaGoKuConfig()
     agent = ScoutAgent(cfg.llm, event_bus=MagicMock())
-    # P1-1 修复后，infer_field_semantics 必须通过 ProjectContext.to_messages_for_llm()
+    # P1-1 修复后，infer_field_semantics 必须通过 Session.to_llm_messages()
     agent._context = {
-        "_project_context": ProjectContext(run_id="test_intent", analysis_goal=intent),
+        "_session": Session(analysis_goal=intent),
         "query": intent,
     }
 
@@ -209,11 +209,11 @@ def _make_tool_call_response(arguments_json: str, function_name: str = "update_f
 def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
     """同一暂停点第 2 轮 LLM 调用，messages 应含第 1 轮的 assistant turn。
 
-    ProjectContext 接管后：messages = [system_prefix, *messages_history, user_raw]。
-    messages_history 由 ProjectContext.entries 派生，第 2 轮应包含第 1 轮的交互。
+    Session 接管后：messages = [system_extra, query, *messages, user_input]。
+    messages_history 由 Session.messages 派生，第 2 轮应包含第 1 轮的交互。
     """
     from tests.helpers.scout_reply_legacy import _apply_scout_reply_with_llm
-    from hagoku.context.project_context import ProjectContext
+    from hagoku.context.session import Session
 
     ctx: dict[str, Any] = {
         "query": "分析每个店铺的收入增长趋势",
@@ -222,11 +222,11 @@ def test_律3_scout多轮纠错_前一轮LLM输出抵达本轮():
         "column_display_names": {},
     }
 
-    # 注入 ProjectContext，预填第 1 轮交互历史
-    project_ctx = ProjectContext(run_id="test", analysis_goal="分析每个店铺的收入增长趋势")
-    project_ctx.add_user_feedback(stage="scout", revision=1, raw_text="Inc1 是收入")
-    project_ctx.add_agent_response(stage="scout", revision=1, content="已更新 Inc1→收入")
-    ctx["_project_context"] = project_ctx
+    # 注入 Session，预填第 1 轮交互历史
+    session = Session(analysis_goal="分析每个店铺的收入增长趋势")
+    session.add("user", "Inc1 是收入")
+    session.add("assistant", "已更新 Inc1→收入")
+    ctx["_session"] = session
 
     # 第 2 轮：用户纠正
     spy = LLMSpy(
@@ -337,35 +337,26 @@ def test_真实场景_律7_LLM未理解时返回空():
 
 
 def test_真实场景_律2_用户原话保存到context():
-    """律 2 ✅：用户原话通过 ProjectContext.entries 保留（替代旧的 utterances 数组）。
-
-    修复后：USER_INPUT_RECEIVED 事件 → ProjectContext._on_event → add_user_feedback。
-    """
+    """律 2 ✅：用户原话通过 Session.messages 保留。"""
     from tests.helpers.scout_reply_legacy import _apply_scout_reply_with_llm
-    from hagoku.context.project_context import ProjectContext
-    from hagoku.observability.event_bus import EventBus
-    from hagoku.observability.events import EventType
+    from hagoku.context.session import Session
 
     ctx = _make_real_scene_context()
-    project_ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
-    bus = EventBus()
-    project_ctx.subscribe(bus, context_ref=ctx)
-    ctx["_project_context"] = project_ctx
-
-    # 模拟 orchestrator 的 USER_INPUT_RECEIVED emit（L2291）
-    bus.emit(EventType.USER_INPUT_RECEIVED, "scout", {"reply": _REAL_SCENE_REPLY})
+    session = Session(analysis_goal="分析ROI")
+    # 模拟 respond() 写入用户输入（生产路径）
+    session.add("user", _REAL_SCENE_REPLY)
+    ctx["_session"] = session
 
     spy = LLMSpy()
     _apply_scout_reply_with_llm(ctx, _REAL_SCENE_REPLY, _REAL_SCENE_COLUMNS, spy.client, "test-model")
 
-    # 正向断言：原始话通过 ProjectContext entries 保留
-    entries = project_ctx.entries
-    user_entries = [e for e in entries if e.type == "user_feedback"]
-    assert len(user_entries) >= 1, (
-        "律 2：用户输入后 ProjectContext 应至少含 1 条 user_feedback entry"
+    # 正向断言：原始话通过 Session messages 保留
+    user_msgs = [m for m in session.messages if m.get("role") == "user"]
+    assert len(user_msgs) >= 1, (
+        "律 2：用户输入后 Session 应至少含 1 条 user 消息"
     )
-    last = user_entries[-1]
-    assert last.raw_user_text == _REAL_SCENE_REPLY, (
+    last = user_msgs[-1]
+    assert last["content"] == _REAL_SCENE_REPLY, (
         f"entries 应含用户原话。期望「{_REAL_SCENE_REPLY}」，"
         f"实际「{last.raw_user_text}」"
     )
@@ -503,40 +494,39 @@ def test_meta_LLMSpy录制功能正常():
     assert not spy.contains_in_any_message("not there")
 
 
-# ── ProjectContext 信息抵达正向断言（律 1/2/3/6）─────────────────────────
+# ── Session 信息抵达正向断言（律 1/2/3/6）─────────────────────────
 
-def test_project_context_stores_analysis_goal():
-    """律 1：ProjectContext 存储 analysis_goal，to_messages_for_llm 将其作为 query 传入。"""
-    from hagoku.context.project_context import ProjectContext
+def test_session_stores_analysis_goal():
+    """律 1：Session 存储 analysis_goal，to_llm_messages 将其作为 query 传入。"""
+    from hagoku.context.session import Session
 
-    ctx = ProjectContext(run_id="test", analysis_goal="分析销售趋势")
-    assert ctx.analysis_goal == "分析销售趋势"
-    msgs = ctx.to_messages_for_llm("scout", {"column_semantics": []}, "请分析")
+    session = Session(analysis_goal="分析销售趋势")
+    assert session.analysis_goal == "分析销售趋势"
+    msgs = session.to_llm_messages(user_input="请分析")
     # query 作为第一条 user message
     assert any("分析销售趋势" in m.get("content", "") for m in msgs), "分析目标应在 messages 中"
 
 
-def test_project_context_preserves_user_raw_text():
-    """律 2 + 律 6：user_feedback entry 必须保留 raw_user_text。"""
-    from hagoku.context.project_context import ProjectContext
+def test_session_preserves_user_raw_text():
+    """律 2 + 律 6：user 消息必须保留原话。"""
+    from hagoku.context.session import Session
 
-    ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
-    ctx.add_user_feedback(stage="scout", revision=1, raw_text="Period是周次")
-    assert ctx.entries[0].raw_user_text == "Period是周次"
+    session = Session(analysis_goal="分析ROI")
+    session.add("user", "Period是周次")
+    assert session.messages[0]["content"] == "Period是周次"
 
 
-def test_project_context_history_includes_full_stage_dialog():
-    """律 3 + 律 6：同一阶段的多轮对话必须全部出现在 history_context 中。"""
-    from hagoku.context.project_context import ProjectContext
+def test_session_history_includes_full_stage_dialog():
+    """律 3 + 律 6：同一阶段的多轮对话必须全部出现在 messages 中。"""
+    from hagoku.context.session import Session
 
-    ctx = ProjectContext(run_id="test", analysis_goal="分析ROI")
-    ctx.add_user_feedback(stage="scout", revision=1, raw_text="第一轮纠正")
-    ctx.add_agent_response(stage="scout", revision=1, content="已处理第一轮")
-    ctx.add_user_feedback(stage="scout", revision=2, raw_text="第二轮纠正")
-    ctx.add_agent_response(stage="scout", revision=2, content="已处理第二轮")
+    session = Session(analysis_goal="分析ROI")
+    session.add("user", "第一轮纠正")
+    session.add("assistant", "已处理第一轮")
+    session.add("user", "第二轮纠正")
+    session.add("assistant", "已处理第二轮")
 
-    result = ctx.build_prompt("scout", {"column_semantics": []})
-    msgs = result["messages_history"]
+    msgs = list(session.messages)
     assert len(msgs) == 4  # user, assistant, user, assistant
     assert msgs[0]["role"] == "user" and "第一轮纠正" in msgs[0]["content"]
     assert msgs[1]["role"] == "assistant"

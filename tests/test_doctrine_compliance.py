@@ -654,7 +654,7 @@ def test_doctrine_无_session_messages_残留():
         if "_session_messages" in _read(path):
             violations.append(str(path.relative_to(HAGOKU_ROOT)))
     assert not violations, (
-        f"_session_messages 残留（应全部替换为 ProjectContext）:\n"
+        f"_session_messages 残留（应全部替换为 Session）:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
 

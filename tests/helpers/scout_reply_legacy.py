@@ -293,19 +293,16 @@ def _apply_scout_reply_with_llm(
     seen_col: set[str] = set()
     context["_scout_last_user_raw"] = raw
 
-    # ── 通道：ProjectContext.to_messages_for_llm → 分析目标 + 字段表 + 多轮历史 + 用户原话 ──
-    project_ctx = context.get("_project_context")
-    if project_ctx is not None:
-        messages = project_ctx.to_messages_for_llm("scout", context, raw)
+    # ── 通道：Session.to_llm_messages → 分析目标 + 字段表 + 多轮历史 + 用户原话 ──
+    session = context.get("_session")
+    if session is not None:
+        messages = session.to_llm_messages(user_input=raw)
     else:
-        from hagoku.context.project_context import ProjectContext
+        from hagoku.context.session import Session
 
         goal = (context.get("query") or "").strip()
-        ephemeral = ProjectContext(
-            run_id=str(context.get("run_id") or "scout"),
-            analysis_goal=goal,
-        )
-        messages = ephemeral.to_messages_for_llm("scout", context, raw)
+        ephemeral = Session(analysis_goal=goal)
+        messages = ephemeral.to_llm_messages(user_input=raw)
 
     _raw_text: str = ""
     tool_calls = None  # 初始化，避免异常路径 UnboundLocalError

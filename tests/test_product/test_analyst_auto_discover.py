@@ -4,7 +4,7 @@ import pandas as pd
 
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import Orchestrator
-from hagoku.context.project_context import ProjectContext
+from hagoku.context.session import Session
 from hagoku.observability.events import EventType
 
 
@@ -19,8 +19,8 @@ def test_handle_analyst_reply_delegates_to_agent_run_step():
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test"
 
-    pc = ProjectContext(run_id="test", analysis_goal="测试分析")
-    context = {"query": "test", "column_semantics": [], "_project_context": pc}
+    session = Session(analysis_goal="测试分析")
+    context = {"query": "test", "column_semantics": [], "_session": session}
 
     step_result = {
         "text": "收到，请说",
@@ -35,8 +35,8 @@ def test_handle_analyst_reply_delegates_to_agent_run_step():
     assert result["status"] == "scout_review"
     assert result["message"] == "收到，请说"
 
-    user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
-    assert len(user_entries) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_entries}"
+    user_msgs = [m for m in session.messages if m.get("role") == "user"]
+    assert len(user_msgs) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_msgs}"
 
 
 def test_handle_analyst_reply_with_mock_agent():
@@ -50,8 +50,8 @@ def test_handle_analyst_reply_with_mock_agent():
     orch._agent.event_bus = orch.event_bus
     orch._agent.prompt = "test"
 
-    pc = ProjectContext(run_id="test", analysis_goal="测试")
-    context = {"query": "test", "column_semantics": [], "_project_context": pc}
+    session = Session(analysis_goal="测试")
+    context = {"query": "test", "column_semantics": [], "_session": session}
 
     step_result = {
         "text": "收到，请说",
@@ -71,15 +71,15 @@ def test_handle_analyst_reply_empty_input():
     orch = Orchestrator(HaGoKuConfig())
     orch._df_clean = pd.DataFrame({"A": [1, 2]})
 
-    pc = ProjectContext(run_id="test", analysis_goal="测试")
-    context = {"query": "test", "column_semantics": [], "_project_context": pc}
+    session = Session(analysis_goal="测试")
+    context = {"query": "test", "column_semantics": [], "_session": session}
 
     result = orch._handle_analyst_reply("", context)
 
     assert result["status"] == "scout_review"
     assert result["message"] == ""
 
-    user_msgs = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
+    user_msgs = [m for m in session.messages if m.get("role") == "user"]
     assert len(user_msgs) == 0, f"空输入不应追加 user 消息，实际: {user_msgs}"
 
 

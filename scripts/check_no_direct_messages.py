@@ -61,7 +61,7 @@ def scan(files: list[str]) -> list[str]:
             if DIRECT_ASSIGN.search(line):
                 violations.append(f"{fpath}:{lineno}  messages = [{{...}}] 直接构造（应通过 build_messages / to_messages_for_llm）")
             elif APPEND_ROLE.search(line):
-                violations.append(f"{fpath}:{lineno}  messages.append({{...}}) 直接追加（应通过 ProjectContext）")
+                violations.append(f"{fpath}:{lineno}  messages.append({{...}}) 直接追加（应通过 Session）")
 
     return violations
 

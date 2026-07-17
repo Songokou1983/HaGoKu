@@ -7,13 +7,13 @@ import pandas as pd
 from hagoku.config import HaGoKuConfig
 from hagoku.observability.event_bus import EventBus
 from hagoku.agents.agent import DataAnalystAgent
-from hagoku.context.project_context import ProjectContext
+from hagoku.context.session import Session
 
 cfg = HaGoKuConfig.load()
 df = pd.read_csv(sys.argv[1] if len(sys.argv) > 1 else '/home/son_goku/smoke_demo.csv')
 query = sys.argv[2] if len(sys.argv) > 2 else '哪个渠道ROI最高'
 bus = EventBus()
-pc = ProjectContext(run_id='phase_d_smoke', analysis_goal=query)
+session = Session(analysis_goal=query)
 
 agent = DataAnalystAgent(cfg.llm, bus)
 
@@ -28,7 +28,7 @@ for r in results:
 print()
 print('=== S2: cleaner assess ===')
 rules = agent._load_cleaning_rules()
-ctx = {'_project_context': pc, 'query': query, 'column_semantics': results}
+ctx = {'_session': session, 'query': query, 'column_semantics': results}
 assessment = agent.assess(df, ctx, rules)
 print(f'  assessment: {assessment.get("summary","")[:80]}...')
 
@@ -46,7 +46,7 @@ print(f'  submit_assessment: {sa}')
 # S5: analyst run_step
 print()
 print('=== S5: analyst run_step ===')
-a_ctx = {'_project_context': pc, 'query': query, 'column_semantics': results}
+a_ctx = {'_session': session, 'query': query, 'column_semantics': results}
 agent._df = df
 ar = agent.run_step(a_ctx, df, '用 t 检验分析 ROI 差异')
 print(f'  text: {ar.get("text","")[:100]}')

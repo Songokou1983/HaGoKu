@@ -56,9 +56,9 @@ class TestAnalystTwoPhaseE2E:
         orch._agent.event_bus = orch.event_bus
         orch._agent.prompt = "test"
 
-        from hagoku.context.project_context import ProjectContext
-        pc = ProjectContext(run_id="flat_pipe", analysis_goal="测试ROI")
-        orch._context = {"_project_context": pc, "query": "测试ROI", "column_semantics": []}
+        from hagoku.context.session import Session
+        session = Session(analysis_goal="测试ROI")
+        orch._context = {"_session": session, "query": "测试ROI", "column_semantics": []}
 
         # ── 第 1 步：用户输入 → run_step 返回文本 ──
         orch._agent.run_step = MagicMock(return_value=self._make_step_result(
@@ -80,8 +80,8 @@ class TestAnalystTwoPhaseE2E:
             assert result.get("need_input") is True, "respond 应返回 need_input"
 
         # P0-2 修复后：add_user_feedback 由 respond() 外层统一写入
-        user_entries = [e for e in pc.entries if e.type == "user_feedback" and e.stage == "analyst"]
-        assert len(user_entries) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_entries}"
+        user_msgs = [m for m in session.messages if m.get("role") == "user"]
+        assert len(user_msgs) == 0, f"handler 不应写入 user_feedback（由 respond 统一），实际: {user_msgs}"
 
         # ── 第 2 步：用户继续对话 ──
         orch._agent.run_step = MagicMock(return_value=self._make_step_result(

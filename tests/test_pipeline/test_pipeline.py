@@ -13,7 +13,7 @@ class TestLLMConfig:
         config = LLMConfig()
         assert config.base_url == ""
         assert config.model == ""
-        assert config.temperature == 0.6
+        assert config.stream_enabled is True
 
     def test_custom(self):
         config = LLMConfig(base_url="http://custom:9000/v1", model="custom-model")
@@ -38,13 +38,11 @@ class TestHaGoKuConfig:
         yaml_path.write_text("""
 llm:
   model: test-model
-  temperature: 0.5
 manager:
   cleaning_impact_warning: 0.5
 """)
         config = HaGoKuConfig.from_yaml(yaml_path)
         assert config.llm.model == "test-model"
-        assert config.llm.temperature == 0.5
         assert config.manager.cleaning_impact_warning == 0.5
 
     def test_from_yaml_nonexistent(self):

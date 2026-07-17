@@ -82,26 +82,26 @@ def _handle_assess_statistical_power(args: dict, _ctx: dict, _df: pd.DataFrame |
     effect_size = float(args.get("effect_size", 0.5))
     alpha = float(args.get("alpha", 0.05))
 
-    from hagoku.tools import power_analysis as pa
+    from hagoku.tools.power_analysis import power_ttest, power_anova, power_correlation, power_regression
 
     try:
         if mode == "ttest":
             n1 = int(args.get("n1", n or 0))
             n2 = int(args.get("n2", n1))
             paired = bool(args.get("paired", False))
-            return pa.power_ttest(n1, n2, effect_size, alpha, paired=paired)
+            return power_ttest(n1, n2, effect_size, alpha, paired=paired)
         elif mode == "anova":
             n_per_group = int(args.get("n_per_group", n or 0))
             n_groups = int(args.get("n_groups", 2))
-            return pa.power_anova(n_per_group, n_groups, effect_size, alpha)
+            return power_anova(n_per_group, n_groups, effect_size, alpha)
         elif mode == "correlation":
             n_val = int(args.get("n", n or 0))
             method = str(args.get("method", "pearson"))
-            return pa.power_correlation(n_val, effect_size, alpha, method=method)
+            return power_correlation(n_val, effect_size, alpha, method=method)
         elif mode == "regression":
             n_val = int(args.get("n", n or 0))
             n_predictors = int(args.get("n_predictors", 1))
-            return pa.power_regression(n_val, n_predictors, effect_size, alpha)
+            return power_regression(n_val, n_predictors, effect_size, alpha)
         else:
             return {"error": f"未知 mode: {mode}，可选: ttest / anova / correlation / regression"}
     except Exception as e:
@@ -120,21 +120,21 @@ def _handle_required_sample_size(args: dict, _ctx: dict, _df: pd.DataFrame | Non
     power = float(args.get("power", 0.8))
     alpha = float(args.get("alpha", 0.05))
 
-    from hagoku.tools import power_analysis as pa
+    from hagoku.tools.power_analysis import required_n_ttest, required_n_anova, required_n_correlation, required_n_regression
 
     try:
         if mode == "ttest":
             paired = bool(args.get("paired", False))
             ratio = float(args.get("ratio", 1.0))
-            return pa.required_n_ttest(effect_size, power, alpha, paired=paired, ratio=ratio)
+            return required_n_ttest(effect_size, power, alpha, paired=paired, ratio=ratio)
         elif mode == "anova":
             n_groups = int(args.get("n_groups", 2))
-            return pa.required_n_anova(effect_size, n_groups, power, alpha)
+            return required_n_anova(effect_size, n_groups, power, alpha)
         elif mode == "correlation":
-            return pa.required_n_correlation(effect_size, power, alpha)
+            return required_n_correlation(effect_size, power, alpha)
         elif mode == "regression":
             n_predictors = int(args.get("n_predictors", 1))
-            return pa.required_n_regression(n_predictors, effect_size, power, alpha)
+            return required_n_regression(n_predictors, effect_size, power, alpha)
         else:
             return {"error": f"未知 mode: {mode}，可选: ttest / anova / correlation / regression"}
     except Exception as e:

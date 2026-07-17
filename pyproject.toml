@@ -32,10 +32,8 @@ dependencies = [
     "click>=8.0",
     # Data
     "pandas>=2.0",
-    "duckdb>=1.0",
     "pyarrow>=14.0",
     "openpyxl>=3.1.0",
-    "pypdf>=4.0",
     "python-docx>=1.0",
     # Statistics
     "pingouin>=0.5",
@@ -44,7 +42,6 @@ dependencies = [
     # ML
     "scikit-learn>=1.4",
     # Cleaning & validation
-    "pyod>=1.1",
     # Profiling
     "ydata-profiling>=4.0",
     # Visualization
@@ -54,7 +51,6 @@ dependencies = [
     "jinja2>=3.1.3",
     # LLM
     "openai>=1.0",
-    "langchain-openai>=0.1.0",
     # API
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",

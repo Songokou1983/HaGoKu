@@ -28,11 +28,8 @@ class LLMConfig(BaseModel):
         return (
             f"LLMConfig(model={self.model!r}, "
             f"base_url={self.base_url!r}, "
-            f"api_key={self.api_key[:8] + '***' if self.api_key else '(none)'!r}, "
-            f"temperature={self.temperature}, max_tokens={self.max_tokens})"
+            f"api_key={self.api_key[:8] + '***' if self.api_key else '(none)'!r})"
         )
-    temperature: float = 0.6  # 生成温度
-    max_tokens: int = 8192  # 最大 token 数
     stream_enabled: bool = True  # 流式输出开关（CO-21）；false 时回退 batch emit 整段 message
 
 class MetaLLMConfig(BaseModel):

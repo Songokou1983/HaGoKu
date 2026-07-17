@@ -458,7 +458,7 @@ function PresetEditor({
                   });
                   const data = await resp.json();
                   alert(data.reply || "Doctor 评估完成，请查看 Doctor 面板");
-                } catch { alert("Doctor 不可用"); }
+                } catch (_e) { alert("Doctor 不可用"); }
               }}
               className="px-2.5 py-1 text-ui-xs rounded bg-app-accent/10 text-app-accent hover:bg-app-accent/20 transition-colors cursor-pointer"
             >
@@ -474,6 +474,7 @@ function PresetEditor({
             <ActionButton variant="primary" icon={Save} loading={loading} onClick={onSave} disabled={!name.trim()}>
               {preset.id ? "保存" : "创建"}
             </ActionButton>
+          </div>
           </div>
         </div>
       </div>

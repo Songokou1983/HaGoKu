@@ -71,15 +71,6 @@ class AnalysisConfig(BaseModel):
     k_folds: int = 5  # cross_validate 的折数
 
 
-class KnowledgeConfig(BaseModel):
-    """知识库配置 — 跨项目知识检索参数"""
-
-    similarity_threshold: float = 0.45  # 向量检索相似度阈值（0~1），低于此值的知识条目不回显给 LLM
-    top_k_recall: int = 3  # 每个字段检索的历史知识条目数上限
-    dedup_similarity: float = 0.85  # learn() 去重阈值：现有条目相似度 > 此值则跳过写入
-    learn_confidence_min: float = 0.70  # 仅 confidence ≥ 此值的字段推断才写入知识库
-
-
 class CleaningConfig(BaseModel):
     """数据清洗配置
 
@@ -139,7 +130,6 @@ class HaGoKuConfig(BaseModel):
     manager: ManagerModeConfig = Field(default_factory=ManagerModeConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
-    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
     work_dir: Path = Field(default_factory=lambda: Path.home() / ".hagoku")
 

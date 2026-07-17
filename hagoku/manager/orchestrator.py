@@ -12,7 +12,6 @@ logger = logging.getLogger("hagoku.orchestrator")
 
 from ..agents.agent import DataAnalystAgent
 from ..config import HaGoKuConfig
-from ..guardrails.statistical import StatisticalGuardrails
 from ..llm.client import create_raw_client, create_structured_llm_client
 from ..observability.display import TerminalDisplay
 from ..observability.event_bus import EventBus
@@ -53,9 +52,6 @@ class Orchestrator(
 
         # 订阅显示
         self.event_bus.subscribe(self.display)
-
-        # 护栏
-        self.guardrails = StatisticalGuardrails()
 
         # LLM 客户端（懒初始化，pure_rule 模式永远不会触发）
         self._llm_client: Any | None = None

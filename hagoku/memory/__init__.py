@@ -8,7 +8,6 @@ __all__ = [
     "LessonStore",
     "MemoryManager",
     "ColumnSemanticDef",
-    "KnowledgeVectorStore",
 ]
 
 
@@ -19,7 +18,4 @@ def __getattr__(name: str):
     if name == "ColumnSemanticDef":
         from hagoku.memory.projects._manager import ColumnSemanticDef
         return ColumnSemanticDef
-    if name == "KnowledgeVectorStore":
-        from hagoku.memory._vector import KnowledgeVectorStore
-        return KnowledgeVectorStore
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

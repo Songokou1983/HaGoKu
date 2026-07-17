@@ -236,7 +236,7 @@ export default function PromptLabPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `评估预设「${presetName}」的提示词质量。只输出诊断结论和改进建议，不要反问、不要询问是否需要修改——用户在此界面无法回复你。\n\n${labPrompt}`,
+          message: `评估预设「${presetName}」的提示词质量。只输出诊断结论和改进建议，不要尝试执行任何 fix 操作、不要写入任何文件。这是只读评估。\n\n${labPrompt}`,
         }),
       });
       const data = await resp.json();

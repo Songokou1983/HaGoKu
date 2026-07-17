@@ -23,48 +23,15 @@ from ..storage.output import OutputManager
 
 # ── CH-5 拆分：从子模块重导出，保持外部 import 路径不变 ─────────
 
-from .payloads.scout_payload import (  # noqa: F401 — 供类内方法使用 + 外部测试导入
-    _expand_column_range,
-    _known_scout_columns,
-    _md_table_cell,
-    _resolve_scout_column_token,
-    _resolve_scout_column_token_with_context,
-    _scout_description_is_meaningful_for_user,
-    _try_parse_json,
-    scout_user_input_received_state,
-)
-
-# Phase D 后：scout_reply 功能已迁入 agent.py + reply_handlers.py。
-# 旧的 scout_reply.py 已删除。测试函数已迁移至 tests/helpers/scout_reply_legacy.py。
-# 生产不再依赖任何 scout_reply 模块。
-
-
-
-from .llm_dispatch.reply_handlers import (  # noqa: F401
-    _ensure_memory_for_respond,
-    _handle_analyst_reply,
-    _handle_cleaner_reply,
-    _handle_reply,
-    _handle_reporter_reply,
-    _handle_scout_reply,
-    respond,
-    ReplyHandlersMixin,
-)
-
-
+from .llm_dispatch.reply_handlers import ReplyHandlersMixin  # noqa: F401
 from .payloads.pipeline_helpers import PipelineHelpersMixin  # noqa: F401
 
-from .payloads.pipeline_helpers import (  # noqa: F401
-    _check_mandatory_guardrails,
-    _finish_run_cancelled,
-    _handle_mandatory_violations,
-)
 
 class Orchestrator(
     ReplyHandlersMixin,
     PipelineHelpersMixin,
 ):
-    """HaGoKu Studio 编排器：规则+AI 双驱动，协调四个 Agent"""
+    """HaGoKu Studio 编排器"""
 
     def _log_channel(self, agent: str, event: str, **kw: Any) -> None:
         """通道日志——记录每个关键决策点。"""
@@ -74,14 +41,6 @@ class Orchestrator(
                 cl.log(agent, event, **kw)
         except Exception:
             logger.debug("_log_channel 失败", exc_info=True)
-
-    # 兼容旧测试
-    _STAGE_HANDLERS: dict[str, str] = {
-        "scout": "_handle_scout_reply",
-        "cleaner": "_handle_cleaner_reply",
-        "analyst": "_handle_analyst_reply",
-        "reporter": "_handle_reporter_reply",
-    }
 
     def __init__(self, config: HaGoKuConfig | None = None) -> None:
         self.config = config or HaGoKuConfig.load()

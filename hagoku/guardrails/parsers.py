@@ -10,12 +10,12 @@ from __future__ import annotations
 生产代码目前仅使用 statistical.py 的 StatisticalGuardrails（结构化规则校验）。
 
 正确方向（Iron Law 1 对齐）：
-  从 LLM 自由文本中解析结构化值是过渡方案。长期应通过 submit_analysis
+  从 LLM 自由文本中解析结构化值是过渡方案。长期应通过 submit_findings
   等工具 schema 让 LLM 直接返回结构化字段（effect_size: float, sample_size: int），
   代码仅做范围/阈值校验，不扫描文本中的语义关键词。
 
 接入点（待实现）：
-  - agent.py: run_step 中 submit_analysis/submit_first_pass 处理 findings 后
+  - agent.py: run_step 中 submit_findings 处理 findings 后
     调用 check_hallucination(txt) 或 deep_validate(txt) 标记可疑输出
   - ws_handler.py: 在 run_completed 事件中向用户展示 guardrail notice_url
 """

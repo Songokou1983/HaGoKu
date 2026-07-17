@@ -100,11 +100,12 @@ def test_G6_respond_flat_pipe_no_switch(orch):
     assert result["message"] == "收到"
 
 
-def test_G7_StageHandlers_完整性(orch):
-    """G7: _STAGE_HANDLERS 覆盖全部 4 个阶段。"""
-    assert set(orch._STAGE_HANDLERS.keys()) == {"scout", "cleaner", "analyst", "reporter"}
-    for stage, handler_name in orch._STAGE_HANDLERS.items():
-        assert hasattr(orch, handler_name), f"handler {handler_name} 不存在"
+def test_G7_orchestrator_uses_reply_handler_mixin(orch):
+    """G7: Orchestrator 通过 ReplyHandlersMixin 拥有 handler 方法。"""
+    from hagoku.manager.llm_dispatch.reply_handlers import ReplyHandlersMixin
+    assert isinstance(orch, ReplyHandlersMixin)
+    # 单 agent 架构下 _handle_analyst_reply 通过 mixin 可用
+    assert hasattr(orch, "_handle_analyst_reply")
 
 
 def test_G8_analyst_run_step_正常返回(orch):

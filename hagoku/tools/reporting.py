@@ -143,7 +143,7 @@ h3 { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
 .finding .limitations { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid var(--border); }
 .finding .limitations li { margin: 0.2rem 0; }
 .finding .evidence-trace { font-size: 0.8rem; color: #80868b; margin-top: 0.5rem; font-family: 'Courier New', monospace; }
-.chart { margin: 1rem 0; text-align: center; }
+.chart { margin: 1rem 0; width: 100%; }
 .chart img, .chart iframe { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
 /* markdown 渲染 */
 .section-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
@@ -192,7 +192,7 @@ _PRINT_CSS = """
   h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
-  .chart, canvas, img, svg { break-inside: avoid; page-break-inside: avoid; max-width: 100%; height: auto; }
+  .chart, canvas, img, svg { break-inside: avoid; page-break-inside: avoid; }
   .finding-compact { break-inside: avoid; page-break-inside: avoid; }
   table { width: 100%; }
 }
@@ -724,7 +724,7 @@ BUSINESS_ANALYSIS_HTML_TEMPLATE = """<!DOCTYPE html>
         tr:hover td { background: rgba(13,110,253,0.03); }
 
         .chart {
-            margin: 1rem 0;
+            margin: 1rem 0; width: 100%;
             border-radius: 8px;
             overflow: hidden;
             background: var(--bg);

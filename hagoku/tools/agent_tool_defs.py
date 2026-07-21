@@ -410,11 +410,14 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                 normalized.append(c)
         s.charts = normalized
 
-    # ── 图表注入：按 chart_id 显式绑定，未绑定的不注入 ──
+    # ── 图表注入：有任一 section.charts 含字符串 ID → 按 ID 绑定；否则全部自动分配 ──
     generated = ctx.get("_generated_charts") or []
-    has_explicit = any(s.charts and any(isinstance(c, str) for c in s.charts) for s in sections)
-    if has_explicit and generated:
-        chart_by_id = {c["chart_id"]: c for c in generated if "chart_id" in c}
+    has_explicit = any(
+        s.charts and any(isinstance(c, str) for c in s.charts)
+        for s in sections
+    )
+    if has_explicit:
+        chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
         for s in sections:
             if s.charts:
                 resolved = []
@@ -424,13 +427,13 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                     elif isinstance(ref, dict):
                         resolved.append(ref)
                 s.charts = resolved
-        ctx["_generated_charts"] = []  # 已消费，防重复
-    elif generated and not has_explicit:
-        # 无显式绑定 → 全部自动分配到没有 charts 的 section
-        empty_sections = [s for s in sections if not s.charts]
-        if empty_sections:
-            for i, chart in enumerate(generated):
-                empty_sections[i % len(empty_sections)].charts.append(chart)
+    elif generated:
+        empty = [s for s in sections if not s.charts]
+        for i, c in enumerate(generated):
+            empty[i % len(empty)].charts.append(c) if empty else None
+
+    # 消费后清空，防跨轮次泄漏
+    ctx["_generated_charts"] = []
 
     # ── page_width: wide=无限制, normal=960px（默认）──
     page_width = args.get("page_width", "normal") or "normal"

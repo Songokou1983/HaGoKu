@@ -411,8 +411,6 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
         s.charts = normalized
 
     # ── 图表注入：按 chart_id 显式绑定，未绑定的不注入 ──
-    # create_plot 生成的图表存在 ctx._generated_charts
-    # LLM 在 section.charts 中传 ["chart_id_1", "chart_id_2"] 来显式绑定
     generated = ctx.get("_generated_charts") or []
     has_explicit = any(s.charts and any(isinstance(c, str) for c in s.charts) for s in sections)
     if has_explicit and generated:
@@ -426,8 +424,9 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                     elif isinstance(ref, dict):
                         resolved.append(ref)
                 s.charts = resolved
+        ctx["_generated_charts"] = []  # 已消费，防重复
     elif generated and not has_explicit:
-        # 无显式绑定 → 全部自动分配到没有 charts 的 section（旧行为）
+        # 无显式绑定 → 全部自动分配到没有 charts 的 section
         empty_sections = [s for s in sections if not s.charts]
         if empty_sections:
             for i, chart in enumerate(generated):

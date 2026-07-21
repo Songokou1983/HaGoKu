@@ -8,7 +8,7 @@ interface ThemeStore {
 }
 
 export const useThemeStore = create<ThemeStore>((set, get) => ({
-  theme: (localStorage.getItem("hagoku_theme") as ThemeId) || "dark",
+  theme: (localStorage.getItem("hagoku_theme") as ThemeId) || "light",
   setTheme: (t) => {
     localStorage.setItem("hagoku_theme", t);
     set({ theme: t });

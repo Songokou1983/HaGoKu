@@ -28,7 +28,7 @@ grep -q "只确认完成\|禁止沉默\|禁止回复" "$ROOT/hagoku/agents/promp
 grep -q 'phase_hint.*==.*"scout"' "$ROOT/hagoku/agents/agent.py" 2>/dev/null && { echo "  ❌ scout 工具锁"; exit 1; } || echo "  ✅ 无工具锁"
 
 echo "=== 6. 消息去重 ==="
-grep -q "false && assistant_pre_text" "$ROOT/hagoku_web/src/components/ToolExchangeTurn.tsx" && echo "  ✅ pre_text 已禁用" || { echo "  ❌ pre_text 重复"; exit 1; }
+grep -q "assistant_pre_text" "$ROOT/hagoku_web/src/components/ToolExchangeTurn.tsx" && { echo "  ❌ pre_text 残留"; exit 1; } || echo "  ✅ pre_text 已移除"
 
 echo "=== 7. P1 假 agent response ==="
 grep -q 'add_agent_response.*理解.*个字段\|add_agent_response.*字段推断完成' "$ROOT/hagoku/manager/orchestrator.py" && { echo "  ❌ orchestrator 仍在写假 agent response"; exit 1; } || echo "  ✅ orchestrator 无假 agent response"

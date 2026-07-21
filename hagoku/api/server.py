@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="HaGoKu Studio API", version="2.0.1", lifespan=lifespan)
+app = FastAPI(title="HaGoKu Studio API", version="2.3.1", lifespan=lifespan)
 
 # Prompt Lab API
 from hagoku.api.prompt_lab import router as prompt_lab_router
@@ -107,7 +107,7 @@ app.add_middleware(ApiAuthMiddleware)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "2.0.1"}
+    return {"status": "ok", "version": "2.3.1"}
 
 
 # ── 项目目录（与 `HaGoKuConfig.output.project_dir` / `HAGOKYU_PROJECT_DIR` 一致）────

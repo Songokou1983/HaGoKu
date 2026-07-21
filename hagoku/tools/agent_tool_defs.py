@@ -410,15 +410,32 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                 normalized.append(c)
         s.charts = normalized
 
-    # ── 自动注入 context 中已生成的图表 ──
-    # 将 create_plot 生成的图表分配到没有手动 charts 的 section，
-    # 按顺序轮流分配，避免全堆在最后一个 section
+    # ── 图表注入：按 chart_id 显式绑定，未绑定的不注入 ──
+    # create_plot 生成的图表存在 ctx._generated_charts
+    # LLM 在 section.charts 中传 ["chart_id_1", "chart_id_2"] 来显式绑定
     generated = ctx.get("_generated_charts") or []
-    if generated:
+    has_explicit = any(s.charts and any(isinstance(c, str) for c in s.charts) for s in sections)
+    if has_explicit and generated:
+        chart_by_id = {c["chart_id"]: c for c in generated if "chart_id" in c}
+        for s in sections:
+            if s.charts:
+                resolved = []
+                for ref in s.charts:
+                    if isinstance(ref, str) and ref in chart_by_id:
+                        resolved.append(chart_by_id[ref])
+                    elif isinstance(ref, dict):
+                        resolved.append(ref)
+                s.charts = resolved
+    elif generated and not has_explicit:
+        # 无显式绑定 → 全部自动分配到没有 charts 的 section（旧行为）
         empty_sections = [s for s in sections if not s.charts]
         if empty_sections:
             for i, chart in enumerate(generated):
                 empty_sections[i % len(empty_sections)].charts.append(chart)
+
+    # ── page_width: wide=无限制, normal=960px（默认）──
+    page_width = args.get("page_width", "normal") or "normal"
+    custom_css = args.get("custom_css") or ""
 
     report = ReportData(
         project_name=ctx.get("_project_name", ""),
@@ -441,6 +458,18 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
         output_path = ""
     gen = ReportGenerator()
     gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
+
+    # ── 注入 page_width 和 custom_css ──
+    if (page_width == "wide" or custom_css) and output_path:
+        html = output_path and __import__("pathlib").Path(output_path).read_text(encoding="utf-8")
+        if html:
+            extra = ""
+            if page_width == "wide":
+                extra += "<style>body{max-width:none!important;padding:1rem 2rem!important}</style>"
+            if custom_css:
+                extra += f"<style>{custom_css}</style>"
+            html = html.replace("</head>", f"{extra}\n</head>")
+            __import__("pathlib").Path(output_path).write_text(html, encoding="utf-8")
 
     # 同步生成打印版
     if output_path:
@@ -466,7 +495,7 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
 
 agent_tools.register(Tool(
     name="generate_report",
-    description="生成 HTML 分析报告。模板可选: default/academic/brief/business_analysis。create_plot 生成的图表自动注入——无需手动传 charts。",
+    description="生成 HTML 分析报告。图表可用 create_plot 的 chart_id 显式绑定（section.charts: [\"chart_1\", \"chart_2\"]）。page_width: wide 时内容撑满页面。",
     parameters={
         "type": "object",
         "properties": {
@@ -479,7 +508,11 @@ agent_tools.register(Tool(
                         "content": {"type": "string"},
                         "headline": {"type": "string"},
                         "findings": {"type": "array", "items": {"type": "object"}},
-                        "charts": {"type": "array", "items": {"type": "object"}},
+                        "charts": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "create_plot 返回的 chart_id 列表，不传则自动分配",
+                        },
                     },
                     "required": ["title", "content"],
                 },
@@ -487,6 +520,8 @@ agent_tools.register(Tool(
             "headline": {"type": "string"},
             "findings": {"type": "array", "items": {"type": "object"}},
             "template": {"type": "string"},
+            "page_width": {"type": "string", "enum": ["normal", "wide"], "description": "normal=960px 版心, wide=撑满页面"},
+            "custom_css": {"type": "string", "description": "自定义 CSS 样式（高级用户微调）"},
         },
         "required": ["sections"],
     },

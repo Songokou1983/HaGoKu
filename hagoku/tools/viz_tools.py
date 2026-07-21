@@ -64,13 +64,16 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
                 html_snippet = fig.to_html(full_html=False, include_plotlyjs="cdn")
                 result["html_snippet"] = html_snippet
                 result["type"] = "inline_html"
-                # ── 自动存入 context，供 generate_report 读取 ──
+                # ── 自动存入 context，供 generate_report 按 chart_id 引用 ──
+                chart_id = args.get("chart_id") or f"chart_{len(charts) + 1}"
                 charts = ctx.setdefault("_generated_charts", [])
                 charts.append({
+                    "chart_id": chart_id,
                     "type": "inline_html",
                     "html_snippet": html_snippet,
                     "title": title or f"{chart_type} 图",
                 })
+                result["chart_id"] = chart_id
             except Exception:
                 result["type"] = "plotly_figure"
                 result["note"] = "图表已生成 (Plotly Figure)，大图不进入 LLM context"
@@ -116,6 +119,7 @@ agent_tools.register(Tool(
             "xlabel": {"type": "string", "description": "X 轴标签"},
             "ylabel": {"type": "string", "description": "Y 轴标签"},
             "output_path": {"type": "string", "description": "输出文件路径（.html），不传则不写文件"},
+            "chart_id": {"type": "string", "description": "图表标识，供 generate_report 的 section.charts 按 ID 引用"},
         },
         "required": ["chart_type"],
     },

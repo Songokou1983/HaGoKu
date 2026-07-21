@@ -189,12 +189,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 _PRINT_CSS = """
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .section, .finding-compact, .track, table, .chart, canvas, img, svg, pre, code, blockquote {
-    break-inside: avoid; page-break-inside: avoid;
-  }
   h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
+  .chart, canvas, img, svg { break-inside: avoid; page-break-inside: avoid; }
+  .finding-compact { break-inside: avoid; page-break-inside: avoid; }
 }
 """
 

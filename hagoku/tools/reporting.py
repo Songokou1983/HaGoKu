@@ -186,6 +186,18 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 .finding-compact .fc-meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; }
 """
 
+_PRINT_CSS = """
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .section, .finding-compact, .track, table, .chart, canvas, img, svg, pre, code, blockquote {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+}
+"""
+
 
 # ── 默认模板 ──────────────────────────────────────────────────
 
@@ -1126,6 +1138,9 @@ class ReportGenerator:
 
         # 渲染
         html: str = template.render(report=report.to_dict())
+
+        # 注入打印 CSS，避免换页截断
+        html = html.replace("</head>", f"<style>{_PRINT_CSS}</style>\n</head>")
 
         # 保存
         if output_path:

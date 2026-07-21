@@ -1061,6 +1061,62 @@ DATA_AUDIT_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+# ── 打印模板（白纸黑字，A4 排版）─────────────────────────────
+
+_PRINT_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ report.title or '分析报告' }}</title>
+    <style>
+        @page { size: A4; margin: 2cm; }
+        body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; color: #1a1a1a; background: #fff; line-height: 1.8; font-size: 11pt; }
+        h1 { font-size: 18pt; border-bottom: 2px solid #333; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+        h2 { font-size: 14pt; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; margin-top: 2rem; }
+        h3 { font-size: 12pt; margin-top: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 10pt; }
+        th, td { padding: 0.4rem 0.6rem; text-align: left; border: 1px solid #ccc; }
+        th { background: #f5f5f5; font-weight: 600; }
+        tr { break-inside: avoid; }
+        thead { display: table-header-group; }
+        .chart { width: 100%; margin: 1rem 0; }
+        .chart img, .chart svg { max-width: 100%; height: auto; }
+        .headline { font-weight: 700; font-size: 12pt; margin: 1rem 0 0.5rem; }
+        .meta { color: #666; font-size: 9pt; margin-bottom: 2rem; }
+        code { font-family: 'Courier New', monospace; font-size: 9pt; background: #f5f5f5; padding: 0.1rem 0.3rem; }
+        pre { background: #f5f5f5; padding: 0.5rem; font-size: 9pt; overflow-x: auto; }
+        blockquote { border-left: 3px solid #ccc; padding-left: 1rem; margin: 0.5rem 0; color: #555; }
+        ul, ol { padding-left: 1.5rem; }
+    </style>
+</head>
+<body>
+    <h1>{{ report.query or '数据分析报告' }}</h1>
+    <div class="meta">HaGoKu Studio · {{ report.generated_at[:19] or '' }}</div>
+
+    {% if report.headline %}
+    <p class="headline">{{ report.headline }}</p>
+    {% endif %}
+
+    {% for section in report.sections %}
+    <h2>{{ section.title }}</h2>
+    {% if section.content %}
+    <div>{{ section.content | safe }}</div>
+    {% endif %}
+    {% for chart in section.charts %}
+    <div class="chart">
+        {% if chart.get('html_snippet') %}
+        {{ chart.html_snippet | safe }}
+        {% elif chart.get('path') %}
+        <img src="{{ chart.path }}" alt="{{ chart.get('title', '') }}">
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endfor %}
+</body>
+</html>
+"""
+
+
 # ── 内置模板注册 ──────────────────────────────────────────────
 
 BUILTIN_TEMPLATES: dict[str, str] = {
@@ -1071,6 +1127,7 @@ BUILTIN_TEMPLATES: dict[str, str] = {
     "ab_test": AB_TEST_HTML_TEMPLATE,
     "executive_brief": EXECUTIVE_BRIEF_HTML_TEMPLATE,
     "data_audit": DATA_AUDIT_HTML_TEMPLATE,
+    "print": _PRINT_HTML_TEMPLATE,
 }
 
 

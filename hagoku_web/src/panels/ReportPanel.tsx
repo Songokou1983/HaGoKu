@@ -242,9 +242,10 @@ export default function ReportPanel() {
                         <button
                           type="button"
                           onClick={() => {
+                            const printUrl = run.report_url!.replace(".html", "_print.html");
                             const api = window.hagokuDesktop;
-                            if (api) api.printUrl(run.report_url);
-                            else window.open(run.report_url, '_blank');
+                            if (api) api.printUrl(printUrl);
+                            else window.open(printUrl, '_blank');
                           }}
                           className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
                           title="打印为 PDF"
@@ -314,9 +315,10 @@ export default function ReportPanel() {
                       <button
                         type="button"
                         onClick={() => {
+                          const printUrl = f.url.replace(".html", "_print.html");
                           const api = window.hagokuDesktop;
-                          if (api) api.printUrl(f.url);
-                          else window.open(f.url, '_blank');
+                          if (api) api.printUrl(printUrl);
+                          else window.open(printUrl, '_blank');
                         }}
                         className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
                       >

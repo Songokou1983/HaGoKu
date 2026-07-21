@@ -442,6 +442,11 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     gen = ReportGenerator()
     gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
 
+    # 同步生成打印版
+    if output_path:
+        print_path = output_path.replace(".html", "_print.html")
+        gen.generate_html(report, output_path=print_path, template_name="print")
+
     # ── 更新项目报告链接 ──
     if run_dir and output_path:
         try:

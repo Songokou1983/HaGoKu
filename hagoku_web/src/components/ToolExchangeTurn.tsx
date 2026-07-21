@@ -1,7 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ChevronDown, ChevronRight, Wrench, AlertTriangle } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { ToolCallItem } from "../types/events";
 
 export interface ToolExchangeTurnProps {
@@ -11,91 +9,89 @@ export interface ToolExchangeTurnProps {
   timestamp?: string;
 }
 
-/** CO-13: Renders a single tool exchange block — the core of HaGoKu transparency. */
+/** 工具调用卡片：默认折叠，展开后逐条显示 */
 export function ToolExchangeTurn({
   tool_calls,
-  assistant_pre_text,
 }: ToolExchangeTurnProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [open, setOpen] = useState(false);
 
-  const toggle = (id: string) =>
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  const summary = useMemo(() => {
+    if (!tool_calls || tool_calls.length === 0) return "";
+    const counts: Record<string, number> = {};
+    for (const tc of tool_calls) {
+      counts[tc.name] = (counts[tc.name] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([name, n]) => (n > 1 ? `${n} 个 ${name}` : name))
+      .join(", ");
+  }, [tool_calls]);
 
   if (!tool_calls || tool_calls.length === 0) return null;
 
+  const errors = tool_calls.filter((tc) => tc.error);
+
   return (
     <div className="border border-app-border/60 rounded-md overflow-hidden bg-app-bg-secondary/50 my-1">
-      {/* Assistant pre-text removed — 流式 agent 消息已展示，此处不重复 */}
-      {false && assistant_pre_text && (
-        <div className="px-3 py-2 text-ui-xs text-app-text-muted italic border-b border-app-border/40">
-          <div className="kb-detail-html">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof assistant_pre_text === "string" ? assistant_pre_text : JSON.stringify(assistant_pre_text)}</ReactMarkdown>
-          </div>
-        </div>
-      )}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left
+          hover:bg-app-bg-tertiary transition-colors duration-150 cursor-pointer"
+      >
+        {open ? (
+          <ChevronDown size={12} className="text-app-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={12} className="text-app-text-muted shrink-0" />
+        )}
+        <Wrench size={12} className="text-app-accent shrink-0" />
+        <span className="text-ui-xs text-app-accent font-mono">
+          {tool_calls.length} 个工具
+        </span>
+        <span className="text-ui-xs text-app-text-muted truncate flex-1">
+          {summary}
+        </span>
+        {errors.length > 0 && (
+          <AlertTriangle size={12} className="text-app-error shrink-0" />
+        )}
+      </button>
 
-      {/* Tool call items */}
-      {tool_calls.map((tc) => {
-        const isExpanded = !!expanded[tc.id];
-        const hasError = !!tc.error;
-        return (
+      {open &&
+        tool_calls.map((tc) => (
           <div
             key={tc.id}
-            className={`border-b border-app-border/30 last:border-b-0 ${
-              hasError ? "bg-app-error/5" : ""
+            className={`border-t border-app-border/30 px-3 py-2 ${
+              tc.error ? "bg-app-error/5" : ""
             }`}
           >
-            <button
-              onClick={() => toggle(tc.id)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left
-                hover:bg-app-bg-tertiary transition-colors duration-150 cursor-pointer"
-            >
-              {isExpanded ? (
-                <ChevronDown size={12} className="text-app-text-muted shrink-0" />
-              ) : (
-                <ChevronRight size={12} className="text-app-text-muted shrink-0" />
-              )}
-              <Wrench size={12} className="text-app-accent shrink-0" />
+            <div className="flex items-center gap-2 mb-1">
               <span
                 className={`text-ui-xs font-mono font-medium ${
-                  hasError ? "text-app-error" : "text-app-accent"
+                  tc.error ? "text-app-error" : "text-app-accent"
                 }`}
               >
                 {tc.name}
               </span>
-              <span className="text-ui-xs text-app-text-muted truncate flex-1">
-                {hasError && (
-                  <span className="inline-flex items-center gap-1 text-app-error">
-                    <AlertTriangle size={10} />
-                    {tc.error}
-                  </span>
-                )}
-              </span>
-            </button>
-
-            {isExpanded && (
-              <div className="px-3 pb-2 space-y-1">
-                {tc.arguments_summary && (
-                  <div className="text-ui-xs text-app-text-muted">
-                    <span className="text-app-text-muted/60">入参: </span>
-                    <code className="text-app-accent font-mono break-all">
-                      {tc.arguments_summary}
-                    </code>
-                  </div>
-                )}
-                {tc.result_summary && (
-                  <div className="text-ui-xs text-app-text-muted">
-                    <span className="text-app-text-muted/60">结果: </span>
-                    <code className="text-app-text font-mono break-all">
-                      {tc.result_summary}
-                    </code>
-                  </div>
-                )}
+              {tc.error && (
+                <span className="text-ui-xs text-app-error">{tc.error}</span>
+              )}
+            </div>
+            {tc.arguments_summary && (
+              <div className="text-ui-xs text-app-text-muted">
+                <span className="text-app-text-muted/60">入参: </span>
+                <code className="text-app-accent font-mono break-all">
+                  {tc.arguments_summary}
+                </code>
+              </div>
+            )}
+            {tc.result_summary && (
+              <div className="text-ui-xs text-app-text-muted">
+                <span className="text-app-text-muted/60">结果: </span>
+                <code className="text-app-text font-mono break-all">
+                  {tc.result_summary}
+                </code>
               </div>
             )}
           </div>
-        );
-      })}
+        ))}
     </div>
   );
 }

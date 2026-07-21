@@ -94,7 +94,6 @@ export function ConvoFeed({
                 <ToolExchangeTurn
                   stage={m.toolExchange.stage}
                   tool_calls={m.toolExchange.tool_calls}
-                  assistant_pre_text={m.toolExchange.assistant_pre_text}
                 />
               </div>
             </div>

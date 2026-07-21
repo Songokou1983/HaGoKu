@@ -5,7 +5,6 @@ import type { ToolCallItem } from "../types/events";
 export interface ToolExchangeTurnProps {
   stage: string;
   tool_calls: ToolCallItem[];
-  assistant_pre_text?: string | null;
   timestamp?: string;
 }
 

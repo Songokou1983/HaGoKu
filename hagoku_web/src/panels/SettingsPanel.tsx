@@ -350,6 +350,9 @@ export default function SettingsPanel() {
           </h3>
           <p className="text-ui-xs text-app-text-muted mb-3">独立 LLM。全部留空则复用主 LLM。填了任意一项则三项必须全填。</p>
           <p className="text-ui-xs text-app-text-muted mb-3">
+            ⚠️ Doctor 需要模型支持结构化输出（structured output / instructor）。本地模型（llama.cpp 等）通常不支持，建议使用云端模型（DeepSeek、OpenAI 等）。
+          </p>
+          <p className="text-ui-xs text-app-text-muted mb-3">
             💡 系统健康检查、知识库/工具箱审计请前往{" "}
             <span className="text-app-accent">Doctor 面板</span>。
           </p>

@@ -61,8 +61,9 @@ ipcMain.on("win:maximize", () => { mainWindow?.isMaximized() ? mainWindow.unmaxi
 ipcMain.on("win:close", () => mainWindow?.close());
 ipcMain.handle("win:isMaximized", () => mainWindow?.isMaximized() ?? false);
 ipcMain.handle("print:url", async (_, url) => {
+  const fullUrl = url.startsWith("http") ? url : `http://localhost:8000${url}`;
   const pw = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
-  await pw.loadURL(url);
+  await pw.loadURL(fullUrl);
   pw.webContents.print({}, () => pw.close());
 });
 

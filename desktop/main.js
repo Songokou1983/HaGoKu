@@ -64,7 +64,12 @@ ipcMain.handle("print:url", async (_, url) => {
   const fullUrl = url.startsWith("http") ? url : `http://localhost:8000${url}`;
   const pw = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
   await pw.loadURL(fullUrl);
-  pw.webContents.print({}, () => pw.close());
+  const data = await pw.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true });
+  const { writeFileSync } = require("fs");
+  const tmpPath = require("path").join(require("os").tmpdir(), `hagoku_report_${Date.now()}.pdf`);
+  writeFileSync(tmpPath, data);
+  pw.close();
+  require("electron").shell.openPath(tmpPath);
 });
 
 app.whenReady().then(() => {

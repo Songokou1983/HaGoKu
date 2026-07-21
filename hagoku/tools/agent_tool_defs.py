@@ -420,15 +420,9 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
         chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
         for s in sections:
             if s.charts and any(isinstance(c, str) for c in s.charts):
-                resolved = []
-                for ref in s.charts:
-                    if isinstance(ref, str) and ref in chart_by_id:
-                        resolved.append(chart_by_id[ref])
-                    elif isinstance(ref, dict):
-                        resolved.append(ref)
-                s.charts = resolved
+                s.charts = [chart_by_id[c] for c in s.charts if isinstance(c, str) and c in chart_by_id]
             else:
-                s.charts = []  # 无显式声明 → 不参与自动分配
+                s.charts = []
     elif generated:
         empty = [s for s in sections if not s.charts]
         for i, c in enumerate(generated):

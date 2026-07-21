@@ -408,6 +408,8 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                 if c.get("html_snippet") and not c.get("type"):
                     c["type"] = "inline_html"
                 normalized.append(c)
+            elif isinstance(c, str):
+                normalized.append(c)  # 保留 chart_id 字符串，供后续按 ID 绑定
         s.charts = normalized
 
     # ── 图表注入：有任一 section.charts 含字符串 ID → 按 ID 绑定；否则全部自动分配 ──

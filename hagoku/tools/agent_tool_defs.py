@@ -8,9 +8,6 @@ from __future__ import annotations
 import json as _json
 from typing import Any
 
-import numpy as np
-import pandas as pd
-
 from hagoku.tools.registry import Tool, agent_tools
 
 
@@ -19,6 +16,7 @@ from hagoku.tools.registry import Tool, agent_tools
 # ═══════════════════════════════════════════════════════════════════
 
 def _handle_get_column_stats(args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
+    import pandas as pd
     col = str(args.get("column", "") or args.get("column_name", ""))
     if df is None or col not in df.columns:
         return {"error": f"列 {col} 不存在"}

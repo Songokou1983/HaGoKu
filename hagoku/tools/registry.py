@@ -18,8 +18,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-import pandas as pd
-
 _log = logging.getLogger("hagoku.tools")
 
 

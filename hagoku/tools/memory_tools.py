@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
 from hagoku.memory.lessons import LESSON_RECALL_WARNING, LessonStore
 from hagoku.tools.registry import Tool, agent_tools
 

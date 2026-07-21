@@ -419,7 +419,7 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     if has_explicit:
         chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
         for s in sections:
-            if s.charts:
+            if s.charts and any(isinstance(c, str) for c in s.charts):
                 resolved = []
                 for ref in s.charts:
                     if isinstance(ref, str) and ref in chart_by_id:
@@ -427,6 +427,8 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                     elif isinstance(ref, dict):
                         resolved.append(ref)
                 s.charts = resolved
+            else:
+                s.charts = []  # 无显式声明 → 不参与自动分配
     elif generated:
         empty = [s for s in sections if not s.charts]
         for i, c in enumerate(generated):

@@ -241,9 +241,13 @@ export default function ReportPanel() {
                         </a>
                         <button
                           type="button"
-                          onClick={() => window.open(run.report_url, '_blank')}
+                          onClick={() => {
+                            const api = window.hagokuDesktop;
+                            if (api) api.printUrl(run.report_url);
+                            else window.open(run.report_url, '_blank');
+                          }}
                           className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
-                          title="在新标签页打开，Ctrl+P 另存为 PDF"
+                          title="打印为 PDF"
                         >
                           PDF
                         </button>
@@ -309,7 +313,11 @@ export default function ReportPanel() {
                       </a>
                       <button
                         type="button"
-                        onClick={() => window.open(f.url, '_blank')}
+                        onClick={() => {
+                          const api = window.hagokuDesktop;
+                          if (api) api.printUrl(f.url);
+                          else window.open(f.url, '_blank');
+                        }}
                         className="shrink-0 px-2 py-1 text-ui-xs text-app-text-muted hover:text-app-text cursor-pointer"
                       >
                         PDF

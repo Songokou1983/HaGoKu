@@ -97,19 +97,6 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
 
 # ── Mixin ──────────────────────────────────────
 
-def _ensure_memory_for_respond(self, project_name: str) -> None:
-    """确保 self.memory 已初始化。"""
-    if self.memory is not None:
-        return
-    if self.output_mgr is None:
-        from ...storage.output import OutputManager
-        self.output_mgr = OutputManager(self.config.output, project_name)
-    schema_file = self.output_mgr.project_dir / "progress.yaml"
-    from ...storage.memory import MemoryManager
-    self.memory = MemoryManager(self.db, progress_path=schema_file)
-
-
 class ReplyHandlersMixin:
     _handle_reply = _handle_reply
     respond = respond
-    _ensure_memory_for_respond = _ensure_memory_for_respond

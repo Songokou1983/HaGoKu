@@ -14,7 +14,6 @@ from typing import Any
 
 import pandas as pd
 
-from hagoku.agents.base import BaseAgent
 from hagoku.agents.constants import (
     SCOUT_INFER_MAX_TOKENS,
     SCOUT_LABEL_TRUNCATE_LEN,
@@ -66,14 +65,14 @@ class _FakeTC:
         })()
 
 
-class DataAnalystAgent(BaseAgent):
+class DataAnalystAgent:
     """数据分析师 — 唯一 agent。
 
     一套 chat、一套 prompt、全部工具可见。
     LLM 按 prompt 描述的自然流程与用户交互。
     """
 
-    ROLE = "analyst"
+    role = "analyst"
 
     def __init__(
         self,
@@ -82,10 +81,16 @@ class DataAnalystAgent(BaseAgent):
         orchestrator: Any | None = None,
         llm_client: Any | None = None,
     ) -> None:
-        super().__init__(llm_config=llm_config, event_bus=event_bus,
-                         orchestrator=orchestrator, llm_client=llm_client)
+        self.llm_config = llm_config
+        self.event_bus = event_bus
+        self.orchestrator = orchestrator
+        self.prompt = self._load_prompt()
         self._context: dict | None = None
         self._df: pd.DataFrame | None = None
+
+    def _emit(self, event_type: EventType, data: dict | None = None) -> None:
+        if self.event_bus:
+            self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
     # ── prompt ──────────────────────────────────────────────────────
 

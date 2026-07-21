@@ -60,6 +60,11 @@ ipcMain.on("win:minimize", () => mainWindow?.minimize());
 ipcMain.on("win:maximize", () => { mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize(); });
 ipcMain.on("win:close", () => mainWindow?.close());
 ipcMain.handle("win:isMaximized", () => mainWindow?.isMaximized() ?? false);
+ipcMain.handle("print:url", async (_, url) => {
+  const pw = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
+  await pw.loadURL(url);
+  pw.webContents.print({}, () => pw.close());
+});
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);

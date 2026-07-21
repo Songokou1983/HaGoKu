@@ -9,6 +9,7 @@ declare global {
       close: () => void;
       isMaximized: () => Promise<boolean>;
       onStateChanged: (cb: (maximized: boolean) => void) => void;
+      printUrl: (url: string) => Promise<void>;
     };
   }
 }

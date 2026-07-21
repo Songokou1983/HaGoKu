@@ -100,9 +100,10 @@ def stream_safe_append(
     """流式增量：只 emit 已剥离 think 后的新增安全文本。
     
     如果存在未闭合的 think 标签，暂不 emit，等闭合后再出。
+    若 accumulated 超过 500 字符仍未闭合，强制 emit（防止截断）。
     """
     combined = (full_text or "") + (chunk or "")
-    if _has_unclosed_think(combined):
+    if _has_unclosed_think(combined) and len(combined) < 500:
         return combined, "", emitted_len
     safe = strip_llm_think(combined)
     if len(safe) <= emitted_len:

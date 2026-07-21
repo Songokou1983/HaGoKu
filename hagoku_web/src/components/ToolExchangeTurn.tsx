@@ -64,13 +64,11 @@ export function ToolExchangeTurn({
                 {tc.name}
               </span>
               <span className="text-ui-xs text-app-text-muted truncate flex-1">
-                {hasError ? (
+                {hasError && (
                   <span className="inline-flex items-center gap-1 text-app-error">
                     <AlertTriangle size={10} />
                     {tc.error}
                   </span>
-                ) : (
-                  tc.result_summary || tc.arguments_summary || ""
                 )}
               </span>
             </button>

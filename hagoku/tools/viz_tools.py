@@ -27,6 +27,16 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
     if df is None:
         return {"error": "需要 DataFrame"}
 
+    # ── 数据过滤 ──
+    filter_col = args.get("filter")
+    if filter_col and isinstance(filter_col, dict):
+        try:
+            for col, vals in filter_col.items():
+                if col in df.columns and isinstance(vals, list):
+                    df = df[df[col].isin(vals)]
+        except Exception:
+            pass
+
     # 验证列存在
     if x and isinstance(x, str) and x not in df.columns:
         return {"error": f"列 {x} 不存在"}
@@ -39,6 +49,8 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
         color = args.get("color")
         xlabel = str(args.get("xlabel", ""))
         ylabel = str(args.get("ylabel", ""))
+        width = int(args["width"]) if args.get("width") else None
+        height = int(args["height"]) if args.get("height") else None
 
         fig = create_plot(
             chart_type, df,
@@ -50,6 +62,13 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
             ylabel=ylabel,
             interactive=True,
         )
+        if fig and (width or height):
+            layout: dict[str, Any] = {}
+            if width:
+                layout["width"] = width
+            if height:
+                layout["height"] = height
+            fig.update_layout(**layout)
 
         # 大图不进 LLM context，只返 artifact 路径/摘要
         result: dict[str, Any] = {
@@ -64,16 +83,17 @@ def _handle_create_plot(args: dict, ctx: dict, df: pd.DataFrame | None) -> dict:
                 html_snippet = fig.to_html(full_html=False, include_plotlyjs="cdn")
                 result["html_snippet"] = html_snippet
                 result["type"] = "inline_html"
-                # ── 自动存入 context，供 generate_report 按 chart_id 引用 ──
-                chart_id = args.get("chart_id") or f"chart_{len(charts) + 1}"
-                charts = ctx.setdefault("_generated_charts", [])
-                charts.append({
-                    "chart_id": chart_id,
-                    "type": "inline_html",
-                    "html_snippet": html_snippet,
-                    "title": title or f"{chart_type} 图",
-                })
-                result["chart_id"] = chart_id
+                # ── 非 ephemeral 才存入 context ──
+                if not args.get("ephemeral"):
+                    chart_id = args.get("chart_id") or f"chart_{len(charts) + 1}"
+                    charts = ctx.setdefault("_generated_charts", [])
+                    charts.append({
+                        "chart_id": chart_id,
+                        "type": "inline_html",
+                        "html_snippet": html_snippet,
+                        "title": title or f"{chart_type} 图",
+                    })
+                    result["chart_id"] = chart_id
             except Exception:
                 result["type"] = "plotly_figure"
                 result["note"] = "图表已生成 (Plotly Figure)，大图不进入 LLM context"
@@ -99,9 +119,8 @@ agent_tools.register(Tool(
     name="create_plot",
     description=(
         "生成交互式图表（Plotly）。chart_type 可选: scatter / line / bar / histogram / box / violin / heatmap。"
-        "需传 chart_type + columns（列名列表，第1个=x轴，第2个=y轴）。"
-        "也可显式传 x / y / title / xlabel / ylabel / color（分组列）。"
-        "图表不进 LLM context，只返回 artifact_path 和摘要信息。"
+        "filter 按列值过滤数据（如 filter: {Code: [\"A0001\",\"A0002\"]} 只画指定店铺）。"
+        "ephemeral: true 时不存入上下文（预览用，不会被 generate_report 自动注入）。"
     ),
     parameters={
         "type": "object",
@@ -120,6 +139,10 @@ agent_tools.register(Tool(
             "ylabel": {"type": "string", "description": "Y 轴标签"},
             "output_path": {"type": "string", "description": "输出文件路径（.html），不传则不写文件"},
             "chart_id": {"type": "string", "description": "图表标识，供 generate_report 的 section.charts 按 ID 引用"},
+            "width": {"type": "integer", "description": "图表宽度（px）"},
+            "height": {"type": "integer", "description": "图表高度（px）"},
+            "filter": {"type": "object", "description": "按列值过滤，如 {\"Code\": [\"A0001\", \"A0002\"]}"},
+            "ephemeral": {"type": "boolean", "description": "true 时不存入上下文，仅预览"},
         },
         "required": ["chart_type"],
     },

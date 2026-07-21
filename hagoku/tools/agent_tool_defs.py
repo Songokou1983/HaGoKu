@@ -489,12 +489,26 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             import logging
             logging.getLogger("hagoku.tools").debug("符号链接创建失败（非关键）", exc_info=True)
 
-    return {"html_path": output_path, "sections_count": len(sections)}
+    # ── 图表注入摘要 ──
+    chart_bindings = []
+    for s in sections:
+        for c in (s.charts or []):
+            cid = c.get("chart_id") or c.get("title", "?")
+            chart_bindings.append({"section": s.title, "chart": cid})
+
+    return {
+        "html_path": output_path,
+        "sections_count": len(sections),
+        "charts_injected": len(chart_bindings),
+        "chart_bindings": chart_bindings,
+        "page_width": page_width,
+        "custom_css_applied": bool(custom_css),
+    }
 
 
 agent_tools.register(Tool(
     name="generate_report",
-    description="生成 HTML 分析报告。图表可用 create_plot 的 chart_id 显式绑定（section.charts: [\"chart_1\", \"chart_2\"]）。page_width: wide 时内容撑满页面。",
+    description="生成 HTML 分析报告。findings 为报告级别摘要（可选，不重复 section.content）。图表用 create_plot 的 chart_id 显式绑定（section.charts: [\"chart_1\"]）。page_width: wide 时内容撑满页面。",
     parameters={
         "type": "object",
         "properties": {

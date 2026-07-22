@@ -146,16 +146,16 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
-        # 对话历史（最近 50 条文本消息，不含大体积 tool 结果）
+        # 对话历史（最近 200 条）
         session = ctx.get("_session")
         if session:
             msgs = []
-            for m in session.messages[-50:]:
+            for m in session.messages[-200:]:
                 role = m.get("role", "")
                 if role in ("user", "assistant"):
                     msgs.append({
                         "role": role,
-                        "content": m.get("content", "")[:500],
+                        "content": m.get("content", "")[:2000],
                         "timestamp": m.get("timestamp", ""),
                     })
             snapshot["messages"] = msgs

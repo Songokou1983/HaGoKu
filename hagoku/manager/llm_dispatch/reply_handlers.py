@@ -38,23 +38,9 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 # ── respond（外层入口）────────────────────────────
 
 def respond(self, user_input: dict) -> dict[str, Any]:
-    """处理用户回复 — 写 Session → 调 handler → 处理 stage 切换。
+    """处理用户回复 — 消息由 HTTP save_user_msg 落盘，此处不重复写入。"""
 
-    加锁防止并发：用户在前一次 respond 未完成时再提交，
-    第二次 respond 会排队等待，不会同时操作同一个 session/agent。
-
-    消息立即写入 session（不等锁）——断连重连后 snapshot 包含排队中的消息。
-    """
     text = user_input.get("text", "").strip()
-    if text:
-        ctx = getattr(self, '_context', None)
-        session = ctx.get("_session") if ctx else None
-        if session:
-            # 去重：HTTP POST 可能已写入相同消息
-            msgs = getattr(session, 'messages', [])
-            last = msgs[-1] if msgs else None
-            if not (last and last.get("role") == "user" and last.get("content", "").strip() == text):
-                session.add("user", text)
 
     with self._respond_lock:
         return _respond_impl(self, user_input)

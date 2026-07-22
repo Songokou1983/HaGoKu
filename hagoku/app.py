@@ -175,16 +175,16 @@ class HaGoKuApp:
             if ask:
                 snap["pending_ask_user"] = ask
 
-            # 对话历史（最近 200 条）
+            # 对话历史（全部 user+assistant 消息）
             session = ctx.get("_session")
             if session:
                 msgs = []
-                for m in session.messages[-200:]:
+                for m in session.messages:
                     role = m.get("role", "")
                     if role in ("user", "assistant"):
                         msgs.append({
                             "role": role,
-                            "content": m.get("content", "")[:2000],
+                            "content": m.get("content", "")[:5000],
                             "timestamp": m.get("timestamp", ""),
                         })
                 snap["messages"] = msgs

@@ -218,6 +218,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const streamId = (data.stream_id as string) || "";
     const delta = (data.delta as string) || "";
     if (streamId && delta) {
+      deps.setReplyPending?.(false);
       deps.setMessages((prev) => {
         for (let i = prev.length - 1; i >= 0; i--) {
           if (prev[i].streaming && prev[i].streamId === streamId) {

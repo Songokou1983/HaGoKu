@@ -163,6 +163,9 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
+        # report_url
+        if ctx.get("_report_html_path"):
+            snapshot["report_url"] = ctx["_report_html_path"]
         # field_review: 从 column_semantics 重建核对表
         cs = ctx.get("column_semantics", [])
         if cs and ctx.get("n_rows"):

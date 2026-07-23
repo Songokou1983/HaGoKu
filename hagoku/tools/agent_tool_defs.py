@@ -497,6 +497,7 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             cid = c.get("chart_id") or c.get("title", "?")
             chart_bindings.append({"section": s.title, "chart": cid})
 
+    ctx["_report_html_path"] = output_path
     return {
         "html_path": output_path,
         "sections_count": len(sections),

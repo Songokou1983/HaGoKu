@@ -175,6 +175,10 @@ class HaGoKuApp:
             if ask:
                 snap["pending_ask_user"] = ask
 
+            # report_url
+            if ctx.get("_report_html_path"):
+                snap["report_url"] = ctx["_report_html_path"]
+
             # field_review: 从 column_semantics 重建核对表
             cs = ctx.get("column_semantics", [])
             if cs and ctx.get("n_rows"):

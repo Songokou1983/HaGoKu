@@ -37,8 +37,8 @@ _AUTH_ENABLED = bool(_API_KEY) and _ENV in ("production", "prod")
 _window_start: float = time.monotonic()
 _window_requests: defaultdict[str, int] = defaultdict(int)
 
-# 豁免端点
-_EXEMPT_PATHS: list[str] = ["/api/health"]
+# 豁免端点（前缀匹配）
+_EXEMPT_PATHS: list[str] = ["/api/health", "/api/projects/", "/api/save_user_msg"]
 
 
 class ApiAuthMiddleware(BaseHTTPMiddleware):
@@ -64,7 +64,7 @@ class ApiAuthMiddleware(BaseHTTPMiddleware):
         call_next: RequestResponseEndpoint,
     ) -> Response:
         # ── 豁免路径 ──
-        if request.url.path in _EXEMPT_PATHS:
+        if any(request.url.path.startswith(p) for p in _EXEMPT_PATHS):
             return await call_next(request)
 
         # ── 认证检查 ──

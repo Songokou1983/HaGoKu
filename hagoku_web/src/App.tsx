@@ -221,16 +221,19 @@ export default function App() {
             </button>
           </div>
         )}
-        {PANEL_ORDER.map((id) =>
-          activeView === id ? (
-            <div
-              key={id}
-              className="h-full min-h-0 overflow-hidden"
-            >
-              {PANEL_MAP[id]}
-            </div>
-          ) : null
-        )}
+        {PANEL_ORDER.map((id) => (
+          <div
+            key={id}
+            className={
+              activeView === id
+                ? "h-full min-h-0 overflow-hidden"
+                : "hidden"
+            }
+            aria-hidden={activeView !== id}
+          >
+            {PANEL_MAP[id]}
+          </div>
+        ))}
       </main>
     </div>
     </div>

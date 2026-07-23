@@ -163,7 +163,27 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         ask = ctx.get("_pending_ask_user")
         if ask:
             snapshot["pending_ask_user"] = ask
-        # 对话历史（全部 user+assistant 消息，不含 tool 结果）
+        # field_review: 从 column_semantics 重建核对表
+        cs = ctx.get("column_semantics", [])
+        if cs and ctx.get("n_rows"):
+            rows = []
+            for s in cs:
+                if isinstance(s, dict) and "column_name" in s:
+                    rows.append({
+                        "field_name": s.get("column_name", ""),
+                        "chinese_name": s.get("display_name", s.get("chinese_name", "—")),
+                        "meaning": s.get("description", ""),
+                        "suggested_role": s.get("suggested_role", "—"),
+                        "used_in_analysis": s.get("used_in_analysis"),
+                        "evidence": s.get("evidence", ""),
+                    })
+            if rows:
+                snapshot["field_review"] = {
+                    "n_rows": ctx["n_rows"],
+                    "n_cols": ctx.get("n_cols", len(rows)),
+                    "rows": rows,
+                }
+        # 对话历史（全部消息）
         session = ctx.get("_session")
         if session:
             msgs = []

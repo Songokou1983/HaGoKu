@@ -431,6 +431,7 @@ class DataAnalystAgent:
         dump_tag: str,
         *,
         round_label: str = "",
+        session=None,
     ):
         """调用 LLM 一轮（流式优先，batch 回退）。
 
@@ -466,6 +467,14 @@ class DataAnalystAgent:
                             ch = getattr(self, '_log_channel', None)
                             if ch:
                                 ch(agent_key, "stream_start", stream_id=stream_id)
+                        # 增量存盘：更新最后一条 assistant 消息，不新增
+                        if session and full_text:
+                            msgs = session.messages
+                            if msgs and msgs[-1].get("role") == "assistant" and not msgs[-1].get("tool_calls"):
+                                msgs[-1]["content"] = full_text
+                            else:
+                                session.add("assistant", full_text)
+                            session._maybe_save()
                         self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id, "delta": delta,
                             "agent": agent_key,
@@ -553,10 +562,12 @@ class DataAnalystAgent:
                       extra={"tools": [t["function"]["name"] for t in _tools]})
 
         # CO-18: 调用 LLM（流式优先，batch 回退）
-        txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response")
-        # 没有 tool_calls 时写入纯文本 assistant 消息
+        txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response", session=session)
+        # 没有 tool_calls 时写入纯文本 assistant 消息（流式已增量存盘则跳过）
         if not tc_list:
-            session.add("assistant", txt or "(tool calls)")
+            last = session.messages[-1] if session.messages else None
+            if not (last and last.get("role") == "assistant" and last.get("content") == txt):
+                session.add("assistant", txt or "(tool calls)")
 
         findings = None
         assessment = None
@@ -665,6 +676,7 @@ class DataAnalystAgent:
                 client, msgs_next, _tools,
                 f"agent_run_step_r{_round + 2}_response",
                 round_label=str(_round + 2),
+                session=session,
             )
         return {
             "text": txt,

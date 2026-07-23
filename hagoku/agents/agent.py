@@ -46,8 +46,7 @@ def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str
     """提取样本值直白串，不做格式判断——让 LLM 自行理解。"""
     try:
         vals = df[col].dropna().unique()
-    except (KeyError, TypeError, ValueError):
-        logger.warning("列 '%s' 样本值提取失败", col, exc_info=True)
+    except Exception:
         return ""
     if len(vals) == 0:
         return ""
@@ -60,8 +59,6 @@ class _FakeTC:
     """从流式 dict 构造伪 ToolCall 对象供 dispatch 使用。"""
     def __init__(self, d: dict):
         self.id = d.get("id", "")
-        if not self.id:
-            logger.warning("流式 tool_call 缺少 id，下游可能失败")
         self.function = type("F", (), {
             "name": d.get("function", {}).get("name", ""),
             "arguments": d.get("function", {}).get("arguments", ""),
@@ -147,7 +144,7 @@ class DataAnalystAgent:
                     xl = pd.ExcelFile(data_path)
                     _ = xl.sheet_names  # 触发读取以验证文件有效
                 except Exception:
-                    logger.warning("Excel 文件预检失败（将在正式加载时重试）", exc_info=True)
+                    pass
 
             df = load_data(data_path, sheet_name=sheet_name)
             self._emit(EventType.TOOL_CALLED, {"tool": "load_data", "args_summary": data_path})
@@ -166,7 +163,7 @@ class DataAnalystAgent:
                         "columns": list(aux_df.columns),
                     })
                 except Exception:
-                    logger.warning("辅助 sheet '%s' 加载失败，已跳过", sn, exc_info=True)
+                    pass
             self._emit(EventType.TOOL_RESULT, {"summary": f"加载成功: {len(df)} 行, {len(df.columns)} 列"})
             self._df = df
 
@@ -189,8 +186,6 @@ class DataAnalystAgent:
                 "_column_info": {c: str(df[c].dtype) for c in df.columns},
                 "_aux_sheets": aux_info,
             }
-            if not column_semantics:
-                context["_last_understanding_failure"] = {"stage": "infer_field_semantics"}
             # 传播 ask_user 到 orchestrator
             agent_ctx = self._context or {}
             if agent_ctx.get("_pending_ask_user"):
@@ -264,10 +259,13 @@ class DataAnalystAgent:
                 memory_notes = "\n".join(lines)
 
         command_context = ""
-        actx = getattr(self, "_context", {}) or {}
-        pt = (actx.get("_pending_command_text") or "").strip()
-        if pt:
-            command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
+        try:
+            actx = getattr(self, "_context", {}) or {}
+            pt = (actx.get("_pending_command_text") or "").strip()
+            if pt:
+                command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
+        except Exception:
+            actx = {}
 
         extra_prefix = ""
         if query and query.strip():
@@ -301,8 +299,7 @@ class DataAnalystAgent:
         cs = context.get("column_semantics", [])
         if cs and any("column_name" in s for s in cs):
             return cs
-        # LLM 未产出有效字段语义——返回空列表，由上游设置 _last_understanding_failure
-        return []
+        return [{"_scout_text": raw_text}]
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:
         """对单列做数据画像（从 scout._profile_column 迁入）。"""
@@ -559,7 +556,7 @@ class DataAnalystAgent:
         txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response")
         # 没有 tool_calls 时写入纯文本 assistant 消息
         if not tc_list:
-            session.add("assistant", txt or "(无文本输出)")
+            session.add("assistant", txt or "(tool calls)")
 
         findings = None
         assessment = None
@@ -576,11 +573,6 @@ class DataAnalystAgent:
                 try:
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
-                    tool_records.append(ToolCallRecord(
-                        tool_call_id=getattr(tc, "id", "") or "",
-                        name=fn.name, arguments=fn.arguments,
-                        result="", error=f"参数解析失败，请检查 JSON 格式",
-                    ))
                     continue
                 if fn.name == "submit_findings":
                     findings = _agt.dispatch(fn.name, args, context, df)

@@ -6,6 +6,10 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$DIR/.."
 
 # 清理已有进程（等待端口释放）
+# 先杀掉所有旧 Electron 残留（桌面端关闭后 GPU/utility 进程可能存活）
+pkill -f 'electron.*hagoku' 2>/dev/null || true
+sleep 1
+
 for port in 8000 5173; do
   fuser -k ${port}/tcp 2>/dev/null || true
   for _ in $(seq 1 10); do

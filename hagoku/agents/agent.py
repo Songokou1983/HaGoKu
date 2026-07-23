@@ -483,8 +483,8 @@ class DataAnalystAgent:
             txt = strip_llm_think(full_text).strip()
             if final_tool_calls_raw:
                 tc_list = [_FakeTC(tc) for tc in final_tool_calls_raw]
-            # 流结束即存盘——关窗口也不丢最后一段对话
-            if session and txt:
+            # 流结束即存盘（仅无 tool_calls 时；有 tool_calls 由 add_tool_call 处理）
+            if session and txt and not final_tool_calls_raw:
                 session.add("assistant", txt)
         else:
             resp = client.chat.completions.create(

@@ -38,7 +38,7 @@ _window_start: float = time.monotonic()
 _window_requests: defaultdict[str, int] = defaultdict(int)
 
 # 豁免端点（前缀匹配）
-_EXEMPT_PATHS: list[str] = ["/api/health", "/api/projects/", "/api/save_user_msg"]
+_EXEMPT_PATHS: list[str] = ["/api/health", "/api/projects/", "/api/save_user_msg", "/api/log", "/api/config"]
 
 
 class ApiAuthMiddleware(BaseHTTPMiddleware):

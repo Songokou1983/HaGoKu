@@ -453,6 +453,7 @@ class DataAnalystAgent:
             full_text = ""
             safe_emitted = 0
             final_tool_calls_raw: list[dict] = []
+            _stream_msg_idx: int | None = None  # 本次流在 session 中的消息索引
             agent_key = "analyst"
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
@@ -467,13 +468,13 @@ class DataAnalystAgent:
                             ch = getattr(self, '_log_channel', None)
                             if ch:
                                 ch(agent_key, "stream_start", stream_id=stream_id)
-                        # 增量存盘：更新最后一条 assistant 消息，不新增
+                        # 增量存盘：跟踪本次流的消息索引，不覆盖上一轮
                         if session and full_text:
-                            msgs = session.messages
-                            if msgs and msgs[-1].get("role") == "assistant" and not msgs[-1].get("tool_calls"):
-                                msgs[-1]["content"] = full_text
+                            if _stream_msg_idx is not None:
+                                session.messages[_stream_msg_idx]["content"] = full_text
                             else:
                                 session.add("assistant", full_text)
+                                _stream_msg_idx = len(session.messages) - 1
                             session._maybe_save()
                         self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id, "delta": delta,

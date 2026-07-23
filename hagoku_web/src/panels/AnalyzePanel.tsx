@@ -108,6 +108,7 @@ export default function AnalyzePanel() {
         }
       })
       .catch((e) => { eventLog("fetch_error", `preview sheets: ${e}`); });
+  }, [dataPath, currentProject]);
 
   const startAnalysis = () => {
     sess.handleStartSession(sheetName, auxSheets);

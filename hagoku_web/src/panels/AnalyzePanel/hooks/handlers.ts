@@ -49,12 +49,17 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   if (Array.isArray(snap.messages) && snap.messages.length > 0) {
     setMessages((prev) => {
-      const snapMsgs: ConvoMessage[] = snap.messages.map((m: any) => ({
-        id: uid(),
-        role: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
-        text: m.content || "",
-        timestamp: m.timestamp || new Date().toISOString(),
-      }));
+      const snapMsgs: ConvoMessage[] = snap.messages.map((m: any) => {
+        const roleMap: Record<string, ConvoMessage["role"]> = {
+          user: "user", assistant: "agent", tool: "system",
+        };
+        return {
+          id: uid(),
+          role: roleMap[m.role] || "system",
+          text: m.content || "",
+          timestamp: m.timestamp || new Date().toISOString(),
+        };
+      });
       // 后端 session 是唯一真相源，全量覆盖文本消息
       // workflow 卡片由 snapshot 的 field_review 字段单独恢复，此处不保留旧卡
       eventLog("snapshot", `restore msgs=${snapMsgs.length}`);

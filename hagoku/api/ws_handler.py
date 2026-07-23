@@ -168,13 +168,15 @@ def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
         if session:
             msgs = []
             for m in session.messages:
-                role = m.get("role", "")
-                if role in ("user", "assistant"):
-                    msgs.append({
-                        "role": role,
-                        "content": m.get("content", "")[:5000],
-                        "timestamp": m.get("timestamp", ""),
-                    })
+                msg: dict[str, Any] = {
+                    "role": m.get("role", ""),
+                    "content": m.get("content", "")[:5000],
+                }
+                if m.get("tool_calls"):
+                    msg["tool_calls"] = m["tool_calls"]
+                if m.get("tool_call_id"):
+                    msg["tool_call_id"] = m["tool_call_id"]
+                msgs.append(msg)
             snapshot["messages"] = msgs
 
         return snapshot

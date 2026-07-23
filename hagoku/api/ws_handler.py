@@ -111,6 +111,23 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":
             orch.respond({"text": ""})
+    except Exception:
+        # LLM 调用失败 → 广播错误给前端（当前无人调用 Future.result()，异常被线程吞噬）
+        try:
+            import asyncio as _asyncio
+            bridge = WSBridge.get()
+            loop = bridge._loop
+            if loop and loop.is_running():
+                _asyncio.run_coroutine_threadsafe(
+                    bridge.broadcast({
+                        "type": "error",
+                        "cmd": "analyze",
+                        "message": "分析失败，请刷新页面重试",
+                    }),
+                    loop,
+                )
+        except Exception:
+            logger.exception("分析错误广播失败")
     finally:
         with _analysis_busy_lock:
             if _analysis_generation == generation:
@@ -405,6 +422,11 @@ async def ws_handler(ws: WebSocket) -> None:
                 except RuntimeError:
                     with _analysis_busy_lock:
                         _analysis_in_progress = False
+                    await _safe_send({
+                        "type": "error",
+                        "cmd": "analyze",
+                        "message": "分析启动失败：事件循环异常，请刷新页面重试",
+                    })
             elif cmd == "cancel_analysis":
                 orch = get_orchestrator()
                 if orch is None:

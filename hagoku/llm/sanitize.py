@@ -103,7 +103,7 @@ def stream_safe_append(
     若 accumulated 超过 500 字符仍未闭合，强制 emit（防止截断）。
     """
     combined = (full_text or "") + (chunk or "")
-    if _has_unclosed_think(combined) and len(combined) < 500:
+    if _has_unclosed_think(combined) and len(combined) < 2000:
         return combined, "", emitted_len
     safe = strip_llm_think(combined)
     if len(safe) <= emitted_len:

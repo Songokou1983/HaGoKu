@@ -29,34 +29,38 @@ export function useFileUpload(
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  const loadFiles = useCallback((proj: string) => {
+  const loadFiles = useCallback((proj: string, signal?: AbortSignal) => {
     setFilesLoading(true);
-    fetch(`/api/projects/${proj}/files`)
+    fetch(`/api/projects/${proj}/files`, { signal })
       .then((r) => r.json())
       .then((d: { files: ProjectFile[] }) => setProjectFiles(d.files ?? []))
-      .catch(() => setProjectFiles([]))
+      .catch((e) => { if ((e as Error).name !== 'AbortError') setProjectFiles([]); })
       .finally(() => setFilesLoading(false));
   }, []);
 
   useEffect(() => {
     if (!currentProject) { setDataPath(""); setProjectFiles([]); return; }
-    loadFiles(currentProject);
-    fetch(`/api/projects/${currentProject}/detail`)
+    const abort = new AbortController();
+    loadFiles(currentProject, abort.signal);
+    fetch(`/api/projects/${currentProject}/detail`, { signal: abort.signal })
       .then((r) => r.json())
       .then((d: { data_path?: string; last_query?: string }) => {
         if (d.data_path) setDataPath(d.data_path);
       })
-      .catch(() => {});
+      .catch((e) => { if ((e as Error).name !== 'AbortError') { /* ignore */ } });
+    return () => abort.abort();
   }, [currentProject, loadFiles]);
 
   useEffect(() => {
     if (!currentProject || !dataPath) { setFileExists(false); return; }
-    fetch(`/api/projects/${currentProject}/files`)
+    const abort = new AbortController();
+    fetch(`/api/projects/${currentProject}/files`, { signal: abort.signal })
       .then(r => r.json())
       .then((d: { files?: Array<{path: string}> }) => {
         setFileExists((d.files || []).some((f: {path: string}) => f.path === dataPath));
       })
-      .catch(() => setFileExists(false));
+      .catch((e) => { if ((e as Error).name !== 'AbortError') setFileExists(false); });
+    return () => abort.abort();
   }, [currentProject, dataPath]);
 
   const handleUpload = useCallback(async (file: File) => {

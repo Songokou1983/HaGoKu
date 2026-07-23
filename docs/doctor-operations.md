@@ -1,5 +1,9 @@
 # HaGoKu Doctor 操作手册
 
+> **Doctor 使用 Meta LLM（云端大模型）执行诊断和修复，不使用本地分析模型。**
+> 本地模型通常不支持 function calling 或推理能力不足，无法可靠执行系统修复操作。
+> 如需使用 Doctor，请在设置面板配置 Meta LLM（独立于 Pipeline LLM）。
+
 Doctor 通过阅读本文档了解可执行的操作。每个操作包含：触发条件、API 调用方式、执行后的验证步骤。
 
 ## 修复操作

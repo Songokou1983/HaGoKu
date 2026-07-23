@@ -152,4 +152,4 @@ export function ConvoFeed({
       <div ref={bottomRef} />
     </div>
   );
-}
+});

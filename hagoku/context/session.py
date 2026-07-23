@@ -87,16 +87,19 @@ class Session:
             self.save(self._save_path)
 
     def save(self, path: str) -> None:
-        """保存到 JSON 文件。"""
+        """保存到 JSON 文件（原子写入，崩溃不损坏）。"""
+        import os as _os
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(
+        tmp = p.with_suffix(p.suffix + ".tmp")
+        tmp.write_text(
             _json.dumps({
                 "analysis_goal": self.analysis_goal,
                 "messages": self.messages,
             }, ensure_ascii=False, default=str),
             encoding="utf-8",
         )
+        _os.replace(tmp, p)
 
     @classmethod
     def load(cls, path: str, analysis_goal: str = "") -> "Session":

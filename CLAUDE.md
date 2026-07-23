@@ -19,7 +19,7 @@
    根据步骤 1 的结论，追踪代码中对应的处理路径：
    - tool_calls 存在 → run_step 循环是否正确 dispatch？
    - tool_calls 不存在 → handler 走到了哪个分支？返回了什么？
-   - route_to 存在 → orchestrator 是否正确执行了切换？
+   - submit_findings / submit_assessment / ask_user 是否存在？→ orchestrator 是否正确处理了阶段推进/暂停？
    ↓ 指出具体行号
 
 步骤 3: 报根因
@@ -79,15 +79,17 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 - 跟进行为从 `if` 改 `while`——给轮次，不给指令
 
 ### 5. run_step 多轮循环：每轮必须对称检测控制工具（2026-06-21）
-- `run_step` 第一轮检测 `route_to` / `submit_*` → 正确提取
+- `run_step` 第一轮检测 `submit_findings` / `submit_assessment` / `ask_user` → 正确提取
 - 第二轮（LLM 看到工具结果后再回复）只做普通 dispatch → **控制工具被丢弃**
-- LLM 最自然的路径："调 `set_columns` → 看成功 → 调 `route_to`"永远不生效
+- LLM 最自然的路径："调 `set_columns` → 看成功 → 调 `submit_findings`"永远不生效
 - **通道里每个出口必须有相同检测能力。不对称 = 控制权只通了一半**
+- 注：阶段切换由 `orchestrator.run()` 硬编码骨架（加载→画像→推断字段→分析→报告）+ WS `respond` 事件驱动，不存在 `route_to` 工具
 
-### 6. 写入单点化：add_user_feedback 只能有一个入口（2026-06-21）
+### 6. 写入单点化：用户输入只能有一个入口（2026-06-21）
 - `respond()` 外层写一遍 + handler 内部写一遍 → 用户每句话在历史出现两遍
 - 递归 `respond()` 又写一遍 → 三遍
 - **信息写入和信息读取一样，必须有唯一入口**（读取已有 `to_messages_for_llm()`）
+- 当前统一入口：`session.add("user", text)` → 经由 `_handle_reply` → `respond()` 单一路径
 
 ## ⛔ 改代码前必须有这四行
 
@@ -107,7 +109,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 - **单 Agent**：`DataAnalystAgent`，4 关注点（理解字段/评估清洗/跑统计/写报告）
 - **单入口**：`to_messages_for_llm()` → `build_messages()`，唯一 LLM 消息构造路径
 - **对话循环**：`run_step()` 已含工具调用→dispatch→回传→继续的完整循环。不要自己写。**每轮都必须对称检测控制工具**
-- **流程控制**：LLM 通过 `route_to` 决定阶段切换，代码不做 if-elif 阶段判断
+- **流程控制**：`orchestrator.run()` 提供固定分析骨架（加载→画像→推断字段→分析→报告），LLM 通过 `submit_findings`/`submit_assessment`/`ask_user` 工具决定每步内容和推进节奏，代码不做 if-elif 阶段判断
 - **代码只做机械执行**：不替 LLM 做语义判断，不加"禁止"堵行为
 - **流程保障 ≠ 替代决策**：数据分析有固定骨架（加载→画像→理解字段→清洗→分析→报告）。代码确保每步发生，LLM 决定每步的内容。`run_scout_phase` 调 load_data → generate_profile → 调 LLM 推断字段 是流程保障，不是越界
 - **通道铁律**：代码可以做一切辅助（透传/工具/日志/dump/校验），只要不做决策、不碰 LLM 输出。删掉代码后用户看到的内容不变 → 通道。变了 → 越界。
@@ -180,7 +182,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 ## 已由架构自动守门（不需人记）
 - `build_messages()` 唯一入口 → pre-commit hook 自动拦截
 - `to_messages_for_llm()` 统一 LLM 调用 → agent 内无法直接构造 messages
-- `route_to` 阶段切换 → 代码无 if-elif 中文分支
+- 阶段编排由 `orchestrator.run()` 骨架 + LLM 工具驱动 → 代码无 if-elif 中文分支
 
 ## 开发背景 — 全程 AI 协作
 

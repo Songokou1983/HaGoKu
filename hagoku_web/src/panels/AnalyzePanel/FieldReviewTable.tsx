@@ -23,7 +23,14 @@ export function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((r, i) => (
+          {data.rows.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-3 py-6 text-center text-ui-sm text-app-text-muted">
+                暂无字段数据 — 请等待 AI 分析完成后自动填充
+              </td>
+            </tr>
+          ) : (
+            data.rows.map((r, i) => (
             <tr key={`${r.field_name}-${i}`} className="border-b border-app-border/40 hover:bg-app-bg/30">
               <td className="px-3 py-2 align-top border-r border-app-border/40 font-mono text-ui-xs">{r.field_name}</td>
               <td className="px-3 py-2 align-top border-r border-app-border/40 font-medium">{r.chinese_name}</td>
@@ -35,7 +42,8 @@ export function FieldReviewTable({ data }: { data: FieldReviewPayload }) {
                 {r.evidence && <div className="text-ui-xs text-app-text-muted/70 mt-1 leading-relaxed">{r.evidence}</div>}
               </td>
             </tr>
-          ))}
+          ))
+          )}
         </tbody>
       </table>
     </div>

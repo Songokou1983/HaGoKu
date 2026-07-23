@@ -2,7 +2,7 @@
 
 > **让每个小模型，都能做专业级商业分析。**
 
-HaGoKu Studio 是一个 LLM 驱动的本地数据分析平台。**一个 Agent + 15 个工具 + 可切换提示词 = 多维度分析能力。**
+HaGoKu Studio 是一个 LLM 驱动的本地数据分析平台。**一个 Agent + 23 个工具 + 可切换提示词 = 多维度分析能力。**
 
 ---
 
@@ -102,7 +102,7 @@ cd hagoku_web && npm install && npm run dev   # http://localhost:5173
 
 ### 工具系统
 
-15 个工具覆盖全流程：数据探查、字段管理、统计检验（t-test/ANOVA/回归/趋势分解）、清洗检测、Plotly 可视化、HTML 报告生成。新增工具只需注册，Agent 自动可见。
+23 个工具覆盖全流程：数据探查、字段管理、统计检验（t-test/ANOVA/回归/趋势分解）、清洗检测、Plotly 可视化、HTML 报告生成。新增工具只需注册，Agent 自动可见。
 
 ### 统计护栏
 
@@ -123,7 +123,7 @@ hagoku/                    # Python 后端
 ├── agents/               # DataAnalystAgent + 提示词预设
 │   └── presets/          # 可切换的分析场景预设
 ├── manager/              # Orchestrator + 事件驱动编排
-├── tools/                # 15 个 LLM 工具（统计/清洗/可视化/报告）
+├── tools/                # 23 个 LLM 工具（统计/清洗/可视化/报告）
 ├── guardrails/           # 统计护栏
 ├── observability/        # EventBus / LLM dump / 通道日志
 ├── api/                  # FastAPI + WebSocket
@@ -131,7 +131,7 @@ hagoku/                    # Python 后端
 
 hagoku_web/               # React 前端（Vite + Tailwind + Zustand）
 docs/                     # 设计文档 / ADR / 计划
-tests/                    # 5 层测试金字塔
+tests/                    # 按模块组织的测试套件（16 个模块 + 契约测试）
 ```
 
 ---

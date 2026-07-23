@@ -168,8 +168,9 @@ async def create_project(req: CreateProjectRequest, request: Request):
     except Exception:
         import logging
         logging.getLogger(__name__).warning("create_project DB 写入失败: %s", name, exc_info=True)
+        return {"project": name, "created": True, "db_synced": False}
     
-    return {"project": name, "created": True}
+    return {"project": name, "created": True, "db_synced": True}
 
 
 # ── POST /api/projects/{name}/switch — 切换项目，返回快照 ──
@@ -667,6 +668,7 @@ async def get_project_runs(project_name: str):
             try:
                 meta = _json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception:
+                logger.warning("get_runs_list run_meta 解析失败: %s", meta_file, exc_info=True)
                 meta = {}
         else:
             meta = {}
@@ -805,7 +807,7 @@ async def upload_project_file(project_name: str, file: UploadFile = File(...)):
         db.create_project(project_name)
         db.update_project(project_name, data_path=str(dest))
     except Exception:
-        pass
+        logger.warning("文件上传后 DB 同步失败 project=%s file=%s", project_name, filename, exc_info=True)
     return {"name": filename, "path": str(dest), "size": len(content)}
 
 

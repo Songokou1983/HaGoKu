@@ -88,7 +88,7 @@ function ProjectCard({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: descDraft }),
-    }).catch(() => {});
+    }).catch((e) => { eventLog("fetch_error", `save_desc: ${e}`); });
     setSavingDesc(false);
     setEditingDesc(false);
     setDetail((prev) => prev ? { ...prev, description: descDraft } : prev);
@@ -103,7 +103,7 @@ function ProjectCard({
     e.stopPropagation();
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setDeleting(true);
-    await fetch(`/api/projects/${name}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`/api/projects/${name}`, { method: "DELETE" }).catch((e) => { eventLog("fetch_error", `delete: ${e}`); });
     setDeleting(false);
     onDeleted();
   };
@@ -495,7 +495,7 @@ export default function ProjectPanel() {
                       dataPath: snap.data_path || "",
                     });
                   })
-                  .catch(() => {});
+                  .catch((e) => { eventLog("fetch_error", `create: ${e}`); });
               }
             }}
             onDeleted={() => {

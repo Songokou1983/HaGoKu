@@ -107,8 +107,7 @@ export default function AnalyzePanel() {
           setSheetName(d.sheets[0]);
         }
       })
-      .catch(() => {});
-  }, [dataPath, currentProject]);
+      .catch((e) => { eventLog("fetch_error", `preview sheets: ${e}`); });
 
   const startAnalysis = () => {
     sess.handleStartSession(sheetName, auxSheets);
@@ -186,7 +185,7 @@ export default function AnalyzePanel() {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ text: outgoing }),
-      }).catch(() => {});
+      }).catch((e) => { eventLog("fetch_error", `save_user_msg: ${e}`); });
       const s = send("respond", { text: outgoing });
       if (!s) {
         sess.replySnapshotRef.current = null;
@@ -404,6 +403,7 @@ export default function AnalyzePanel() {
                 onSend={submitUserReply}
                 inputRef={sess.replyInputRef}
                 sendLabel="发送"
+                disabled={replyPending}
                 log={log}
                 footerHint={
                   scoutFieldReviewOpen

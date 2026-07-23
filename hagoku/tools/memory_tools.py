@@ -164,41 +164,6 @@ def _handle_recall_lessons(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> 
     }
 
 
-def _handle_correct_lesson(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dict:
-    store = LessonStore()
-    try:
-        store.correct(
-            str(args.get("lesson_id", "")),
-            args.get("new_lesson"),
-            str(args.get("reason", "")),
-        )
-    except ValueError as e:
-        return {"error": str(e)}
-    return {"ok": True}
-
-
-def _handle_remember_field(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    from hagoku.memory.projects._manager import ColumnSemanticDef
-
-    mm = _memory_manager(ctx)
-    pid = _project_id(ctx)
-    if not pid:
-        return {"error": "无 project_id"}
-    col = str(args.get("column", ""))
-    sem = str(args.get("semantics") or args.get("semantic") or "")
-    mm.save_column_semantic(
-        pid,
-        col,
-        ColumnSemanticDef(
-            semantic=sem,
-            display_name=args.get("display_name"),
-            description=sem,
-            role=args.get("role"),
-            confirmed_by_user=bool(args.get("confirmed_by_user", False)),
-            source="user" if args.get("confirmed_by_user") else "auto",
-        ),
-    )
-    return {"ok": True, "column": col}
 
 
 def _handle_query_project_memory(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
@@ -214,15 +179,6 @@ def _handle_query_project_memory(args: dict, ctx: dict, _df: pd.DataFrame | None
     if aspect == "history":
         return {"patterns": [p.model_dump() for p in mm.get_analysis_patterns(pid)]}
     return {"error": f"未知 aspect: {aspect}"}
-
-
-def _handle_forget_project(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    mm = _memory_manager(ctx)
-    pid = str(args.get("project_id") or _project_id(ctx))
-    if not pid:
-        return {"error": "无 project_id"}
-    mm.clear_project_memory(pid)
-    return {"ok": True, "project_id": pid}
 
 
 def _register_memory_tools() -> None:

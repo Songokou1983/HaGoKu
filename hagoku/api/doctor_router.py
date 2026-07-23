@@ -628,6 +628,7 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     from hagoku.config import HaGoKuConfig
     from hagoku.channel import build_messages
     from hagoku.tools.health import check_system
+    import json as _json
 
     cfg = HaGoKuConfig.load()
 
@@ -728,6 +729,7 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
     # 构建 system_extra
     system_extra = f"""你是 HaGoKu Doctor，负责系统诊断和修复。
 严格按照下方「操作手册」执行——不要自行发挥，不要建议用户手动编辑文件。
+需要执行修复操作时，调用 execute_fix 工具（传入 action 和可选的 params），不要在正文中写 [fix:xxx] 标记。
 
 ## 操作手册
 
@@ -738,8 +740,8 @@ async def doctor_chat(req: ChatRequest) -> dict[str, Any]:
 {health_ctx}
 
 ## 配置信息
-Pipeline LLM: {cfg.llm.model} @ {cfg.llm.base_url}
-Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cfg.llm.base_url}
+Pipeline LLM（主分析）: {cfg.llm.model} @ {cfg.llm.base_url}
+Doctor LLM（云端，用于诊断修复，不分析数据）: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cfg.llm.base_url}
 {preset_ctx}
 
 ## 日志
@@ -767,15 +769,86 @@ Doctor LLM: {cfg.meta_llm.model or cfg.llm.model} @ {cfg.meta_llm.base_url or cf
     )
 
     try:
+        # ── 构建 execute_fix 工具 ──
+        execute_fix_tool = {
+            "type": "function",
+            "function": {
+                "name": "execute_fix",
+                "description": "执行系统修复操作。先描述问题和诊断结果，再调用此工具执行修复。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": list(_FIX_ACTIONS.keys()),
+                            "description": "要执行的修复操作",
+                        },
+                        "params": {
+                            "type": "object",
+                            "description": "操作的附加参数（JSON 对象，可选）",
+                        },
+                    },
+                    "required": ["action"],
+                },
+            },
+        }
+
         resp = client.chat.completions.create(
             model=model,
             messages=messages,
             temperature=0.3,
             max_tokens=2048,
+            tools=[execute_fix_tool],
+            tool_choice="auto",
         )
-        reply = resp.choices[0].message.content or ""
+        msg = resp.choices[0].message
 
-        # ── 检测 LLM 回复中的 fix 指令并自动执行 ──
+        # ── 优先走 tool_calls ──
+        fix_results: list[dict] = []
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                if tc.function.name != "execute_fix":
+                    continue
+                try:
+                    args = _json.loads(tc.function.arguments) if tc.function.arguments else {}
+                except (_json.JSONDecodeError, TypeError):
+                    fix_results.append({"ok": False, "message": "参数解析失败"})
+                    continue
+                action = args.get("action", "")
+                params = _json.dumps(args.get("params", {}), ensure_ascii=False) if args.get("params") else ""
+                result = _run_fix(action, params)
+                fix_results.append(result)
+                _record_case(
+                    symptom=req.message,
+                    fix=action,
+                    ok=result["ok"],
+                    detail=result.get("message", ""),
+                )
+
+            # 将 tool 结果回传给 LLM 生成最终回复
+            messages.append({"role": "assistant", "content": msg.content, "tool_calls": [
+                {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in msg.tool_calls if tc.function.name == "execute_fix"
+            ]})
+            for i, tc in enumerate(msg.tool_calls):
+                if tc.function.name != "execute_fix":
+                    continue
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": _json.dumps(fix_results[i] if i < len(fix_results) else {"ok": False, "message": "未知错误"}, ensure_ascii=False),
+                })
+            resp2 = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            reply = resp2.choices[0].message.content or ""
+        else:
+            reply = msg.content or ""
+
+        # ── 降级：正则兼容旧格式 [fix:xxx] ──
         import re as _re
         fix_match = _re.search(r"\[fix:(\w+)\s*(\{[^}]+\})?\]", reply)
         if fix_match:

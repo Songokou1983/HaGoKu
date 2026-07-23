@@ -104,9 +104,11 @@ class ChatResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 async def doctor_health() -> dict[str, Any]:
     """执行系统健康检查（LLM 5 步 + 依赖库）。"""
-    from hagoku.tools.health import check_system
+    from hagoku.tools.health import check_dependencies_only
+    import asyncio
 
-    results = check_system()
+    # 依赖库检查（同步，轻量）
+    results = check_dependencies_only()
     ok_count = sum(1 for r in results if r.ok)
 
     # 找到 LLM 检查中的模型和速率信息

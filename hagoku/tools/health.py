@@ -322,6 +322,38 @@ def check_llm_health(config: Any) -> LlmHealthReport:
     return report
 
 
+def check_dependencies_only() -> list[HealthCheckResult]:
+    """轻量依赖库检查（不含 LLM，不阻塞）。"""
+    from ..config import HaGoKuConfig
+
+    results: list[HealthCheckResult] = []
+
+    critical_deps = {
+        "pandas": "数据处理",
+        "numpy": "数值计算",
+        "scipy": "统计检验",
+        "pingouin": "高级统计",
+    }
+    for lib, purpose in critical_deps.items():
+        try:
+            __import__(lib)
+            results.append(HealthCheckResult(
+                ok=True,
+                name=lib,
+                detail=f"✅ {lib} 已安装（{purpose}）",
+                suggestions=[],
+            ))
+        except ImportError:
+            results.append(HealthCheckResult(
+                ok=False,
+                name=lib,
+                detail=f"❌ {lib} 未安装（{purpose}）",
+                suggestions=[f"运行: pip install {lib}"],
+            ))
+
+    return results
+
+
 def check_system() -> list[HealthCheckResult]:
     """
     系统健康检查：LLM + 依赖库

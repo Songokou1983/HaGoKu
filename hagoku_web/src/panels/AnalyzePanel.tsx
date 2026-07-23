@@ -404,7 +404,6 @@ export default function AnalyzePanel() {
                 onSend={submitUserReply}
                 inputRef={sess.replyInputRef}
                 sendLabel="发送"
-                disabled={replyPending}
                 log={log}
                 footerHint={
                   scoutFieldReviewOpen

@@ -114,12 +114,14 @@ async def doctor_health() -> dict[str, Any]:
     model_available = ""
     token_rate = 0.0
 
-    # 尝试获取更详细的 LLM 健康报告
+    # 尝试获取更详细的 LLM 健康报告（用线程池避免阻塞事件循环）
     try:
         from hagoku.config import HaGoKuConfig
         from hagoku.tools.health import check_llm_health
+        import asyncio
         cfg = HaGoKuConfig.load()
-        llm_report = check_llm_health(cfg)
+        loop = asyncio.get_running_loop()
+        llm_report = await loop.run_in_executor(None, check_llm_health, cfg)
         model_available = llm_report.model_available
         token_rate = llm_report.token_rate_tok_s
     except Exception:

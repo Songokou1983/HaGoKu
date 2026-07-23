@@ -494,6 +494,8 @@ class DataAnalystAgent:
             msg = resp.choices[0].message
             txt = strip_llm_think((msg.content or "")).strip()
             tc_list = getattr(msg, "tool_calls", None)
+            if session and txt and not tc_list:
+                session.add("assistant", txt)
 
         dump_messages(dump_tag,
             messages + [{"role": "assistant", "content": txt,
@@ -558,11 +560,6 @@ class DataAnalystAgent:
 
         # CO-18: 调用 LLM（流式优先，batch 回退）
         txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response", session=session)
-        # 没有 tool_calls 时写入纯文本 assistant 消息（流式已在 _call_llm_step 内存盘）
-        if not tc_list:
-            last = session.messages[-1] if session.messages else None
-            if not (last and last.get("role") == "assistant" and last.get("content") == txt):
-                session.add("assistant", txt or "(tool calls)")
 
         findings = None
         assessment = None

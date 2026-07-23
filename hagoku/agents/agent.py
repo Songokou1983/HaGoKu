@@ -453,7 +453,6 @@ class DataAnalystAgent:
             full_text = ""
             safe_emitted = 0
             final_tool_calls_raw: list[dict] = []
-            _stream_msg_idx: int | None = None  # 本次流在 session 中的消息索引
             agent_key = "analyst"
             for chunk in stream_chat_completion(
                 client, self.llm_config.model, messages,
@@ -468,14 +467,6 @@ class DataAnalystAgent:
                             ch = getattr(self, '_log_channel', None)
                             if ch:
                                 ch(agent_key, "stream_start", stream_id=stream_id)
-                        # 增量存盘：跟踪本次流的消息索引，不覆盖上一轮
-                        if session and full_text:
-                            if _stream_msg_idx is not None:
-                                session.messages[_stream_msg_idx]["content"] = full_text
-                            else:
-                                session.add("assistant", full_text)
-                                _stream_msg_idx = len(session.messages) - 1
-                            session._maybe_save()
                         self._emit(EventType.AGENT_STREAM_DELTA, {
                             "stream_id": stream_id, "delta": delta,
                             "agent": agent_key,
@@ -492,6 +483,9 @@ class DataAnalystAgent:
             txt = strip_llm_think(full_text).strip()
             if final_tool_calls_raw:
                 tc_list = [_FakeTC(tc) for tc in final_tool_calls_raw]
+            # 流结束即存盘——关窗口也不丢最后一段对话
+            if session and txt:
+                session.add("assistant", txt)
         else:
             resp = client.chat.completions.create(
                 model=self.llm_config.model, messages=messages,
@@ -564,7 +558,7 @@ class DataAnalystAgent:
 
         # CO-18: 调用 LLM（流式优先，batch 回退）
         txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response", session=session)
-        # 没有 tool_calls 时写入纯文本 assistant 消息（流式已增量存盘则跳过）
+        # 没有 tool_calls 时写入纯文本 assistant 消息（流式已在 _call_llm_step 内存盘）
         if not tc_list:
             last = session.messages[-1] if session.messages else None
             if not (last and last.get("role") == "assistant" and last.get("content") == txt):

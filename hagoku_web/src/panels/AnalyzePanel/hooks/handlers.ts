@@ -259,6 +259,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
   if (d.event_type === "user_input_requested") {
     eventLog("gate", `open agent=${d.agent}`);
     deps.setGateOpen(false);
+    deps.setReplyPending?.(false);  // ask_user = LLM交棒，清除等待状态
     const dataObj = (d.data ?? {}) as Record<string, unknown>;
     const gatePayload = dataObj.gate as { phase?: string; prompt?: string } | undefined;
     const fr = parseFieldReview(dataObj.field_review);

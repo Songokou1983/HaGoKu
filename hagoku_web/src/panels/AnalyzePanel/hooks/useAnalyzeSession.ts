@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { AgentKey, AgentRunState, SessionPhase } from "../types";
 import type { ConvoMessage } from "../types";
+import { useWorkspaceStore } from "../../../stores/workspace";
 import { sanitizeText } from "../../../utils/sanitize";
 import { eventLog } from "../../../utils/eventLog";
 
@@ -17,9 +18,6 @@ export function useAnalyzeSession(
   setMessages: (v: any[] | ((prev: any[]) => any[])) => void,
   setReplyPending: (v: boolean) => void,
 ) {
-  const [agentStates, setAgentStates] = useState<Record<AgentKey, AgentRunState>>({
-    scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle",
-  });
   const [agentElapsed, setAgentElapsed] = useState<Record<AgentKey, number>>({
     scout: 0, cleaner: 0, analyst: 0, reporter: 0,
   });
@@ -46,7 +44,7 @@ export function useAnalyzeSession(
     eventLog("analysis", `start project=${currentProject} data=${dataPath} sheet=${sheetName ?? 0}`);
     setMessages([]);
     setReplyPending(true);
-    setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
+    useWorkspaceStore.getState().resetAgentStates();
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
@@ -98,7 +96,6 @@ export function useAnalyzeSession(
   }, [send, resetRunUiState, setPhase]);
 
   return {
-    agentStates, setAgentStates,
     agentElapsed, setAgentElapsed,
     agentStartTimes,
     waitingAgent, setWaitingAgent,

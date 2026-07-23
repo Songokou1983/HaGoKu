@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { WifiOff } from "lucide-react";
-import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
@@ -36,7 +35,6 @@ export default function EventPanel() {
 
   useEffect(() => { loadSysLog(); const t = setInterval(loadSysLog, 5000); return () => clearInterval(t); }, [loadSysLog]);
 
-  useAgentStatusSync();
   const batch = useBatchEvents();
 
   useEffect(() => {

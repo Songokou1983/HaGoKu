@@ -4,6 +4,7 @@
  */
 import { uid } from "../utils";
 import { eventLog } from "../../../utils/eventLog";
+import { useWorkspaceStore } from "../../../stores/workspace";
 import {
   resolveAgentKey,
   parsePauseInteractionRevision,
@@ -31,7 +32,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setMessages, setActiveFieldReviewId, setActiveFieldReviewRevision,
     setActiveCleaningReviewId, setActiveCleaningReviewRevision,
     setActiveAnalystReviewId, setActiveAnalystReviewRevision,
-    setGateOpen, setPhase, setWaitingAgent, setAgentStates,
+    setGateOpen, setPhase, setWaitingAgent,
     setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
   } = deps;
 
@@ -111,7 +112,9 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     else if (i === doneIdx) states[a] = "running";
     else states[a] = "idle";
   }
-  setAgentStates(states as any);
+  for (const [a, s] of Object.entries(states)) {
+    useWorkspaceStore.getState().setAgentStatus(a, s as AgentStatus);
+  }
   return true;
 }
 
@@ -170,17 +173,17 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
   // agent lifecycle
   if (d.event_type === "agent_started" && agentKey) {
     deps.agentStartTimes.current[agentKey] = Date.now();
-    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "running" }));
+    useWorkspaceStore.getState().setAgentStatus(agentKey, "running");
     deps.onThinking?.(null);
   }
   if (d.event_type === "agent_completed" && agentKey) {
     const elapsed = Math.round((Date.now() - (deps.agentStartTimes.current[agentKey] ?? Date.now())) / 1000);
-    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "done" }));
+    useWorkspaceStore.getState().setAgentStatus(agentKey, "done");
     deps.setAgentElapsed((prev) => ({ ...prev, [agentKey]: elapsed }));
     deps.onThinking?.(null);
   }
   if (d.event_type === "agent_failed" && agentKey) {
-    deps.setAgentStates((prev) => ({ ...prev, [agentKey]: "error" }));
+    useWorkspaceStore.getState().setAgentStatus(agentKey, "error");
     deps.onThinking?.(null);
     deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
     const detail = (d.data as Record<string, unknown>)?.error;
@@ -247,12 +250,12 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const data = d.data as Record<string, unknown>;
     const elapsed = Math.round((Date.now() - (deps.agentStartTimes.current["reporter"] ?? Date.now())) / 1000);
     if (data?.skipped === true) {
-      deps.setAgentStates((prev) => ({ ...prev, reporter: "skipped" }));
+      useWorkspaceStore.getState().setAgentStatus("reporter", "skipped");
       deps.setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
       deps.setWaitingAgent(null);
       deps.setPhase("done");
     } else {
-      deps.setAgentStates((prev) => ({ ...prev, reporter: "done" }));
+      useWorkspaceStore.getState().setAgentStatus("reporter", "done");
       deps.setAgentElapsed((prev) => ({ ...prev, reporter: elapsed }));
       const proj = (data?.project_name as string) || deps.currentProject || "";
       deps.setResultReportUrl(`/api/reports/${proj}`);
@@ -403,7 +406,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
       deps.setActiveAnalystReviewId(null); deps.setActiveAnalystReviewRevision(-1);
       deps.setGateOpen(false);
       deps.setPhase("setup");
-      deps.setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
+      useWorkspaceStore.getState().resetAgentStates();
       deps.setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
       deps.setResultReportUrl(null);
       deps.setGuardrailsBlocked(false);

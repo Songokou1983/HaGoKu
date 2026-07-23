@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { eventLog } from "../utils/eventLog";
-import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { PanelHeader } from "../components/PanelHeader";
@@ -135,7 +134,6 @@ export default function AnalyzePanel() {
   useWsEventHandler({
     batch: useBatchEvents(),
     setMessages,
-    setAgentStates: sess.setAgentStates,
     setAgentElapsed: sess.setAgentElapsed,
     agentStartTimes: sess.agentStartTimes,
     setWaitingAgent: sess.setWaitingAgent,
@@ -168,8 +166,6 @@ export default function AnalyzePanel() {
     setCurrentDataPath,
     log,
   });
-
-  useAgentStatusSync();
 
   // Submit reply handler — 不拦截，后端 respond 锁保证排队
   const submitUserReply = useCallback(

@@ -81,4 +81,5 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   setReportFiles: (reportFiles) => set({ reportFiles }),
   setLastError: (lastError) => set({ lastError }),
   resetRunUiState: () => set({ status: "idle", agents: {} }),
+  resetAgentStates: () => set({ agents: { scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" } }),
 }));

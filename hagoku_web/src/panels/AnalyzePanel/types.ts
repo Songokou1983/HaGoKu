@@ -124,7 +124,6 @@ export interface ProjectFile {
 export interface WsEventDeps {
   batch: any[];
   setMessages: React.Dispatch<React.SetStateAction<ConvoMessage[]>>;
-  setAgentStates: React.Dispatch<React.SetStateAction<Record<AgentKey, AgentRunState>>>;
   setAgentElapsed: React.Dispatch<React.SetStateAction<Record<AgentKey, number>>>;
   agentStartTimes: React.MutableRefObject<Record<string, number>>;
   setWaitingAgent: React.Dispatch<React.SetStateAction<AgentKey | null>>;

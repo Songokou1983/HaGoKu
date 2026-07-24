@@ -501,7 +501,7 @@ async def update_project(project_name: str, req: UpdateProjectRequest):
 
 # ── POST /api/projects/{project_name}/clear-history — 清除历史 ─
 @app.post("/api/projects/{project_name}/clear-history")
-async def clear_project_history(project_name: str):
+async def clear_project_history(project_name: str, request):
     import shutil
     proj_dir = _projects_root() / project_name
     if not proj_dir.exists():
@@ -530,6 +530,17 @@ async def clear_project_history(project_name: str):
         ]:
             db.conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (project_name,))
         db.conn.commit()
+        # 清除内存中的 orchestrator 上下文
+        try:
+            app_inst = request.app.state.hagoku_app
+            if app_inst:
+                orch = getattr(app_inst, '_active_orch', None)
+                if orch:
+                    ctx = getattr(orch, '_context', None)
+                    if ctx:
+                        ctx.clear()
+        except Exception:
+            pass
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return {"project": project_name, "cleared": True}

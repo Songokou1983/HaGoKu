@@ -64,10 +64,6 @@ export function AskUserPrompt({
   return (
     <div className="border border-app-border/60 rounded-md p-3 bg-app-bg-secondary/50 my-1">
       <p className="text-ui-sm text-app-text leading-relaxed">{question}</p>
-      <p className="text-ui-xs text-app-text-muted mt-2 flex items-center gap-1">
-        <span className="inline-block w-1 h-4 bg-app-accent rounded-sm animate-pulse" />
-        请在下方输入框中回复
-      </p>
     </div>
   );
 }

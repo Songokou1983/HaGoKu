@@ -12,8 +12,7 @@ export interface ToolExchangeTurnProps {
 export function ToolExchangeTurn({
   tool_calls,
 }: ToolExchangeTurnProps) {
-  const hasErrors = tool_calls?.some((tc) => tc.error) ?? false;
-  const [open, setOpen] = useState(hasErrors);
+  const [open, setOpen] = useState(false);
 
   const summary = useMemo(() => {
     if (!tool_calls || tool_calls.length === 0) return "";

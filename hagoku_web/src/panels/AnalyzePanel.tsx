@@ -53,24 +53,6 @@ export default function AnalyzePanel() {
 
   // ── 项目切换：监听 snapshot 恢复状态 ──
   // ── 挂载时拉快照 ──
-  useEffect(() => {
-    if (!currentProject) return;
-    fetch(`/api/projects/${currentProject}/switch`, { method: "POST" })
-      .then(r => r.json())
-      .then(snap => {
-        if (snap?.messages?.length) {
-          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
-          const ms: ConvoMessage[] = snap.messages.map((m: any) => ({
-            id: uid(), role: roleMap[m.role] || "system",
-            text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
-          }));
-          syncFromSnapshot(ms);
-        }
-        if (snap?.data_path) setCurrentDataPath(snap.data_path);
-      })
-      .catch(() => {});
-  }, [currentProject, syncFromSnapshot]);
-
   // File upload hook
   const [dataPath, _setDataPath] = useState(currentDataPath);
   const setDataPath = (path: string) => {
@@ -126,6 +108,25 @@ export default function AnalyzePanel() {
   // Conversation hook
   const { messages, addSystemMsg, addUserMsg, addAgentMsg, addWorkflowCard, updateWorkflowCard, syncFromSnapshot, clearMessages, addRawMsg, _setMessages } =
     useConversation();
+
+  // ── 挂载/切换时拉快照 ──
+  useEffect(() => {
+    if (!currentProject) return;
+    fetch(`/api/projects/${currentProject}/switch`, { method: "POST" })
+      .then(r => r.json())
+      .then(snap => {
+        if (snap?.messages?.length) {
+          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
+          const ms: ConvoMessage[] = snap.messages.map((m: any) => ({
+            id: uid(), role: roleMap[m.role] || "system",
+            text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
+          }));
+          syncFromSnapshot(ms);
+        }
+        if (snap?.data_path) setCurrentDataPath(snap.data_path);
+      })
+      .catch(() => {});
+  }, [currentProject, syncFromSnapshot]);
 
   // Analyze session hook
   const sess = useAnalyzeSession(

@@ -51,31 +51,8 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   if (Array.isArray(snap.messages) && snap.messages.length > 0) {
-    // 预解析 review 数据
-    const fieldReview = snap.field_review && !deps.activeFieldReviewId && snap.project_name === deps.currentProject
-      ? parseFieldReview(snap.field_review) : null;
-    const cleaningReview = snap.cleaning_review && !deps.activeCleaningReviewId && snap.project_name === deps.currentProject
-      ? parseCleaningReview(snap.cleaning_review) : null;
-
-    deps.syncFromSnapshot(snapMsgs);
-    // 追加 review 卡片
-    if (fieldReview) {
-      setActiveFieldReviewId(uid());
-      setActiveFieldReviewRevision(0);
-      setFieldReviewScrollNonce((n: number) => n + 1);
-      deps.addWorkflowCard({ fieldReview } as any);
-      setWaitingAgent("scout"); setGateOpen(true);
-    }
-    if (cleaningReview) {
-      setActiveCleaningReviewId(uid());
-      setActiveCleaningReviewRevision(0);
-      deps.addWorkflowCard({ cleaningReview } as any);
-      setWaitingAgent("cleaner"); setGateOpen(true);
-    }
-    if (snap.analyst_message) {
-      deps.addRawMsg?.({ id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() } as ConvoMessage);
-      setWaitingAgent("analyst"); setGateOpen(true);
-    }
+    // 全量消息来自session，直接同步
+    deps.syncFromSnapshot(snap.messages);
   } else if (snap.messages && snap.messages.length === 0) {
     setPhase("setup");
   }

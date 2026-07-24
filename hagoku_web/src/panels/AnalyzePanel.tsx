@@ -116,14 +116,51 @@ export default function AnalyzePanel() {
       .then(r => r.json())
       .then(snap => {
         if (snap?.messages?.length) {
+          const allMsgs = snap.messages;
           const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
-          const ms: ConvoMessage[] = snap.messages
+
+          // 重建对话消息（跳过 tool 消息）
+          const dialogMsgs: ConvoMessage[] = allMsgs
             .filter((m: any) => m.role !== "tool")
             .map((m: any) => ({
-            id: uid(), role: roleMap[m.role] || "system",
-            text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
-          }));
-          syncFromSnapshot(ms);
+              id: uid(), role: roleMap[m.role] || "system",
+              text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
+            }));
+
+          // 从 tool 消息重建工具卡片（和 live tool_exchange 一致）
+          let toolBatch: any[] = [];
+          let batchStage = "";
+          for (let i = 0; i < allMsgs.length; i++) {
+            const m = allMsgs[i];
+            if (m.role === "assistant" && m.tool_calls?.length) {
+              if (toolBatch.length > 0) {
+                dialogMsgs.push({
+                  id: uid(), role: "agent", text: "", timestamp: new Date().toISOString(),
+                  toolExchange: { stage: batchStage || "工具", tool_calls: toolBatch },
+                } as ConvoMessage);
+                toolBatch = [];
+              }
+              batchStage = `第 ${toolBatch.length + 1} 轮`;
+            }
+            if (m.role === "tool") {
+              const prevAsst = allMsgs.slice(0, i).reverse().find((x: any) => x.role === "assistant" && x.tool_calls);
+              const tcId = m.tool_call_id || "";
+              const tcName = prevAsst?.tool_calls?.find((t: any) => t.id === tcId)?.function?.name || "";
+              toolBatch.push({
+                id: tcId || uid(), name: tcName,
+                arguments_summary: "", result_summary: String(m.content || "").slice(0, 200),
+                error: null, duration_ms: 0,
+              });
+            }
+          }
+          if (toolBatch.length > 0) {
+            dialogMsgs.push({
+              id: uid(), role: "agent", text: "", timestamp: new Date().toISOString(),
+              toolExchange: { stage: batchStage || "工具", tool_calls: toolBatch },
+            } as ConvoMessage);
+          }
+
+          syncFromSnapshot(dialogMsgs);
           // 从快照恢复 review 卡片
           if (snap?.field_review) {
             addWorkflowCard({ fieldReview: snap.field_review } as any);

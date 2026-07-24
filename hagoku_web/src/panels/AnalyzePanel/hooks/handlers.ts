@@ -96,17 +96,11 @@ export function handleAck(deps: WsEventDeps, msg: any): boolean {
 // ── error ─────────────────────────────────────────────────────
 
 export function handleError(deps: WsEventDeps, msg: any): boolean {
-  const { _setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
+  const { setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
   if (msg.type !== "error") return false;
-  const detail = typeof msg.message === "string" ? msg.message.trim() : "";
-  const iso = new Date().toISOString();
-  _setMessages((prev) => [
-    ...prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
-    { id: uid(), role: "system", text: detail || "服务器返回错误", timestamp: iso },
-  ]);
   setReplyPending?.(false);
   const snap = replySnapshotRef.current;
-  const recoverable = /No agent is waiting|No active orchestrator/i.test(detail);
+  const recoverable = /No agent is waiting|No active orchestrator/i.test(typeof msg.message === "string" ? msg.message : "");
   if (recoverable && snap) {
     setWaitingAgent(snap.agent);
     setGateOpen(snap.gate);
@@ -140,11 +134,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
   if (d.event_type === "agent_failed" && agentKey) {
     useWorkspaceStore.getState().setAgentStatus(agentKey, "error");
     deps.onThinking?.(null);
-    deps._setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
-    const detail = (d.data as Record<string, unknown>)?.error;
-    if (typeof detail === "string" && detail.trim()) {
-      deps._setMessages((prev) => [...prev, { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp }]);
-    }
+    deps.endStream?.();
   }
 
   // agent_thinking

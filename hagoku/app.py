@@ -179,9 +179,10 @@ class HaGoKuApp:
             if ctx.get("_report_html_path"):
                 snap["report_url"] = ctx["_report_html_path"]
 
-            # field_review: 从 column_semantics 重建核对表
+            # field_review: 从 column_semantics 重建核对表（仅活跃 session 时）
             cs = ctx.get("column_semantics", [])
-            if cs and ctx.get("n_rows"):
+            session = ctx.get("_session")
+            if cs and ctx.get("n_rows") and session and len(session.messages) > 0:
                 rows = []
                 for s in cs:
                     if isinstance(s, dict) and "column_name" in s:

@@ -7,8 +7,11 @@ export function ClearHistoryButton({ currentProject, onClear }: { currentProject
 
   const handleClear = () => {
     setShowConfirm(false);
-    onClear();
-    fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" }).catch(() => {});
+    // 先调 API 清除后端，再清前端状态
+    // 不能反过来——onClear 里 cancel_analysis 会 save_state 写回 runs/
+    fetch(`/api/projects/${currentProject}/clear-history`, { method: "POST" })
+      .then(() => onClear())
+      .catch(() => onClear());
   };
 
   return (

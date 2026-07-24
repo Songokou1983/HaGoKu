@@ -50,12 +50,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   }
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
-  if (Array.isArray(snap.messages) && snap.messages.length > 0) {
-    // 全量消息来自session，直接同步
-    deps.syncFromSnapshot(snap.messages);
-  } else if (snap.messages && snap.messages.length === 0) {
-    setPhase("setup");
-  }
+  // 消息由 REST API useEffect 统一管理，WS 只同步元数据
   if (snap.gate_open) setGateOpen(true);
   // askUser 由 live user_input_requested 事件添加，snapshot 不重复
   const agentOrder = ["scout", "cleaner", "analyst", "reporter"];

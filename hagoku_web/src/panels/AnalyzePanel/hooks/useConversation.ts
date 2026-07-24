@@ -24,7 +24,7 @@ function loadSession(): ConvoMessage[] {
 }
 
 export function useConversation(_log?: (msg: string) => void) {
-  const [messages, setMessages] = useState<ConvoMessage[]>(loadSession);
+  const [messages, setMessages] = useState<ConvoMessage[]>([]);
 
   function persist(next: ConvoMessage[]) {
     try { localStorage.setItem(_storageKey(), JSON.stringify(next.slice(-100))); } catch {}

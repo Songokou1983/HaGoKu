@@ -97,6 +97,16 @@ export function useConversation(_log?: (msg: string) => void) {
 
   const clearMessages = () => { eventLog("state", "clear_messages"); setMessages([]); persist([]); };
 
+  // ── 流结束：清除 streaming 标记 ──
+
+  const endStream = () => {
+    setMessages((prev) => {
+      const next = prev.map((m) => (m.streaming ? { ...m, streaming: false } : m));
+      persist(next);
+      return next;
+    });
+  };
+
   // ── 原始消息追加（供 handlers 内部特殊消息使用，不推荐外部直接调） ──
 
   const addRawMsg = (msg: ConvoMessage) => {
@@ -124,7 +134,7 @@ export function useConversation(_log?: (msg: string) => void) {
   return {
     messages,
     // 幂等入口（外部首选）
-    addSystemMsg, addUserMsg, addAgentMsg,
+    addSystemMsg, addUserMsg, addAgentMsg, endStream,
     addWorkflowCard, updateWorkflowCard,
     syncFromSnapshot, clearMessages,
     // 内部入口（特殊消息类型，无幂等）

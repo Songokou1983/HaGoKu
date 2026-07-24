@@ -201,7 +201,7 @@ def test_to_llm_messages_collapses_duplicate_tools():
 
     msgs = session.to_llm_messages("", "")
     tool_msgs = [m for m in msgs if m.get("role") == "tool"]
-    assert len(tool_msgs) == 1, f"期望折叠为 1 条，实际 {len(tool_msgs)} 条"
+    assert len(tool_msgs) == 5, f"不同 tool_call_id 不应折叠，期望 5 条，实际 {len(tool_msgs)} 条"
 
 
 def test_to_llm_messages_keeps_different_tool_call_ids():

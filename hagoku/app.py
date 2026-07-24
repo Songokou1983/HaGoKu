@@ -21,18 +21,19 @@ logger = logging.getLogger("hagoku.app")
 
 
 def _build_field_review(ctx: dict) -> dict | None:
-    """从 column_semantics 构建 field_review。"""
+    """从 column_semantics 构建 field_review。仅活跃 session 时生成。"""
     cs = ctx.get("column_semantics", [])
-    if not cs or not ctx.get("n_rows"):
+    session = ctx.get("_session")
+    if not cs or not ctx.get("n_rows") or not session:
         return None
     rows = []
     for s in cs:
         if isinstance(s, dict) and "column_name" in s:
             rows.append({
                 "field_name": s.get("column_name", ""),
-                "chinese_name": s.get("display_name", s.get("chinese_name", "—")),
+                "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
                 "meaning": s.get("description", ""),
-                "suggested_role": s.get("suggested_role", "—"),
+                "suggested_role": s.get("suggested_role") or None,
                 "used_in_analysis": s.get("used_in_analysis"),
                 "evidence": s.get("evidence", ""),
             })

@@ -116,7 +116,7 @@ export default function AnalyzePanel() {
       .then(r => r.json())
       .then(snap => {
         if (snap?.messages?.length) {
-          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
+          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", agent: "agent", tool: "system" };
           const ms: ConvoMessage[] = snap.messages
             .filter((m: any) => m.role !== "tool")
             .map((m: any) => ({
@@ -141,7 +141,7 @@ export default function AnalyzePanel() {
         if (snap?.data_path) setCurrentDataPath(snap.data_path);
       })
       .catch(() => {});
-  }, [currentProject, syncFromSnapshot]);
+  }, [currentProject]);
 
   // Analyze session hook
   const sess = useAnalyzeSession(
@@ -256,15 +256,6 @@ export default function AnalyzePanel() {
           </span>
         )}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={sess.handleReset}
-            className="flex items-center gap-1 px-2 py-0.5 border border-app-border rounded text-ui-xs normal-case tracking-normal font-medium text-app-text
-                hover:border-app-accent hover:text-app-accent transition-colors cursor-pointer"
-          >
-            <RotateCcw size={12} />
-            重置分析
-          </button>
           <ClearHistoryButton
             currentProject={currentProject}
             onClear={sess.handleReset}
@@ -344,102 +335,63 @@ export default function AnalyzePanel() {
             <div className="h-0.5 bg-app-accent animate-pulse shrink-0" />
           )}
 
-          {/* Conversation feed */}
-          <ConvoFeed
-            messages={messages}
-            scrollFieldTableId={sess.activeFieldReviewId}
-            scrollFieldTableNonce={sess.fieldReviewScrollNonce}
-            onAskReply={submitUserReply}
-          />
-
-          {/* CO-16: reply pending processing bar — shown after user sends reply */}
-          {replyPending && (
-            <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 shrink-0 text-ui-xs text-app-text-muted">
-              <Loader2 size={13} className="animate-spin text-app-accent" />
-              <span>分析师正在处理你的回复…</span>
-              <button
-                type="button"
-                onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}
-                className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs
-                  hover:border-app-error hover:text-app-error cursor-pointer transition-colors"
-              >
-                停止
-              </button>
+          {/* Conversation feed + input — absolute 定位，输入框永远在底部 */}
+          <div className="flex-1 min-h-0 relative">
+            <div className="absolute inset-0 overflow-y-auto pb-[100px] px-4 py-3 space-y-2">
+              <ConvoFeed
+                messages={messages}
+                scrollFieldTableId={sess.activeFieldReviewId}
+                scrollFieldTableNonce={sess.fieldReviewScrollNonce}
+                onAskReply={submitUserReply}
+              />
             </div>
-          )}
+            <div className="absolute bottom-0 left-0 right-0 bg-app-bg border-t border-app-border/60 pt-2">
+              {/* CO-16: reply pending */}
+              {replyPending && (
+                <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 text-ui-xs text-app-text-muted">
 
-          {/* Reply input — always visible */}
-          <div className="shrink-0 border-t border-app-border/60 pt-2 motion-safe:transition-colors">
-            {/* Quick action buttons */}
-            {cleanerCleaningReviewOpen && (
+                  <Loader2 size={13} className="animate-spin text-app-accent" /><span>分析师正在处理你的回复…</span>
+                  <button type="button" onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}
+                    className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs hover:border-app-error hover:text-app-error cursor-pointer transition-colors">停止</button>
+                </div>
+              )}
+              {/* Quick action buttons */}
+              {cleanerCleaningReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("确认继续")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                  >
-                    <CheckCircle2 size={14} />
-                    确认继续
-                  </button>
+                  <button type="button" onClick={() => submitUserReply("确认继续")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
+                    <CheckCircle2 size={14} />确认继续</button>
                 </div>
               )}
               {analystReviewOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("确认继续")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                  >
-                    <CheckCircle2 size={14} />
-                    确认继续
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      submitUserReply(
-                        "已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段",
-                      )
-                    }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border
-                      border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer
-                      motion-safe:transition-colors"
-                  >
-                    <FileText size={14} />
-                    同意进入报告
-                  </button>
+                  <button type="button" onClick={() => submitUserReply("确认继续")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
+                    <CheckCircle2 size={14} />确认继续</button>
+                  <button type="button" onClick={() => submitUserReply("已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors">
+                    <FileText size={14} />同意进入报告</button>
                 </div>
               )}
               {scoutFieldReviewOpen && !sess.gateOpen && (
                 <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button
-                    type="button"
-                    onClick={() => submitUserReply("可以进入下一阶段了")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium
-                      bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors"
-                  >
-                    <CheckCircle2 size={14} />
-                    进入下一阶段
-                  </button>
+                  <button type="button" onClick={() => submitUserReply("可以进入下一阶段了")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
+                    <CheckCircle2 size={14} />进入下一阶段</button>
                 </div>
               )}
-              {/* CO-17: InputBar replacing inline textarea */}
               <InputBar
-              placeholder="输入回复后 Enter 发送"
+                placeholder="输入回复后 Enter 发送"
                 value={sess.replyText}
                 onChange={(v) => sess.setReplyText(v)}
                 onSend={submitUserReply}
                 inputRef={sess.replyInputRef}
                 sendLabel="发送"
                 log={log}
-                footerHint={
-                  scoutFieldReviewOpen
-                    ? "用自然语言说明字段理解即可 · Enter 发送 · Shift+Enter 换行"
-                    : "Enter 发送 · Shift+Enter 换行"
-                }
+                footerHint={scoutFieldReviewOpen ? "用自然语言说明字段理解即可 · Enter 发送 · Shift+Enter 换行" : "Enter 发送 · Shift+Enter 换行"}
               />
             </div>
+          </div>
 
           {/* Done: report link + reset */}
           {phase === "done" &&

@@ -143,69 +143,6 @@ def _respond_task(orch: "Orchestrator", user_text: str) -> dict[str, Any]:
     return orch.respond({"text": user_text})
 
 
-def _build_state_snapshot(orch: "Orchestrator") -> dict[str, Any] | None:
-    """从 Orchestrator 当前状态构建前端可恢复的快照。
-
-    用于 WebSocket 重连时恢复 UI 状态：当前阶段、对话等。
-    不生成任何用户可见内容——所有展示数据由 LLM 流式输出提供。"""
-    try:
-        ctx = getattr(orch, '_context', None) or {}
-        snapshot: dict[str, Any] = {
-            "project_name": getattr(orch, '_project_name', '') or (
-                ctx.get('data_path', '').split('/')[-2] if ctx.get('data_path') else ''
-            ),
-            "query": ctx.get('query', ''),
-            "data_path": ctx.get('data_path', ''),
-            "phase": "running",
-            "gate_open": True,
-        }
-        # Phase C: pending_ask_user（LLM ask_user 暂停状态恢复）
-        ask = ctx.get("_pending_ask_user")
-        if ask:
-            snapshot["pending_ask_user"] = ask
-        # report_url
-        if ctx.get("_report_html_path"):
-            snapshot["report_url"] = ctx["_report_html_path"]
-        # field_review: 从 column_semantics 重建核对表（仅活跃 session 时）
-        cs = ctx.get("column_semantics", [])
-        session = ctx.get("_session")
-        if cs and ctx.get("n_rows") and session and len(session.messages) > 0:
-            rows = []
-            for s in cs:
-                if isinstance(s, dict) and "column_name" in s:
-                    rows.append({
-                        "field_name": s.get("column_name", ""),
-                        "chinese_name": s.get("display_name", s.get("chinese_name", "—")),
-                        "meaning": s.get("description", ""),
-                        "suggested_role": s.get("suggested_role", "—"),
-                        "used_in_analysis": s.get("used_in_analysis"),
-                        "evidence": s.get("evidence", ""),
-                    })
-            if rows:
-                snapshot["field_review"] = {
-                    "n_rows": ctx["n_rows"],
-                    "n_cols": ctx.get("n_cols", len(rows)),
-                    "rows": rows,
-                }
-        # 对话历史（全部消息）
-        session = ctx.get("_session")
-        if session:
-            msgs = []
-            for m in session.messages:
-                msg: dict[str, Any] = {
-                    "role": m.get("role", ""),
-                    "content": m.get("content", "")[:5000],
-                }
-                if m.get("tool_calls"):
-                    msg["tool_calls"] = m["tool_calls"]
-                if m.get("tool_call_id"):
-                    msg["tool_call_id"] = m["tool_call_id"]
-                msgs.append(msg)
-            snapshot["messages"] = msgs
-
-        return snapshot
-    except Exception:
-        return None
 
 
 # ── WS ↔ EventBus bridge ──────────────────────────────────────
@@ -322,8 +259,8 @@ async def ws_handler(ws: WebSocket) -> None:
             orch.event_bus.subscribe(bridge.on_event)
 
         # ── 推送当前项目快照 ──
-        if orch is not None:
-            snapshot = app.build_snapshot() if app else _build_state_snapshot(orch)
+        if orch is not None and app is not None:
+            snapshot = app.build_snapshot()
             if snapshot:
                 await _safe_send({"type": "state_snapshot", "data": snapshot})
 

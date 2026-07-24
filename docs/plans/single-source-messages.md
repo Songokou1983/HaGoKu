@@ -417,3 +417,36 @@ Session（唯一真相源）
 │
 └──────────────────────────────────────────────
 ```
+
+---
+
+## 九、2026-07-24 首次实现教训
+
+### 问题：关闭重开后前端恢复的不是关闭前看到的内容
+
+**根因**：`7aa88ba` 重构 `app.py:build_snapshot()` 为后端预渲染格式（tool 消息 → toolExchange 卡片），但 **`ws_handler.py:_build_state_snapshot()` 没有被同步更新**。两套 snapshot 格式同时存在，同一份 session.json 数据经过两条不同的流水线，产出两份不同的前端视图。
+
+**核心教训**：snapshot 的重建逻辑必须是**唯一的**。只要存在两个 snapshot 构建路径，它们就会在某个时刻分歧。
+
+### 问题：输入框被顶到屏幕顶部
+
+**根因**：`4d32207` 尝试用 `min-h-0` 修复 flex-1 不生效，但 `min-h-0` 在消息为空时让 ConvoFeed 塌缩为 0 高度。
+
+**修复**：`min-h-0` → `min-h-[120px]`，确保 ConvoFeed 即使无消息也有保底高度。真正的根因是消息为空——这通常由 snapshot 格式不一致导致。
+
+### 问题：roleMap 缺少 "agent" → 工具卡片被标为 system
+
+**根因**：`7aa88ba` 的后端渲染中，toolExchange 卡片使用 `role: "agent"`，但前端 `roleMap` 只有 `user/assistant/tool` 三个映射。
+
+**修复**：`roleMap` 增加 `agent: "agent"` 映射。
+
+### 修复清单（2026-07-24）
+
+| 修复 | 位置 | 说明 |
+|------|------|------|
+| 删除 `_build_state_snapshot` | `ws_handler.py` | 重复代码，统一走 `app.build_snapshot()` |
+| 删除语义默认值 `"—"` | `app.py:_build_field_review` | 铁律 1：LLM 没给的值代码不准填 |
+| ConvoFeed `min-h-0` → `min-h-[120px]` | `ConvoFeed.tsx` | 防止空消息时塌缩 |
+| `roleMap` 加 `agent: "agent"` | `AnalyzePanel.tsx` | 工具卡片 role 正确 |
+| 删除僵尸测试 | `test_doctrine_fix_f038.py` | 引用了不存在的 `hagoku.tools.business` |
+| `_build_field_review` 加 session 检查 | `app.py` | 清历史后不残留旧 field_review |

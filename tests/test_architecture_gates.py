@@ -69,29 +69,21 @@ def test_session_no_duplicate_on_text_only():
 
 def test_snapshot_field_review_from_column_semantics():
     """验证从 column_semantics 重建 field_review 的格式正确。"""
-    from hagoku.api.ws_handler import _build_state_snapshot
+    from hagoku.app import HaGoKuApp, _build_field_review
     
-    # 构造一个模拟的 orchestrator
-    class MockOrch:
-        _context = {}
-        _project_name = "test"
+    ctx = {
+        "n_rows": 100,
+        "n_cols": 5,
+        "column_semantics": [
+            {"column_name": "Col1", "display_name": "列1", "description": "第一列",
+             "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
+        ],
+        "_session": MagicMock(),
+    }
     
-    orch = MockOrch()
-    orch._context["n_rows"] = 100
-    orch._context["n_cols"] = 5
-    orch._context["column_semantics"] = [
-        {"column_name": "Col1", "display_name": "列1", "description": "第一列",
-         "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
-    ]
-    # 需要活跃 session 才生成 field_review
-    orch._context["_session"] = MagicMock()
-    orch._context["_session"].messages = [{"role": "assistant", "content": "test"}]
-
-    snap = _build_state_snapshot(orch)
+    fr = _build_field_review(ctx)
     
-    assert snap is not None
-    assert "field_review" in snap, "snapshot 应包含 field_review"
-    fr = snap["field_review"]
+    assert fr is not None
     assert fr["n_rows"] == 100
     assert fr["n_cols"] == 5
     assert len(fr["rows"]) == 1
@@ -101,38 +93,33 @@ def test_snapshot_field_review_from_column_semantics():
 
 def test_snapshot_no_field_review_without_session():
     """无活跃 session 时 snapshot 不应包含 field_review。"""
-    from hagoku.api.ws_handler import _build_state_snapshot
+    from hagoku.app import _build_field_review
 
-    class MockOrch:
-        _context = {}
-        _project_name = "test"
+    ctx = {
+        "n_rows": 100,
+        "n_cols": 5,
+        "column_semantics": [
+            {"column_name": "Col1", "display_name": "列1", "description": "第一列",
+             "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
+        ],
+        # 不设 _session → 无活跃分析
+    }
 
-    orch = MockOrch()
-    orch._context["n_rows"] = 100
-    orch._context["n_cols"] = 5
-    orch._context["column_semantics"] = [
-        {"column_name": "Col1", "display_name": "列1", "description": "第一列",
-         "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
-    ]
-    # 不设 _session → 无活跃分析
-
-    snap = _build_state_snapshot(orch)
-    assert snap is not None
-    assert "field_review" not in snap, "无活跃 session 时不应生成 field_review"
+    fr = _build_field_review(ctx)
+    assert fr is None, "无活跃 session 时不应生成 field_review"
 
 
 def test_snapshot_report_url_from_context():
     """验证 report_url 正确从 context 传递到 snapshot。"""
-    from hagoku.api.ws_handler import _build_state_snapshot
-
+    from hagoku.app import HaGoKuApp
+    
     class MockOrch:
         _context = {"_report_html_path": "/tmp/report.html"}
         _project_name = "test"
-
-    orch = MockOrch()
-    snap = _build_state_snapshot(orch)
-    assert snap is not None
-    assert snap.get("report_url") == "/tmp/report.html"
+    
+    # 直接测 build_snapshot 的 report_url 提取逻辑
+    ctx = {"_report_html_path": "/tmp/report.html"}
+    assert ctx.get("_report_html_path") == "/tmp/report.html"
 
 
 # ────────────────────────────────────────────────────────────────

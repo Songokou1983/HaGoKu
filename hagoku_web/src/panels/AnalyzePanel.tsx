@@ -116,7 +116,7 @@ export default function AnalyzePanel() {
       .then(r => r.json())
       .then(snap => {
         if (snap?.messages?.length) {
-          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", agent: "agent", tool: "system" };
+          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", agent: "agent", workflow: "workflow", tool: "system" };
           const ms: ConvoMessage[] = snap.messages
             .filter((m: any) => m.role !== "tool")
             .map((m: any) => ({

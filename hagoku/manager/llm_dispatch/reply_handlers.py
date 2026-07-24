@@ -7,12 +7,46 @@ from typing import Any
 from ...observability.events import EventType
 
 
+def _save_review_cards(context: dict) -> None:
+    """将 context 中的 review 数据写入 Session（单一真相源——一条通道）。"""
+    session = context.get("_session")
+    if not session:
+        return
+    # field_review: 从 column_semantics 构建
+    cs = context.get("column_semantics", [])
+    if cs and context.get("n_rows"):
+        rows = []
+        for s in cs:
+            if isinstance(s, dict) and "column_name" in s:
+                rows.append({
+                    "field_name": s.get("column_name", ""),
+                    "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
+                    "meaning": s.get("description", ""),
+                    "suggested_role": s.get("suggested_role") or None,
+                    "used_in_analysis": s.get("used_in_analysis"),
+                    "evidence": s.get("evidence", ""),
+                })
+        if rows:
+            session.add_workflow_card("field_review", {
+                "field_review": {"n_rows": context["n_rows"], "n_cols": context.get("n_cols", len(rows)), "rows": rows},
+            })
+    # ask_user
+    ask = context.get("_pending_ask_user")
+    if ask:
+        session.add_workflow_card("ask_user", {
+            "question": ask.get("question", ""),
+            "expected_format": ask.get("expected_format", ""),
+            "options": ask.get("options", []),
+        })
+
+
 def _handle_reply(self, user_input: str, context: dict) -> dict:
     """纯通道——不做阶段路由，LLM 自然推进。"""
 
     # ── 首次暂停 ──
     if not user_input or not user_input.strip():
-        ask = context.pop("_pending_ask_user", None)
+        _save_review_cards(context)
+        context.pop("_pending_ask_user", None)
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
 
@@ -24,6 +58,7 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 
     ask = context.pop("_pending_ask_user", None)
     if ask:
+        _save_review_cards(context)
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
 

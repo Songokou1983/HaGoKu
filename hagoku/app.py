@@ -20,27 +20,6 @@ from typing import Any
 logger = logging.getLogger("hagoku.app")
 
 
-def _build_field_review(ctx: dict) -> dict | None:
-    """从 column_semantics 构建 field_review。仅活跃 session 时生成。"""
-    cs = ctx.get("column_semantics", [])
-    session = ctx.get("_session")
-    if not cs or not ctx.get("n_rows") or not session:
-        return None
-    rows = []
-    for s in cs:
-        if isinstance(s, dict) and "column_name" in s:
-            rows.append({
-                "field_name": s.get("column_name", ""),
-                "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
-                "meaning": s.get("description", ""),
-                "suggested_role": s.get("suggested_role") or None,
-                "used_in_analysis": s.get("used_in_analysis"),
-                "evidence": s.get("evidence", ""),
-            })
-    if not rows:
-        return None
-    return {"n_rows": ctx["n_rows"], "n_cols": ctx.get("n_cols", len(rows)), "rows": rows}
-
 
 class HaGoKuApp:
     """进程级应用单例。
@@ -194,6 +173,19 @@ class HaGoKuApp:
             pending_asst: dict[str, Any] | None = None
             for m in raw_msgs:
                 role = m.get("role", "")
+                if role == "workflow":
+                    if tool_batch:
+                        rendered.append({"role": "agent", "text": "",
+                            "toolExchange": {"stage": "工具", "tool_calls": tool_batch}})
+                        tool_batch = []
+                    wtype = m.get("type", "")
+                    if wtype == "field_review":
+                        rendered.append({"role": "workflow", "text": "", "fieldReview": m.get("field_review", m)})
+                    elif wtype == "cleaning_review":
+                        rendered.append({"role": "workflow", "text": "", "cleaningReview": m.get("cleaning_review", m)})
+                    elif wtype == "ask_user":
+                        rendered.append({"role": "workflow", "text": "", "askUser": {"question": m.get("question", ""), "expected_format": m.get("expected_format", ""), "options": m.get("options")}})
+                    continue
                 if role == "tool":
                     tc_id = m.get("tool_call_id", "")
                     tc_name = ""
@@ -232,8 +224,6 @@ class HaGoKuApp:
                 "project_name": getattr(orch, '_project_name', '') or "",
                 "query": ctx.get('query', ''),
                 "data_path": ctx.get('data_path', ''),
-                "field_review": _build_field_review(ctx),
-                "pending_ask_user": ctx.get("_pending_ask_user"),
                 "report_url": ctx.get("_report_html_path"),
                 "messages": rendered,
             }

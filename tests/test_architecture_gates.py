@@ -68,9 +68,11 @@ def test_session_no_duplicate_on_text_only():
 # ────────────────────────────────────────────────────────────────
 
 def test_snapshot_field_review_from_column_semantics():
-    """验证从 column_semantics 重建 field_review 的格式正确。"""
-    from hagoku.app import HaGoKuApp, _build_field_review
+    """验证 _save_review_cards 正确将 column_semantics 写入 Session。"""
+    from hagoku.manager.llm_dispatch.reply_handlers import _save_review_cards
+    from hagoku.context.session import Session
     
+    session = Session(analysis_goal="test")
     ctx = {
         "n_rows": 100,
         "n_cols": 5,
@@ -78,12 +80,15 @@ def test_snapshot_field_review_from_column_semantics():
             {"column_name": "Col1", "display_name": "列1", "description": "第一列",
              "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
         ],
-        "_session": MagicMock(),
+        "_session": session,
     }
     
-    fr = _build_field_review(ctx)
+    _save_review_cards(ctx)
     
-    assert fr is not None
+    # field_review 应写入 session
+    wf_msgs = [m for m in session.messages if m.get("role") == "workflow" and m.get("type") == "field_review"]
+    assert len(wf_msgs) == 1
+    fr = wf_msgs[0].get("field_review", {})
     assert fr["n_rows"] == 100
     assert fr["n_cols"] == 5
     assert len(fr["rows"]) == 1
@@ -92,9 +97,9 @@ def test_snapshot_field_review_from_column_semantics():
 
 
 def test_snapshot_no_field_review_without_session():
-    """无活跃 session 时 snapshot 不应包含 field_review。"""
-    from hagoku.app import _build_field_review
-
+    """无 session 时 _save_review_cards 不应写任何消息。"""
+    from hagoku.manager.llm_dispatch.reply_handlers import _save_review_cards
+    
     ctx = {
         "n_rows": 100,
         "n_cols": 5,
@@ -102,11 +107,9 @@ def test_snapshot_no_field_review_without_session():
             {"column_name": "Col1", "display_name": "列1", "description": "第一列",
              "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
         ],
-        # 不设 _session → 无活跃分析
     }
-
-    fr = _build_field_review(ctx)
-    assert fr is None, "无活跃 session 时不应生成 field_review"
+    # 不抛异常即可
+    _save_review_cards(ctx)
 
 
 def test_snapshot_report_url_from_context():

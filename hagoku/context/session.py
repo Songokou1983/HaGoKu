@@ -44,6 +44,16 @@ class Session:
         self.messages.append(msg)
         self._maybe_save()
 
+    def add_workflow_card(self, card_type: str, data: dict[str, Any]) -> None:
+        """追加一条 workflow 卡片消息（field_review / cleaning_review / ask_user）。
+        
+        这些消息存在 Session 中确保重启可恢复，但 to_llm_messages() 会过滤掉。
+        """
+        msg: dict[str, Any] = {"role": "workflow", "type": card_type, "timestamp": ""}
+        msg.update(data)
+        self.messages.append(msg)
+        self._maybe_save()
+
     def add_tool_call(
         self,
         assistant_text: str,
@@ -73,9 +83,11 @@ class Session:
         """构建发给 LLM 的完整 messages。折叠连续重复的 tool 结果。"""
         from hagoku.channel import build_messages
 
-        # 折叠连续重复的 tool 消息（同 tool_call_id + 同内容才是真重复）
+        # 折叠连续重复的 tool 消息 + 过滤 workflow 卡片（LLM 不需要 UI 元素）
         collapsed: list[dict[str, Any]] = []
         for m in self.messages:
+            if m.get("role") == "workflow":
+                continue
             if m.get("role") == "tool" and collapsed:
                 prev = collapsed[-1]
                 if (prev.get("role") == "tool"

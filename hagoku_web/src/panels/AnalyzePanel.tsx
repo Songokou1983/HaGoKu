@@ -122,6 +122,7 @@ export default function AnalyzePanel() {
             text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
           }));
           syncFromSnapshot(ms);
+          setPhase("running");
         }
         if (snap?.data_path) setCurrentDataPath(snap.data_path);
       })

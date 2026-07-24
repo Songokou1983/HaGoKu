@@ -123,7 +123,13 @@ export interface ProjectFile {
 
 export interface WsEventDeps {
   batch: any[];
-  setMessages: React.Dispatch<React.SetStateAction<ConvoMessage[]>>;
+  addWorkflowCard: (card: Partial<ConvoMessage> & { id?: string }) => void;
+  updateWorkflowCard: (id: string, updates: Partial<ConvoMessage>) => void;
+  syncFromSnapshot: (snapMsgs: ConvoMessage[]) => void;
+  addSystemMsg: (text: string, timestamp?: string) => void;
+  addAgentMsg: (text: string, timestamp?: string) => void;
+  addRawMsg: (msg: ConvoMessage) => void;
+  _setMessages: React.Dispatch<React.SetStateAction<ConvoMessage[]>>;
   setAgentElapsed: React.Dispatch<React.SetStateAction<Record<AgentKey, number>>>;
   agentStartTimes: React.MutableRefObject<Record<string, number>>;
   setWaitingAgent: React.Dispatch<React.SetStateAction<AgentKey | null>>;

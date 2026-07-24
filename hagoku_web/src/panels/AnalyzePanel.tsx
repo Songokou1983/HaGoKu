@@ -114,7 +114,7 @@ export default function AnalyzePanel() {
   };
 
   // Conversation hook
-  const { messages, setMessages, addSystemMsg, addUserMsg } =
+  const { messages, addSystemMsg, addUserMsg, addAgentMsg, addWorkflowCard, updateWorkflowCard, syncFromSnapshot, clearMessages, addRawMsg, _setMessages } =
     useConversation();
 
   // Analyze session hook
@@ -126,14 +126,20 @@ export default function AnalyzePanel() {
     setQueryText,
     setPhase,
     resetRunUiState,
-    setMessages,
+    clearMessages,
     setReplyPending,
   );
 
   // WS event handler hook
   useWsEventHandler({
     batch: useBatchEvents(),
-    setMessages,
+    addWorkflowCard,
+    updateWorkflowCard,
+    syncFromSnapshot,
+    addSystemMsg,
+    addAgentMsg,
+    addRawMsg,
+    _setMessages,
     setAgentElapsed: sess.setAgentElapsed,
     agentStartTimes: sess.agentStartTimes,
     setWaitingAgent: sess.setWaitingAgent,

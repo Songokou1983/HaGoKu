@@ -29,7 +29,14 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   eventLog("snapshot", `arrived msgs=${Array.isArray(snap?.messages) ? snap.messages.length : 'N/A'} gate=${snap?.gate_open}`);
   if (!snap) return false;
   const {
-    setMessages, setActiveFieldReviewId, setActiveFieldReviewRevision,
+    syncFromSnapshot, _setMessages, addSystemMsg: addSys,
+    addWorkflowCard, addRawMsg,
+    setActiveFieldReviewId, setActiveFieldReviewRevision,
+    setActiveCleaningReviewId, setActiveCleaningReviewRevision,
+    setActiveAnalystReviewId, setActiveAnalystReviewRevision,
+    setGateOpen, setPhase, setWaitingAgent,
+    setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
+  } = deps;
     setActiveCleaningReviewId, setActiveCleaningReviewRevision,
     setActiveAnalystReviewId, setActiveAnalystReviewRevision,
     setGateOpen, setPhase, setWaitingAgent,
@@ -38,7 +45,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
 
   // 项目切换时清空旧消息，断连重连不动已有消息
   if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {
-    setMessages([]);
+    deps._setMessages?.([]);
     setActiveFieldReviewId(null);
     setActiveFieldReviewRevision(-1);
     setActiveCleaningReviewId(null);
@@ -55,42 +62,25 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     const cleaningReview = snap.cleaning_review && !deps.activeCleaningReviewId && snap.project_name === deps.currentProject
       ? parseCleaningReview(snap.cleaning_review) : null;
 
-    setMessages((prev) => {
-      const snapMsgs: ConvoMessage[] = snap.messages.map((m: any) => {
-        const roleMap: Record<string, ConvoMessage["role"]> = {
-          user: "user", assistant: "agent", tool: "system",
-        };
-        return {
-          id: uid(),
-          role: roleMap[m.role] || "system",
-          text: m.content || "",
-          timestamp: m.timestamp || new Date().toISOString(),
-        };
-      });
-      // 原子追加 workflow 卡片，不分离
-      if (fieldReview) {
-        const wfId = uid();
-        setActiveFieldReviewId(wfId);
-        setActiveFieldReviewRevision(0);
-        setFieldReviewScrollNonce((n: number) => n + 1);
-        snapMsgs.push({ id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview } as ConvoMessage);
-        setWaitingAgent("scout"); setGateOpen(true);
-      }
-      if (cleaningReview) {
-        const cid = uid();
-        setActiveCleaningReviewId(cid);
-        setActiveCleaningReviewRevision(0);
-        snapMsgs.push({ id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview } as ConvoMessage);
-        setWaitingAgent("cleaner"); setGateOpen(true);
-      }
-      if (snap.analyst_message) {
-        snapMsgs.push({ id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() } as ConvoMessage);
-        setWaitingAgent("analyst"); setGateOpen(true);
-      }
-      eventLog("snapshot", `restore msgs=${snapMsgs.length}`);
-      setPhase("running");
-      return snapMsgs;
-    });
+    deps.syncFromSnapshot(snapMsgs);
+    // 追加 review 卡片
+    if (fieldReview) {
+      setActiveFieldReviewId(uid());
+      setActiveFieldReviewRevision(0);
+      setFieldReviewScrollNonce((n: number) => n + 1);
+      deps.addWorkflowCard({ fieldReview } as any);
+      setWaitingAgent("scout"); setGateOpen(true);
+    }
+    if (cleaningReview) {
+      setActiveCleaningReviewId(uid());
+      setActiveCleaningReviewRevision(0);
+      deps.addWorkflowCard({ cleaningReview } as any);
+      setWaitingAgent("cleaner"); setGateOpen(true);
+    }
+    if (snap.analyst_message) {
+      deps.addRawMsg?.({ id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() } as ConvoMessage);
+      setWaitingAgent("analyst"); setGateOpen(true);
+    }
   } else if (snap.messages && snap.messages.length === 0) {
     setPhase("setup");
   }

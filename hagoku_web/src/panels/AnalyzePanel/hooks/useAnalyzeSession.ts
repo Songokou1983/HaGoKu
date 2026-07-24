@@ -15,7 +15,7 @@ export function useAnalyzeSession(
   _setQueryText: (v: string) => void,
   setPhase: (v: SessionPhase) => void,
   resetRunUiState: () => void,
-  setMessages: (v: any[] | ((prev: any[]) => any[])) => void,
+  clearMessages: () => void,
   setReplyPending: (v: boolean) => void,
 ) {
   const [agentElapsed, setAgentElapsed] = useState<Record<AgentKey, number>>({
@@ -42,7 +42,7 @@ export function useAnalyzeSession(
   const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
     if (!currentProject || !dataPath) return;
     eventLog("analysis", `start project=${currentProject} data=${dataPath} sheet=${sheetName ?? 0}`);
-    setMessages([]);
+    clearMessages();
     setReplyPending(true);
     useWorkspaceStore.getState().resetAgentStates();
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
@@ -77,7 +77,7 @@ export function useAnalyzeSession(
     send("cancel_analysis", {});
     resetRunUiState();
     setPhase("setup");
-    setMessages([]);
+    clearMessages();
     setWaitingAgent(null);
     setReplyText("");
     setActiveFieldReviewId(null);

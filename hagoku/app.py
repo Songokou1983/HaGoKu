@@ -20,6 +20,27 @@ from typing import Any
 logger = logging.getLogger("hagoku.app")
 
 
+def _build_field_review(ctx: dict) -> dict | None:
+    """从 column_semantics 构建 field_review。"""
+    cs = ctx.get("column_semantics", [])
+    if not cs or not ctx.get("n_rows"):
+        return None
+    rows = []
+    for s in cs:
+        if isinstance(s, dict) and "column_name" in s:
+            rows.append({
+                "field_name": s.get("column_name", ""),
+                "chinese_name": s.get("display_name", s.get("chinese_name", "—")),
+                "meaning": s.get("description", ""),
+                "suggested_role": s.get("suggested_role", "—"),
+                "used_in_analysis": s.get("used_in_analysis"),
+                "evidence": s.get("evidence", ""),
+            })
+    if not rows:
+        return None
+    return {"n_rows": ctx["n_rows"], "n_cols": ctx.get("n_cols", len(rows)), "rows": rows}
+
+
 class HaGoKuApp:
     """进程级应用单例。
 
@@ -163,62 +184,16 @@ class HaGoKuApp:
 
         try:
             ctx = getattr(orch, '_context', None) or {}
+            session = ctx.get("_session")
             snap: dict[str, Any] = {
-                "project_name": getattr(orch, '_project_name', '') or (
-                    ctx.get('data_path', '').split('/')[-2]
-                    if ctx.get('data_path') else ''
-                ),
+                "project_name": getattr(orch, '_project_name', '') or "",
                 "query": ctx.get('query', ''),
                 "data_path": ctx.get('data_path', ''),
-                "phase": "running",
-                "gate_open": True,
+                "field_review": _build_field_review(ctx),
+                "pending_ask_user": ctx.get("_pending_ask_user"),
+                "report_url": ctx.get("_report_html_path"),
+                "messages": list(session.messages) if session else [],
             }
-
-            # 暂停状态
-            ask = ctx.get("_pending_ask_user")
-            if ask:
-                snap["pending_ask_user"] = ask
-
-            # report_url
-            if ctx.get("_report_html_path"):
-                snap["report_url"] = ctx["_report_html_path"]
-
-            # field_review: 从 column_semantics 重建核对表（仅活跃 session 时）
-            cs = ctx.get("column_semantics", [])
-            session = ctx.get("_session")
-            if cs and ctx.get("n_rows") and session and len(session.messages) > 0:
-                rows = []
-                for s in cs:
-                    if isinstance(s, dict) and "column_name" in s:
-                        rows.append({
-                            "field_name": s.get("column_name", ""),
-                            "chinese_name": s.get("display_name", s.get("chinese_name", "—")),
-                            "meaning": s.get("description", ""),
-                            "suggested_role": s.get("suggested_role", "—"),
-                            "used_in_analysis": s.get("used_in_analysis"),
-                            "evidence": s.get("evidence", ""),
-                        })
-                if rows:
-                    snap["field_review"] = {
-                        "n_rows": ctx["n_rows"],
-                        "n_cols": ctx.get("n_cols", len(rows)),
-                        "rows": rows,
-                    }
-
-            # 对话历史（全部 user+assistant 消息）
-            session = ctx.get("_session")
-            if session:
-                msgs = []
-                for m in session.messages:
-                    role = m.get("role", "")
-                    if role in ("user", "assistant"):
-                        msgs.append({
-                            "role": role,
-                            "content": m.get("content", "")[:5000],
-                            "timestamp": m.get("timestamp", ""),
-                        })
-                snap["messages"] = msgs
-
             return snap
         except Exception:
             return None

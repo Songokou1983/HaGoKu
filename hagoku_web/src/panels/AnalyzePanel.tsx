@@ -117,7 +117,9 @@ export default function AnalyzePanel() {
       .then(snap => {
         if (snap?.messages?.length) {
           const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
-          const ms: ConvoMessage[] = snap.messages.map((m: any) => ({
+          const ms: ConvoMessage[] = snap.messages
+            .filter((m: any) => m.role !== "tool")
+            .map((m: any) => ({
             id: uid(), role: roleMap[m.role] || "system",
             text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
           }));

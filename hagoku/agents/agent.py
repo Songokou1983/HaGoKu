@@ -457,6 +457,9 @@ class DataAnalystAgent:
                 client, self.llm_config.model, messages,
                 temperature=0.3, max_tokens=SCOUT_INFER_MAX_TOKENS, tools=tools,
             ):
+                # 用户点了停止 → 提前结束流式
+                if getattr(self, 'orchestrator', None) is not None and self.orchestrator.is_respond_cancelled():
+                    break
                 if chunk["type"] == "delta":
                     full_text, delta, safe_emitted = stream_safe_append(
                         full_text, chunk["content"], safe_emitted,
@@ -562,6 +565,8 @@ class DataAnalystAgent:
         MAX_TOOL_ROUNDS = 99
         for _round in range(MAX_TOOL_ROUNDS):
             if not tc_list:
+                if session and txt:
+                    session.add("assistant", txt)
                 break
 
             # 调度工具，收集所有结果

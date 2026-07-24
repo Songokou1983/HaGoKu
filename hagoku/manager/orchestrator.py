@@ -113,6 +113,8 @@ class Orchestrator(
             save_path = getattr(session, '_save_path', None)
             if not save_path:
                 return None
+            # 先同步 session.json，确保对话历史在 orch_state 之前落盘
+            session.save(save_path)
             run_dir = Path(save_path).parent
             run_id = run_dir.name
             run_dir.mkdir(parents=True, exist_ok=True)

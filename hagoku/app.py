@@ -91,9 +91,10 @@ class HaGoKuApp:
         """切换到目标项目，返回状态快照。失败返回 None。"""
         from hagoku.manager.orchestrator import Orchestrator
 
-        # 保存当前项目
+        # 保存当前项目 + 取消飞行中的 respond
         if self._active_orch is not None:
             try:
+                self._active_orch.request_cancel_respond()
                 self._active_orch.save_state()
             except Exception:
                 logger.warning("save_state 失败（切换项目时）", exc_info=True)
@@ -165,7 +166,11 @@ class HaGoKuApp:
         try:
             ctx = getattr(orch, '_context', None) or {}
             session = ctx.get("_session")
-            raw_msgs = list(session.messages) if session else []
+            if session:
+                with session._lock:
+                    raw_msgs = list(session.messages)
+            else:
+                raw_msgs = []
 
             # 将 tool 消息转换为 toolExchange 卡片，前端直接用
             rendered: list[dict[str, Any]] = []

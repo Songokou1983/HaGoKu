@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json as _json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ class Session:
     analysis_goal: str
     messages: list[dict[str, Any]] = field(default_factory=list)
     _save_path: str | None = field(default=None, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     # ── 消息操作 ──
 
@@ -41,8 +43,9 @@ class Session:
         if content:
             msg["content"] = content
         msg.update(extra)
-        self.messages.append(msg)
-        self._maybe_save()
+        with self._lock:
+            self.messages.append(msg)
+            self._maybe_save()
 
     def add_workflow_card(self, card_type: str, data: dict[str, Any]) -> None:
         """追加一条 workflow 卡片消息（field_review / cleaning_review / ask_user）。
@@ -51,8 +54,9 @@ class Session:
         """
         msg: dict[str, Any] = {"role": "workflow", "type": card_type, "timestamp": ""}
         msg.update(data)
-        self.messages.append(msg)
-        self._maybe_save()
+        with self._lock:
+            self.messages.append(msg)
+            self._maybe_save()
 
     def add_tool_call(
         self,
@@ -61,17 +65,18 @@ class Session:
         tool_results: list[dict[str, Any]],
     ) -> None:
         """追加一轮 tool exchange：assistant(tool_calls) + tool results。"""
-        assist: dict[str, Any] = {"role": "assistant", "tool_calls": tool_calls}
-        if assistant_text:
-            assist["content"] = assistant_text
-        self.messages.append(assist)
-        for tr in tool_results:
-            self.messages.append({
-                "role": "tool",
-                "content": tr.get("content", ""),
-                "tool_call_id": tr.get("tool_call_id", ""),
-            })
-        self._maybe_save()
+        with self._lock:
+            assist: dict[str, Any] = {"role": "assistant", "tool_calls": tool_calls}
+            if assistant_text:
+                assist["content"] = assistant_text
+            self.messages.append(assist)
+            for tr in tool_results:
+                self.messages.append({
+                    "role": "tool",
+                    "content": tr.get("content", ""),
+                    "tool_call_id": tr.get("tool_call_id", ""),
+                })
+            self._maybe_save()
 
     # ── LLM 调用 ──
 
@@ -83,9 +88,12 @@ class Session:
         """构建发给 LLM 的完整 messages。折叠连续重复的 tool 结果。"""
         from hagoku.channel import build_messages
 
+        with self._lock:
+            msgs_snapshot = list(self.messages)
+
         # 折叠连续重复的 tool 消息 + 过滤 workflow 卡片（LLM 不需要 UI 元素）
         collapsed: list[dict[str, Any]] = []
-        for m in self.messages:
+        for m in msgs_snapshot:
             if m.get("role") == "workflow":
                 continue
             if m.get("role") == "tool" and collapsed:

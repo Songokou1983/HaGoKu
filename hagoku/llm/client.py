@@ -255,7 +255,18 @@ def stream_chat_completion(
             stream=True,
         )
     except Exception as e:
-        raise RuntimeError(f"LLM 流式请求失败：{e}") from e
+        # 网络瞬时错误重试一次
+        import time as _time
+        _time.sleep(1)
+        try:
+            stream = client.chat.completions.create(
+                model=model, messages=messages,
+                temperature=temperature, max_tokens=max_tokens,
+                tools=tools, tool_choice="auto" if tools else None,
+                stream=True,
+            )
+        except Exception:
+            raise RuntimeError(f"LLM 流式请求失败（重试后）：{e}") from e
 
     tool_call_buffers: dict[int, dict[str, Any]] = {}
 

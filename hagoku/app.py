@@ -45,7 +45,11 @@ class HaGoKuApp:
     def create_project(self, name: str) -> bool:
         """创建新项目。"""
         try:
+            from hagoku.manager.orchestrator import Orchestrator
             self._repo.create(name)
+            self._active_project = name
+            self._active_orch = Orchestrator(self.config)
+            self._active_orch._project_name = name
             return True
         except Exception:
             logger.warning("create_project 失败: %s", name, exc_info=True)

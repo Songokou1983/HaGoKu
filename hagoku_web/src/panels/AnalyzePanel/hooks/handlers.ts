@@ -49,6 +49,12 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   if (Array.isArray(snap.messages) && snap.messages.length > 0) {
+    // 预解析 review 数据
+    const fieldReview = snap.field_review && !deps.activeFieldReviewId && snap.project_name === deps.currentProject
+      ? parseFieldReview(snap.field_review) : null;
+    const cleaningReview = snap.cleaning_review && !deps.activeCleaningReviewId && snap.project_name === deps.currentProject
+      ? parseCleaningReview(snap.cleaning_review) : null;
+
     setMessages((prev) => {
       const snapMsgs: ConvoMessage[] = snap.messages.map((m: any) => {
         const roleMap: Record<string, ConvoMessage["role"]> = {
@@ -61,8 +67,26 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
           timestamp: m.timestamp || new Date().toISOString(),
         };
       });
-      // 后端 session 是唯一真相源，全量覆盖文本消息
-      // workflow 卡片由 snapshot 的 field_review 字段单独恢复，此处不保留旧卡
+      // 原子追加 workflow 卡片，不分离
+      if (fieldReview) {
+        const wfId = uid();
+        setActiveFieldReviewId(wfId);
+        setActiveFieldReviewRevision(0);
+        setFieldReviewScrollNonce((n: number) => n + 1);
+        snapMsgs.push({ id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview } as ConvoMessage);
+        setWaitingAgent("scout"); setGateOpen(true);
+      }
+      if (cleaningReview) {
+        const cid = uid();
+        setActiveCleaningReviewId(cid);
+        setActiveCleaningReviewRevision(0);
+        snapMsgs.push({ id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview } as ConvoMessage);
+        setWaitingAgent("cleaner"); setGateOpen(true);
+      }
+      if (snap.analyst_message) {
+        snapMsgs.push({ id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() } as ConvoMessage);
+        setWaitingAgent("analyst"); setGateOpen(true);
+      }
       eventLog("snapshot", `restore msgs=${snapMsgs.length}`);
       setPhase("running");
       return snapMsgs;
@@ -71,32 +95,6 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setPhase("setup");
   }
   if (snap.gate_open) setGateOpen(true);
-  // 断连恢复：只在当前没有且同项目时才从 snapshot 恢复，避免旧数据污染新分析
-  if (snap.field_review && !deps.activeFieldReviewId && snap.project_name === deps.currentProject) {
-    const fr = parseFieldReview(snap.field_review);
-    if (fr) {
-      const wfId = uid();
-      setActiveFieldReviewId(wfId);
-      setMessages((prev) => [...prev, { id: wfId, role: "workflow", text: "", timestamp: new Date().toISOString(), fieldReview: fr }]);
-      setActiveFieldReviewRevision(0);
-      setFieldReviewScrollNonce((n: number) => n + 1);
-    }
-    setWaitingAgent("scout"); setGateOpen(true);
-  }
-  if (snap.cleaning_review && !deps.activeCleaningReviewId && snap.project_name === deps.currentProject) {
-    const cr = parseCleaningReview(snap.cleaning_review);
-    if (cr) {
-      const cid = uid();
-      setActiveCleaningReviewId(cid);
-      setMessages((prev) => [...prev, { id: cid, role: "workflow", text: "", timestamp: new Date().toISOString(), cleaningReview: cr }]);
-      setActiveCleaningReviewRevision(0);
-    }
-    setWaitingAgent("cleaner"); setGateOpen(true);
-  }
-  if (snap.analyst_message) {
-    setMessages((prev) => [...prev, { id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() }]);
-    setWaitingAgent("analyst"); setGateOpen(true);
-  }
   // askUser 由 live user_input_requested 事件添加，snapshot 不重复
   const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
   const doneIdx = agentOrder.indexOf(snap.stage);

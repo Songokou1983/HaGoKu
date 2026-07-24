@@ -81,6 +81,7 @@ def test_snapshot_field_review_from_column_semantics():
              "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
         ],
         "_session": session,
+        "_pending_ask_user": {"question": "确认？", "expected_format": "yes_no"},
     }
     
     _save_review_cards(ctx)

@@ -8,13 +8,28 @@ from ...observability.events import EventType
 
 
 def _save_review_cards(context: dict) -> None:
-    """将 context 中的 review 数据写入 Session（单一真相源——一条通道）。"""
+    """将 context 中的 review 数据写入 Session——仅当 LLM 正在等待用户确认时。"""
+    ask = context.get("_pending_ask_user")
+    if not ask:
+        return
     session = context.get("_session")
     if not session:
         return
-    # field_review: 从 column_semantics 构建
+
+    # ask_user 卡片（每次 ask 都写，因为是新的暂停点）
+    session.add_workflow_card("ask_user", {
+        "question": ask.get("question", ""),
+        "expected_format": ask.get("expected_format", ""),
+        "options": ask.get("options", []),
+    })
+
+    # field_review: 从 column_semantics 构建（幂等：已存在则跳过）
     cs = context.get("column_semantics", [])
     if cs and context.get("n_rows"):
+        # 检查最后一条 workflow 是否已是 field_review
+        last = session.messages[-1] if session.messages else None
+        if last and last.get("role") == "workflow" and last.get("type") == "field_review":
+            return
         rows = []
         for s in cs:
             if isinstance(s, dict) and "column_name" in s:
@@ -30,14 +45,6 @@ def _save_review_cards(context: dict) -> None:
             session.add_workflow_card("field_review", {
                 "field_review": {"n_rows": context["n_rows"], "n_cols": context.get("n_cols", len(rows)), "rows": rows},
             })
-    # ask_user
-    ask = context.get("_pending_ask_user")
-    if ask:
-        session.add_workflow_card("ask_user", {
-            "question": ask.get("question", ""),
-            "expected_format": ask.get("expected_format", ""),
-            "options": ask.get("options", []),
-        })
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:

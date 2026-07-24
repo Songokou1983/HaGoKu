@@ -564,14 +564,7 @@ class DataAnalystAgent:
             if not tc_list:
                 break
 
-            # 先存 assistant(txt + tool_calls)，再调度工具
-            oai_calls = [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in tc_list
-            ]
-            session.add_tool_call(txt, oai_calls, [])
-
+            # 调度工具，收集所有结果
             tool_records = []
             for tc in tc_list:
                 fn = tc.function
@@ -613,10 +606,18 @@ class DataAnalystAgent:
                         name=fn.name, arguments=fn.arguments,
                         result="", error=str(exc),
                     ))
-            # 工具结果逐一存入 session
+            # 原子写入：assistant(txt+tool_calls) + 全部 tool 结果
             if tool_records:
-                for tr in tool_records:
-                    session.add("tool", tr.error or tr.result, tool_call_id=tr.tool_call_id)
+                oai_calls = [
+                    {"id": tc.tool_call_id, "type": "function",
+                     "function": {"name": tc.name, "arguments": tc.arguments}}
+                    for tc in tool_records
+                ]
+                results = [
+                    {"content": tc.error or tc.result, "tool_call_id": tc.tool_call_id}
+                    for tc in tool_records
+                ]
+                session.add_tool_call(txt, oai_calls, results)
 
                 # ── 工具执行进度：每轮 emit TOOL_EXCHANGE，前端渲染为内联工具卡片 ──
                 self._emit(EventType.TOOL_EXCHANGE, {

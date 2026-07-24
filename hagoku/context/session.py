@@ -73,12 +73,14 @@ class Session:
         """构建发给 LLM 的完整 messages。折叠连续重复的 tool 结果。"""
         from hagoku.channel import build_messages
 
-        # 折叠连续相同内容的 tool 消息，避免上下文膨胀
+        # 折叠连续重复的 tool 消息（同 tool_call_id + 同内容才是真重复）
         collapsed: list[dict[str, Any]] = []
         for m in self.messages:
             if m.get("role") == "tool" and collapsed:
                 prev = collapsed[-1]
-                if prev.get("role") == "tool" and prev.get("content") == m.get("content"):
+                if (prev.get("role") == "tool"
+                        and prev.get("content") == m.get("content")
+                        and prev.get("tool_call_id") == m.get("tool_call_id")):
                     continue
             collapsed.append(m)
 

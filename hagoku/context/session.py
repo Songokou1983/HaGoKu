@@ -70,13 +70,22 @@ class Session:
         system_extra: str = "",
         user_input: str = "",
     ) -> list[dict[str, Any]]:
-        """构建发给 LLM 的完整 messages。"""
+        """构建发给 LLM 的完整 messages。折叠连续重复的 tool 结果。"""
         from hagoku.channel import build_messages
+
+        # 折叠连续相同内容的 tool 消息，避免上下文膨胀
+        collapsed: list[dict[str, Any]] = []
+        for m in self.messages:
+            if m.get("role") == "tool" and collapsed:
+                prev = collapsed[-1]
+                if prev.get("role") == "tool" and prev.get("content") == m.get("content"):
+                    continue
+            collapsed.append(m)
 
         return build_messages(
             query=self.analysis_goal,
             user_input=user_input,
-            history=list(self.messages),
+            history=collapsed,
             system_extra=system_extra,
         )
 

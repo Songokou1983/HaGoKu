@@ -71,8 +71,8 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setPhase("setup");
   }
   if (snap.gate_open) setGateOpen(true);
-  // 断连恢复：只在当前没有时才从 snapshot 恢复，避免重复
-  if (snap.field_review && !deps.activeFieldReviewId) {
+  // 断连恢复：只在当前没有且同项目时才从 snapshot 恢复，避免旧数据污染新分析
+  if (snap.field_review && !deps.activeFieldReviewId && snap.project_name === deps.currentProject) {
     const fr = parseFieldReview(snap.field_review);
     if (fr) {
       const wfId = uid();
@@ -83,7 +83,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     }
     setWaitingAgent("scout"); setGateOpen(true);
   }
-  if (snap.cleaning_review && !deps.activeCleaningReviewId) {
+  if (snap.cleaning_review && !deps.activeCleaningReviewId && snap.project_name === deps.currentProject) {
     const cr = parseCleaningReview(snap.cleaning_review);
     if (cr) {
       const cid = uid();

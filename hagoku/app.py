@@ -226,43 +226,39 @@ class HaGoKuApp:
     # ── 会话恢复 ───────────────────────────────────────────────
 
     def try_restore_session(self) -> bool:
-        """从磁盘恢复最近未完成的 session。返回 True 表示已恢复。"""
+        """从磁盘恢复当前项目的未完成 session。返回 True 表示已恢复。"""
         import os
         if os.environ.get("HAGOKU_SKIP_AUTO_RESTORE", "0") != "0":
+            return False
+
+        # 只恢复活跃项目，不跨项目扫描
+        if not self._active_project:
             return False
 
         try:
             from hagoku.manager.orchestrator import Orchestrator
 
-            projects_dir = Path(self.config.output.project_dir)
-            if not projects_dir.exists():
+            proj_dir = Path(self.config.output.project_dir) / self._active_project
+            runs_dir = proj_dir / "runs"
+            if not runs_dir.exists():
                 return False
 
-            # 收集所有候选 run 目录
-            candidates: list[tuple[float, str, str]] = []  # (mtime, run_dir, proj_name)
-            for proj_dir in projects_dir.iterdir():
-                if not proj_dir.is_dir():
+            # 找最新 run
+            candidates: list[tuple[float, str]] = []  # (mtime, run_dir_path)
+            for run_dir in runs_dir.iterdir():
+                state_file = run_dir / "orch_state.json"
+                if not state_file.exists():
                     continue
-                runs_dir = proj_dir / "runs"
-                if not runs_dir.exists():
-                    continue
-                for run_dir in sorted(runs_dir.iterdir(), reverse=True):
-                    state_file = run_dir / "orch_state.json"
-                    if not state_file.exists():
-                        continue
-                    candidates.append((
-                        run_dir.stat().st_mtime, str(run_dir), proj_dir.name,
-                    ))
+                candidates.append((run_dir.stat().st_mtime, str(run_dir)))
 
             if not candidates:
                 return False
 
             candidates.sort(reverse=True)
-            for _, run_dir_path, proj_name in candidates:
+            for _, run_dir_path in candidates:
                 orch = Orchestrator.restore_session(self.config, run_dir_path)
                 if orch is not None:
                     self._active_orch = orch
-                    self._active_project = proj_name
                     return True
 
             return False

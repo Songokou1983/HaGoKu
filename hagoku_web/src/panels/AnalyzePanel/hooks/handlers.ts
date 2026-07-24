@@ -119,11 +119,11 @@ export function handleAck(deps: WsEventDeps, msg: any): boolean {
 // ── error ─────────────────────────────────────────────────────
 
 export function handleError(deps: WsEventDeps, msg: any): boolean {
-  const { _setMessages as setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
+  const { _setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
   if (msg.type !== "error") return false;
   const detail = typeof msg.message === "string" ? msg.message.trim() : "";
   const iso = new Date().toISOString();
-  setMessages((prev) => [
+  _setMessages((prev) => [
     ...prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
     { id: uid(), role: "system", text: detail || "服务器返回错误", timestamp: iso },
   ]);

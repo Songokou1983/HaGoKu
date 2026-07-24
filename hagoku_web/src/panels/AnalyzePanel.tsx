@@ -52,13 +52,13 @@ export default function AnalyzePanel() {
   const [presetName, setPresetName] = useState("");
 
   // ── 项目切换：监听 snapshot 恢复状态 ──
-  // ── 项目切换：拉取快照同步会话 ──
+  // ── 挂载时拉快照 ──
   useEffect(() => {
     if (!currentProject) return;
     fetch(`/api/projects/${currentProject}/switch`, { method: "POST" })
       .then(r => r.json())
       .then(snap => {
-        if (snap?.messages) {
+        if (snap?.messages?.length) {
           const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", tool: "system" };
           const ms: ConvoMessage[] = snap.messages.map((m: any) => ({
             id: uid(), role: roleMap[m.role] || "system",
@@ -69,7 +69,7 @@ export default function AnalyzePanel() {
         if (snap?.data_path) setCurrentDataPath(snap.data_path);
       })
       .catch(() => {});
-  }, [currentProject]);
+  }, [currentProject, syncFromSnapshot]);
 
   // File upload hook
   const [dataPath, _setDataPath] = useState(currentDataPath);

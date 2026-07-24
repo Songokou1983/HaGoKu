@@ -97,12 +97,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setMessages((prev) => [...prev, { id: uid(), role: "agent", text: snap.analyst_message, timestamp: new Date().toISOString() }]);
     setWaitingAgent("analyst"); setGateOpen(true);
   }
-  if (snap.pending_ask_user) {
-    const ask = snap.pending_ask_user;
-    if (ask.question && ask.expected_format) {
-      setMessages((prev) => [...prev, { id: uid(), role: "workflow", text: "", timestamp: new Date().toISOString(), askUser: { question: ask.question, expected_format: ask.expected_format, options: ask.options } }]);
-    }
-  }
+  // askUser 由 live user_input_requested 事件添加，snapshot 不重复
   const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
   const doneIdx = agentOrder.indexOf(snap.stage);
   const states: Record<string, string> = {};
@@ -283,14 +278,10 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const isPureAsk = !!askQuestion && !!askFmt && !fr && !cr && !ar && !dataObj.field_review && !dataObj.cleaning_review && !dataObj.analyst_review;
 
     if (isPureAsk) {
-      deps.setMessages((prev) => {
-        // 避免与 snapshot restore 的 askUser 重复
-        if (prev.some((m) => m.askUser?.question === askQuestion)) return prev;
-        return [...prev, {
-          id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
-          askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
-        }];
-      });
+      deps.setMessages((prev) => [...prev, {
+        id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
+        askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
+      }]);
     }
 
     if (fr) {

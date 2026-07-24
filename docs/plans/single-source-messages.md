@@ -420,33 +420,160 @@ Session（唯一真相源）
 
 ---
 
-## 九、2026-07-24 首次实现教训
+## 九、2026-07-24 通道重构全记录
 
-### 问题：关闭重开后前端恢复的不是关闭前看到的内容
+### 9.1 问题全景
 
-**根因**：`7aa88ba` 重构 `app.py:build_snapshot()` 为后端预渲染格式（tool 消息 → toolExchange 卡片），但 **`ws_handler.py:_build_state_snapshot()` 没有被同步更新**。两套 snapshot 格式同时存在，同一份 session.json 数据经过两条不同的流水线，产出两份不同的前端视图。
+当天从"inputSnapshot 重构"开始，逐步发现了五个层次的问题。前三个是补丁思维造成的直接 bug，后两个是架构层面的通道分裂。
 
-**核心教训**：snapshot 的重建逻辑必须是**唯一的**。只要存在两个 snapshot 构建路径，它们就会在某个时刻分歧。
+---
 
-### 问题：输入框被顶到屏幕顶部
+### 9.2 发现一：useEffect 死循环
 
-**根因**：`4d32207` 尝试用 `min-h-0` 修复 flex-1 不生效，但 `min-h-0` 在消息为空时让 ConvoFeed 塌缩为 0 高度。
+**现象**：`syncFromSnapshot` 无限调用，`[snapshot] sync msgs=42` 每秒刷屏多次。
 
-**修复**：`min-h-0` → `min-h-[120px]`，确保 ConvoFeed 即使无消息也有保底高度。真正的根因是消息为空——这通常由 snapshot 格式不一致导致。
+**根因**：`AnalyzePanel.tsx:144` useEffect 依赖数组写了 `[currentProject, syncFromSnapshot]`。`syncFromSnapshot` 每次渲染都是新引用 → 触发 effect → fetch snapshot → setMessages → 重新渲染 → 新引用 → 死循环。
 
-### 问题：roleMap 缺少 "agent" → 工具卡片被标为 system
+**修复**：删掉 `syncFromSnapshot` 依赖，改为 `[currentProject]`。snapshot 只在项目切换时拉取。
 
-**根因**：`7aa88ba` 的后端渲染中，toolExchange 卡片使用 `role: "agent"`，但前端 `roleMap` 只有 `user/assistant/tool` 三个映射。
+**教训**：useEffect 依赖数组里不能放内联函数。要么用 useCallback 稳定引用，要么不依赖它。
 
-**修复**：`roleMap` 增加 `agent: "agent"` 映射。
+---
 
-### 修复清单（2026-07-24）
+### 9.3 发现二：a44d494——工具调用后 LLM 返回空
 
-| 修复 | 位置 | 说明 |
-|------|------|------|
-| 删除 `_build_state_snapshot` | `ws_handler.py` | 重复代码，统一走 `app.build_snapshot()` |
-| 删除语义默认值 `"—"` | `app.py:_build_field_review` | 铁律 1：LLM 没给的值代码不准填 |
-| ConvoFeed `min-h-0` → `min-h-[120px]` | `ConvoFeed.tsx` | 防止空消息时塌缩 |
-| `roleMap` 加 `agent: "agent"` | `AnalyzePanel.tsx` | 工具卡片 role 正确 |
-| 删除僵尸测试 | `test_doctrine_fix_f038.py` | 引用了不存在的 `hagoku.tools.business` |
-| `_build_field_review` 加 session 检查 | `app.py` | 清历史后不残留旧 field_review |
+**现象**：LLM 调完工具后不输出结果，系统直接发 `USER_INPUT_REQUESTED` 等用户输入。
+
+**根因链**：
+
+```
+a44d494 (防重复补丁)
+  → _call_llm_step: if session and txt and NOT final_tool_calls_raw
+  → LLM 返回 text+tool_calls 时，text 不存盘
+  → 等 add_tool_call 补存 → 时机在工具调度之后
+  → 如果工具调度出问题，text 永远丢失
+
+6e3bded (事件瘦身)
+  → _handle_reply: pop _pending_ask_user 后立刻存回
+  → 信号永不消失 → run_step 每轮直接 break
+  → 工具调度后 LLM 根本不会被调
+```
+
+**两重 bug 叠加**：
+1. `_pending_ask_user` 永不消失 → 工具循环直接 break（`6e3bded` 引入）
+2. text 存盘时机太晚 → 即使循环跑了，LLM 也可能看不到自己的输出（`a44d494` 引入）
+
+**修复**：
+- `_pending_ask_user`：pop 后不再存回；用户回复时主动清一次残留
+- `_call_llm_step`：纯函数化，不写 session；session 写入全集中在 `run_step`
+- `run_step`：先存 assistant(txt+tool_calls) → 再调度工具 → 再存 tool 结果
+
+**教训**：补丁互相踩踏。两个独立的"优化"（防重复 + 事件瘦身）各自引入 bug，组合起来直接把工具循环废了。
+
+---
+
+### 9.4 发现三：清除历史不生效
+
+**现象**：点击"清除历史"前端清空了，但重启后数据全部恢复。
+
+**根因链**：
+
+```
+1. clear-history API 参数 request 缺类型注解 → FastAPI 当成 query param → 422 错误
+2. 前端 .catch(() => {}) 静默吞错误 → 用户看不到报错
+3. ClearHistoryButton 先调 onClear() → cancel_analysis → save_state() 写 runs/
+   再调 fetch(clear-history) → rm -rf runs/
+   → save_state 比 rm 慢时，runs/ 被重建
+```
+
+**修复**：
+- API: `request` → `request: Request`
+- 前端: 先 fetch API → 再 onClear（`.then/.catch` 都调）
+- 后端: `orch._session = None` + `orch._df_raw/df_clean = None` + `project.json` 重置 current_run_id
+
+**教训**：竞态条件 + 静默吞错 = 用户看到的和实际发生的完全不同。
+
+---
+
+### 9.5 发现四：输入框位置靠内容撑
+
+**现象**：`4d32207` 加 `min-h-0` 想让 flex-1 生效，反而让空 ConvoFeed 塌缩为 0，输入框跑到顶部。
+
+**根本问题**：布局设计从第一天就错了。输入框用 `flex-1` 靠内容撑位置，而不是用绝对定位/Grid 保证位置。
+
+**修复**：输入框改为 `absolute bottom-0`，对话区 `absolute inset-0 overflow-y-auto pb-[100px]`。位置由布局保证，与内容无关。
+
+**教训**：其他 IDE（VS Code、ChatGPT）的输入框都是绝对定位。flex 布局中 `flex-1` 的语义是"分配剩余空间"不是"占满剩余空间"——内容为空就给 0。
+
+---
+
+### 9.6 发现五：review 卡片双通道——本次重构的核心问题
+
+**现象**：
+- 重启后 field_review 表格挂在消息列表最底部（位置错）
+- 重复重启会重复追加（累积）
+- live 分析中 review 卡片从未显示（`6e3bded` 清空事件数据后两端都断了）
+
+**根因**：review 卡片（field_review / cleaning_review / ask_user）和对话消息走**两条独立通道**：
+
+```
+通道 A：Session.messages → snapshot.messages → syncFromSnapshot → 对话消息
+通道 B：context.column_semantics → snapshot.field_review → addWorkflowCard → 卡片
+```
+
+两条通道的数据各自序列化、各自恢复，前端各自处理。位置永远对不齐。
+
+**架构修复**：合并为一条通道——Session.messages。
+
+```
+Session.messages（唯一真相源）
+  ├── user / assistant / tool 消息    ← LLM 需要的
+  ├── workflow 消息（field_review 等）  ← 前端 UI 需要的
+  │
+  ├── to_llm_messages()  → 过滤 workflow → 给 LLM
+  └── build_snapshot()   → 全量透传 → 给前端 syncFromSnapshot
+```
+
+**具体改动**：
+1. `Session.add_workflow_card()` — workflow 消息存入 messages
+2. `to_llm_messages()` — 过滤 role="workflow"
+3. `build_snapshot()` — workflow 消息渲染为前端格式，含在 messages 中
+4. `reply_handlers._save_review_cards()` — 暂停时从 context 构建并写入 Session
+5. 前端删除独立的 `addWorkflowCard` 调用，`syncFromSnapshot` 自然恢复
+6. 删除 `app._build_field_review`（逻辑移到 `_save_review_cards`）
+
+**效果**：
+- 重启后：snapshot.messages 含 workflow 卡片 → syncFromSnapshot → 自然在正确位置
+- live：LLM 暂停 → `_save_review_cards` 写入 Session → `build_snapshot` 透传
+- `addWorkflowCard` 去重逻辑不再需要（来源唯一）
+
+**教训**：只要存在两条通道，它们就会在某个时刻分歧。补丁（去重、位置修复、条件互斥）永远补不完。合并通道是唯一的根治方案。
+
+---
+
+### 9.7 补丁链全景
+
+| 补丁 | 试图解决的问题 | 引入的新问题 |
+|------|--------------|------------|
+| `a44d494` 加 `not final_tool_calls_raw` | 防重复 assistant 消息 | text 存盘时机太晚 |
+| `6e3bded` 事件不带数据 | 统一数据源 | `_pending_ask_user` 永不消失 |
+| `fab9c7c` 删 snapshot review 卡片 | 重复追加 | live 卡片也断了 |
+| `4d32207` 加 `min-h-0` | flex-1 不生效 | 空内容塌缩 |
+
+四条补丁链最终都指向同一个根因：**数据有多个源头，各自独立处理。** 补丁在源头上互相踩踏。
+
+### 9.8 最终架构
+
+```
+Session.messages  ← 唯一真相源
+    │
+    ├── add()              user / assistant / tool
+    ├── add_tool_call()    assistant(txt+tool_calls) + tool results
+    ├── add_workflow_card() field_review / ask_user / cleaning_review
+    │
+    ├── to_llm_messages()  → 过滤 workflow → 给 LLM
+    └── build_snapshot()   → 全量渲染 → 给前端
+
+run_step: 唯一 session 写入编排者
+    _call_llm_step → 纯函数（不写 session）
+    session 写入顺序: add_tool_call(txt,calls,[]) → dispatch → add("tool",result)

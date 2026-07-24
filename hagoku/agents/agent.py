@@ -576,6 +576,11 @@ class DataAnalystAgent:
                 try:
                     args = _json.loads(fn.arguments) if fn.arguments else {}
                 except (_json.JSONDecodeError, TypeError):
+                    tool_records.append(ToolCallRecord(
+                        tool_call_id=getattr(tc, "id", "") or "",
+                        name=fn.name, arguments=fn.arguments,
+                        result="", error=f"参数解析失败：{str(fn.arguments)[:200]}",
+                    ))
                     continue
                 if fn.name == "submit_findings":
                     findings = _agt.dispatch(fn.name, args, context, df)

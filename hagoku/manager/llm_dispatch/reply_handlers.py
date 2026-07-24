@@ -14,24 +14,20 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     if not user_input or not user_input.strip():
         ask = context.pop("_pending_ask_user", None)
         if ask:
-            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
-        else:
-            self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
+            context["_pending_ask_user"] = ask
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
 
-    # ── 调 LLM ──
     df = self._df_clean if self._df_clean is not None else self._df_raw
     result = self._agent.run_step(context, df, user_input)
-    self._log_channel("analyst", "run_step_done", text=result.get("text", ""))
 
-    # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
+        context["_pending_ask_user"] = ask
+        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
 
-    # ── 留在当前 ──
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", {"message": ""})
+    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
     return {"status": "scout_review", "message": result.get("text", "")}
 
 

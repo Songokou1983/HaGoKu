@@ -283,10 +283,14 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const isPureAsk = !!askQuestion && !!askFmt && !fr && !cr && !ar && !dataObj.field_review && !dataObj.cleaning_review && !dataObj.analyst_review;
 
     if (isPureAsk) {
-      deps.setMessages((prev) => [...prev, {
-        id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
-        askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
-      }]);
+      deps.setMessages((prev) => {
+        // 避免与 snapshot restore 的 askUser 重复
+        if (prev.some((m) => m.askUser?.question === askQuestion)) return prev;
+        return [...prev, {
+          id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
+          askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
+        }];
+      });
     }
 
     if (fr) {

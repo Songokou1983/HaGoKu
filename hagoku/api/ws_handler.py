@@ -464,6 +464,12 @@ async def ws_handler(ws: WebSocket) -> None:
                 else:
                     try:
                         orch.request_cancel()
+                        # 清除分析上下文，避免旧数据污染新分析
+                        ctx = getattr(orch, '_context', None)
+                        if ctx:
+                            ctx.pop("column_semantics", None)
+                            ctx.pop("_pending_ask_user", None)
+                            ctx.pop("_report_html_path", None)
                         with _analysis_busy_lock:
                             _analysis_in_progress = False
                             _analysis_generation += 1  # 旧任务的 finally 不会再清除标志

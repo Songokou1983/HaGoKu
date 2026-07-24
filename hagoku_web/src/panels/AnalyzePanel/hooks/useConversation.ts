@@ -37,10 +37,6 @@ export function useConversation(_log?: (msg: string) => void) {
   const addSystemMsg = (text: string, timestamp?: string) => {
     const ts = timestamp ?? new Date().toISOString();
     setMessages((prev) => {
-      // 去重：相同文本不重复追加
-      if (prev.length > 0 && prev[prev.length - 1].text === text && prev[prev.length - 1].role === "system") {
-        return prev;
-      }
       const next = [...prev, { id: uid(), role: "system", text, timestamp: ts }];
       persist(next);
       return next;
@@ -72,17 +68,11 @@ export function useConversation(_log?: (msg: string) => void) {
     const id = card.id ?? uid();
     const ts = card.timestamp ?? new Date().toISOString();
     setMessages((prev) => {
-      // 去重：相同类型卡片不重复追加
-      if (card.fieldReview && prev.some((m) => m.fieldReview)) return prev;
-      if (card.cleaningReview && prev.some((m) => m.cleaningReview)) return prev;
-      if (card.analystReview && prev.some((m) => m.analystReview)) return prev;
-      if (card.askUser && prev.some((m) => m.askUser?.question === card.askUser?.question)) return prev;
       const next = [...prev, {
         id, role: "workflow", text: card.text ?? "", timestamp: ts,
         fieldReview: card.fieldReview,
         cleaningReview: card.cleaningReview,
         analystReview: card.analystReview,
-        askUser: card.askUser,
       }];
       persist(next);
       return next;

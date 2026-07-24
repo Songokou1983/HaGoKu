@@ -122,6 +122,16 @@ export default function AnalyzePanel() {
             text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
           }));
           syncFromSnapshot(ms);
+          // 从快照恢复 review 卡片
+          if (snap?.field_review) {
+            addWorkflowCard({ fieldReview: snap.field_review } as any);
+          }
+          if (snap?.cleaning_review) {
+            addWorkflowCard({ cleaningReview: snap.cleaning_review } as any);
+          }
+          if (snap?.pending_ask_user?.question) {
+            addWorkflowCard({ askUser: { question: snap.pending_ask_user.question, expected_format: snap.pending_ask_user.expected_format, options: snap.pending_ask_user.options } } as any);
+          }
           setPhase("running");
         }
         if (snap?.data_path) setCurrentDataPath(snap.data_path);

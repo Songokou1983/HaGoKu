@@ -577,3 +577,130 @@ Session.messages  ← 唯一真相源
 run_step: 唯一 session 写入编排者
     _call_llm_step → 纯函数（不写 session）
     session 写入顺序: add_tool_call(txt,calls,[]) → dispatch → add("tool",result)
+
+---
+
+## 十、通道全量审计与字典（2026-07-24 全面审计）
+
+> 本章是对全部 8 条数据流的完整边界分析，覆盖正常路径、异常点、不完整状态、并发风险。
+> 每条风险都有修复方案、深度评估、测试要求。这是通道的"字典"——遇到任何边界问题时先查本章。
+
+### 10.1 审计范围
+
+| 数据流 | 入口 | 出口 | 涉及文件 |
+|--------|------|------|---------|
+| 1. 分析启动 | `analyze` WS 命令 | `run_scout_phase` 完成 | ws_handler, orchestrator, agent |
+| 2. 用户回复 | `respond` WS 命令 | `run_step` → 前端 ack | ws_handler, reply_handlers, agent |
+| 3. 消息落盘 | `save_msg` WS 命令 | session.json | ws_handler, session |
+| 4. 分析取消 | `cancel_analysis` WS 命令 | context 清除 | ws_handler, orchestrator |
+| 5. 回复取消 | `cancel_respond` WS 命令 | `_respond_cancelled` 标志 | ws_handler, orchestrator |
+| 6. 快照构建 | WS 重连 / switch_project | snapshot dict | app, session |
+| 7. 持久化恢复 | 进程重启 | 状态重建 | session, orchestrator, app |
+| 8. LLM 交互 | `_call_llm_step` | 流/batch 响应 | agent |
+
+### 10.2 全量风险登记（按严重度排序）
+
+#### 🔴 高风险（4 项）
+
+##### R1：LLM 纯文本响应不入 Session
+
+- **现状**：`run_step` 工具循环 `if not tc_list: break` 直接跳出，`txt` 不写入 Session
+- **影响**：重启后 LLM 所有纯文本回复丢失。对话历史在工具调用之间出现空白
+- **触发条件**：LLM 任何一次不调工具的回复
+- **修复**：break 前加 `if session: session.add("assistant", txt)`
+- **位置**：`agent.py:564` 和 `agent.py:568`（第一轮和工具轮后两处）
+- **注意**：`txt` 可能为空字符串（LLM 返回空）。空文本不入 Session（符合 `add()` 语义）
+- **测试**：模拟 LLM 返回纯文本 → 验证 session.messages 最后一条是 assistant
+
+##### R2：`cancel_respond` 在流式输出时无效
+
+- **现状**：`_respond_cancelled` 只在 `run_step` 工具循环检查（`agent.py:642`）。`_call_llm_step` 的流式 for 循环不检查
+- **影响**：LLM 流式输出长文本时点击停止无反应
+- **触发条件**：LLM 正在输出纯文本（无 tool_calls），用户点停止
+- **修复**：`_call_llm_step` 流式循环内检查 `is_respond_cancelled()`，取消时提前结束
+- **位置**：`agent.py:_call_llm_step` 流式 for 循环内
+- **注意**：取消时 `txt` 是已收到的部分文本，`tc_list` 未形成。这是预期行为——用户看到的就是已输出的内容
+- **测试**：模拟长流式输出 + 中途调 `request_cancel_respond()` → 验证循环提前退出 + `tc_list` 为 None
+
+##### R3：`save_msg` 和 `respond` 分离导致用户消息可能丢失
+
+- **现状**：前端先发 `save_msg` 写用户消息到 Session，再发 `respond` 调 LLM。如果 `save_msg` 时 orchestrator 为 None，消息静默丢失
+- **影响**：重启后对话历史缺失用户消息，LLM 上下文不完整
+- **触发条件**：前端 WS 重连期间快速发消息（orch 尚未创建）、或 `save_msg` 本身因任何原因跳过
+- **修复**：`_handle_reply` 兜底写入用户消息。幂等检查：最后一条不是同内容 user 消息才写
+- **位置**：`reply_handlers.py:_handle_reply` 用户回复分支
+- **注意**：`save_msg` 保留不删（兼容性）。幂等检查避免×2 重复
+- **测试**：模拟 `save_msg` 跳过（不调 orch）→ `_handle_reply` 兜底写入 → 验证 session 有且只有一条 user 消息
+
+##### R4：Session 写入无锁
+
+- **现状**：`add()` / `add_tool_call()` / `add_workflow_card()` 被不同线程调用。事件循环线程（`save_msg`）和 executor 线程（`run_step`）并发写 `session.messages`
+- **影响**：并发写可能丢数据。`_maybe_save` 的 `tmp + os.replace` 在多线程下可能覆盖
+- **触发条件**：`save_msg` 和 `respond` 的 executor 恰好同时操作同一个 Session
+- **修复**：Session 加 `threading.Lock()`，所有写方法（含 `_maybe_save`）获取锁，读方法（`to_llm_messages`）拷贝时获取锁
+- **位置**：`session.py:Session` 类
+- **注意**：Python GIL 保证单个 `list.append` 原子性，但不保证多次 append（`add_tool_call` 做 3+N 次 append）的整体原子性。锁是唯一保证
+- **测试**：多线程并发写 session → 验证无数据丢失 + 无损坏
+
+#### 🟡 中风险（4 项）
+
+##### R5：snapshot 构建时读不一致
+
+- **现状**：`build_snapshot()` 遍历 `session.messages` 时，`add_tool_call()` 可能正在追加新元素
+- **影响**：snapshot 可能看到不完整的一轮 tool exchange（如只有 assistant 没有 tool 结果）
+- **触发条件**：WS 重连恰好在一轮 tool exchange 中间
+- **修复**：R4 的锁同时覆盖读。`build_snapshot` 读 session.messages 时获取锁拷贝
+- **位置**：`app.py:build_snapshot`
+- **注意**：在 R4 修复后，`to_llm_messages` 和 `build_snapshot` 都需要读锁
+
+##### R6：`session.json` 与 `orch_state.json` 双文件不同步
+
+- **现状**：`_maybe_save()` 和 `save_state()` 各自独立写文件，时间点不同
+- **影响**：恢复时 session 可能落后于 orch_state（或相反），上下文与对话历史不一致
+- **触发条件**：两次写入之间的进程崩溃
+- **修复**：`save_state()` 开头先调 `session.save(path)` 强制同步。确保 session.json 在 orch_state.json 之前更新
+- **位置**：`orchestrator.py:save_state`
+- **注意**：不能保证原子性（两个文件），但保证恢复时 session 不落后。配合 R4 锁，写入顺序确定
+
+##### R7：项目切换时飞行中的 respond 线程
+
+- **现状**：`switch_project` 设 `_active_orch = None` 后，旧 orch 上的 executor 线程可能仍在运行 `respond`
+- **影响**：旧 `respond` 的 `save_state()` 写旧项目 run_dir。但旧 orch 已不被 app 跟踪，数据写入"孤儿目录"
+- **触发条件**：分析进行中切换项目
+- **修复**：`switch_project` 前调 `old_orch.request_cancel_respond()` 发中断信号
+- **位置**：`app.py:switch_project`
+- **注意**：配合 R2 修复，流式循环会响应取消。不等待——只发信号
+- **测试**：模拟分析进行中切换项目 → 验证旧 orch 的飞行中 respond 在下一个检查点退出
+
+##### R8：LLM 网络异常无重试
+
+- **现状**：`stream_chat_completion` 的 `HTTP 400/5xx` 直接抛 `RuntimeError`，穿透所有调用栈
+- **影响**：瞬时网络波动导致整个分析中断
+- **触发条件**：API 返回 5xx（服务端临时故障）
+- **修复**：5xx 重试 1 次（sleep 1s），400 不重试（消息格式问题，重试无意义）。重试前后各一次 try/except
+- **位置**：`agent.py:_call_llm_step`
+- **注意**：重试发生在 LLM 调用内部，不重复 emit 流式事件（重试是新请求）
+- **测试**：mock API 返回 503 → 验证重试一次 → 第二次仍失败则 raise
+
+### 10.3 没落在修复方案中的已知限制（设计决策）
+
+| 限制 | 原因 | 风险等级 |
+|------|------|---------|
+| 流式输出中途崩溃，部分文本不持久化 | 流式文本在 stream_end 才存盘。在 delta 频次（每 token）存盘开销太大 | 低（前端已收到并显示） |
+| `_pending_ask_user` 不在 Session 中，重启不恢复 | 该信号已改为一次性消费，重启后 LLM 从对话历史自然判断 | 低（session 中有 ask_user tool call） |
+| `build_snapshot` 任意异常返回 None | 快照是诊断辅助，不应阻塞主流程。None → 前端降级为空白，比带错误数据好 | 低 |
+| 并发 respond 的 ack 先于锁 | ack 是为了防止 WS ping/pong 堆积。先 ack 后处理是故意设计 | 低 |
+| 多个 tool call 之间的无原子性 | Python 不支持真正的多操作原子性。通过锁+顺序写入保证足够的安全性 | 低 |
+
+### 10.4 每条修复的验证要求
+
+| 风险 | 验证方式 | 预期结果 |
+|------|---------|---------|
+| R1 | 单元测试：mock LLM 返回纯文本 → 检查 session | `session.messages[-1]` 是 assistant，content 匹配 |
+| R2 | 单元测试：流式循环中调 cancel → 检查提前退出 | `tc_list` 为 None，`txt` 为部分文本 |
+| R3 | 单元测试：无 `save_msg` 直接调 `_handle_reply` → 检查 session | 用户消息在 session 中 |
+| R4 | 并发测试：10 线程同时写 session → 检查完整性 | 无数据丢失，消息计数正确 |
+| R5 | 单元测试：写 session 同时调 `to_llm_messages` → 检查快照 | 快照自洽（assistant.tool_calls 数量 = tool 结果数量） |
+| R6 | 验证 `save_state` 调用时序 | session.json 的 mtime ≤ orch_state.json 的 mtime |
+| R7 | 切换项目时验证 `_respond_cancelled` | 标志已设置为 True |
+| R8 | 单元测试：mock API 503 → 验证重试 | 第一次 503 → sleep → 第二次 503 → raise |

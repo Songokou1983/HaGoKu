@@ -39,7 +39,7 @@ export default function AnalyzePanel() {
   const setCurrentDataPath = useWorkspaceStore((s) => s.setCurrentDataPath);
 
   // Phase state
-  const [phase, setPhase] = useState<any>("running");
+  const [phase, setPhase] = useState<any>("setup");
   const [queryText, setQueryText] = useState("");
 
   // CO-15: Thinking text (external from useWsEventHandler)

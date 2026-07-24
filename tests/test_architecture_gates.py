@@ -204,25 +204,22 @@ def test_to_llm_messages_collapses_duplicate_tools():
     assert len(tool_msgs) == 1, f"期望折叠为 1 条，实际 {len(tool_msgs)} 条"
 
 
-def test_to_llm_messages_keeps_different_tools():
-    """不同内容的 tool 消息不应该被折叠。"""
+def test_to_llm_messages_keeps_different_tool_call_ids():
+    """不同 tool_call_id 的 tool 消息不应被折叠（LLM API 要求每条 tool_call 有对应响应）。"""
     from hagoku.context.session import Session
 
     session = Session(analysis_goal="test")
     session.add("user", "查询")
     session.add("assistant", "让我查一下")
 
+    # 不同 tool_call_id，相同内容
     session.messages.append({
-        "role": "tool", "content": '{"column":"Inc1"}', "tool_call_id": "call_1",
+        "role": "tool", "content": '{"result":"ok"}', "tool_call_id": "call_1",
     })
     session.messages.append({
-        "role": "tool", "content": '{"column":"Inc2"}', "tool_call_id": "call_2",
-    })
-    session.messages.append({
-        "role": "tool", "content": '{"column":"Inc1"}', "tool_call_id": "call_3",
+        "role": "tool", "content": '{"result":"ok"}', "tool_call_id": "call_2",
     })
 
     msgs = session.to_llm_messages("", "")
     tool_msgs = [m for m in msgs if m.get("role") == "tool"]
-    # Inc1, Inc2, Inc1 — 不相邻重复，全部保留
-    assert len(tool_msgs) == 3, f"期望 3 条（不相同），实际 {len(tool_msgs)} 条"
+    assert len(tool_msgs) == 2, f"不同 tool_call_id 不应折叠，期望 2 条，实际 {len(tool_msgs)} 条"

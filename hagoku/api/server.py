@@ -184,14 +184,6 @@ async def switch_project(name: str, request: Request):
     snap = app.switch_project(name)
     if snap is None:
         raise HTTPException(404, f"项目 {name} 不存在或无法加载")
-    # 推送快照到前端同步会话
-    try:
-        from hagoku.api.ws_handler import WSBridge
-        import asyncio
-        loop = asyncio.get_event_loop()
-        loop.create_task(WSBridge.get().broadcast({"type": "state_snapshot", "data": snap}))
-    except Exception:
-        pass
     return snap
 
 

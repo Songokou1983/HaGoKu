@@ -52,14 +52,24 @@ export default function AnalyzePanel() {
   const [presetName, setPresetName] = useState("");
 
   // ── 项目切换：监听 snapshot 恢复状态 ──
-  const snapshot = useWorkspaceStore((s) => s.snapshot);
+  // ── 项目切换：拉取快照同步会话 ──
   useEffect(() => {
-    if (!snapshot) return;
-    // project/data path 由 handleStateSnapshot 统一处理消息恢复
-    // 此处只管理组件级状态
-    setCurrentDataPath(snapshot.dataPath || "");
-    useWorkspaceStore.getState().setSnapshot(null);
-  }, [snapshot]);
+    if (!currentProject) return;
+    fetch(`/api/projects/${currentProject}/switch`, { method: "POST" })
+      .then(r => r.json())
+      .then(snap => {
+        if (snap?.messages) {
+          const roleMap: Record<string, any> = { user: "user", assistant: "agent", tool: "system" };
+          const ms = snap.messages.map((m: any) => ({
+            id: uid(), role: roleMap[m.role] || "system", text: m.content || "",
+            timestamp: m.timestamp || new Date().toISOString(),
+          }));
+          syncFromSnapshot(ms);
+        }
+        if (snap?.data_path) setCurrentDataPath(snap.data_path);
+      })
+      .catch(() => {});
+  }, [currentProject]);
 
   // File upload hook
   const [dataPath, _setDataPath] = useState(currentDataPath);

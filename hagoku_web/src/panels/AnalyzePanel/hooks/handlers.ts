@@ -37,11 +37,6 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setGateOpen, setPhase, setWaitingAgent,
     setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
   } = deps;
-    setActiveCleaningReviewId, setActiveCleaningReviewRevision,
-    setActiveAnalystReviewId, setActiveAnalystReviewRevision,
-    setGateOpen, setPhase, setWaitingAgent,
-    setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
-  } = deps;
 
   // 项目切换时清空旧消息，断连重连不动已有消息
   if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {

@@ -7,7 +7,7 @@ import type { AgentKey } from "../types";
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function makeDeps(overrides: Partial<any> = {}) {
-  const setMessages = vi.fn() as any;
+  const _setMessages = vi.fn() as any;
   const setAgentStates = vi.fn() as any;
   const setAgentElapsed = vi.fn() as any;
   const agentStartTimes = { current: {} };
@@ -31,7 +31,7 @@ function makeDeps(overrides: Partial<any> = {}) {
 
   return {
     batch: [] as any[],
-    setMessages,
+    _setMessages,
     setAgentStates,
     setAgentElapsed,
     agentStartTimes,
@@ -106,8 +106,8 @@ describe("useWsEventHandler — tool_exchange", () => {
 
     renderHook(() => useWsEventHandler(deps));
 
-    expect(deps.setMessages).toHaveBeenCalled();
-    const updater = deps.setMessages.mock.calls[0][0];
+    expect(deps._setMessages).toHaveBeenCalled();
+    const updater = deps._setMessages.mock.calls[0][0];
     const prev: ConvoMessage[] = [];
     const next = typeof updater === "function" ? updater(prev) : updater;
     expect(next).toHaveLength(1);
@@ -131,8 +131,8 @@ describe("useWsEventHandler — ask (pure)", () => {
 
     renderHook(() => useWsEventHandler(deps));
 
-    expect(deps.setMessages).toHaveBeenCalled();
-    const updater = deps.setMessages.mock.calls[0][0];
+    expect(deps._setMessages).toHaveBeenCalled();
+    const updater = deps._setMessages.mock.calls[0][0];
     const prev: ConvoMessage[] = [];
     const next = typeof updater === "function" ? updater(prev) : updater;
     // Should have at least 1 message: the askUser message
@@ -171,7 +171,7 @@ describe("useWsEventHandler — ask (pure)", () => {
     renderHook(() => useWsEventHandler(deps));
 
     // Should have messages but no askUser message
-    const updater = deps.setMessages.mock.calls[0][0];
+    const updater = deps._setMessages.mock.calls[0][0];
     const prev: ConvoMessage[] = [];
     const next = typeof updater === "function" ? updater(prev) : updater;
     const askMsg = next.find((m: ConvoMessage) => m.askUser);
@@ -193,7 +193,7 @@ describe("useWsEventHandler — agent_stream_delta", () => {
 
     renderHook(() => useWsEventHandler(deps));
 
-    const updater = deps.setMessages.mock.calls[0][0];
+    const updater = deps._setMessages.mock.calls[0][0];
     const prev: ConvoMessage[] = [];
     const next = typeof updater === "function" ? updater(prev) : updater;
     expect(next).toHaveLength(1);
@@ -225,7 +225,7 @@ describe("useWsEventHandler — agent_stream_delta", () => {
     // Capture the updater to check it appends
     renderHook(() => useWsEventHandler(deps));
 
-    const updater = deps.setMessages.mock.calls[0][0];
+    const updater = deps._setMessages.mock.calls[0][0];
     const next = typeof updater === "function" ? updater([existingMsg]) : updater;
     expect(next).toHaveLength(1);
     expect(next[0].text).toBe("你好，世界");
@@ -254,7 +254,7 @@ describe("useWsEventHandler — agent_stream_delta", () => {
 
     renderHook(() => useWsEventHandler(deps));
 
-    const updater = deps.setMessages.mock.calls[0][0];
+    const updater = deps._setMessages.mock.calls[0][0];
     const next = typeof updater === "function" ? updater([existingMsg]) : updater;
     expect(next).toHaveLength(2);
   });
@@ -282,7 +282,7 @@ describe("useWsEventHandler — agent_stream_end", () => {
 
     renderHook(() => useWsEventHandler(deps));
 
-    const updater = deps.setMessages.mock.calls[0][0];
+    const updater = deps._setMessages.mock.calls[0][0];
     const next = typeof updater === "function" ? updater([existingMsg]) : updater;
     expect(next[0].streaming).toBe(false);
     expect(next[0].streamId).toBeUndefined();
@@ -305,7 +305,7 @@ describe("useWsEventHandler — agent_thinking", () => {
 
     expect(onThinking).toHaveBeenCalledWith("正在分析数据...");
     // Should NOT push to messages
-    expect(deps.setMessages).not.toHaveBeenCalled();
+    expect(deps._setMessages).not.toHaveBeenCalled();
   });
 });
 

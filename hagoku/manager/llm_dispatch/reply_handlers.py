@@ -13,17 +13,17 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     # ── 首次暂停 ──
     if not user_input or not user_input.strip():
         ask = context.pop("_pending_ask_user", None)
-        if ask:
-            context["_pending_ask_user"] = ask
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
+
+    # 用户已回复，清除上一次 ask_user 的残留信号
+    context.pop("_pending_ask_user", None)
 
     df = self._df_clean if self._df_clean is not None else self._df_raw
     result = self._agent.run_step(context, df, user_input)
 
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        context["_pending_ask_user"] = ask
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
         return {"status": "scout_review", "message": ""}
 

@@ -185,6 +185,48 @@ class HaGoKuApp:
         try:
             ctx = getattr(orch, '_context', None) or {}
             session = ctx.get("_session")
+            raw_msgs = list(session.messages) if session else []
+
+            # 将 tool 消息转换为 toolExchange 卡片，前端直接用
+            rendered: list[dict[str, Any]] = []
+            tool_batch: list[dict[str, Any]] = []
+            pending_asst: dict[str, Any] | None = None
+            for m in raw_msgs:
+                role = m.get("role", "")
+                if role == "tool":
+                    tc_id = m.get("tool_call_id", "")
+                    tc_name = ""
+                    if pending_asst and pending_asst.get("tool_calls"):
+                        for tc in pending_asst["tool_calls"]:
+                            if tc.get("id") == tc_id:
+                                tc_name = tc.get("function", {}).get("name", "")
+                                break
+                    tool_batch.append({
+                        "id": tc_id, "name": tc_name,
+                        "arguments_summary": "", "result_summary": str(m.get("content", ""))[:200],
+                        "error": None, "duration_ms": 0,
+                    })
+                else:
+                    if tool_batch:
+                        rendered.append({
+                            "role": "agent", "text": "",
+                            "toolExchange": {"stage": "工具", "tool_calls": tool_batch},
+                        })
+                        tool_batch = []
+                    if role == "assistant":
+                        pending_asst = m
+                    rendered.append({
+                        "role": role,
+                        "content": m.get("content", ""),
+                        "tool_calls": m.get("tool_calls"),
+                        "timestamp": m.get("timestamp", ""),
+                    })
+            if tool_batch:
+                rendered.append({
+                    "role": "agent", "text": "",
+                    "toolExchange": {"stage": "工具", "tool_calls": tool_batch},
+                })
+
             snap: dict[str, Any] = {
                 "project_name": getattr(orch, '_project_name', '') or "",
                 "query": ctx.get('query', ''),
@@ -192,7 +234,7 @@ class HaGoKuApp:
                 "field_review": _build_field_review(ctx),
                 "pending_ask_user": ctx.get("_pending_ask_user"),
                 "report_url": ctx.get("_report_html_path"),
-                "messages": list(session.messages) if session else [],
+                "messages": rendered,
             }
             return snap
         except Exception:

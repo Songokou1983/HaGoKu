@@ -180,6 +180,8 @@ async def switch_project(name: str, request: Request):
     if app is None:
         raise HTTPException(500, "App not initialized")
     if app.is_busy():
+        if app.active_project == name:
+            return app.build_snapshot()
         raise HTTPException(409, "当前项目分析进行中，请等待完成或停止后再切换")
     snap = app.switch_project(name)
     if snap is None:

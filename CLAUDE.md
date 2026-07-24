@@ -3,9 +3,15 @@
 ## 调试铁流程（出错/停住/行为不对时，必须按顺序执行，不许跳步）
 
 ```
-步骤 0: 读 dump + 读日志（两者缺一不可）
+步骤 0: 读 dump + 读日志 + 读 session（三者缺一不可）
+   # 全局 dump
    ls -lt ~/.hagoku/llm_dumps/ | head -5
+   # 项目 dump（如果有活跃项目）
+   find ~/.hagoku/projects -name 'llm_dumps' -type d | while read d; do ls -lt "$d" | head -3; done
+   # 日志
    tail -30 ~/.hagoku/hagoku.log
+   # 会话数据（前端显示内容的镜像）
+   find ~/.hagoku/projects -name 'session.json' -newer /tmp/api.log | head -1 | xargs python3 -c "import json,sys; d=json.load(open(sys.argv[1])); msgs=d['messages']; ua=[m for m in msgs if m.get('role') in ('user','assistant')]; print(f'{len(msgs)}条, 对话{len(ua)}条')"
    ↓ 贴出来，说明你看到了什么
 
 步骤 1: 定位断点
@@ -34,6 +40,7 @@
 **违反此流程的行为**：
 - ❌ 不看 dump 就说"我来修一下"
 - ❌ 不看日志就说"后端没问题"
+- ❌ 不看 session 就问用户"你看到了什么"（session 就是前端对话的镜像）
 - ❌ 看了 dump 但不贴证据就下结论
 - ❌ 加日志代替读 dump（铁律 -4）
 - ❌ 说"可能是模型问题"（铁律 -3 / 刹车 F）

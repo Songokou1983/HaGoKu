@@ -119,7 +119,7 @@ export function handleAck(deps: WsEventDeps, msg: any): boolean {
 // ── error ─────────────────────────────────────────────────────
 
 export function handleError(deps: WsEventDeps, msg: any): boolean {
-  const { setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
+  const { _setMessages as setMessages, setReplyPending, replySnapshotRef, setWaitingAgent, setGateOpen } = deps;
   if (msg.type !== "error") return false;
   const detail = typeof msg.message === "string" ? msg.message.trim() : "";
   const iso = new Date().toISOString();
@@ -163,10 +163,10 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
   if (d.event_type === "agent_failed" && agentKey) {
     useWorkspaceStore.getState().setAgentStatus(agentKey, "error");
     deps.onThinking?.(null);
-    deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+    deps._setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
     const detail = (d.data as Record<string, unknown>)?.error;
     if (typeof detail === "string" && detail.trim()) {
-      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp }]);
+      deps._setMessages((prev) => [...prev, { id: uid(), role: "system", text: detail.trim(), timestamp: d.timestamp }]);
     }
   }
 
@@ -181,7 +181,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const data = (d.data ?? {}) as Record<string, unknown>;
     const toolCalls = data.tool_calls as any[] | undefined;
     if (toolCalls && toolCalls.length > 0) {
-      deps.setMessages((prev) => [...prev, {
+      deps._setMessages((prev) => [...prev, {
         id: uid(), role: "agent", text: "", timestamp: d.timestamp,
         toolExchange: {
           stage: (data.stage as string) || d.agent || "",
@@ -205,7 +205,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const delta = (data.delta as string) || "";
     if (streamId && delta) {
       deps.setReplyPending?.(false);
-      deps.setMessages((prev) => {
+      deps._setMessages((prev) => {
         for (let i = prev.length - 1; i >= 0; i--) {
           if (prev[i].streaming && prev[i].streamId === streamId) {
             return prev.map((m, idx) => idx === i ? { ...m, text: m.text + delta, timestamp: d.timestamp } : m);
@@ -220,7 +220,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
   // agent_stream_end
   if (d.event_type === "agent_stream_end") {
     eventLog("stream", "end");
-    deps.setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+    deps._setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
   }
 
   // reporter completed
@@ -261,7 +261,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     const isPureAsk = !!askQuestion && !!askFmt && !fr && !cr && !ar && !dataObj.field_review && !dataObj.cleaning_review && !dataObj.analyst_review;
 
     if (isPureAsk) {
-      deps.setMessages((prev) => [...prev, {
+      deps._setMessages((prev) => [...prev, {
         id: uid(), role: "workflow", text: "", timestamp: d.timestamp,
         askUser: { question: askQuestion, expected_format: askFmt, options: dataObj.options as string[] | undefined },
       }]);
@@ -270,18 +270,18 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     if (fr) {
       const patchInPlace = deps.activeFieldReviewId !== null && (incomingRevision === deps.activeFieldReviewRevision || incomingRevision > deps.activeFieldReviewRevision);
       if (patchInPlace) {
-        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m));
+        deps._setMessages((prev) => prev.map((m) => m.id === deps.activeFieldReviewId ? { ...m, fieldReview: fr, timestamp: d.timestamp } : m));
       } else {
         const wfId = uid();
         deps.setActiveFieldReviewId(wfId);
-        deps.setMessages((prev) => [...prev, { id: wfId, role: "workflow", text: "", timestamp: d.timestamp, fieldReview: fr }]);
+        deps._setMessages((prev) => [...prev, { id: wfId, role: "workflow", text: "", timestamp: d.timestamp, fieldReview: fr }]);
       }
       deps.setActiveFieldReviewRevision(incomingRevision);
       deps.setFieldReviewScrollNonce((n) => n + 1);
     } else if (!fr && dataObj.message) {
       const msgText = String(dataObj.message);
       if (msgText.trim()) {
-        deps.setMessages((prev) => {
+        deps._setMessages((prev) => {
           if (prev.length > 0 && prev[prev.length - 1].text === msgText) return prev;
           return [...prev, { id: uid(), role: "workflow", text: msgText, timestamp: d.timestamp }];
         });
@@ -295,11 +295,11 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
     if (cr) {
       const patchCleaning = deps.activeCleaningReviewId !== null && incRev !== null && (incRev === deps.activeCleaningReviewRevision || incRev > deps.activeCleaningReviewRevision);
       if (patchCleaning) {
-        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeCleaningReviewId ? { ...m, cleaningReview: cr, timestamp: d.timestamp } : m));
+        deps._setMessages((prev) => prev.map((m) => m.id === deps.activeCleaningReviewId ? { ...m, cleaningReview: cr, timestamp: d.timestamp } : m));
       } else {
         const cid = uid();
         deps.setActiveCleaningReviewId(cid);
-        deps.setMessages((prev) => [...prev, { id: cid, role: "workflow", text: "", timestamp: d.timestamp, cleaningReview: cr }]);
+        deps._setMessages((prev) => [...prev, { id: cid, role: "workflow", text: "", timestamp: d.timestamp, cleaningReview: cr }]);
       }
       if (incRev !== null) deps.setActiveCleaningReviewRevision(incRev);
     } else {
@@ -311,17 +311,17 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
       const cid = uid();
       const colLines = ca.columns.map((c: any) => `<tr><td style="padding:4px 8px;border:1px solid #2a3040">${escapeHtml(c.column)}</td><td style="padding:4px 8px;border:1px solid #2a3040;color:#4ade80">${c.action === "clean" ? "清洗" : "不清洗"}</td><td style="padding:4px 8px;border:1px solid #2a3040">${escapeHtml(c.reason)}</td></tr>`).join("");
       const tableHtml = `<div style="margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#1e2430"><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">字段</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:center;width:80px">建议</th><th style="padding:6px 8px;border:1px solid #2a3040;text-align:left">原因</th></tr></thead><tbody>${colLines}</tbody></table></div>`;
-      deps.setMessages((prev) => [...prev, { id: cid, role: "agent", text: ca.summary, html: `<p><strong>${escapeHtml(ca.summary)}</strong></p>${tableHtml}`, timestamp: d.timestamp } as ConvoMessage]);
+      deps._setMessages((prev) => [...prev, { id: cid, role: "agent", text: ca.summary, html: `<p><strong>${escapeHtml(ca.summary)}</strong></p>${tableHtml}`, timestamp: d.timestamp } as ConvoMessage]);
     }
 
     if (ar) {
       const patchAnalyst = deps.activeAnalystReviewId !== null && incRev !== null && (incRev === deps.activeAnalystReviewRevision || incRev > deps.activeAnalystReviewRevision);
       if (patchAnalyst) {
-        deps.setMessages((prev) => prev.map((m) => m.id === deps.activeAnalystReviewId ? { ...m, analystReview: ar, timestamp: d.timestamp } : m));
+        deps._setMessages((prev) => prev.map((m) => m.id === deps.activeAnalystReviewId ? { ...m, analystReview: ar, timestamp: d.timestamp } : m));
       } else {
         const aid = uid();
         deps.setActiveAnalystReviewId(aid);
-        deps.setMessages((prev) => [...prev, { id: aid, role: "workflow", text: "", timestamp: d.timestamp, analystReview: ar }]);
+        deps._setMessages((prev) => [...prev, { id: aid, role: "workflow", text: "", timestamp: d.timestamp, analystReview: ar }]);
       }
       if (incRev !== null) deps.setActiveAnalystReviewRevision(incRev);
     } else {
@@ -333,14 +333,14 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
       deps.setGateOpen(true);
       const prompt = typeof gatePayload.prompt === "string" ? gatePayload.prompt.trim() : "";
       if (prompt) {
-        deps.setMessages((prev) => [...prev, { id: uid(), role: "workflow", text: prompt, timestamp: d.timestamp }]);
+        deps._setMessages((prev) => [...prev, { id: uid(), role: "workflow", text: prompt, timestamp: d.timestamp }]);
       }
     }
 
     const raw = dataObj.message;
     const agentMsg = typeof raw === "string" ? raw.trim() : "";
     if (agentMsg) {
-      deps.setMessages((prev) => [...prev, { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp }]);
+      deps._setMessages((prev) => [...prev, { id: uid(), role: "agent", text: agentMsg, timestamp: d.timestamp }]);
     }
 
     const pausedAgent = resolveAgentKey(d.agent);
@@ -365,12 +365,12 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
         if (lines.length > 0) line = formatScoutAppliedUpdates(lines);
       }
       if (line) {
-        deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: line, timestamp: d.timestamp }]);
+        deps._setMessages((prev) => [...prev, { id: uid(), role: "system", text: line, timestamp: d.timestamp }]);
       }
     } else if (agentKey === "cleaner" && typeof inner.proceed_accepted === "boolean") {
-      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("清洗", inner), timestamp: d.timestamp }]);
+      deps._setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("清洗", inner), timestamp: d.timestamp }]);
     } else if (agentKey === "analyst" && typeof inner.proceed_accepted === "boolean") {
-      deps.setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("统计", inner), timestamp: d.timestamp }]);
+      deps._setMessages((prev) => [...prev, { id: uid(), role: "system", text: formatStageProceedFactLine("统计", inner), timestamp: d.timestamp }]);
     }
   }
 

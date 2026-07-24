@@ -431,9 +431,8 @@ class DataAnalystAgent:
         dump_tag: str,
         *,
         round_label: str = "",
-        session=None,
     ):
-        """调用 LLM 一轮（流式优先，batch 回退）。
+        """调用 LLM 一轮（流式优先，batch 回退）。纯函数，不写 session。
 
         返回 (text, tool_calls_list | None)。
         """
@@ -483,9 +482,6 @@ class DataAnalystAgent:
             txt = strip_llm_think(full_text).strip()
             if final_tool_calls_raw:
                 tc_list = [_FakeTC(tc) for tc in final_tool_calls_raw]
-            # 流结束即存盘——先存文本，tool_calls 后续由 add_tool_call 原地补
-            if session and txt:
-                session.add("assistant", txt)
         else:
             resp = client.chat.completions.create(
                 model=self.llm_config.model, messages=messages,
@@ -494,8 +490,6 @@ class DataAnalystAgent:
             msg = resp.choices[0].message
             txt = strip_llm_think((msg.content or "")).strip()
             tc_list = getattr(msg, "tool_calls", None)
-            if session and txt:
-                session.add("assistant", txt)
 
         dump_messages(dump_tag,
             messages + [{"role": "assistant", "content": txt,
@@ -559,7 +553,7 @@ class DataAnalystAgent:
                       extra={"tools": [t["function"]["name"] for t in _tools]})
 
         # CO-18: 调用 LLM（流式优先，batch 回退）
-        txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response", session=session)
+        txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response")
 
         findings = None
         assessment = None
@@ -569,6 +563,14 @@ class DataAnalystAgent:
         for _round in range(MAX_TOOL_ROUNDS):
             if not tc_list:
                 break
+
+            # 先存 assistant(txt + tool_calls)，再调度工具
+            oai_calls = [
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in tc_list
+            ]
+            session.add_tool_call(txt, oai_calls, [])
 
             tool_records = []
             for tc in tc_list:
@@ -611,23 +613,10 @@ class DataAnalystAgent:
                         name=fn.name, arguments=fn.arguments,
                         result="", error=str(exc),
                     ))
+            # 工具结果逐一存入 session
             if tool_records:
-                oai_calls = [
-                    {
-                        "id": tc.tool_call_id,
-                        "type": "function",
-                        "function": {"name": tc.name, "arguments": tc.arguments},
-                    }
-                    for tc in tool_records
-                ]
-                results = [
-                    {
-                        "content": tc.error or tc.result,
-                        "tool_call_id": tc.tool_call_id,
-                    }
-                    for tc in tool_records
-                ]
-                session.add_tool_call(txt, oai_calls, results)
+                for tr in tool_records:
+                    session.add("tool", tr.error or tr.result, tool_call_id=tr.tool_call_id)
 
                 # ── 工具执行进度：每轮 emit TOOL_EXCHANGE，前端渲染为内联工具卡片 ──
                 self._emit(EventType.TOOL_EXCHANGE, {
@@ -673,7 +662,6 @@ class DataAnalystAgent:
                 client, msgs_next, _tools,
                 f"agent_run_step_r{_round + 2}_response",
                 round_label=str(_round + 2),
-                session=session,
             )
         return {
             "text": txt,

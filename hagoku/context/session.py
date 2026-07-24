@@ -50,22 +50,11 @@ class Session:
         tool_calls: list[dict[str, Any]],
         tool_results: list[dict[str, Any]],
     ) -> None:
-        """追加一轮 tool exchange：assistant(tool_calls) + tool results。
-        
-        若最后一条已是同文本的 assistant（由 _call_llm_step 提前存盘），
-        原地补 tool_calls，避免重复消息。
-        """
+        """追加一轮 tool exchange：assistant(tool_calls) + tool results。"""
         assist: dict[str, Any] = {"role": "assistant", "tool_calls": tool_calls}
         if assistant_text:
             assist["content"] = assistant_text
-        # 原地更新：最后一条是同文本的 assistant 则补 tool_calls，不新建
-        if (assistant_text and self.messages
-                and self.messages[-1].get("role") == "assistant"
-                and self.messages[-1].get("content") == assistant_text
-                and not self.messages[-1].get("tool_calls")):
-            self.messages[-1]["tool_calls"] = tool_calls
-        else:
-            self.messages.append(assist)
+        self.messages.append(assist)
         for tr in tool_results:
             self.messages.append({
                 "role": "tool",

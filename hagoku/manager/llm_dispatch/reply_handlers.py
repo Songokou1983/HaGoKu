@@ -27,8 +27,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     # ── ask_user 优先 ──
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        # 存回 context 供 save_state 和 snapshot 持久化
-        context["_pending_ask_user"] = ask
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
         return {"status": "scout_review", "message": ""}
 

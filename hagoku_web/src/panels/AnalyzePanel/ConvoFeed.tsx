@@ -46,7 +46,7 @@ export function ConvoFeed({
   return (
     <div
       ref={containerRef}
-      className=""
+      className="h-full overflow-y-auto"
     >
       {messages.map((m) => {
       // Workflow: FieldReview table

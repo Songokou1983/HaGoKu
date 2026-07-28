@@ -327,7 +327,7 @@ export default function AnalyzePanel() {
 
           {/* Conversation feed + input — absolute 定位，输入框永远在底部 */}
           <div className="flex-1 min-h-0 relative">
-            <div className="absolute inset-0 overflow-y-auto pb-[100px] px-4 py-3 space-y-2">
+            <div className="absolute inset-0 pb-[100px]">
               <ConvoFeed
                 messages={messages}
                 scrollFieldTableId={sess.activeFieldReviewId}

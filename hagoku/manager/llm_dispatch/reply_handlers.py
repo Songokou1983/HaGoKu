@@ -7,9 +7,9 @@ from typing import Any
 from ...observability.events import EventType
 
 
-def _save_review_cards(context: dict) -> None:
+def _save_review_cards(context: dict, ask: dict | None = None) -> None:
     """将 context 中的 review 数据写入 Session——仅当 LLM 正在等待用户确认时。"""
-    ask = context.get("_pending_ask_user")
+    ask = ask or context.get("_pending_ask_user")
     if not ask:
         return
     session = context.get("_session")
@@ -52,8 +52,8 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 
     # ── 首次暂停 ──
     if not user_input or not user_input.strip():
-        _save_review_cards(context)
         ask = context.pop("_pending_ask_user", None)
+        _save_review_cards(context, ask)
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask or {})
         return {"status": "scout_review", "message": ""}
 
@@ -72,7 +72,7 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
 
     ask = context.pop("_pending_ask_user", None)
     if ask:
-        _save_review_cards(context)
+        _save_review_cards(context, ask)
         self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
         return {"status": "scout_review", "message": ""}
 

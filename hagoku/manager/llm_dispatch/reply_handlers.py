@@ -60,13 +60,6 @@ def _handle_reply(self, user_input: str, context: dict) -> dict:
     # 用户已回复，清除上一次 ask_user 的残留信号
     context.pop("_pending_ask_user", None)
 
-    # 兜底：确保用户消息在 Session 中（save_msg 可能漏了）
-    session = context.get("_session")
-    if session and user_input.strip():
-        last = session.messages[-1] if session.messages else None
-        if not (last and last.get("role") == "user" and last.get("content") == user_input):
-            session.add("user", user_input)
-
     df = self._df_clean if self._df_clean is not None else self._df_raw
     result = self._agent.run_step(context, df, user_input)
 

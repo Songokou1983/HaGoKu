@@ -1069,7 +1069,7 @@ _PRINT_HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>{{ report.title or '分析报告' }}</title>
     <style>
-        @page { size: A4; margin: 2cm; }
+        @page { size: A4; margin: 1cm; }
         body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; color: #1a1a1a; background: #fff; line-height: 1.8; font-size: 11pt; }
         h1 { font-size: 18pt; border-bottom: 2px solid #333; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
         h2 { font-size: 14pt; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; margin-top: 2rem; }

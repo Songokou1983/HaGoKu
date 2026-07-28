@@ -194,7 +194,9 @@ def _latest_report_path(run_dir: Path) -> Path | None:
     out_dir = run_dir / "output"
     if not out_dir.exists():
         return None
-    reports = sorted(out_dir.glob("report_*.html"), reverse=True)
+    reports = sorted(
+        [r for r in out_dir.glob("report_*.html") if "_print" not in r.name],
+        reverse=True)
     return reports[0] if reports else None
 
 
@@ -206,8 +208,9 @@ async def list_reports(project_name: str):
         return {"reports": []}
     # 支持 runs/{run_id}/output/*.html 和 output/*.html 两种路径
     files = sorted(
-        list(project_dir.glob("runs/*/output/*.html")) +
-        list(project_dir.glob("output/*.html")),
+        [f for f in (list(project_dir.glob("runs/*/output/*.html")) +
+                      list(project_dir.glob("output/*.html")))
+         if "_print" not in f.name],
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )

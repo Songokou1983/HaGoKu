@@ -23,10 +23,11 @@ export function ConvoFeed({
   onAskReply?: (answer: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
   }, [messages.length]);
 
   useLayoutEffect(() => {
@@ -149,7 +150,6 @@ export function ConvoFeed({
           </div>
         );
       })}
-      <div ref={bottomRef} />
     </div>
   );
 }

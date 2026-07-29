@@ -317,6 +317,13 @@ async def ws_handler(ws: WebSocket) -> None:
                 name = msg.get("project", "")
                 ok = app.delete_project(name) if app else False
                 await _safe_send({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
+                if ok:
+                    # 推送更新后的项目列表 + 空快照，让前端清空分析面板
+                    projects = app.list_projects()
+                    await _safe_send({"type": "project_list", "data": projects})
+                    await _safe_send({"type": "state_snapshot", "data": {
+                        "project_name": "", "messages": [], "gate_open": False,
+                    }})
             elif cmd == "analyze":
                 payload = msg.get("payload", {})
                 # 清理整个 payload 中的 null 字节

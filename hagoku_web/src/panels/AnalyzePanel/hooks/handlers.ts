@@ -65,6 +65,16 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   for (const [a, s] of Object.entries(states)) {
     useWorkspaceStore.getState().setAgentStatus(a, s as AgentStatus);
   }
+  // 项目被删除：空 project_name + 空 messages → 清空分析面板
+  if (!snap.project_name && snap.messages && snap.messages.length === 0) {
+    deps._setMessages?.([]);
+    setActiveFieldReviewId(null); setActiveFieldReviewRevision(-1); setFieldReviewScrollNonce(0);
+    setActiveCleaningReviewId(null); setActiveCleaningReviewRevision(-1);
+    setActiveAnalystReviewId(null); setActiveAnalystReviewRevision(-1);
+    setPhase?.("setup");
+    deps.setCurrentProject?.(null);
+    useWorkspaceStore.getState().setCurrentProject(null);
+  }
   return true;
 }
 

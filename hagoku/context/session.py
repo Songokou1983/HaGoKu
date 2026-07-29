@@ -118,8 +118,9 @@ class Session:
             self.save(self._save_path)
 
     def save(self, path: str) -> None:
-        """保存到 JSON 文件（原子写入，崩溃不损坏）。"""
+        """保存到 JSON 文件（原子写入，崩溃不损坏）。同步最新会话到项目根目录。"""
         import os as _os
+        import shutil as _shutil
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(p.suffix + ".tmp")
@@ -131,6 +132,10 @@ class Session:
             encoding="utf-8",
         )
         _os.replace(tmp, p)
+
+        # 同步最新会话到项目根目录（固定路径，不用 find）
+        proj_dir = p.parent.parent  # runs/{run_id} → 项目根
+        _shutil.copyfile(p, proj_dir / "session.latest.json")
 
     @classmethod
     def load(cls, path: str, analysis_goal: str = "") -> "Session":

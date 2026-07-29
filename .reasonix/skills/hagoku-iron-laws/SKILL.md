@@ -25,13 +25,22 @@ tail -30 ~/.hagoku/hagoku.log
 
 查 session（前端显示的对话镜像）：
 ```bash
-find ~/.hagoku/projects -name 'session.json' -newer /tmp/api.log | head -1 | xargs python3 -c "
+# 优先用固定路径（session保存时同步到 session.latest.json）
+latest=~/.hagoku/projects/*/session.latest.json
+for f in $latest; do
+  [ -f "$f" ] && python3 -c "
 import json,sys
-d=json.load(open(sys.argv[1]))
+d=json.load(open('$f'))
 msgs=d['messages']
+print(f'{d.get(\"analysis_goal\",\"?\")}: {len(msgs)}条消息')
 ua=[m for m in msgs if m.get('role') in ('user','assistant')]
-print(f'{len(msgs)}条总消息, {len(ua)}条对话')
+print(f'  对话: {len(ua)}条')
+for m in msgs[-4:]:
+    r=m.get('role','?')
+    c=str(m.get('content',''))[:60]
+    print(f'  [{r}] {c}')
 "
+done
 ```
 
 **dump 回答 LLM 在想什么。日志回答系统在干什么。session 回答前端显示了什么。三者缺一不可。禁止问用户"你看到了什么"。**

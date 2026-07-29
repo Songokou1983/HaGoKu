@@ -129,10 +129,9 @@ export default function AnalyzePanel() {
             syncFromSnapshot(ms);
             setPhase("running");
           } else {
-            // 空项目：清空对话 + session 状态，回到 setup
+            // 空项目：清空对话，回到 setup
             clearMessages();
             setPhase("setup");
-            useWorkspaceStore.getState().resetRunUiState();
           }
         }
         if (snap?.data_path) setCurrentDataPath(snap.data_path);

@@ -704,3 +704,48 @@ run_step: 唯一 session 写入编排者
 | R6 | 验证 `save_state` 调用时序 | session.json 的 mtime ≤ orch_state.json 的 mtime |
 | R7 | 切换项目时验证 `_respond_cancelled` | 标志已设置为 True |
 | R8 | 单元测试：mock API 503 → 验证重试 | 第一次 503 → sleep → 第二次 503 → raise |
+
+### 10.5 项目切换数据流审计（2026-08-01）
+
+#### 完整数据流
+
+```
+用户点击项目列表中的项目
+  │
+  ├─ ProjectPanel.onSelect()
+  │    ├─ setCurrentProject(p)
+  │    │    └─ workspace store → localStorage + React 重渲染
+  │    │
+  │    ├─ WS: send("switch_project", {project: p})      ← EventBus 订阅切换的关键
+  │    │    └─ ws_handler → 切换 EventBus 订阅 + 推送 state_snapshot
+  │    │
+  │    └─ REST: fetch /api/projects/{p}/switch           ← fallback
+  │         └─ 后端返回 snapshot → 写入 workspace store
+  │
+  ├─ WS 意外重连时
+  │    handleStateSnapshot(snap)
+  │      if snap.project_name != currentProject → clear
+  │      setCurrentProject → 触发下面的 useEffect
+  │
+  └─ useEffect([currentProject])
+       fetch /switch
+         snap?.messages ? [] → clearMessages + setPhase("setup")
+         snap?.messages ? [...] → syncFromSnapshot + setPhase("running")
+```
+
+#### 已知断裂点（已修复）
+
+| # | 位置 | 来源 | 修复 |
+|---|------|------|------|
+| 1 | `AnalyzePanel.tsx:118` `.length` | `7aa88ba` 引入 | `5fdc49e`: 改为 `snap?.messages` |
+| 2 | `ProjectPanel.tsx` 不走 WS | 设计遗漏 | `015e954`: 加 `send("switch_project")` |
+| 3 | `handleStateSnapshot` WS 路径 vs REST 路径双写 | 双路径共存 | 不作为：REST 走 store, WS 走 useConversation，互不冲突 |
+
+#### 已修复的检查
+
+- [x] `send` 使用模块级 `_ws`，多组件调用安全
+- [x] `handleStateSnapshot` 第 42 行：项目不同时 `_setMessages([])` 清空
+- [x] `handleStateSnapshot` 第 69-77 行：空 `project_name` + 空 `messages` → 清分析面板
+- [x] `localStorage` 按项目名 key 隔离（`_storageKey()` + 项目名 suffix）
+- [x] `loadSession()` 死代码已清除（`cc0e249`）
+- [x] `resetRunUiState()` 不清 agent 状态——改用精确清理

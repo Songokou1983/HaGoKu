@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
+import { useWebSocket } from "../hooks/useWebSocket";
 import { PanelHeader } from "../components/PanelHeader";
 
 interface ProjectDetail {
@@ -247,6 +248,7 @@ export default function ProjectPanel() {
   const currentProject = useWorkspaceStore((s) => s.currentProject);
   const agents = useWorkspaceStore((s) => s.agents);
   const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
+  const { send } = useWebSocket();
 
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -484,6 +486,8 @@ export default function ProjectPanel() {
             onSelect={() => {
               if (p !== currentProject) {
                 setCurrentProject(p);
+                // 走 WS 确保 EventBus 订阅切换
+                send("switch_project", { project: p });
                 fetch(`/api/projects/${p}/switch`, { method: "POST" })
                   .then(r => r.json())
                   .then(snap => {

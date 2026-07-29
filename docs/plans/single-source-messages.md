@@ -750,14 +750,13 @@ run_step: 唯一 session 写入编排者
 - [x] `loadSession()` 死代码已清除（`cc0e249`）
 - [x] `resetRunUiState()` 不清 agent 状态——改用精确清理
 
-### 10.6 项目切换架构（2026-08-01）
+### 10.6 项目切换回归通道（2026-08-01）
 
-三条独立路径 → 单一事务。详见 [docs/arch/project-switch-architecture.md](../arch/project-switch-architecture.md)。
+三条独立路径 → 单一 WS 路径。重构时 `handlers.ts:53` 被加了一行注释阻止了 WS `state_snapshot` 同步消息，另开 REST 路径替代。修复见 `de7f7d8`。
 
-**核心变化**：
-- 删除两条冗余 REST `/switch` 调用
-- WS `state_snapshot` 作为唯一数据源
-- `handleStateSnapshot` 作为唯一处理入口
-- `ProjectPanel.onSelect` 只做 `setCurrentProject` + `send("switch_project")`
+**核心变更**：
+- 删除两条冗余 REST `/switch` 调用（`AnalyzePanel.tsx` + `ProjectPanel.tsx`）
+- WS `state_snapshot` 恢复为唯一数据源
+- `handleStateSnapshot` 恢复 `syncFromSnapshot`+`setPhase` 调用
 
-**状态**：待实现。
+**架构依据**：`docs/CHANNEL.md` 第 172-221 行已定义正确的 WS 推送模式。

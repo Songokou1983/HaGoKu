@@ -109,10 +109,6 @@ export default function AnalyzePanel() {
   const { messages, addSystemMsg, addUserMsg, addAgentMsg, addWorkflowCard, updateWorkflowCard, syncFromSnapshot, clearMessages, addRawMsg, _setMessages } =
     useConversation();
 
-  // ── 项目切换：触发重新渲染，数据由 WS state_snapshot 推送 ──
-  useEffect(() => {
-    if (!currentProject) return;
-  }, [currentProject]);
 
   // Analyze session hook
   const sess = useAnalyzeSession(

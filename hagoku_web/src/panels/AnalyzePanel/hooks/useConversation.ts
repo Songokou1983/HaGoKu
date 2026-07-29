@@ -13,16 +13,6 @@ function _storageKey(): string {
   return proj ? `${BASE_KEY}_${proj}` : BASE_KEY;
 }
 
-function loadSession(): ConvoMessage[] {
-  try {
-    const key = _storageKey();
-    const raw = localStorage.getItem(key)
-      ?? (key !== BASE_KEY ? localStorage.getItem(BASE_KEY) : null);
-    if (raw) return JSON.parse(raw) as ConvoMessage[];
-  } catch {}
-  return [];
-}
-
 export function useConversation(_log?: (msg: string) => void) {
   const [messages, setMessages] = useState<ConvoMessage[]>([]);
 

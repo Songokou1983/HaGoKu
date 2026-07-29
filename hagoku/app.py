@@ -183,7 +183,13 @@ class HaGoKuApp:
                         rendered.append({"role": "agent", "text": "",
                             "toolExchange": {"stage": "工具", "tool_calls": tool_batch}})
                         tool_batch = []
-                    # workflow 卡片不渲染到前端（live 事件负责，重启后不恢复）
+                    wtype = m.get("type", "")
+                    if wtype == "field_review":
+                        rendered.append({"role": "workflow", "text": "", "fieldReview": m.get("field_review", m)})
+                    elif wtype == "cleaning_review":
+                        rendered.append({"role": "workflow", "text": "", "cleaningReview": m.get("cleaning_review", m)})
+                    elif wtype == "ask_user":
+                        rendered.append({"role": "workflow", "text": "", "askUser": {"question": m.get("question", ""), "expected_format": m.get("expected_format", ""), "options": m.get("options")}})
                     continue
                 if role == "tool":
                     tc_id = m.get("tool_call_id", "")

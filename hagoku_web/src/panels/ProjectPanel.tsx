@@ -486,20 +486,7 @@ export default function ProjectPanel() {
             onSelect={() => {
               if (p !== currentProject) {
                 setCurrentProject(p);
-                // 走 WS 确保 EventBus 订阅切换
                 send("switch_project", { project: p });
-                fetch(`/api/projects/${p}/switch`, { method: "POST" })
-                  .then(r => r.json())
-                  .then(snap => {
-                    useWorkspaceStore.getState().setSnapshot({
-                      messages: Array.isArray(snap.messages) ? snap.messages : [],
-                      reportUrl: snap.report_url || null,
-                      pendingAskUser: snap.pending_ask_user || null,
-                      projectName: snap.project_name || p,
-                      dataPath: snap.data_path || "",
-                    });
-                  })
-                  .catch((e) => { eventLog("fetch_error", `create: ${e}`); });
               }
             }}
             onDeleted={() => {

@@ -5,6 +5,7 @@
 import { uid } from "../utils";
 import { eventLog } from "../../../utils/eventLog";
 import { useWorkspaceStore } from "../../../stores/workspace";
+import type { WsEventDeps, ConvoMessage, AgentStatus } from "../types";
 import {
   resolveAgentKey,
   parsePauseInteractionRevision,
@@ -39,6 +40,10 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   } = deps;
 
   // 项目切换时清空旧消息，断连重连不动已有消息
+  const roleMap: Record<string, ConvoMessage["role"]> = {
+    user: "user", assistant: "agent", agent: "agent",
+    workflow: "workflow", tool: "system",
+  };
   if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {
     deps._setMessages?.([]);
     setActiveFieldReviewId(null);
@@ -50,7 +55,24 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   }
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
-  // 消息由 REST API useEffect 统一管理，WS 只同步元数据
+  // 消息由 WS state_snapshot 统一管理（项目切换和断连重连都走这条路径）
+  if (Array.isArray(snap.messages)) {
+    if (snap.messages.length > 0) {
+      const ms: ConvoMessage[] = snap.messages
+        .filter((m: any) => m.role !== "tool")
+        .map((m: any) => ({
+          id: uid(), role: roleMap[m.role] || "system",
+          text: m.content || "", timestamp: m.timestamp || "",
+          ...(m.toolExchange ? { toolExchange: m.toolExchange } : {}),
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+        }));
+      syncFromSnapshot(ms);
+      setPhase?.("running");
+    } else {
+      deps._setMessages?.([]);
+      setPhase?.("setup");
+    }
+  }
   if (snap.gate_open) setGateOpen(true);
   // askUser 由 live user_input_requested 事件添加，snapshot 不重复
   const agentOrder = ["scout", "cleaner", "analyst", "reporter"];

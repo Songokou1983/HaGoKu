@@ -18,6 +18,7 @@ const API_PROXY = {
 export default defineConfig({
   plugins: [react()],
   server: {
+    hmr: false,  // 禁用热更新：分析中 HMR 触发 WS 断联会导致状态丢失
     proxy: { ...API_PROXY },
     watch: {
       ignored: ["**/.venv/**", "**/__pycache__/**", "**/.git/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/dist/**", "**/*.db"],

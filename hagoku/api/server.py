@@ -585,6 +585,21 @@ async def delete_project(project_name: str, request: Request):
         db.conn.commit()
     except Exception as exc:
         raise HTTPException(500, str(exc))
+
+    # 广播项目列表和空快照到所有 WS 客户端（HTTP 不走 WS handler）
+    try:
+        from hagoku.api.ws_handler import WSBridge
+        bridge = WSBridge.get()
+        if bridge:
+            import asyncio
+            projects = app.list_projects()
+            asyncio.create_task(bridge.broadcast({"type": "project_list", "data": projects}))
+            asyncio.create_task(bridge.broadcast({"type": "state_snapshot", "data": {
+                "project_name": "", "messages": [], "gate_open": False,
+            }}))
+    except Exception:
+        pass
+
     return {"project": project_name, "deleted": True}
 
 

@@ -18,9 +18,11 @@ ls -lt ~/.hagoku/llm_dumps/ | head -5
 find ~/.hagoku/projects -name 'llm_dumps' -type d | while read d; do ls -lt "$d" | head -3; done
 ```
 
-查运行日志（时间线）：
+查运行日志（时间线，固定路径）：
 ```bash
 tail -30 ~/.hagoku/hagoku.log
+# 如果文件过大 → head -5 看最新事件
+# 如果文件不存在 → ls -la ~/.hagoku/ 检查目录结构
 ```
 
 查 session（前端显示的对话镜像）：
@@ -66,6 +68,9 @@ done
 | `return null` / `pass` 在渲染路径 | 检查 → 是否静默吞行为 |
 | 不看日志就说"后端没问题" | 铁律 12 → 先 `tail -30 ~/.hagoku/hagoku.log` |
 | 不看 session 就问用户"你看到了什么" | 铁律 13 → session 是前端对话镜像 |
+| 找不到日志/session/数据 | **铁律 31 → 只跑一条命令就结论不存在 = 撒谎。** 必须试 3 种以上方法再下结论。固定路径优先：`~/.hagoku/hagoku.log` / `{project_dir}/session.latest.json` |
+| 后端改了状态只发 ack 不发 WS 推送 | 刹车 I → 状态同步：后端清空自己 ≠ 前端知道了 |
+| 说"可能是…""估计是…""试试…"（无日志证据） | **铁律 12 / 刹车 J** → 停下来补日志系统，拿到证据再开口 |
 
 ## 系统认知
 

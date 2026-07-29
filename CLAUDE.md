@@ -16,7 +16,11 @@ session.json = 前端对话的镜像。llm_dumps = LLM 输入输出的快照。h
    # 日志
    tail -30 ~/.hagoku/hagoku.log
    # 会话数据（前端显示内容的镜像）
-   find ~/.hagoku/projects -name 'session.json' -newer /tmp/api.log | head -1 | xargs python3 -c "import json,sys; d=json.load(open(sys.argv[1])); msgs=d['messages']; ua=[m for m in msgs if m.get('role') in ('user','assistant')]; print(f'{len(msgs)}条, 对话{len(ua)}条')"
+   # 优先用 session.latest.json（固定路径，无需搜索）
+   latest=~/.hagoku/projects/*/session.latest.json
+   for f in $latest; do
+     [ -f "$f" ] && python3 -c "import json,sys; d=json.load(open('$f')); msgs=d['messages']; print(f'{len(msgs)}条, 对话{len([m for m in msgs if m.get(\"role\") in (\"user\",\"assistant\")])}条')"
+   done
    ↓ 贴出来，说明你看到了什么
 
 步骤 1: 定位断点
@@ -155,6 +159,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | **C** | `setdefault` / `.get("role","feature")` | LLM没给的值代码不准填 |
 | **D** | 代码"搬运"LLM文本 | LLM流式已经送达前端。禁止从context/column_semantics取LLM文本，通过事件/返回值再发一次。删掉搬运代码用户看到的不变→搬运。变了→原有通道断裂 |
 | **E** | 改完代码 | 跑 `bash scripts/ci/self_check.sh` 全部通过才提交 |
+| **I** | 后端改了状态但前端没收到推送 | **状态同步刹车。** 后端 delete/clear/switch 后，问自己：前端有没有显示这份数据？如果有 → 必须通过 WS 推送更新。后端清空自己 ≠ 前端知道了。
 
 ---
 
@@ -169,6 +174,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | prompt里「必须判断为」「应该理解成」「不要分析」 | 铁律 11 |
 | prompt里「禁止」「不要」「不准」 | 刹车 G |
 | `@lru_cache` 装饰 LLM 调用 | 铁律 7 |
+| 后端改了状态只发 ack 不发 WS 推送 | 刹车 I |
 
 ---
 

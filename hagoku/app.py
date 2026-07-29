@@ -85,7 +85,7 @@ class HaGoKuApp:
         """当前项目是否有活跃的分析处理。"""
         if self._active_orch is None:
             return False
-        return not self._active_orch.is_respond_cancelled()
+        return self._active_orch._processing
 
     def switch_project(self, project_name: str) -> dict | None:
         """切换到目标项目，返回状态快照。失败返回 None。"""
@@ -227,8 +227,8 @@ class HaGoKuApp:
 
             snap: dict[str, Any] = {
                 "project_name": getattr(orch, '_project_name', '') or "",
-                "query": ctx.get('query', ''),
-                "data_path": ctx.get('data_path', ''),
+                "query": ctx.get('query') or "",
+                "data_path": ctx.get('data_path') or "",
                 "report_url": ctx.get("_report_html_path"),
                 "messages": rendered,
             }

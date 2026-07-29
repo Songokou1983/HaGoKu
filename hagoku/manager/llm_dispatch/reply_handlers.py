@@ -103,8 +103,9 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     else:
         setattr(self, '_empty_respond_count', 0)
 
-    # ── 清除上次停止标记 ──
+    # ── 清除上次停止标记，标记处理中 ──
     self._respond_cancelled = False
+    self._processing = True
 
     ctx = getattr(self, '_context', None)
     if ctx is not None:
@@ -113,9 +114,12 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
 
     # 写 Session（外层 respond 已提前写入，此处不重复）
 
-    result = _handle_reply(self, text, ctx or {})
-    self.save_state()
-    return result
+    try:
+        result = _handle_reply(self, text, ctx or {})
+        self.save_state()
+        return result
+    finally:
+        self._processing = False
 
 
 

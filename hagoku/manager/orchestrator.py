@@ -68,9 +68,10 @@ class Orchestrator(
         # 用户请求中止本轮分析（WebSocket cancel_analysis）
         self._cancel_lock = threading.Lock()
         self._cancel_requested_flag = False
-        # respond() 重入守卫 + _respond_cancelled 保护（共用锁）
+        # respond() 重入守卫 + 取消/处理状态
         self._respond_lock = threading.Lock()
         self._respond_cancelled = False
+        self._processing = False  # True = 分析线程正在处理 respond
         # 事件驱动状态机字段
         self._df_clean: pd.DataFrame | None = None
         self._df_raw: pd.DataFrame | None = None
@@ -233,6 +234,7 @@ class Orchestrator(
     def request_cancel_respond(self) -> None:
         """前端点「停止」：中断当前 respond 处理。"""
         self._respond_cancelled = True
+        self._processing = False
 
     def is_respond_cancelled(self) -> bool:
         """线程安全地检查 respond 是否已被取消。"""

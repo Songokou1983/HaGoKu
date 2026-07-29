@@ -39,18 +39,13 @@ export function useAnalyzeSession(
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
   const queryRef = useRef("");
 
-  const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
-    if (!currentProject || !dataPath) return;
-    eventLog("analysis", `start project=${currentProject} data=${dataPath} sheet=${sheetName ?? 0}`);
-    clearMessages();
-    setReplyPending(true);
-    useWorkspaceStore.getState().resetAgentStates();
+  const resetAll = useCallback(() => {
     setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-    setGuardrailsBlocked(false);
-    setBlockedRunId(null);
-    setResultReportUrl(null);
     setWaitingAgent(null);
     setReplyText("");
+    setResultReportUrl(null);
+    setGuardrailsBlocked(false);
+    setBlockedRunId(null);
     setActiveFieldReviewId(null);
     setActiveFieldReviewRevision(-1);
     setFieldReviewScrollNonce(0);
@@ -59,6 +54,15 @@ export function useAnalyzeSession(
     setActiveAnalystReviewId(null);
     setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
+  }, []);
+
+  const handleStartSession = useCallback((sheetName?: string | number, auxSheets?: string[]) => {
+    if (!currentProject || !dataPath) return;
+    eventLog("analysis", `start project=${currentProject} data=${dataPath} sheet=${sheetName ?? 0}`);
+    resetAll();
+    clearMessages();
+    setReplyPending(true);
+    useWorkspaceStore.getState().resetAgentStates();
     setPhase("running");
     const q = sanitizeText(queryText.trim());
     queryRef.current = q;
@@ -70,30 +74,17 @@ export function useAnalyzeSession(
       sheet_name: sheetName ?? 0,
       aux_sheets: auxSheets ?? [],
     });
-  }, [send, dataPath, currentProject, queryText, setPhase]);
+  }, [send, dataPath, currentProject, queryText, setPhase, resetAll]);
 
   const handleReset = useCallback(() => {
     eventLog("analysis", "stop");
     send("cancel_analysis", {});
+    resetAll();
     resetRunUiState();
     setPhase("setup");
     clearMessages();
-    setWaitingAgent(null);
-    setReplyText("");
-    setActiveFieldReviewId(null);
-    setActiveFieldReviewRevision(-1);
-    setFieldReviewScrollNonce(0);
-    setActiveCleaningReviewId(null);
-    setActiveCleaningReviewRevision(-1);
-    setActiveAnalystReviewId(null);
-    setActiveAnalystReviewRevision(-1);
-    setGateOpen(false);
-    setResultReportUrl(null);
-    setGuardrailsBlocked(false);
-    setBlockedRunId(null);
-    setAgentStates({ scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" });
-    setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-  }, [send, resetRunUiState, setPhase]);
+    useWorkspaceStore.getState().resetAgentStates();
+  }, [send, resetAll, resetRunUiState, setPhase, clearMessages]);
 
   return {
     agentElapsed, setAgentElapsed,
@@ -116,5 +107,6 @@ export function useAnalyzeSession(
     queryRef,
     handleStartSession,
     handleReset,
+    resetAll,
   };
 }

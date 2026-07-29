@@ -30,7 +30,6 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (!snap) return false;
   const {
     syncFromSnapshot, _setMessages, addSystemMsg: addSys,
-    addWorkflowCard, addRawMsg,
     setActiveFieldReviewId, setActiveFieldReviewRevision,
     setActiveCleaningReviewId, setActiveCleaningReviewRevision,
     setActiveAnalystReviewId, setActiveAnalystReviewRevision,
@@ -38,20 +37,13 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
   } = deps;
 
-  // 项目切换时清空旧消息，断连重连不动已有消息
   const roleMap: Record<string, ConvoMessage["role"]> = {
     user: "user", assistant: "agent", agent: "agent",
     workflow: "workflow", tool: "system",
   };
-  if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {
-    deps._setMessages?.([]);
-    setActiveFieldReviewId(null);
-    setActiveFieldReviewRevision(-1);
-    setActiveCleaningReviewId(null);
-    setActiveCleaningReviewRevision(-1);
-    setActiveAnalystReviewId(null);
-    setActiveAnalystReviewRevision(-1);
-  }
+
+  // 项目切换时的清理由 AnalyzePanel useEffect([currentProject]) 负责
+  // 此处只应用快照数据
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   // 消息由 WS state_snapshot 统一管理（项目切换和断连重连都走这条路径）

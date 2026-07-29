@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { eventLog } from "../utils/eventLog";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -122,6 +122,33 @@ export default function AnalyzePanel() {
     clearMessages,
     setReplyPending,
   );
+
+  // ── 项目切换：重置 UI 状态（不含 messages — 铁律 13：消息唯一写入点 = handleStateSnapshot）──
+  const prevProjectRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevProjectRef.current;
+    prevProjectRef.current = currentProject;
+    // 跳过：首次挂载、同项目不变、清空项目
+    if (prev === currentProject) return;
+    if (prev === null && currentProject) return;
+    if (!currentProject) return;
+    // 真正切换
+    setPhase("setup");
+    setQueryText("");
+    setThinkingText(null);
+    setReplyPending(false);
+    _setDataPath("");
+    setExcelSheets([]);
+    setSheetName("");
+    setAuxSheets([]);
+    setPresetName("");
+    sess.resetAll();
+    setCurrentDataPath("");
+    useWorkspaceStore.getState().resetRunUiState();
+    useWorkspaceStore.getState().setLastError(null);
+    useWorkspaceStore.getState().setReportFiles([]);
+    useWorkspaceStore.getState().setSnapshot(null);
+  }, [currentProject]);
 
   // WS event handler hook
   useWsEventHandler({

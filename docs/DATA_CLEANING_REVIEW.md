@@ -1,5 +1,7 @@
 # 数据清洗审查：硬编码检查 & 客户体验视角
 
+> ⚠️ **归档说明**（2026-07-24）：本文档撰写于 Phase D（4 agent 合 1，2026-06-11）之前。引用的 `cleaner/agent.py`、`cleaner/prompt.md` 等路径已删除，功能已合并到 `hagoku/agents/agent.py`。本文档保留作为审计参考，代码路径已不适用。
+
 > 审查日期：2026-05-19  
 > 涉及文件：`hagoku/tools/cleaning.py`、`hagoku/agents/cleaner/agent.py`、`hagoku/config.py`、`hagoku/agents/cleaner/prompt.md`、`hagoku_web/src/panels/AnalyzePanel.tsx`
 

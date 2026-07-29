@@ -270,8 +270,9 @@ class Orchestrator(
             progress_path: 外部 progress.yaml 路径
 
         Returns:
-            运行结果摘要。
-            `scout_confirm` / `cleaner_strategy` / `analyst_preliminary` 等阶段返回值。
+            运行结果摘要。当前截断在字段理解阶段（scout），
+            返回 `{"status": "scout_review"}`。
+            后续通过 `respond()` 事件驱动推进。
         """
         run_start = datetime.now()
 

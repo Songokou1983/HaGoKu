@@ -1,6 +1,5 @@
 # HaGoKu Studio — 全方位核心原则审计报告
-
-> **历史快照**（2026-05-20 审计）：本文件记录当时状态。**2026-06-06 Scribe 类已删除**（详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段 + commit `d2772dd`），下方"原则 5：没有代码兜底"中 Scribe 灰区相关讨论不再适用。
+> ⚠️ **归档说明**（2026-07-24）：本文档撰写于 Phase D（4 agent 合 1，2026-06-11）之前。引用的 `scout/`、`cleaner/`、`analyst/`、`reporter/` 目录已删除，功能已合并到 `hagoku/agents/agent.py`（DataAnalystAgent）。本文档保留作为决策历史参考，代码路径已不适用。
 
 > 审计时间：2026-05-20
 > 审计范围：对照 PROJECT.md 六条核心原则，全代码库逐项扫描

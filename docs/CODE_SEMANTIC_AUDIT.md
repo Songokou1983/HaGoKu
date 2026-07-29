@@ -1,6 +1,6 @@
 # 代码语义理解审计报告
 
-> ⚠️ **本文件已部分被自动化取代（2026-05-31）** + **2026-06-06 Scribe 类已删除**：本审计中所有"5 个 Agent（Scout/Cleaner/Analyst/Reporter/Scribe）"相关讨论需在 4 Agent + Orchestrator 架构下重新审视（详见 `docs/superpowers/plans/scribe-redesign-brief.md` 结论段）。
+> ⚠️ **本文件已部分被自动化取代（2026-05-31）** + **2026-06-06 Scribe 类已删除** + **2026-07-24 4 agent 合 1**：本审计中所有"5 个 Agent"及"4 Agent"相关讨论，均已合并到单一 `DataAnalystAgent`（`hagoku/agents/agent.py`）。引用的 `scout/agent.py` 等路径已不存在。本文档保留作为审计方法参考，代码路径不适用。
 >
 > 本文件为 2026-05-25 一次性人工审计的快照，记录了当时发现的硬编码模式与修复路径。
 > 现在硬编码守门已机器化：

@@ -4,6 +4,10 @@
 > **排错录** → [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 > **项目规范** → [PROJECT.md](../PROJECT.md)
 
+> 🔄 **架构现状**（2026-07-24）：本文档部分内容撰写于 4-agent 架构时期（scout/cleaner/analyst/reporter 独立 agent）。
+> 当前已合并为单一 `DataAnalystAgent`（`hagoku/agents/agent.py`），分析流程改为 `orch.run()` → 返回 `{"status": "scout_review"}` →
+> 之后通过 `respond()` 事件驱动 LLM 自主推进（评估清洗 → 统计分析 → 撰写报告）。旧阶段名（`scout_first`、`cleaning_first`、`analyst_first`）和旧 API（`DataContext`、`phase=` 参数）已不可用。
+
 ---
 
 ## ⚠️ 最重要的经验教训
@@ -27,50 +31,25 @@
 # 在仓库根目录（含 pyproject.toml）执行，已激活 .venv
 cd /path/to/<repo-root>
 
-# 3 阶段流程测试
+# 3 阶段流程测试（当前架构：单 DataAnalystAgent + respond 事件驱动）
 .venv/bin/python -c "
 import sys, time
 sys.path.insert(0, '.')
 from pathlib import Path
 from hagoku.config import HaGoKuConfig
 from hagoku.manager.orchestrator import Orchestrator
-from hagoku.agents.scout import DataContext
 
 config = HaGoKuConfig.load()
 data_path = str(Path.home() / '.hagoku/projects/Playwright测试/input/ad_campaign_1.csv')
 
-# Phase 1
-orch1 = Orchestrator(config)
-r1 = orch1.run(data_path, '', project_name='Playwright测试', phase='scout_first')
-print(f'Phase1: {r1[\"status\"]}, cols={len(r1.get(\"column_semantics\",[]))}')
-assert r1['status'] == 'scout_done'
+# 全量分析由 orch.run() 启动 → 返回 scout_review → respond("") 推进后续阶段
+orch = Orchestrator(config)
+r = orch.run(data_path, '分析哪个渠道ROI最高', project_name='Playwright测试')
+print(f'Run: {r.get(\"status\")}')
+assert r.get('status') == 'scout_review'
 
-# Phase 2
-scout_ctx = DataContext.from_dict({
-    'data_path': data_path,
-    'n_rows': r1.get('n_rows', 0), 'n_cols': r1.get('n_cols', 0),
-    'column_semantics': r1.get('column_semantics', []),
-    'column_descriptions': r1.get('column_descriptions', {}),
-})
-time.sleep(1)
-orch2 = Orchestrator(config)
-r2 = orch2.run(data_path, '分析哪个渠道ROI最高',
-    project_name='Playwright测试',
-    phase='cleaning_first', scout_context=scout_ctx)
-print(f'Phase2: {r2.get(\"status\")}')
-assert r2.get('status') == 'cleaner_strategy'
-
-# Phase 3
-time.sleep(1)
-orch3 = Orchestrator(config)
-r3 = orch3.run(data_path, '分析哪个渠道ROI最高',
-    project_name='Playwright测试',
-    phase='analyst_first', scout_context=scout_ctx,
-    cleaning_operations=r2.get('operations'))
-print(f'Phase3: {r3.get(\"status\")}')
-assert r3.get('status') == 'analyst_preliminary'
-
-print('ALL 3 PHASES OK')
+# 后续通过 orch.respond({"text": "..."}) 驱动 LLM 自主推进评估清洗→统计分析→撰写报告
+print('Scout phase done, ready for respond-driven flow')
 "
 
 # pytest

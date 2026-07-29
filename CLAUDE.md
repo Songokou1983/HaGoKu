@@ -145,6 +145,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | -3 | 禁止无证据归因外部 | 不说"可能是模型问题"——贴 dump 行号 |
 | -4 | 禁止绕过已有诊断 | dump 没读完不准加新日志 |
 | 1 | 零硬编码语义 | 关键词列表/中文if-elif/regex → 全禁 |
+| **13** | **唯一真相源** | **前端状态只有一个写入点：`handleStateSnapshot`（来自 WS `state_snapshot`）。不准另开 HTTP 路径、不准在 useEffect 里清消息、不准走 localStorage 恢复。违反 = 通道断裂。** |
 | 7 | 失败在场 | LLM失败 → `raise RuntimeError`，不except兜底 |
 | 9 | 配置中性 | 不写死模型名/URL/端口 |
 | 10 | 提示词修改慎重 | 改 prompt 必须：开dump→定位→最小改→dump对比 |
@@ -165,6 +166,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | **E** | 改完代码 | 跑 `bash scripts/ci/self_check.sh` 全部通过才提交 |
 | **I** | 后端改了状态但前端没收到推送 | **状态同步刹车。** 后端 delete/clear/switch 后，问自己：前端有没有显示这份数据？如果有 → 必须通过 WS 推送更新。后端清空自己 ≠ 前端知道了。
 | **J** | "可能是…""估计是…""试试…" | **无证据刹车。** 铁律12：没有日志/dump 就没有发言权。先说"日志不够，需要补 X"，不说无证据猜测。 |
+| **K** | "再加一条 REST 路径保底" / "useEffect 里顺便清一下消息" | **唯一真相源刹车。** 铁律13：`handleStateSnapshot` 是前端状态的唯一写入点。再加新路径 = 绕开架构。必须删代码而非加代码。 |
 
 ---
 
@@ -182,6 +184,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | `tail ~/.hagoku/hagoku.log` 失败 → 结论"没日志" | **铁律 31** → 日志路径固定，找不到是命令出错，不是文件不存在。换 `ls -la ~/.hagoku/` 确认 |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I |
 | 说"可能是…""估计是…""试试…"（无日志证据） | 铁律 12 / 刹车 J |
+| 另开 REST /switch、useEffect 里手动清消息、localStorage 恢复消息 | **铁律 13 / 刹车 K — 唯一真相源** |
 
 ---
 
@@ -233,10 +236,11 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 
 ### 验证协议
 
-1. 重启 desktop
+1. 重启桌面/前后端
 2. 跑一次 run
 3. 把 `run.log` + `ls llm_dumps/` + 关键 dump 复制给问题-AI
-4. 问题-AI 看 dump 验证：现象是否消失 / 是否引入新问题
+4. **唯一真相源检查**：改 `handlers.ts` / `AnalyzePanel.tsx` / `ProjectPanel.tsx` 相关的代码后，必须确认前端状态的**唯一写入点**仍是 `handleStateSnapshot`。grep 查：`clearMessages`、`fetch.*switch`、`setCurrentDataPath` 不能在 `handleStateSnapshot` 以外出现。
+5. 问题-AI 看 dump 验证：现象是否消失 / 是否引入新问题
 
 **没验证 = 没改完**。
 

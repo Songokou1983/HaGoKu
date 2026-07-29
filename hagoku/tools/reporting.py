@@ -1069,20 +1069,20 @@ _PRINT_HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>{{ report.title or '分析报告' }}</title>
     <style>
-        @page { size: A4; margin: 1cm; }
-        body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; color: #1a1a1a; background: #fff; line-height: 1.8; font-size: 11pt; }
-        h1 { font-size: 18pt; border-bottom: 2px solid #333; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
-        h2 { font-size: 14pt; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; margin-top: 2rem; }
-        h3 { font-size: 12pt; margin-top: 1.5rem; }
-        table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 10pt; }
-        th, td { padding: 0.4rem 0.6rem; text-align: left; border: 1px solid #ccc; }
+        @page { size: A4; margin: 0.5cm; }
+        body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; color: #1a1a1a; background: #fff; line-height: 1.6; font-size: 10pt; }
+        h1 { font-size: 16pt; border-bottom: 2px solid #333; padding-bottom: 0.3rem; margin-bottom: 1rem; }
+        h2 { font-size: 12pt; border-bottom: 1px solid #ccc; padding-bottom: 0.2rem; margin-top: 1.5rem; }
+        h3 { font-size: 11pt; margin-top: 1rem; }
+        table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 9pt; }
+        th, td { padding: 0.3rem 0.4rem; text-align: left; border: 1px solid #ccc; }
         th { background: #f5f5f5; font-weight: 600; }
         tr { break-inside: avoid; }
         thead { display: table-header-group; }
-        .chart { width: 100%; margin: 1rem 0; }
+        .chart { width: 100%; margin: 0.5rem 0; }
         .chart img, .chart svg { max-width: 100%; height: auto; }
-        .headline { font-weight: 700; font-size: 12pt; margin: 1rem 0 0.5rem; }
-        .meta { color: #666; font-size: 9pt; margin-bottom: 2rem; }
+        .headline { font-weight: 700; font-size: 11pt; margin: 0.75rem 0 0.5rem; }
+        .meta { color: #666; font-size: 9pt; margin-bottom: 1.5rem; }
         code { font-family: 'Courier New', monospace; font-size: 9pt; background: #f5f5f5; padding: 0.1rem 0.3rem; }
         pre { background: #f5f5f5; padding: 0.5rem; font-size: 9pt; overflow-x: auto; }
         blockquote { border-left: 3px solid #ccc; padding-left: 1rem; margin: 0.5rem 0; color: #555; }

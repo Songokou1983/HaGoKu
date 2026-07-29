@@ -13,8 +13,10 @@ session.json = 前端对话的镜像。llm_dumps = LLM 输入输出的快照。h
    ls -lt ~/.hagoku/llm_dumps/ | head -5
    # 项目 dump（如果有活跃项目）
    find ~/.hagoku/projects -name 'llm_dumps' -type d | while read d; do ls -lt "$d" | head -3; done
-   # 日志
+   # 日志（固定路径 ~/.hagoku/hagoku.log，找不到就是命令出错不是文件不存在）
    tail -30 ~/.hagoku/hagoku.log
+   # 如果 tail 失败 → ls -la ~/.hagoku/
+   # 如果文件过大 → 换 head -5
    # 会话数据（前端显示内容的镜像）
    # 优先用 session.latest.json（固定路径，无需搜索）
    latest=~/.hagoku/projects/*/session.latest.json
@@ -174,6 +176,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | prompt里「必须判断为」「应该理解成」「不要分析」 | 铁律 11 |
 | prompt里「禁止」「不要」「不准」 | 刹车 G |
 | `@lru_cache` 装饰 LLM 调用 | 铁律 7 |
+| `tail ~/.hagoku/hagoku.log` 失败 → 结论"没日志" | **铁律 31** → 日志路径固定，找不到是命令出错，不是文件不存在。换 `ls -la ~/.hagoku/` 确认 |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I |
 
 ---

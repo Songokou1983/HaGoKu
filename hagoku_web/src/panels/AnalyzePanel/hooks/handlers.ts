@@ -21,7 +21,6 @@ import {
 } from "../utils";
 import { guardrailsRunCompletedInfo } from "../../../utils/wsGuardrails";
 import { escapeHtml } from "../../../utils/sanitize";
-import type { WsEventDeps, ConvoMessage } from "../types";
 
 // ── state_snapshot ────────────────────────────────────────────
 

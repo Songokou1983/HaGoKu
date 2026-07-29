@@ -752,11 +752,42 @@ run_step: 唯一 session 写入编排者
 
 ### 10.6 项目切换回归通道（2026-08-01）
 
-三条独立路径 → 单一 WS 路径。重构时 `handlers.ts:53` 被加了一行注释阻止了 WS `state_snapshot` 同步消息，另开 REST 路径替代。修复见 `de7f7d8`。
+#### 核心变更（`de7f7d8` + 迭代）
 
-**核心变更**：
-- 删除两条冗余 REST `/switch` 调用（`AnalyzePanel.tsx` + `ProjectPanel.tsx`）
-- WS `state_snapshot` 恢复为唯一数据源
-- `handleStateSnapshot` 恢复 `syncFromSnapshot`+`setPhase` 调用
+| 改了什么 | 原来 | 后来发现的问题 | 最终方案 |
+|---------|------|--------------|---------|
+| `handlers.ts` `handleStateSnapshot` | 注释"消息由 REST 管理"，跳过消息同步 | — | 恢复 `syncFromSnapshot`+`setPhase`，WS 为唯一消息源 |
+| `AnalyzePanel.tsx` useEffect | `fetch REST /switch` → `syncFromSnapshot` | 删除 REST 后加了 `clearMessages() + setPhase("setup")`，造成 WS 到达前的空窗期 | **完全不做消息操作**——只触发重渲染，`handleStateSnapshot` 全权负责 |
+| `ProjectPanel.tsx` onSelect | `fetch REST /switch` + 后续又加回 WS send | 加了 REST 保底（补丁） | 只 `setCurrentProject` + `send("switch_project")`，无 REST 保底 |
 
-**架构依据**：`docs/CHANNEL.md` 第 172-221 行已定义正确的 WS 推送模式。
+#### 当前架构
+
+```
+用户点项目
+  │
+  ├─ setCurrentProject(p)           ← workspace store
+  ├─ send("switch_project", {p})    ← WS
+  │    └─ 后端：switch_project + EventBus 订阅切换 + 推送 state_snapshot
+  │
+  └─ useEffect([currentProject])
+       └─ 空函数（仅触发 re-render） ← 数据由 WS 推送
+```
+
+#### 关键决定
+
+1. **WS 是唯一消息源**——REST `/switch` 已被彻底删除，不是保底。
+2. **`handleStateSnapshot` 是唯一消息处理入口**——同时负责清空旧消息和同步新消息。不需要前端主动 clear。
+3. **`useEffect` 不做消息操作**——旧消息保留到 WS 快照到达被覆盖。无空窗期。
+4. **项目去重是 `handleStateSnapshot` 行 46 的守卫干的**——如果 WS 快照的 `project_name` 和当前项目不同，才清空。相同则直接同步（正常切换）。
+5. **`deps.currentProject` 闭包问题**——`useWsEventHandler` 中 `deps` 捕获的是当前 render 周期的 `currentProject`。`setCurrentProject(p)` 是同步修改 store，但 `handleStateSnapshot` 是异步回调，它收到的 `deps.currentProject` 是**事件注册时刻的值**。如果 `setCurrentProject` 在事件注册之前调用，`deps.currentProject` 已经是新值；如果在之后调用，`deps.currentProject` 还是旧值。需要确认 `WsEventDeps` 的类型定义中 `currentProject` 是否是从 store 读取的。
+
+#### 架构依据
+
+`docs/CHANNEL.md` 第 172-221 行已定义正确的 WS 推送模式。
+
+#### 已关闭的补丁
+
+| 补丁 | 做了什么 | 为什么撤回 |
+|------|---------|----------|
+| `AnalyzePanel.tsx` useEffect 加 `clearMessages` | 乐观清空 | WS 异步到达前有空窗，用户看到空屏 |
+| `ProjectPanel.tsx` onSelect 加 REST 保底 | WS 失败时退而求其次 | 双路径竞态，违反 CHANNEL.md

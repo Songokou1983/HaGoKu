@@ -749,3 +749,15 @@ run_step: 唯一 session 写入编排者
 - [x] `localStorage` 按项目名 key 隔离（`_storageKey()` + 项目名 suffix）
 - [x] `loadSession()` 死代码已清除（`cc0e249`）
 - [x] `resetRunUiState()` 不清 agent 状态——改用精确清理
+
+### 10.6 项目切换架构（2026-08-01）
+
+三条独立路径 → 单一事务。详见 [docs/arch/project-switch-architecture.md](../arch/project-switch-architecture.md)。
+
+**核心变化**：
+- 删除两条冗余 REST `/switch` 调用
+- WS `state_snapshot` 作为唯一数据源
+- `handleStateSnapshot` 作为唯一处理入口
+- `ProjectPanel.onSelect` 只做 `setCurrentProject` + `send("switch_project")`
+
+**状态**：待实现。

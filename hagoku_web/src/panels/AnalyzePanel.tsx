@@ -115,18 +115,24 @@ export default function AnalyzePanel() {
     fetch(`/api/projects/${currentProject}/switch`, { method: "POST" })
       .then(r => r.json())
       .then(snap => {
-        if (snap?.messages?.length) {
-          const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", agent: "agent", workflow: "workflow", tool: "system" };
-          const ms: ConvoMessage[] = snap.messages
-            .filter((m: any) => m.role !== "tool")
-            .map((m: any) => ({
-              id: uid(), role: roleMap[m.role] || "system",
-              text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
-              ...(m.toolExchange ? { toolExchange: m.toolExchange } : {}),
-              ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-            }));
-          syncFromSnapshot(ms);
-          setPhase("running");
+        if (snap?.messages) {
+          if (snap.messages.length > 0) {
+            const roleMap: Record<string, ConvoMessage["role"]> = { user: "user", assistant: "agent", agent: "agent", workflow: "workflow", tool: "system" };
+            const ms: ConvoMessage[] = snap.messages
+              .filter((m: any) => m.role !== "tool")
+              .map((m: any) => ({
+                id: uid(), role: roleMap[m.role] || "system",
+                text: m.content || "", timestamp: m.timestamp || new Date().toISOString(),
+                ...(m.toolExchange ? { toolExchange: m.toolExchange } : {}),
+                ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+              }));
+            syncFromSnapshot(ms);
+            setPhase("running");
+          } else {
+            // 空项目：清空对话，回到 setup 状态
+            clearMessages();
+            setPhase("setup");
+          }
         }
         if (snap?.data_path) setCurrentDataPath(snap.data_path);
       })

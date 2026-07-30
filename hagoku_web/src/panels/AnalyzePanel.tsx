@@ -215,7 +215,7 @@ export default function AnalyzePanel() {
         );
         return;
       }
-      addUserMsg(outgoing);
+      // 消息走通道：保存到session → respond → 快照推送 → handleStateSnapshot渲染
       sess.setReplyText("");
       setQueryText("");
       setReplyPending(true);

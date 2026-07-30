@@ -457,6 +457,11 @@ async def ws_handler(ws: WebSocket) -> None:
                                 None, _respond_task, orch, user_text,
                             )
                             await _safe_send({"type": "ack", "cmd": "respond", "data": result})
+                            # respond 完成后推送快照，前端获取最新会话
+                            if app is not None:
+                                snapshot = app.build_snapshot()
+                                if snapshot:
+                                    await _safe_send({"type": "state_snapshot", "data": snapshot})
                         except Exception as e:
                             await _safe_send({"type": "error", "message": str(e)})
                     asyncio.create_task(_process())

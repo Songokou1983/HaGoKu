@@ -35,7 +35,7 @@
 ```
 
 **结论**：只有一个数据通道（WS `state_snapshot` → `handleStateSnapshot`），
-两个入口（`App.tsx:135`、`ProjectPanel.tsx:489`）都走这个通道。
+三个入口都走这条通道。
 prevRef 守卫确保首次挂载不误清，App.tsx 填补首次挂载的恢复需求。
 不是补丁，是一体设计。
 
@@ -54,14 +54,14 @@ prevRef 守卫确保首次挂载不误清，App.tsx 填补首次挂载的恢复�
 | `app.py:126-128` | `logger.info/warning` debug 日志 | ⚠️ 待移除（根因已修复，无需保留） |
 | `handlers.ts:32` | `addSystemMsg: addSys` 解构但未使用 | ⚠️ 待清理 |
 
-## 四、数据流（单通道，双入口）
+## 四、数据流（单通道，三入口）
 
 ```
-┌─ 入口1: 启动恢复 ──┐    ┌─ 入口2: 手动切换 ──┐
-│ App.tsx:135          │    │ ProjectPanel.tsx:489 │
-│ send("switch_project",│    │ send("switch_project",│
-│   {project:proj})    │    │   {project:p})       │
-└──────┬───────────────┘    └──────┬───────────────┘
+┌─ 入口1: 启动恢复 ──┐  ┌─ 入口2: 项目面板 ──┐  ┌─ 入口3: 分析页选择器 ──┐
+│ App.tsx:135          │  │ ProjectPanel.tsx:489│  │ ProjectFileSelectors  │
+│ send("switch_project",│  │ send("switch_project",│  │   .tsx:72              │
+│   {project:proj})    │  │   {project:p})       │  │ → AnalyzePanel.tsx:309│
+└──────┬───────────────┘  └──────┬───────────────┘  └──────┬────────────────┘
        └──────────┬────────────────┘
                   ▼
          useWebSocket.ts:190
@@ -105,6 +105,7 @@ prevRef 守卫确保首次挂载不误清，App.tsx 填补首次挂载的恢复�
 | K | `STATE_REGISTRY.md` + 守门测试 | 新文件 | 4 |
 | L | `ws_handler` payload 路径修复 | `ws_handler.py:294,313,317` | 5 |
 | M | `App.tsx` 启动恢复 | `App.tsx:131-137` | 5 |
+| P | `ProjectFileSelectors` 加 switch_project | `ProjectFileSelectors.tsx:72` + `AnalyzePanel.tsx:309` | 5 |
 | N | 移除 debug 日志 | `app.py:126-128` | 待做 |
 | O | 清理未使用解构 | `handlers.ts:32` | ✅ 已做 |
 
@@ -443,6 +444,7 @@ git commit -m "fix: 项目切换完整修复
 | K | STATE_REGISTRY + 守门 | `pytest tests/test_frontend/test_state_registry.py -v` | 3 passed | 新增文件，零影响 |
 | L | `ws_handler.py:294,313,317` payload | `grep "msg.get.*payload.*or.*msg" hagoku/api/ws_handler.py` | 3 行匹配 | 同时修了 switch/create/delete |
 | M | `App.tsx:131-137` 启动恢复 | `grep -A5 "挂载后恢复" hagoku_web/src/App.tsx` | send("switch_project") | 仅 mount 一次，无副作用 |
+| P | `ProjectFileSelectors` 补齐 switch | `grep "onSwitchProject" hagoku_web/src/panels/AnalyzePanel/ProjectFileSelectors.tsx hagoku_web/src/panels/AnalyzePanel.tsx` | 3 行匹配（prop+调用+传递） | 与 ProjectPanel 行为一致 |
 | N | `app.py:126-128` 移除 | `grep "logger.info.*_load_project" hagoku/app.py` | 无输出 | — |
 | O | `handlers.ts:32` 清理 | `grep "addSystemMsg" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts` | 仅 `addSystemMsg: addSys` 已删除 | 原已未使用 |
 

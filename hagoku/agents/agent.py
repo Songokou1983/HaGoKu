@@ -27,19 +27,6 @@ from hagoku.observability.events import EventType
 logger = logging.getLogger("hagoku.agent")
 
 
-def _description_is_user_facing_meaningful(col_name: str, desc: str) -> bool:
-    """检查描述是否提供了超出列名本身的结构性信息（从 scout/agent.py 迁入）。"""
-    d = (desc or "").strip()
-    if not d:
-        return False
-    if d == col_name:
-        return False
-    prefix = col_name + "（"
-    if d.startswith(prefix) and d.endswith("）"):
-        return False
-    return True
-
-
 # ── 模块级工具（从 scout 迁入，D7 删 scout/ 后无需改 import）─────────
 
 def _format_sample_preview(df: pd.DataFrame, col: str, *, limit: int = 5) -> str:
@@ -200,12 +187,6 @@ class DataAnalystAgent:
             # Phase D: 项目记忆 / 角色派生 / 质量警告
             if memory_project and project_id:
                 self._apply_project_memory(context, memory_project)
-            self._derive_roles(context)
-
-            if profile.get("duplicate_rate", 0) > 0.05:
-                context["warnings"].append(f"重复行率 {profile['duplicate_rate']:.1%} 较高")
-            if profile.get("missing_summary", {}).get("null_rate", 0) > 0.1:
-                context["warnings"].append(f"缺失率 {profile['missing_summary']['null_rate']:.1%} 较高")
 
             self._learn_from_results(context, project_id)
             self._update_own_memory(context, project_id)
@@ -367,21 +348,6 @@ class DataAnalystAgent:
                 if col not in dnames:
                     dnames[col] = dn
             context["column_display_names"] = dnames
-
-    def _derive_roles(self, context: dict) -> None:
-        """从 column_semantics 派生 target/features。"""
-        semantics = context.get("column_semantics", [])
-        target = None
-        features = []
-        for s in semantics:
-            role = s.get("suggested_role", "")
-            if role == "target" and target is None:
-                target = s["column_name"]
-            elif role in ("feature", "target"):
-                features.append(s["column_name"])
-        if target:
-            context["target"] = target
-        context["features"] = features
 
     def _learn_from_results(self, context: dict, project_id: str | None) -> None:
         """从推断结果学习 — 将用户确认的字段理解保存为 lesson。"""

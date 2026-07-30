@@ -152,10 +152,6 @@ def _column_profile(series: pd.Series, *, minimal: bool = True) -> dict[str, Any
             "top_freq": int(value_counts.iloc[0]) if len(value_counts) > 0 else 0,
         })
 
-        # 唯一值过多可能是 ID 列
-        if n_unique > len(series) * 0.8:
-            profile["likely_id"] = True
-
     elif col_type == "datetime":
         profile.update({
             "min_date": str(series.min()),
@@ -240,7 +236,7 @@ def _compute_correlations(df: pd.DataFrame) -> dict[str, Any]:
     for i in range(len(corr.columns)):
         for j in range(i + 1, len(corr.columns)):
             val = corr.iloc[i, j]
-            if abs(val) >= 0.7 and not np.isnan(val):
+            if not np.isnan(val):
                 high_corr.append({
                     "var1": corr.columns[i],
                     "var2": corr.columns[j],

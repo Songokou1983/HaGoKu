@@ -321,7 +321,7 @@ _KNOWN_LLM_EXCEPT_VIOLATIONS: set[str] = set()
 # 待后续改名（_detect_→_compute_ / _infer_→_resolve_）后从此清单移除。
 _KNOWN_SEMANTIC_FUNC_VIOLATIONS: set[str] = {
     "tools/diagnostics.py::_detect_residual_pattern (line 145)",
-    "tools/profiling.py::_infer_type (line 175)",
+    "tools/profiling.py::_infer_type (line 171)",
 }
 
 _LLM_CALL_HINT_LINES = re.compile(

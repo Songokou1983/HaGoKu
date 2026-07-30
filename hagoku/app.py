@@ -36,6 +36,23 @@ class HaGoKuApp:
         self._repo = ProjectRepository(config.output.project_dir)
         self._active_project: str | None = None
         self._active_orch: Any = None
+        self._restore_active_project()
+
+    # ── 活跃项目持久化 ──────────────────────────────────────
+
+    def _active_project_file(self) -> Path:
+        return self.config.work_dir / "active_project"
+
+    def _save_active_project(self) -> None:
+        if self._active_project:
+            self._active_project_file().write_text(self._active_project)
+
+    def _restore_active_project(self) -> None:
+        f = self._active_project_file()
+        if f.exists():
+            name = f.read_text().strip()
+            if name and (self.config.output.project_dir / name).exists():
+                self._active_project = name
 
     # ── Repository delegate ────────────────────────────────────
 
@@ -114,6 +131,7 @@ class HaGoKuApp:
 
         self._active_orch = orch
         self._active_project = project_name
+        self._save_active_project()
 
         return self.build_snapshot()
 

@@ -35,6 +35,9 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     setActiveAnalystReviewId, setActiveAnalystReviewRevision,
     setGateOpen, setPhase, setWaitingAgent,
     setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
+    setQueryText, setThinkingText, setReplyPending,
+    _setDataPath, setExcelSheets, setSheetName, setAuxSheets, setPresetName,
+    resetAll,
   } = deps;
 
   const roleMap: Record<string, ConvoMessage["role"]> = {
@@ -42,8 +45,31 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
     workflow: "workflow", tool: "system",
   };
 
-  // 项目切换时的清理由 AnalyzePanel useEffect([currentProject]) 负责
-  // 此处只应用快照数据
+  // 项目切换：清理旧状态（原 useEffect 逻辑移入此处）
+  if (snap.project_name && deps.currentProject && snap.project_name !== deps.currentProject) {
+    setPhase?.("setup");
+    setQueryText?.("");
+    setThinkingText?.(null);
+    setReplyPending?.(false);
+    _setDataPath?.("");
+    setExcelSheets?.([]);
+    setSheetName?.("");
+    setAuxSheets?.([]);
+    setPresetName?.("");
+    resetAll?.();
+    setCurrentDataPath?.("");
+    useWorkspaceStore.getState().resetRunUiState();
+    useWorkspaceStore.getState().setLastError(null);
+    useWorkspaceStore.getState().setReportFiles([]);
+    useWorkspaceStore.getState().setSnapshot(null);
+    setActiveFieldReviewId?.(null);
+    setActiveFieldReviewRevision?.(-1);
+    setActiveCleaningReviewId?.(null);
+    setActiveCleaningReviewRevision?.(-1);
+    setActiveAnalystReviewId?.(null);
+    setActiveAnalystReviewRevision?.(-1);
+  }
+
   if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
   if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
   // 消息由 WS state_snapshot 统一管理（项目切换和断连重连都走这条路径）

@@ -160,5 +160,14 @@ export interface WsEventDeps {
   setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentProject?: (p: string) => void;
   setCurrentDataPath?: (p: string) => void;
+  setQueryText?: (v: string) => void;
+  setThinkingText?: (v: string | null) => void;
+  setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
+  _setDataPath?: (v: string) => void;
+  setExcelSheets?: (v: string[]) => void;
+  setSheetName?: (v: string) => void;
+  setAuxSheets?: (v: string[]) => void;
+  setPresetName?: (v: string) => void;
+  resetAll?: () => void;
   log?: (msg: string) => void;
 }

@@ -111,13 +111,10 @@ export function useConversation(_log?: (msg: string) => void) {
   // ── snapshot 同步 ──
 
   const syncFromSnapshot = (snapMsgs: ConvoMessage[]) => {
-    setMessages((prev) => {
-      // 保留本地独有的 user 消息（刚发的新消息）
-      const localUserMsgs = prev.filter((m) => m.role === "user" && !snapMsgs.some((s) => s.text === m.text && s.role === "user"));
-      const merged = [...snapMsgs, ...localUserMsgs];
-      eventLog("snapshot", `sync msgs=${merged.length}`);
-      persist(merged);
-      return merged;
+    setMessages((_prev) => {
+      eventLog("snapshot", `sync msgs=${snapMsgs.length}`);
+      persist(snapMsgs);
+      return snapMsgs;
     });
   };
 

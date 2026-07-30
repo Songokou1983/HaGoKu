@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useWorkspaceStore, type PanelId } from "./stores/workspace";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { switchToProject } from "./utils/switchProject";
 import ProjectPanel from "./panels/ProjectPanel";
 import AnalyzePanel from "./panels/AnalyzePanel";
 import ReportPanel from "./panels/ReportPanel";
@@ -118,6 +119,7 @@ export default function App() {
   const activeView = useWorkspaceStore((s) => s.activeView);
   const setActiveView = useWorkspaceStore((s) => s.setActiveView);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
+  const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
 
   useEffect(() => {
     return onMessage((msg) => {
@@ -132,7 +134,7 @@ export default function App() {
   useEffect(() => {
     const proj = useWorkspaceStore.getState().currentProject;
     if (proj) {
-      send("switch_project", { project: proj });
+      switchToProject(proj, send, setCurrentProject);
     }
   }, []);
 

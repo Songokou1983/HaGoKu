@@ -8,6 +8,7 @@ import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";
 import { useWorkspaceStore } from "../stores/workspace";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { switchToProject } from "../utils/switchProject";
 import { PanelHeader } from "../components/PanelHeader";
 
 interface ProjectDetail {
@@ -485,8 +486,7 @@ export default function ProjectPanel() {
             isRunning={isAgentRunning && p === currentProject}
             onSelect={() => {
               if (p !== currentProject) {
-                setCurrentProject(p);
-                send("switch_project", { project: p });
+                switchToProject(p, send, setCurrentProject);
               }
             }}
             onDeleted={() => {

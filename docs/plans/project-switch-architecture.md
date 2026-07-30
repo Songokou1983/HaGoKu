@@ -118,102 +118,62 @@ handleStateSnapshot(snap):
 
 1. 逐步把 useEffect 中的清理逻辑移到 handleStateSnapshot（保持功能不变）
 2. 统一触发点为 `switchToProject(name)` 函数
-## 七、迁移路径（不改功能，逐步收敛）
+## 七、迁移路径
 
-**原则**：每一步完成后，8 个场景（S1-S8）必须全部通过。任一步失败 → 回退 → 修到通过再继续。
+**不变的是功能**：S1-S8 每步都必须全过。**变的是代码**：逐步从"多写入点"收敛到"handleStateSnapshot 单写入点"。
 
-### 当前状态（基线）
+### 基线功能（当前已实现）
 
-| 功能 | 状态 |
-|------|:--:|
-| 项目面板切换 | ✅ |
-| 分析页下拉切换 | ✅ |
-| 启动恢复 | ✅ |
-| 8 场景验收 | ⬜ 待你验证 |
+| # | 功能 | 用户看到 |
+|---|------|---------|
+| F1 | 启动恢复 | 打开应用 → 上次项目的对话出现 |
+| F2 | 项目面板切换 | 点项目列表 → 对话切换 |
+| F3 | 分析页下拉切换 | 分析页选项目 → 对话切换 |
+| F4 | 切换至空项目 | 切换到无历史项目 → setup 界面 |
+| F5 | 分析中锁定 | 分析进行中点其他项目 → 拒绝提示 |
+| F6 | 停止后切换 | 停止 → 点其他项目 → 正常切换 |
+| F7 | 反复切换 | A→B→A→B → 每次正确 |
+| F8 | 删除后清空 | 删除当前项目 → 面板自动清空 |
 
-### 步骤 1：统一触发函数（不改行为）
+### 步骤 1：统一触发（代码改，功能不变）
 
-创建 `switchToProject(name)` 函数，替代三处散调的 `send("switch_project", ...)`。
+**功能**：F1-F8 全部保持。
 
-```typescript
-// 新函数（放在 hooks/ 或 utils/）
-function switchToProject(name: string, send: SendFn, setCurrentProject: SetFn) {
-  setCurrentProject(name);
-  send("switch_project", { project: name });
-}
-```
+**代码变化**：三处 `send("switch_project", ...)` 替换为一个 `switchToProject(name)` 函数。ProjectPanel、ProjectFileSelectors、App.tsx 都调用它。
 
-**改动**：`ProjectPanel.tsx:488-489`、`ProjectFileSelectors.tsx:72`/`AnalyzePanel.tsx:309`、`App.tsx:135` — 三处替换为调用 `switchToProject`。
+**验证**：F1-F8 全部通过 → 进入步骤 2。
 
-**行为不变**：函数内部做的就是原来两行代码。零功能变化。
+### 步骤 2：清理逻辑移入 handleStateSnapshot（代码改，功能不变）
 
-**验证**：S1-S8 全部通过。`tsc --noEmit` 零错误。
+**功能**：F1-F8 全部保持。
 
-### 步骤 2：handleStateSnapshot 接管清理（不改行为，移代码）
+**代码变化**：AnalyzePanel useEffect 中的清理逻辑（9 个 setState + sess.resetAll + store 重置）移到 handleStateSnapshot 内，在检测到 project_name 变化时执行。useEffect 清空。
 
-当前 useEffect（`AnalyzePanel.tsx:127-151`）清理 9 个本地 state + sess.resetAll() + store 字段。
+**验证**：F1-F8 全部通过。确认无闪烁、无消息丢失 → 进入步骤 3。
 
-目标：把这段清理逻辑移到 `handleStateSnapshot` 内，在检测到项目变化时执行。
+### 步骤 3：删除 useEffect 和 prevRef（代码改，功能不变）
 
-```typescript
-// handleStateSnapshot 新增
-if (snap.project_name && snap.project_name !== currentProject) {
-  // 以下代码与 AnalyzePanel.tsx:136-150 完全一致
-  setPhase("setup");
-  setQueryText("");
-  setThinkingText(null);
-  setReplyPending(false);
-  // _setDataPath 不在 handleStateSnapshot 可访问范围内 → 用 deps
-  setExcelSheets([]);
-  setSheetName("");
-  setAuxSheets([]);
-  setPresetName("");
-  // sess.resetAll() → 需要在 deps 中暴露
-  setCurrentDataPath("");
-  useWorkspaceStore.getState().resetRunUiState();
-  useWorkspaceStore.getState().setLastError(null);
-  useWorkspaceStore.getState().setReportFiles([]);
-  useWorkspaceStore.getState().setSnapshot(null);
-}
-```
+**功能**：F1-F8 全部保持。
 
-**关键**：`handleStateSnapshot` 通过 `deps` 访问这些 setter。需要在 `WsEventDeps` 类型中添加缺失的字段（`setQueryText`, `setThinkingText`, `setReplyPending`, `_setDataPath`, `setExcelSheets`, `setSheetName`, `setAuxSheets`, `setPresetName`, `sessResetAll`），然后从 `AnalyzePanel` 传入。
+**代码变化**：删除已空的 useEffect 和 prevProjectRef。WsEventDeps 中移除不再需要的字段。
 
-**同时**：useEffect 中的清理代码删除，只保留空 useEffect（或加注释标记"已移至 handleStateSnapshot"）。
+**验证**：F1-F8 全部通过 → 进入步骤 4。
 
-**验证**：S1-S8 全部通过。确认消息不重复、不丢失、不闪烁。
+### 步骤 4：sess 状态纳入快照管理（技术债，暂缓）
 
-### 步骤 3：移除 useEffect 和 prevRef
+**功能**：F1-F8 全部保持。
 
-步骤 2 验证通过后，`AnalyzePanel.tsx:127-151` 的 useEffect 已空。删除它和 `prevProjectRef`。
-
-**改动**：删除 25 行代码。
-
-**验证**：S1-S8 全部通过。
-
-### 步骤 4：用快照管理 sess 状态
-
-当前 `sess.resetAll()` 重置 14 个 useAnalyzeSession 状态。理想架构中这些应由快照或 handleStateSnapshot 管理。
-
-**不急于做**：sess 状态和消息不同——它们是 UI 交互状态（如 review 卡片 ID、gateOpen），不是持久化数据。让 handleStateSnapshot 管理它们需要后端 snapshot 包含这些字段，改动范围大。
-
-**标记为技术债**：当前 resetAll 模式可接受，不影响唯一真相源原则（消息已走 handleStateSnapshot）。
+**代码变化**：resetAll 管理的 14 个 sess 状态改为由 handleStateSnapshot 根据快照字段管理。需要后端 snapshot 新增对应字段。改动范围大，标记为技术债，不阻塞步骤 1-3。
 
 ### 每步守护
 
-```bash
-# 步骤 1-3 每步结束后运行
-cd hagoku_web && npx tsc --noEmit          # 零错误
-cd .. && python3 -m pytest tests/ -q         # 全绿
-grep -rn 'setMessages\|clearMessages' hagoku_web/src/panels/AnalyzePanel/ \
-  --include='*.ts' --include='*.tsx' \
-  | grep -v useConversation | grep -v types.ts | grep -v _setMessages
-# 预期：无输出（消息写入只在 handleStateSnapshot）
+```
+cd hagoku_web && npx tsc --noEmit        # 零错误
+cd .. && pytest tests/ -q                  # 全绿
+# F1-F8 手动验证全部通过
 ```
 
-### 不可回退的改动
-
-每一步均独立 commit。如果步骤 2 验证失败，`git revert` 回到步骤 1 状态。不允许"修修补补继续往前走"——必须回到上一个干净状态，重新设计方案。
+**回退规则**：任一步验证失败 → `git revert` 回到上一步。不允许在当前步内修补。
 
 ## 八、守门
 

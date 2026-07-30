@@ -64,7 +64,6 @@ function switchToProject(name: string) {
 
 在以下位置调用：
 - `ProjectPanel` 项目列表点击
-- `ProjectFileSelectors` 下拉选择
 - `App` 启动恢复（mount 时）
 
 ## 五、handleStateSnapshot 完整逻辑

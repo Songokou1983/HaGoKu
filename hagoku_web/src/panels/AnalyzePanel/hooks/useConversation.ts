@@ -16,9 +16,8 @@ function _storageKey(): string {
 export function useConversation(_log?: (msg: string) => void) {
   const [messages, setMessages] = useState<ConvoMessage[]>([]);
 
-  function persist(next: ConvoMessage[]) {
-    try { localStorage.setItem(_storageKey(), JSON.stringify(next.slice(-100))); } catch {}
-    eventLog("persist", `${next.length} msgs`);
+  function persist(_next: ConvoMessage[]) {
+    // 前端不持久化消息。快照是唯一真相源，来自后端。
   }
 
   // ── 幂等方法 ──

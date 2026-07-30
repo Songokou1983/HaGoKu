@@ -306,6 +306,7 @@ export default function AnalyzePanel() {
         auxSheets={auxSheets}
         setAuxSheets={setAuxSheets}
         onDeleteFile={() => reloadFiles()}
+        onSwitchProject={(p: string) => send("switch_project", { project: p })}
       />
       {/* ── Setup idle: start button ── */}
       <StartPanel

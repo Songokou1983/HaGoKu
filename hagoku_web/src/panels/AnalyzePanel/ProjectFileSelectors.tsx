@@ -1,12 +1,9 @@
-import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2, Trash2 } from "lucide-react";
+import { Loader2, FolderOpen, FileText, Upload, X, Trash2 } from "lucide-react";
 import type { ProjectFile } from "./types";
 import { fmtSize } from "./utils";
 
 interface ProjectFileSelectorsProps {
   currentProject: string | null;
-  projects: string[];
-  setCurrentProject: (p: string) => void;
-  setActiveView: (v: any) => void;
   dataPath: string;
   setDataPath: (p: string) => void;
   selectedFileName: string | null;
@@ -35,8 +32,7 @@ interface ProjectFileSelectorsProps {
 
 export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
   const {
-    currentProject, projects, setCurrentProject, setActiveView,
-    dataPath, setDataPath, selectedFileName,
+    currentProject, dataPath, setDataPath, selectedFileName,
     projectFiles, filesLoading, showFileDropdown, setShowFileDropdown,
     showProjectDropdown, setShowProjectDropdown,
     uploading, uploadError, setUploadError,
@@ -53,37 +49,12 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
         <div className="relative flex-1" ref={projectDropdownRef}>
           <button
             onClick={() => setShowProjectDropdown((v) => !v)}
-            disabled={phase === "running"}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded
-                       text-ui-sm transition-colors
-                       ${phase !== "running"
-                         ? "border-app-border hover:border-app-accent cursor-pointer text-app-text"
-                         : "border-app-border opacity-50 cursor-not-allowed text-app-text-muted"}`}
+            className="w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded
+                       text-ui-sm border-app-border text-app-text"
           >
             <FolderOpen size={13} className="text-app-accent shrink-0" />
-            <span className="flex-1 text-left truncate font-mono">{currentProject ?? "— 选择项目 —"}</span>
-            <ChevronDown size={12} className="text-app-text-muted shrink-0" />
-          </button>
-          {showProjectDropdown && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-app-bg-secondary border border-app-border rounded shadow-lg max-h-48 overflow-y-auto">
-              {!projects?.length
-                ? <div className="px-3 py-2 text-ui-xs text-app-text-muted">暂无项目</div>
-                : projects.map((p) => (
-                  <button key={p} onClick={() => { setCurrentProject(p); setShowProjectDropdown(false); }}
-                    className={`w-full text-left px-3 py-1.5 text-ui-sm font-mono hover:bg-app-bg cursor-pointer
-                      ${p === currentProject ? "text-app-accent" : "text-app-text"}`}>
-                    {p === currentProject && <CheckCircle2 size={11} className="inline mr-1.5 text-app-accent" />}
-                    {p}
-                  </button>
-                ))}
-              <div className="border-t border-app-border">
-                <button onClick={() => { setShowProjectDropdown(false); setActiveView("projects"); }}
-                  className="w-full text-left px-3 py-1.5 text-ui-xs text-app-accent hover:bg-app-bg cursor-pointer">
-                  + 新建项目 →
-                </button>
-              </div>
-            </div>
-          )}
+            <span className="flex-1 text-left truncate font-mono">{currentProject ?? "—"}</span>
+          </div>
         </div>
       </div>
 

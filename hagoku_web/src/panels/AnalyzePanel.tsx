@@ -64,8 +64,6 @@ export default function AnalyzePanel() {
     filesLoading,
     showFileDropdown,
     setShowFileDropdown,
-    showProjectDropdown,
-    setShowProjectDropdown,
     uploading,
     uploadError,
     setUploadError,
@@ -280,9 +278,6 @@ export default function AnalyzePanel() {
       {/* ── Setup: project + file selectors ── */}
       <ProjectFileSelectors
         currentProject={currentProject}
-        projects={projects}
-        setCurrentProject={setCurrentProject}
-        setActiveView={setActiveView}
         dataPath={dataPath}
         setDataPath={setDataPath}
         selectedFileName={selectedFileName}

@@ -71,6 +71,8 @@ done
 | 找不到日志/session/数据 | **铁律 31 → 只跑一条命令就结论不存在 = 撒谎。** 必须试 3 种以上方法再下结论。固定路径优先：`~/.hagoku/hagoku.log` / `{project_dir}/session.latest.json` |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I → 状态同步：后端清空自己 ≠ 前端知道了 |
 | 说"可能是…""估计是…""试试…"（无日志证据） | **铁律 12 / 刹车 J** → 停下来补日志系统，拿到证据再开口 |
+| 另开 REST /switch、useEffect 清消息、localStorage 恢复 | **铁律 13 / 刹车 K** → `handleStateSnapshot` 是前端状态唯一写入点。不准绕开。 |
+| 改 handlers/AnalyzePanel/ProjectPanel 后不查唯一真相源 | **违反验证协议** → 必须 grep `clearMessages|fetch.*switch|setCurrentDataPath` 确认不在 `handleStateSnapshot` 外出现 |
 
 ## 系统认知
 
@@ -78,6 +80,7 @@ done
 - **对话循环**: `run_step()` — 已有工具调用→dispatch→回传→继续。不自己写循环
 - **流程控制**: LLM 通过 `route_to` 决定阶段。代码不做 if-elif 判断
 - **代码=通道**: 不替 LLM 做语义判断，不替用户做选择
+- **唯一真相源**: `handleStateSnapshot` 是前端状态的唯一写入点。WS `state_snapshot` 是项目切换和断连重连的唯一数据通道。不准另开路径。
 - **项目真相**: `PROJECT.md`、`CLAUDE.md`、`reasonix.toml`
 
 ## 流程
@@ -85,5 +88,6 @@ done
 1. 用户反馈问题 → 先读 dump + 日志 + session（`ls -lt ~/.hagoku/llm_dumps/` + `tail -30 ~/.hagoku/hagoku.log` + 读 session.json 对话数据）
 2. 贴 dump 证据 → 回答四行
 3. 用户确认 → 改代码
-4. 跑 `bash scripts/ci/self_check.sh` + `pytest`
-5. commit message 含 dump/path/gap + 【自检】
+4. **唯一真相源自查** — 改过 `handlers.ts` / `AnalyzePanel.tsx` / `ProjectPanel.tsx` 后，必须 grep `clearMessages|fetch.*switch|setCurrentDataPath` 确认这些操作不出现在 `handleStateSnapshot` 之外。如果有 → 撤回，改由 WS snapshot 推送。
+5. 跑 `bash scripts/ci/self_check.sh` + `pytest`
+6. commit message 含 dump/path/gap + 【自检】

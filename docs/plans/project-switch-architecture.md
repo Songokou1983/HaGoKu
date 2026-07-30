@@ -1,185 +1,75 @@
-# 项目切换 — 理想架构
+# 项目切换 — 架构文档 v7
 
-> 基于铁律 13（唯一真相源）和通道原则设计。
-> 不管现有代码实现——只描述"应该是什么样"。
+> 基于铁律 13 和实际验证结果。描述当前工作状态，不是理想态。
 
-## 一、单通道
+## 一、职责分离
 
-整个系统只有一条数据路径：
+项目切换涉及两个独立事件，由不同机制处理：
 
-```
-触发（任一处）
-  → WS: switch_project
-  → 后端: 恢复 session → build_snapshot
-  → WS: state_snapshot
-  → handleStateSnapshot（唯一写入点）
-```
+| 事件 | 触发时机 | 处理者 | 做什么 |
+|------|---------|--------|------|
+| 用户切换项目 | `currentProject` 变化 | `useEffect([currentProject])` + `prevRef` | 清理旧 UI 状态（不含 messages） |
+| 后端快照到达 | WS `state_snapshot` | `handleStateSnapshot` | 替换 messages + 同步 project 信息 |
 
-三个入口汇入同一条通道：
+**为什么不能合并**：`useEffect` 是同步的（React render 阶段），`handleStateSnapshot` 是异步的（WS 到达）。合并意味着清理必须等快照——但快照可能延迟、可能不到达。分离意味着清理立即执行，快照到达后填充——各自独立，互不依赖。
 
-| 入口 | 场景 |
-|------|------|
-| 项目面板点击 | 用户主动切换 |
-| 分析页下拉选项目 | 同上 |
-| 应用启动 | localStorage 有 active project |
-
-## 二、handleStateSnapshot 是唯一写入点
-
-`handleStateSnapshot` 收到快照后，原子性地完成以下操作。**没有任何其他函数、useEffect、事件处理器直接写这些状态**：
-
-| 操作 | 说明 |
-|------|------|
-| `syncFromSnapshot(messages)` | 替换消息列表 |
-| `setPhase("running")` 或 `"setup"` | 根据快照是否有消息 |
-| `setCurrentProject(snap.project_name)` | 同步项目名 |
-| `setCurrentDataPath(snap.data_path)` | 同步数据路径 |
-| 同步 agent 状态条 | 根据 snap.stage |
-| 清空 review 卡片 ID | 如果 project_name 变化 |
-
-**切换时的旧状态清理**：handleStateSnapshot 在处理新快照前，检测 `snap.project_name !== 当前 project_name`，如果是 → 先执行清理（清 review ID、清本地 UI 标记），再应用新快照。清理和应用在同一个函数调用内完成，不需要 useEffect。
-
-**切换期间的视觉过渡**：在 `send("switch_project")` 返回后、快照到达前，不需要任何中间状态。如果快照在 16ms 内到达（正常情况），React 批量处理，用户看不到中间帧。如果快照延迟（网络慢），消息列表短暂显示旧内容，快照到达后替换——这也比先清空再填充的闪烁好。
-
-## 三、不需要的东西
-
-以下在理想架构中不存在：
-
-- ❌ `useEffect([currentProject])` 清理 UI 状态 — 清理是 handleStateSnapshot 的职责
-- ❌ `prevRef` 守卫区分首次挂载和切换 — handleStateSnapshot 自己处理
-- ❌ `resetAll()` 方法供 useEffect 调用 — handleStateSnapshot 处理所有状态
-- ❌ 多个 `send("switch_project")` 调用点 — 统一为一个触发函数
-- ❌ 任何在 handleStateSnapshot 之外的 `setMessages` / `clearMessages` 调用
-
-## 四、统一触发
-
-所有需要切换项目的地方，调用同一个函数：
-
-```typescript
-function switchToProject(name: string) {
-  setCurrentProject(name);                    // 同步 store（UI 立即响应）
-  send("switch_project", { project: name });  // 触发后端
-  // 不做任何状态清理 — handleStateSnapshot 负责
-}
-```
-
-在以下位置调用：
-- `ProjectPanel` 项目列表点击
-- `App` 启动恢复（mount 时）
-
-## 五、handleStateSnapshot 完整逻辑
+## 二、数据流
 
 ```
-handleStateSnapshot(snap):
-  if !snap: return
-
-  // 1. 如果项目变了 → 先清理
-  if snap.project_name !== currentProject:
-    clearReviewCards()
-    setGateOpen(false)
-    setPhase(null)  // 过渡态，等消息处理完再设
-
-  // 2. 同步项目信息
-  setCurrentProject(snap.project_name)
-  setCurrentDataPath(snap.data_path || "")
-
-  // 3. 同步消息
-  if snap.messages.length > 0:
-    renderAndSyncFromSnapshot(snap.messages)
-    setPhase("running")
-  else:
-    clearMessages()
-    setPhase("setup")
-
-  // 4. 同步其他快照字段
-  if snap.gate_open: setGateOpen(true)
-  if snap.report_url: setReportUrl(snap.report_url)
-
-  // 5. 同步 agent 状态条
-  syncAgentStates(snap.stage)
-
-  // 6. 项目被删除 → 全清
-  if !snap.project_name && snap.messages.length == 0:
-    clearAll()
+用户点击项目 B
+  │
+  ├─ switchToProject("B")
+  │    ├─ setCurrentProject("B")           ← store 同步
+  │    └─ send("switch_project", {B})      ← WS 异步
+  │
+  ├─ [同步] useEffect([currentProject])
+  │    └─ prevRef 守卫 → 清理 UI 状态（不碰 messages）
+  │
+  └─ [异步] WS state_snapshot 到达
+       └─ handleStateSnapshot
+            ├─ syncFromSnapshot(ms)        ← 替换 messages
+            ├─ setPhase("running"/"setup")  ← 根据快照
+            └─ setCurrentProject/DataPath   ← 同步项目信息
 ```
 
-## 六、与现有代码的差距
+## 三、唯一真相源
 
-| 理想 | 现有 | 差距 |
-|------|------|------|
-| handleStateSnapshot 做清理 | useEffect + prevRef 做清理 | 清理逻辑分散两处 |
-| 一个 `switchToProject` 函数 | 多处散调 send("switch_project") | 不一致（已部分修复） |
-| 无 resetAll 概念 | useAnalyzeSession.resetAll() | sess 状态也应由 snapshot 管理 |
-| App mount 触发 switchToProject | App.tsx useEffect | 功能一致，命名不统一 |
+| 数据 | 唯一写入点 | 机制 |
+|------|-----------|------|
+| **messages** | `handleStateSnapshot` → `syncFromSnapshot` | WS 快照 |
+| **phase** | `handleStateSnapshot`（快照）/ `useEffect`（清理） | 快照优先 |
+| **本地 UI state** | `useEffect([currentProject])` | 切换时清空 |
+| **project_name/data_path** | `handleStateSnapshot` | WS 快照 |
 
-## 七、迁移路径
+messages 不走 useEffect（铁律 13 合规）。useEffect 只清理 UI state，不写 messages。
 
-**不做一次性重写。** 当前代码已工作（项目切换正常、启动恢复正常、三个入口均补齐）。差距是架构清洁度问题，非功能缺陷。下一步改代码时优先收敛到理想架构：
+## 四、入口
 
-1. 逐步把 useEffect 中的清理逻辑移到 handleStateSnapshot（保持功能不变）
-2. 统一触发点为 `switchToProject(name)` 函数
-## 七、迁移路径
+只有一个切换入口：`ProjectPanel` 项目面板点击。
+（分析页下拉只设项目上下文，不触发切换。）
 
-**不变的是功能**：S1-S8 每步都必须全过。**变的是代码**：逐步从"多写入点"收敛到"handleStateSnapshot 单写入点"。
+应用启动恢复：`App.tsx` mount 时调 `switchToProject`。
 
-### 基线功能（当前已实现）
+统一函数：`switchToProject(name, send, setCurrentProject)`。
 
-| # | 功能 | 用户看到 |
-|---|------|---------|
-| F1 | 启动恢复 | 打开应用 → 上次项目的对话出现 |
-| F2 | 项目面板切换 | 点项目列表 → 对话切换 |
-| F3 | 分析页下拉切换 | 分析页选项目 → 对话切换 |
-| F4 | 切换至空项目 | 切换到无历史项目 → setup 界面 |
-| F5 | 分析中锁定 | 分析进行中点其他项目 → 拒绝提示 |
-| F6 | 停止后切换 | 停止 → 点其他项目 → 正常切换 |
-| F7 | 反复切换 | A→B→A→B → 每次正确 |
-| F8 | 删除后清空 | 删除当前项目 → 面板自动清空 |
+## 五、当前代码位置
 
-### 步骤 1：统一触发（代码改，功能不变）
+| 职责 | 文件:行 |
+|------|--------|
+| 统一触发 | `utils/switchProject.ts` |
+| 启动恢复 | `App.tsx:135` |
+| 项目面板切换 | `ProjectPanel.tsx:489` |
+| 清理 UI state | `AnalyzePanel.tsx:127-151` |
+| 快照应用 | `handlers.ts:27-100` |
 
-**功能**：F1-F8 全部保持。
+## 六、验收
 
-**代码变化**：三处 `send("switch_project", ...)` 替换为一个 `switchToProject(name)` 函数。ProjectPanel、ProjectFileSelectors、App.tsx 都调用它。
-
-**验证**：F1-F8 全部通过 → 进入步骤 2。
-
-### 步骤 2：清理逻辑移入 handleStateSnapshot（代码改，功能不变）
-
-**功能**：F1-F8 全部保持。
-
-**代码变化**：AnalyzePanel useEffect 中的清理逻辑（9 个 setState + sess.resetAll + store 重置）移到 handleStateSnapshot 内，在检测到 project_name 变化时执行。useEffect 清空。
-
-**验证**：F1-F8 全部通过。确认无闪烁、无消息丢失 → 进入步骤 3。
-
-### 步骤 3：删除 useEffect 和 prevRef（代码改，功能不变）
-
-**功能**：F1-F8 全部保持。
-
-**代码变化**：删除已空的 useEffect 和 prevProjectRef。WsEventDeps 中移除不再需要的字段。
-
-**验证**：F1-F8 全部通过 → 进入步骤 4。
-
-### 步骤 4：sess 状态纳入快照管理（技术债，暂缓）
-
-**功能**：F1-F8 全部保持。
-
-**代码变化**：resetAll 管理的 14 个 sess 状态改为由 handleStateSnapshot 根据快照字段管理。需要后端 snapshot 新增对应字段。改动范围大，标记为技术债，不阻塞步骤 1-3。
-
-### 每步守护
-
-```
-cd hagoku_web && npx tsc --noEmit        # 零错误
-cd .. && pytest tests/ -q                  # 全绿
-# F1-F8 手动验证全部通过
-```
-
-**回退规则**：任一步验证失败 → `git revert` 回到上一步。不允许在当前步内修补。
-
-## 八、守门
-
-```bash
-# handleStateSnapshot 之外无状态写入
-grep -rn "setPhase\|setCurrentProject\|setCurrentDataPath\|syncFromSnapshot\|clearMessages\|_setMessages" \
-  hagoku_web/src/ --include='*.ts' --include='*.tsx' \
-  | grep -v handleStateSnapshot | grep -v useConversation | grep -v useAnalyzeSession
-# 预期：仅在 switchToProject 中有 setCurrentProject
-```
+| # | 功能 | 验证 |
+|---|------|------|
+| F1 | 启动恢复 test0729 对话 | 重启应用 → 48 条消息出现 |
+| F2 | 项目面板切换 A→B | B 对话出现 |
+| F3 | 切换至空项目 | setup 界面 |
+| F4 | 分析中锁定 | 切换被拒 |
+| F5 | 停止后切换 | 正常 |
+| F6 | 反复切换 | 每次正确 |
+| F7 | 删除后清空 | setup |

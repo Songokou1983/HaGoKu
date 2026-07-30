@@ -1,75 +1,85 @@
-# 项目切换 — 架构文档 v7
+# 项目切换 — 功能架构
 
-> 基于铁律 13 和实际验证结果。描述当前工作状态，不是理想态。
+> 描述应该是什么。不考虑现有代码。
 
-## 一、职责分离
+## 一、用户需要什么
 
-项目切换涉及两个独立事件，由不同机制处理：
+| # | 功能 | 用户体验 |
+|---|------|---------|
+| F1 | 打开应用 | 看到上次关闭时正在看的项目对话 |
+| F2 | 切换项目 | 点项目列表中任一项目 → 看到该项目的对话 |
+| F3 | 切换至空项目 | 点无历史数据的项目 → 看到空白开始界面 |
+| F4 | 分析中锁定 | 分析进行中点其他项目 → 提示无法切换 |
+| F5 | 停止后切换 | 点停止 → 可正常切换 |
+| F6 | 反复切换 | A→B→A 来回切，每次内容正确，不残留旧数据 |
+| F7 | 删除项目 | 删除当前项目 → 面板自动清空 |
 
-| 事件 | 触发时机 | 处理者 | 做什么 |
-|------|---------|--------|------|
-| 用户切换项目 | `currentProject` 变化 | `useEffect([currentProject])` + `prevRef` | 清理旧 UI 状态（不含 messages） |
-| 后端快照到达 | WS `state_snapshot` | `handleStateSnapshot` | 替换 messages + 同步 project 信息 |
+## 二、用户体验原则
 
-**为什么不能合并**：`useEffect` 是同步的（React render 阶段），`handleStateSnapshot` 是异步的（WS 到达）。合并意味着清理必须等快照——但快照可能延迟、可能不到达。分离意味着清理立即执行，快照到达后填充——各自独立，互不依赖。
+1. **关前什么样，打开就什么样。** 不需要用户做任何操作恢复状态。
+2. **切换即所见。** 点项目的瞬间，要么看到历史对话，要么看到空白界面。不闪烁、不残留。
+3. **项目面板是唯一切换入口。** 用户切换项目的操作只在一处——项目列表。不在分析页重复提供切换功能。
+4. **分析中不可切换。** 保护正在运行的分析不被意外中断。
+5. **删除即清空。** 删除当前项目后，分析面板回到初始状态。
 
-## 二、数据流
+## 三、数据流
 
 ```
-用户点击项目 B
-  │
-  ├─ switchToProject("B")
-  │    ├─ setCurrentProject("B")           ← store 同步
-  │    └─ send("switch_project", {B})      ← WS 异步
-  │
-  ├─ [同步] useEffect([currentProject])
-  │    └─ prevRef 守卫 → 清理 UI 状态（不碰 messages）
-  │
-  └─ [异步] WS state_snapshot 到达
-       └─ handleStateSnapshot
-            ├─ syncFromSnapshot(ms)        ← 替换 messages
-            ├─ setPhase("running"/"setup")  ← 根据快照
-            └─ setCurrentProject/DataPath   ← 同步项目信息
+用户点项目 B
+  → 后端加载 B 的会话数据
+  → 后端返回快照（messages + project 信息）
+  → 前端接收快照
+  → 前端显示 B 的对话（或空白）
 ```
 
-## 三、唯一真相源
+用户点项目的瞬间，在快照到达之前，前端显示什么？原则 2 的答案：旧内容保留，快照到达后原子替换。这避免"先清空再填充"的闪烁。如果快照延迟超过可感知时间（约 200ms），前端可显示过渡态——但这不是必须的，因为正常网络下快照在 50ms 内到达。
 
-| 数据 | 唯一写入点 | 机制 |
-|------|-----------|------|
-| **messages** | `handleStateSnapshot` → `syncFromSnapshot` | WS 快照 |
-| **phase** | `handleStateSnapshot`（快照）/ `useEffect`（清理） | 快照优先 |
-| **本地 UI state** | `useEffect([currentProject])` | 切换时清空 |
-| **project_name/data_path** | `handleStateSnapshot` | WS 快照 |
+## 四、快照内容
 
-messages 不走 useEffect（铁律 13 合规）。useEffect 只清理 UI state，不写 messages。
+后端返回的快照必须包含前端需要的全部信息：
 
-## 四、入口
+```
+{
+  project_name: "test0729",
+  query: "分析每个店铺的收入变动趋势",
+  data_path: "/path/to/data.xlsx",
+  report_url: "/path/to/report.html",
+  messages: [...],           // 对话历史
+  stage: "analyst",          // 分析阶段（用于 agent 状态条）
+  gate_open: false           // 输入门状态
+}
+```
 
-只有一个切换入口：`ProjectPanel` 项目面板点击。
-（分析页下拉只设项目上下文，不触发切换。）
+前端收到快照后，用它替换当前的对话、项目信息、数据路径。不做增量更新——做全量替换。
 
-应用启动恢复：`App.tsx` mount 时调 `switchToProject`。
+## 五、入口
 
-统一函数：`switchToProject(name, send, setCurrentProject)`。
+只有一个切换入口：项目面板项目列表点击。
 
-## 五、当前代码位置
+应用启动时不走"切换"逻辑——启动是独立场景。后端在 WS 连接后自动推送当前项目快照，前端无需主动请求。
 
-| 职责 | 文件:行 |
-|------|--------|
-| 统一触发 | `utils/switchProject.ts` |
-| 启动恢复 | `App.tsx:135` |
-| 项目面板切换 | `ProjectPanel.tsx:489` |
-| 清理 UI state | `AnalyzePanel.tsx:127-151` |
-| 快照应用 | `handlers.ts:27-100` |
+## 六、不会出现的东西
 
-## 六、验收
+- 不会有两个地方都能切换项目
+- 不会有"先清空再等快照"的闪烁
+- 不会有时钟依赖（等 3 秒超时）
+- 不会有前端本地判断"我是不是首次挂载"
+- 快照不到达时，显示旧内容（保留用户正在看的东西），不主动清空
 
-| # | 功能 | 验证 |
-|---|------|------|
-| F1 | 启动恢复 test0729 对话 | 重启应用 → 48 条消息出现 |
-| F2 | 项目面板切换 A→B | B 对话出现 |
-| F3 | 切换至空项目 | setup 界面 |
-| F4 | 分析中锁定 | 切换被拒 |
-| F5 | 停止后切换 | 正常 |
-| F6 | 反复切换 | 每次正确 |
-| F7 | 删除后清空 | setup |
+---
+
+## 七、实现
+
+| 功能 | 实现方式 | 代码位置 |
+|------|---------|---------|
+| F1 打开恢复 | App mount → `switchToProject` | `App.tsx:135` |
+| F2 切换项目 | ProjectPanel → `switchToProject` | `ProjectPanel.tsx:489` |
+| F3 空项目 | 快照空 → `handleStateSnapshot` 设 setup | `handlers.ts:63` |
+| F4 分析锁定 | `is_busy()` True → 后端拒 | `ws_handler.py:297` |
+| F5 停止切换 | `_processing=False` → `is_busy` False | `orchestrator.py:237` |
+| F6 无残留 | `useEffect([currentProject])` 清理 UI | `AnalyzePanel.tsx:127-151` |
+| F7 删除清空 | WS 空快照 → handleStateSnapshot 清 | `handlers.ts:82-98` |
+
+`switchToProject`：`utils/switchProject.ts` — setCurrentProject + send，唯一切换入口。
+
+唯一真相源：messages 只走 `handleStateSnapshot`。useEffect 不碰。

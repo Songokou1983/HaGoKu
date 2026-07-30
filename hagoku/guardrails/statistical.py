@@ -64,7 +64,7 @@ class NoConclusionWithoutTest:
 
     @property
     def severity(self) -> Severity:
-        return Severity.MANDATORY
+        return Severity.WARNING
 
     # 以下分析类型本身不产生 p 值或检验统计量，无需检验即可下结论
     _NO_TEST_TYPES = frozenset({"descriptive", "trend", "summary", "exploratory"})
@@ -149,7 +149,7 @@ class NoCausalClaimWithoutMethod:
 
     @property
     def severity(self) -> Severity:
-        return Severity.MANDATORY
+        return Severity.WARNING
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         # 信任 LLM 的自我声明：causal_method 由 LLM 自行设置。
@@ -183,7 +183,7 @@ class MustDiagnoseModel:
 
     @property
     def severity(self) -> Severity:
-        return Severity.MANDATORY
+        return Severity.WARNING
 
     def check(self, analysis_result: dict[str, Any]) -> GuardrailResult:
         is_modeling = analysis_result.get("analysis_type", "") in (

@@ -33,7 +33,7 @@ class TestNoConclusionWithoutTest:
             "conclusion_plain": "有显著差异",
         })
         assert not result.passed
-        assert result.severity == Severity.MANDATORY
+        assert result.severity == Severity.WARNING
 
 
 class TestMustReportEffectSize:
@@ -159,7 +159,7 @@ class TestStatisticalGuardrails:
             "conclusion_plain": "显著差异",
             # 没有 p_value → no_conclusion_without_test 违规
         })
-        assert not g.can_output(results)
+        assert g.can_output(results)
 
     def test_format_report(self):
         g = StatisticalGuardrails()

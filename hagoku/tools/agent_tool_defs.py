@@ -412,23 +412,14 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                 normalized.append(c)  # 保留 chart_id 字符串，供后续按 ID 绑定
         s.charts = normalized
 
-    # ── 图表注入：有任一 section.charts 含字符串 ID → 按 ID 绑定；否则全部自动分配 ──
+    # ── 图表注入：LLM 显式绑定 chart_id 到 section.charts ──
     generated = ctx.get("_generated_charts") or []
-    has_explicit = any(
-        s.charts and any(isinstance(c, str) for c in s.charts)
-        for s in sections
-    )
-    if has_explicit:
-        chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
-        for s in sections:
-            if s.charts and any(isinstance(c, str) for c in s.charts):
-                s.charts = [chart_by_id[c] for c in s.charts if isinstance(c, str) and c in chart_by_id]
-            else:
-                s.charts = []
-    elif generated:
-        empty = [s for s in sections if not s.charts]
-        for i, c in enumerate(generated):
-            empty[i % len(empty)].charts.append(c) if empty else None
+    chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
+    for s in sections:
+        if s.charts and any(isinstance(c, str) for c in s.charts):
+            s.charts = [chart_by_id[c] for c in s.charts if isinstance(c, str) and c in chart_by_id]
+        else:
+            s.charts = []
 
     # 消费后清空，防跨轮次泄漏
     ctx["_generated_charts"] = []

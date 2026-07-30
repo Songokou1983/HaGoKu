@@ -215,8 +215,7 @@ export default function AnalyzePanel() {
         );
         return;
       }
-      // 消息走通道：HTTP保存 → 后端生成快照 → WS推送 → handleStateSnapshot渲染
-      // 前端不在快照外提前写消息（铁律：快照是唯一真相源）
+      addUserMsg(outgoing);
       sess.setReplyText("");
       setQueryText("");
       setReplyPending(true);

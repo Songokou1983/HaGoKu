@@ -53,6 +53,9 @@ class HaGoKuApp:
             name = f.read_text().strip()
             if name and (self.config.output.project_dir / name).exists():
                 self._active_project = name
+                orch = self._load_project(name)
+                if orch is not None:
+                    self._active_orch = orch
 
     # ── Repository delegate ────────────────────────────────────
 

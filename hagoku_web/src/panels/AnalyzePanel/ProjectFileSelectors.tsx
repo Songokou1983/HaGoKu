@@ -47,8 +47,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
       <div className="flex items-center gap-2">
         <span className="text-ui-xs text-app-text-muted w-12 shrink-0">项目</span>
         <div className="relative flex-1" ref={projectDropdownRef}>
-          <button
-            onClick={() => setShowProjectDropdown((v) => !v)}
+          <div
             className="w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded
                        text-ui-sm border-app-border text-app-text"
           >

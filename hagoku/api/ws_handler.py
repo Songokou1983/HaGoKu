@@ -111,8 +111,8 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         # run() 截断在 Scout → 自动调一次 respond 启动事件循环
         if isinstance(result, dict) and result.get("status") == "scout_review":
             orch.respond({"text": ""})
-    except Exception:
-        # LLM 调用失败 → 广播错误给前端（当前无人调用 Future.result()，异常被线程吞噬）
+    except Exception as e:
+        # LLM 调用失败 → 广播错误给前端
         try:
             import asyncio as _asyncio
             bridge = WSBridge.get()
@@ -122,7 +122,7 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
                     bridge.broadcast({
                         "type": "error",
                         "cmd": "analyze",
-                        "message": "分析失败，请刷新页面重试",
+                        "message": str(e),
                     }),
                     loop,
                 )

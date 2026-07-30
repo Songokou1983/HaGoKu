@@ -169,8 +169,8 @@ def littles_mcar_test(
 
     if len(numeric_df) < 10:
         return {
-            "statistic": 0.0, "p_value": 1.0, "is_mcar": True,
-            "conclusion": "样本量不足（<10），无法可靠检验，默认 MCAR",
+            "statistic": 0.0, "p_value": 1.0, "is_mcar": None,
+            "conclusion": "样本量不足（<10），无法判断",
         }
 
     # 构建缺失模式矩阵

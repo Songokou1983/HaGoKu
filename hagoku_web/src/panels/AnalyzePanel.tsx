@@ -123,13 +123,31 @@ export default function AnalyzePanel() {
     setReplyPending,
   );
 
-  // ── 项目切换：清理已移至 handleStateSnapshot ──
+  // ── 项目切换：重置 UI 状态（不含 messages — 铁律 13：消息唯一写入点 = handleStateSnapshot）──
   const prevProjectRef = useRef<string | null>(null);
   useEffect(() => {
     const prev = prevProjectRef.current;
     prevProjectRef.current = currentProject;
-    // 清理逻辑已移至 handleStateSnapshot（步骤 2 迁移）
-    // useEffect 保留结构，步骤 3 删除
+    // 跳过：首次挂载、同项目不变、清空项目
+    if (prev === currentProject) return;
+    if (prev === null && currentProject) return;
+    if (!currentProject) return;
+    // 真正切换
+    setPhase("setup");
+    setQueryText("");
+    setThinkingText(null);
+    setReplyPending(false);
+    _setDataPath("");
+    setExcelSheets([]);
+    setSheetName("");
+    setAuxSheets([]);
+    setPresetName("");
+    sess.resetAll();
+    setCurrentDataPath("");
+    useWorkspaceStore.getState().resetRunUiState();
+    useWorkspaceStore.getState().setLastError(null);
+    useWorkspaceStore.getState().setReportFiles([]);
+    useWorkspaceStore.getState().setSnapshot(null);
   }, [currentProject]);
 
   // WS event handler hook
@@ -172,15 +190,6 @@ export default function AnalyzePanel() {
     setReplyPending,
     setCurrentProject,
     setCurrentDataPath,
-    setQueryText,
-    setThinkingText,
-    setReplyPending,
-    _setDataPath,
-    setExcelSheets,
-    setSheetName,
-    setAuxSheets,
-    setPresetName,
-    resetAll: sess.resetAll,
     log,
   });
 

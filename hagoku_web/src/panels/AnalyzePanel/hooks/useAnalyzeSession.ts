@@ -71,7 +71,7 @@ export function useAnalyzeSession(
       query: q || "",
       project_name: currentProject || "",
       phase: "full",
-      sheet_name: sheetName ?? 0,
+      sheet_name: sheetName || 0,
       aux_sheets: auxSheets ?? [],
     });
   }, [send, dataPath, currentProject, queryText, setPhase, resetAll]);

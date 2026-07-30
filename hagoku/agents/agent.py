@@ -146,7 +146,12 @@ class DataAnalystAgent:
                 except Exception:
                     pass
 
-            df = load_data(data_path, sheet_name=sheet_name)
+            try:
+                df = load_data(data_path, sheet_name=sheet_name)
+                data_load_error = None
+            except Exception as e:
+                df = pd.DataFrame()
+                data_load_error = str(e)
             self._emit(EventType.TOOL_CALLED, {"tool": "load_data", "args_summary": data_path})
 
             # 加载辅助 sheet（参考数据）
@@ -185,6 +190,7 @@ class DataAnalystAgent:
                 "column_descriptions": {},
                 "_column_info": {c: str(df[c].dtype) for c in df.columns},
                 "_aux_sheets": aux_info,
+                "_data_load_error": data_load_error,
             }
             # 传播 ask_user 到 orchestrator
             agent_ctx = self._context or {}
@@ -545,6 +551,9 @@ class DataAnalystAgent:
         if aux_info:
             aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
             agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
+        load_err = context.get("_data_load_error")
+        if load_err:
+            agent_extra += f"\n⚠️ 数据加载失败：{load_err}\n请告知用户此错误，并建议检查文件格式或表单名称。"
 
         messages = session.to_llm_messages(
             system_extra=agent_extra,
@@ -655,6 +664,9 @@ class DataAnalystAgent:
             if aux_info:
                 aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
                 agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
+            load_err = context.get("_data_load_error")
+            if load_err:
+                agent_extra += f"\n⚠️ 数据加载失败：{load_err}\n请告知用户此错误，并建议检查文件格式或表单名称。"
             msgs_next = session.to_llm_messages(
                 system_extra=agent_extra,
                 user_input="",

@@ -291,7 +291,7 @@ async def ws_handler(ws: WebSocket) -> None:
                 else:
                     await _safe_send({"type": "error", "message": "App not initialized"})
             elif cmd == "switch_project":
-                name = msg.get("project", "")
+                name = (msg.get("payload") or msg).get("project", "")
                 if app is None:
                     await _safe_send({"type": "error", "message": "App not initialized"})
                 elif app.is_busy():
@@ -310,11 +310,11 @@ async def ws_handler(ws: WebSocket) -> None:
                     else:
                         await _safe_send({"type": "error", "message": f"项目 {name} 不存在或无法加载"})
             elif cmd == "create_project":
-                name = msg.get("project", "")
+                name = (msg.get("payload") or msg).get("project", "")
                 ok = app.create_project(name) if app else False
                 await _safe_send({"type": "ack", "cmd": "create_project", "data": {"ok": ok}})
             elif cmd == "delete_project":
-                name = msg.get("project", "")
+                name = (msg.get("payload") or msg).get("project", "")
                 ok = app.delete_project(name) if app else False
                 await _safe_send({"type": "ack", "cmd": "delete_project", "data": {"ok": ok}})
                 if ok:

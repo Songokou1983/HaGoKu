@@ -1,562 +1,469 @@
-# 项目切换架构重构 — 设计文档 v2
+# 项目切换架构 — 设计文档 v6
 
-> 状态：设计完成。阶段 0 代码已就位。v3 通过铁律 13 + 功能回归双维审计。
-> 审计版本：v3（2026-07-29，闭合 v1 gap、v2 合规、v3 prevRef 守卫）
+> 状态：v6 整体性审计后重写。
+> 核心：说明「prevRef 守卫 + App.tsx 启动恢复」是一个方案的互补两半，
+> 不是为了打补丁加的第二个入口。标注残留代码 + 竞态风险。
 
-## 一、问题诊断（已确认）
+## 一、整体方案（为什么有两个入口）
 
-### 1.1 当前项目切换流程（标注所有断裂点）
+**问题**：`AnalyzePanel` 的 `useEffect([currentProject])` 需要区分「首次挂载」和「真正切换」——
+首次挂载时 WS 快照可能尚未到达，不能清空消息（否则快照到达前的空窗期用户看到空白）；
+真正切换时必须清理 UI 状态（否则旧项目数据残留）。
+
+**方案**：prevRef 守卫 + App.tsx 启动恢复，互为补充：
 
 ```
-用户点击项目 B
+应用启动
   │
-  ├─ ProjectPanel.onSelect()
-  │    ├─ setCurrentProject("B")         ← workspace store，同步
-  │    └─ send("switch_project", {B})    ← WS 命令
+  ├─ AnalyzePanel mount → prevRef 守卫跳过清理（prev===null）
+  │     （此时快照尚未到达，消息为空，不做任何操作）
   │
-  ├─ 后端 ws_handler:293
-  │    ├─ app.is_busy() ? → 拒绝（⚠️ bug ①）
-  │    ├─ app.switch_project("B")
-  │    │    ├─ 保存旧 orch state
-  │    │    ├─ _load_project("B") → 恢复 orch 或新建空 orch
-  │    │    └─ build_snapshot() → 返回快照
-  │    ├─ 切换 EventBus 订阅
-  │    └─ WS push: state_snapshot
+  └─ App.tsx mount → useEffect send("switch_project", {proj})
+        → 后端恢复 session → WS state_snapshot → handleStateSnapshot
+        → syncFromSnapshot(48条消息) + setPhase("running")
+        → 用户看到历史对话 ✅
+
+用户点击切换 A→B
   │
-  └─ 前端 handleStateSnapshot(snap)
-       ├─ snap.project_name !== deps.currentProject ? → 清空（⚠️ 守卫不触发 ②）
-       ├─ snap.messages 非空 → syncFromSnapshot(ms)
-       ├─ snap.messages 为空 → _setMessages([]) + setPhase("setup")
-       ├─ snap.data_path ? → setCurrentDataPath（⚠️ 空值不清理 ③）
-       └─ ⚠️ 其他 34 个 state 无任何处理
+  └─ ProjectPanel → setCurrentProject("B") + send("switch_project", {B})
+       │
+       ├─ AnalyzePanel useEffect: prev="A" current="B" → 执行清理
+       │     （清空本地 UI 状态，不碰 messages）
+       │
+       └─ WS state_snapshot 到达 → handleStateSnapshot
+            → syncFromSnapshot(B的消息) + setPhase("running")
 ```
 
-### 1.2 6 个根因
+**结论**：只有一个数据通道（WS `state_snapshot` → `handleStateSnapshot`），
+两个入口（`App.tsx:135`、`ProjectPanel.tsx:489`）都走这个通道。
+prevRef 守卫确保首次挂载不误清，App.tsx 填补首次挂载的恢复需求。
+不是补丁，是一体设计。
 
-| # | 严重度 | 位置 | 问题 | 影响 |
-|---|--------|------|------|------|
-| ① | 🔴 P0 | `app.py:88` | `is_busy()` 用 `_respond_cancelled` 判断——正常完成后永远 True | 分析结束无法切换 |
-| ② | 🔴 P0 | `handlers.ts:46` | 守卫被 `setCurrentProject` 同步绕过 | 项目切换的去重/清理逻辑跳过 |
-| ③ | 🔴 P0 | `AnalyzePanel.tsx` | 39 个状态中 29 个在项目切换时无人清理 | phase/queryText/dataPath 等残留 |
-| ④ | 🟡 P1 | `app.py:231` | `build_snapshot` data_path="" → falsy → 前端不设 setCurrentDataPath | 旧 dataPath 永不清 |
-| ⑤ | 🟡 P1 | `AnalyzePanel.tsx` | `useEffect([currentProject])` 被删除（`36bc342`） | 失去唯一切换响应点 |
-| ⑥ | 🟡 P1 | `ws_handler.py:297` | `is_busy()` 阻塞只发 error | 用户被卡住无提示 |
+## 二、竞态风险（已知，未修复）
 
----
+| 风险 | 触发条件 | 影响 | 缓解 |
+|------|---------|------|------|
+| WS 快照在 useBatchEvents 注册前到达 | App mount 时 WS 连接快于 React effect 执行 | 快照丢失，用户看到空白 | 暂无。需 `useBatchEvents` 缓存早期消息 |
+| WS 断连时启动恢复 | 网络不通时打开应用 | App.tsx 发了 switch_project 但无响应，phase 保持 setup | 无影响（setup 是正确的降级状态） |
+| 连续快速切换 | A→B→C 快速点击 | 两个快照几乎同时到达，React 批量处理，最终以最后一个为准 | 正确行为 |
 
-## 二、完整状态盘点（共 39 个）
+## 三、代码纯净度——残留项
 
-### 2.1 AnalyzePanel 本地 useState（9 个）
+| 文件:行 | 内容 | 状态 |
+|---------|------|:--:|
+| `app.py:126-128` | `logger.info/warning` debug 日志 | ⚠️ 待移除（根因已修复，无需保留） |
+| `handlers.ts:32` | `addSystemMsg: addSys` 解构但未使用 | ⚠️ 待清理 |
 
-| # | 状态 | 文件:行 | 默认值 | 需重置为 |
-|---|------|--------|--------|---------|
-| 1 | `phase` | `:42` | `"setup"` | `"setup"` |
-| 2 | `queryText` | `:43` | `""` | `""` |
-| 3 | `thinkingText` | `:46` | `null` | `null` |
-| 4 | `replyPending` | `:49` | `false` | `false` |
-| 5 | `dataPath` | `:57` | `""` | `""` |
-| 6 | `excelSheets` | `:86` | `[]` | `[]` |
-| 7 | `sheetName` | `:87` | `""` | `""` |
-| 8 | `auxSheets` | `:88` | `[]` | `[]` |
-| 9 | `presetName` | `:52` | `""` | `""` |
-
-### 2.2 useConversation（1 个）
-
-| # | 状态 | 默认值 | 重置方式 |
-|---|------|--------|---------|
-| 10 | `messages` | `[]` | `clearMessages()` 或 `syncFromSnapshot([])` |
-
-### 2.3 useAnalyzeSession（14 个）
-
-| # | 状态 | 默认值 | 需重置为 |
-|---|------|--------|---------|
-| 11 | `agentElapsed` | `{scout:0,...}` | 同上 |
-| 12 | `waitingAgent` | `null` | `null` |
-| 13 | `replyText` | `""` | `""` |
-| 14 | `resultReportUrl` | `null` | `null` |
-| 15 | `guardrailsBlocked` | `false` | `false` |
-| 16 | `blockedRunId` | `null` | `null` |
-| 17 | `activeFieldReviewId` | `null` | `null` |
-| 18 | `activeFieldReviewRevision` | `-1` | `-1` |
-| 19 | `activeCleaningReviewId` | `null` | `null` |
-| 20 | `activeCleaningReviewRevision` | `-1` | `-1` |
-| 21 | `activeAnalystReviewId` | `null` | `null` |
-| 22 | `activeAnalystReviewRevision` | `-1` | `-1` |
-| 23 | `gateOpen` | `false` | `false` |
-| 24 | `fieldReviewScrollNonce` | `0` | `0` |
-
-### 2.4 useFileUpload（7 个）
-
-| # | 状态 | 默认值 | 需重置为 |
-|---|------|--------|---------|
-| 25 | `projectFiles` | `[]` | `[]` |
-| 26 | `filesLoading` | `false` | `false` |
-| 27 | `showFileDropdown` | `false` | `false` |
-| 28 | `showProjectDropdown` | `false` | `false` |
-| 29 | `uploading` | `false` | `false` |
-| 30 | `uploadError` | `null` | `null` |
-| 31 | `fileExists` | `false` | `false` |
-
-> **⚠️ 冲突点**：useFileUpload 已有 `useEffect([currentProject, loadFiles])`（`:41-52`），切换项目时自动 fetch `/detail` 回填 `dataPath`。新加的清理 effect 必须在它**之前**注册（按 hook 调用顺序：useFileUpload 在 AnalyzePanel 第 78 行调用，新 effect 在第 112 行调用 → React 先执行 useFileUpload 的 effect → 设 dataPath → 新 effect 后执行 → 清空 dataPath → 竞态。**修复见阶段 2 实施细节**）。
-
-### 2.5 workspace store（8 个）
-
-| # | 状态 | 需重置为 |
-|---|------|---------|
-| 32 | `status` | 不动 |
-| 33 | `agents` | `resetRunUiState()` |
-| 34 | `currentProject` | ProjectPanel 已设置 ✅ |
-| 35 | `currentDataPath` | `""` |
-| 36 | `snapshot` | `null` |
-| 37 | `lastError` | `null` |
-| 38 | `reportFiles` | `[]` |
-
-### 2.6 已自动处理的（1 个）
-
-| # | 状态 | 处理方式 |
-|---|------|---------|
-| 39 | `currentProject`（已有） | ProjectPanel 的 `setCurrentProject` 已设置 ✅ |
-
-**统计**：39 个状态，10 个已有处理（messages + currentProject + useFileUpload 7个自动加载 + workspace status不动），**29 个无清理逻辑**。
-
----
-
-## 三、设计原则
-
-1. **单一清理入口。** 一个 `useEffect([currentProject])` 触发所有重置。不分散。
-
-2. **先清后建。** useEffect 清零 UI 状态 → WS snapshot 异步到达 → 覆盖 messages/phase/data_path。messages 不走 useEffect（铁律 13）。
-
-3. **防闪烁 + 铁律合规。** useEffect 设 `setPhase("setup")`（React 18 批量处理）。**不调 `clearMessages()`**——消息唯一写入点仍是 `handleStateSnapshot`。prevRef 守卫跳过首次挂载。
-
-4. **状态注册表驱动。** STATE_REGISTRY.md 是所有 state 的权威清单。改代码 → 更新注册表 → CI 比对。
-
-5. **`is_busy()` 语义正确。** 用 `_processing` flag，不和取消标志混用。
-
-6. **WS 优先。** 快照走 WS。WS 断连时，cleanup effect 已设 phase="setup"，重连后 snapshot 自然恢复。
-
----
-
-## 四、分阶段实施计划
-
-### 阶段 0：`is_busy()` 修复（已完成代码，待验证）
-
-**目标**：分析正常完成后可以切换。
-
-**已改文件**：
-- `hagoku/manager/orchestrator.py`：`__init__` 加 `self._processing = False`；`request_cancel_respond()` 加 `self._processing = False`
-- `hagoku/manager/llm_dispatch/reply_handlers.py`：`_respond_impl` 用 `try/finally` 包裹 `_processing` 的设/清
-- `hagoku/app.py`：`is_busy()` 改为 `return self._active_orch._processing`
-
-**`_processing` 状态转换表**：
-
-| 事件 | `_processing` | `_respond_cancelled` |
-|------|:--:|:--:|
-| 构造 / 恢复 orch | `False` | `False` |
-| respond 开始 | `True` | `False` |
-| respond 正常结束 | `False` | `False` |
-| 用户点停止 | `False` | `True` |
-| respond 中抛异常 | `False`（finally） | 不变 |
-
-**验证**：
-- [ ] 分析进行中 → 切换 → 被拒绝
-- [ ] 分析正常完成 → 切换 → 成功
-- [ ] 用户点停止 → 切换 → 成功
-- [ ] `restore_session` 恢复的 orch `_processing` 为 `False`（构造函数已保证 ✅）
-
----
-
-### 阶段 1：`useAnalyzeSession.resetAll()` + 本地 state 清理
-
-**目标**：useAnalyzeSession 暴露一个 `resetAll()` 方法（复用 `handleReset` 逻辑但去掉 WS 命令和 store 操作），供 useEffect 单次调用。
-
-**改 1：`useAnalyzeSession.ts`** — 加 `resetAll()`
-
-```typescript
-// 在 handleReset 之前加
-const resetAll = useCallback(() => {
-  setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
-  setWaitingAgent(null);
-  setReplyText("");
-  setResultReportUrl(null);
-  setGuardrailsBlocked(false);
-  setBlockedRunId(null);
-  setActiveFieldReviewId(null);
-  setActiveFieldReviewRevision(-1);
-  setFieldReviewScrollNonce(0);
-  setActiveCleaningReviewId(null);
-  setActiveCleaningReviewRevision(-1);
-  setActiveAnalystReviewId(null);
-  setActiveAnalystReviewRevision(-1);
-  setGateOpen(false);
-}, []);  // 空依赖——setter 是稳定的
-
-// handleReset 改为调 resetAll + WS/store 操作
-const handleReset = useCallback(() => {
-  send("cancel_analysis", {});
-  resetAll();
-  resetRunUiState();
-  setPhase("setup");
-  clearMessages();
-  useWorkspaceStore.getState().resetAgentStates();
-}, [send, resetAll, resetRunUiState, setPhase, clearMessages]);
-```
-
-**返回值加** `resetAll`。
-
-**改 2：`AnalyzePanel.tsx`** — 加 `useEffect([currentProject])` + `useRef` 守卫
-
-```typescript
-const prevProjectRef = useRef<string | null>(null);
-
-useEffect(() => {
-  const prev = prevProjectRef.current;
-  prevProjectRef.current = currentProject;
-
-  // 跳过：首次挂载（prev=null→有项目）、同项目不变、清空项目
-  if (prev === currentProject) return;
-  if (prev === null && currentProject) return;
-  if (!currentProject) return;
-
-  // ── 真正切换（prev 和 currentProject 不同且都不是 null）──
-
-  // 1. 本地 state（由本组件的 useState setter 操作）
-  setPhase("setup");
-  setQueryText("");
-  setThinkingText(null);
-  setReplyPending(false);
-  _setDataPath("");           // 清空本地 dataPath 副本
-  setExcelSheets([]);
-  setSheetName("");
-  setAuxSheets([]);
-  setPresetName("");
-
-  // 2. useAnalyzeSession 状态（单次调用替代 14 个散调）
-  sess.resetAll();
-
-  // 3. workspace store（不含 messages — 铁律 13：消息唯一写入点 = handleStateSnapshot）
-  setCurrentDataPath("");
-  useWorkspaceStore.getState().resetRunUiState();
-  useWorkspaceStore.getState().setLastError(null);
-  useWorkspaceStore.getState().setReportFiles([]);
-  useWorkspaceStore.getState().setSnapshot(null);
-
-  // ⚠️ 不调 clearMessages() — 消息由 handleStateSnapshot 的 syncFromSnapshot 负责替换
-  //    铁律 13：消息只有一个写入点
-}, [currentProject]);  // sess.resetAll 是 useCallback([]) → 稳定引用，不放 deps
-```
-
-**prevRef 守卫状态机**：
-
-| 触发场景 | prev | currentProject | 行为 |
-|---------|------|---------------|------|
-| 首次挂载（有 localStorage 项目） | `null` → `"A"` | `"A"` | 跳过（`prev === null`） |
-| 用户点击切换 A→B | `"A"` | `"B"` | **执行清理** |
-| WS 重连推快照 | `"B"` | `"B"` | 跳过（`prev === currentProject`） |
-| 清空项目（点 X） | `"A"` | `null` | 跳过（`!currentProject`） |
-
-**改 3：防闪烁 + 铁律 13 合规** — cleanup 设 `setPhase("setup")`（React 18 批量处理保证 snapshot 同 render 覆盖）。**不调 `clearMessages()`**——消息替换只走 `handleStateSnapshot`，遵守铁律 13。
-
-```typescript
-// cleanup effect 内：
-setPhase("setup");  // ✅ UI 状态，不违规
-// ❌ clearMessages() — 铁律 13 禁止，不在本条 effect 中调用
-```
-
-**执行顺序保证**（React 按 hook 注册顺序执行 effect）：
+## 四、数据流（单通道，双入口）
 
 ```
-AnalyzePanel render:
-  hook #1: useFileUpload     ← useEffect([currentProject]) 注册
-  hook #2: useConversation   ← 无依赖 currentProject 的 effect
-  hook #3: useAnalyzeSession ← 无依赖 currentProject 的 effect
-  hook #4: 新清理 effect    ← useEffect([currentProject]) 注册（含 prevRef 守卫）
-
-currentProject 真正切换时执行顺序：
-  1. useFileUpload effect  ← fetch /files + /detail（异步，微任务）
-  2. 新清理 effect         ← 同步清零 UI state + setPhase("setup")
-                              ⚠️ 不碰 messages（铁律 13）
-
-  … 微任务：useFileUpload 的 fetch resolve → 回填 dataPath、projectFiles
-  … WS 到达：handleStateSnapshot → syncFromSnapshot 替换 messages + phase="running"
-  … WS 断连：已由 cleanup 设 phase="setup"，messages 保持旧值等重连恢复
+┌─ 入口1: 启动恢复 ──┐    ┌─ 入口2: 手动切换 ──┐
+│ App.tsx:135          │    │ ProjectPanel.tsx:489 │
+│ send("switch_project",│    │ send("switch_project",│
+│   {project:proj})    │    │   {project:p})       │
+└──────┬───────────────┘    └──────┬───────────────┘
+       └──────────┬────────────────┘
+                  ▼
+         useWebSocket.ts:190
+         _ws.send(JSON.stringify({cmd, payload}))
+                  │
+                  ▼  WS消息: {"cmd":"switch_project","payload":{"project":"X"}}
+                  │
+         ws_handler.py:294
+         name = (msg.get("payload") or msg).get("project", "")
+                  │
+         app.py:90  switch_project(name)
+           → app.py:110  _load_project(name)
+             → orchestrator.py:171  restore_session()
+           → app.py:118  build_snapshot()
+                  │
+         ws_handler.py:309
+         state_snapshot → WS push
+                  │
+         handleStateSnapshot (handlers.ts:28)
+           → syncFromSnapshot(ms) (useConversation.ts:113)
+           → setPhase("running")
 ```
 
-**验证**：
-- [ ] 刷新页面（首次挂载）→ WS 快照恢复，不被 useEffect 清空
-- [ ] 项目 A 分析中 → 切换到空项目 B → 面板 UI 清空，messages 由空快照替换，显示 setup
-- [ ] 切换后有历史快照 → messages 由 syncFromSnapshot 替换，phase 变 running
-- [ ] 同一项目切换（A→A 再点一次）→ 不触发清理（prevRef 跳过）
+**唯一写入点：** `handleStateSnapshot`（`handlers.ts:60` `syncFromSnapshot` / `:63` `_setMessages`）。
+`AnalyzePanel.tsx:127-151` useEffect 清理 UI 状态但不写 messages（铁律 13 合规）。
+
+## 五、实施改动清单（含代码证据）
+
+| # | 改动 | 文件:行 | 阶段 |
+|---|------|--------|:--:|
+| A | `_processing` flag | `orchestrator.py:74` | 0 |
+| B | `_processing = True` on respond | `reply_handlers.py:108` | 0 |
+| C | `_processing = False` in finally | `reply_handlers.py:122` | 0 |
+| D | `_processing = False` on cancel | `orchestrator.py:237` | 0 |
+| E | `is_busy()` → `_processing` | `app.py:88` | 0 |
+| F | `resetAll()` 14 setter | `useAnalyzeSession.ts:42-57` | 1 |
+| G | `handleReset`/`handleStartSession` 复用 | `useAnalyzeSession.ts:59-87` | 1 |
+| H | `useEffect([currentProject])` + prevRef | `AnalyzePanel.tsx:127-151` | 1 |
+| I | `handleStateSnapshot` 删守卫 | `handlers.ts` — 行 46-54 已删 | 2 |
+| J | `build_snapshot` `or ""` | `app.py:232-233` | 3 |
+| K | `STATE_REGISTRY.md` + 守门测试 | 新文件 | 4 |
+| L | `ws_handler` payload 路径修复 | `ws_handler.py:294,313,317` | 5 |
+| M | `App.tsx` 启动恢复 | `App.tsx:131-137` | 5 |
+| N | 移除 debug 日志 | `app.py:126-128` | 待做 |
+| O | 清理未使用解构 | `handlers.ts:32` | ✅ 已做 |
 
 ---
 
-### 阶段 2：`handleStateSnapshot` 精简
+## 五、分阶段实施
 
-**目标**：只负责应用快照数据，不做清理判断。
+每个阶段有 **进入条件、改动清单、完成审核、通过标准**。
+不通过 → 不回退 → 在当前阶段修到通过为止。
 
-**当前 handleStateSnapshot（100 行）→ 精简后保留的 5 个职责**：
+### 阶段 0：`is_busy()` 语义修复
 
-| 职责 | 保留 | 理由 |
-|------|:--:|------|
-| ① 快照消息 → ConvoMessage[] 渲染 + syncFromSnapshot | ✅ | 核心职责 |
-| ② snap.data_path → setCurrentDataPath | ✅ | 核心职责 |
-| ③ snap.gate_open → setGateOpen | ✅ | 核心职责 |
-| ④ snap.project_name → setCurrentProject + agent 状态条 | ✅ | 核心职责 |
-| ⑤ 项目删除（空 project_name + 空 messages → 清面板） | ✅ | 独立触发路径 |
-| ⑥ 项目切换守卫（行 46-54） | ❌ 删除 | 阶段 1 useEffect 替代 |
-| ⑦ askUser 的 workflow 卡片追加 | ❌ 删除 | 已由 live 事件处理（行 76 注释确认） |
+**目标**：分析正常完成后 `is_busy()` 返回 False，允许切换项目。
 
-**精简后的代码**：
+**进入条件**：代码仓库干净，`pytest tests/` 全绿。
 
-```typescript
-export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
-  const snap = (msg as any).data;
-  if (!snap) return false;
-  const {
-    syncFromSnapshot, _setMessages, addSystemMsg: addSys,
-    setActiveFieldReviewId, setActiveFieldReviewRevision,
-    setActiveCleaningReviewId, setActiveCleaningReviewRevision,
-    setActiveAnalystReviewId, setActiveAnalystReviewRevision,
-    setGateOpen, setPhase, setWaitingAgent,
-    setCurrentProject, setCurrentDataPath, setFieldReviewScrollNonce,
-  } = deps;
+**改动**：A, B, C, D, E（3 文件，+6 行）
 
-  const roleMap: Record<string, ConvoMessage["role"]> = {
-    user: "user", assistant: "agent", agent: "agent",
-    workflow: "workflow", tool: "system",
-  };
-
-  // ── ① 消息同步 ──
-  if (Array.isArray(snap.messages)) {
-    if (snap.messages.length > 0) {
-      const ms: ConvoMessage[] = snap.messages
-        .filter((m: any) => m.role !== "tool")
-        .map((m: any) => ({
-          id: uid(), role: roleMap[m.role] || "system",
-          text: m.content || "", timestamp: m.timestamp || "",
-          ...(m.toolExchange ? { toolExchange: m.toolExchange } : {}),
-          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-        }));
-      syncFromSnapshot(ms);
-      setPhase?.("running");
-    } else {
-      // 空消息 → 该设 setup（当前代码已有此行为，保留）
-      _setMessages?.([]);
-      setPhase?.("setup");
-    }
-  }
-
-  // ── ②④ 项目信息同步 ──
-  if (snap.project_name && setCurrentProject) setCurrentProject(snap.project_name);
-  if (snap.data_path && setCurrentDataPath) setCurrentDataPath(snap.data_path);
-  if (snap.gate_open) setGateOpen(true);
-
-  // ── ④ agent 状态条同步 ──
-  const agentOrder = ["scout", "cleaner", "analyst", "reporter"];
-  const doneIdx = agentOrder.indexOf(snap.stage);
-  const states: Record<string, string> = {};
-  for (let i = 0; i < 4; i++) {
-    const a = agentOrder[i];
-    if (i < doneIdx) states[a] = "done";
-    else if (i === doneIdx) states[a] = "running";
-    else states[a] = "idle";
-  }
-  for (const [a, s] of Object.entries(states)) {
-    useWorkspaceStore.getState().setAgentStatus(a, s as AgentStatus);
-  }
-
-  // ── ⑤ 项目被删除 → 全清 ──
-  if (!snap.project_name && snap.messages && snap.messages.length === 0) {
-    _setMessages?.([]);
-    setActiveFieldReviewId(null); setActiveFieldReviewRevision(-1); setFieldReviewScrollNonce(0);
-    setActiveCleaningReviewId(null); setActiveCleaningReviewRevision(-1);
-    setActiveAnalystReviewId(null); setActiveAnalystReviewRevision(-1);
-    setPhase?.("setup");
-    deps.setCurrentProject?.(null);
-    useWorkspaceStore.getState().setCurrentProject(null);
-  }
-  return true;
-}
+**完成审核**：
+```bash
+grep -n "_processing" hagoku/manager/orchestrator.py hagoku/manager/llm_dispatch/reply_handlers.py hagoku/app.py
+# 预期：orchestrator.py:74=False, :237=False; reply_handlers.py:108=True, :122=False; app.py:88=return _processing
 ```
 
-> **注意**：保留了 agent 状态条同步（当前行 77-88）和项目删除处理（当前行 89-98），这两块不能删——删了 agent 进度条不更新、删项目后分析面板不清。
+**通过标准**：
+- [ ] `pytest tests/` 全绿
+- [ ] 手动验证：分析完成 → 点其他项目 → 不出现"分析进行中"提示
 
-**验证**：
-- [ ] 场景同阶段 1 + 阶段 2
+**通过即进入阶段 1。**
 
 ---
 
-### 阶段 3（原阶段 4）：`build_snapshot()` 补全输出
+### 阶段 1：前端切换清理
 
-**目标**：新项目返回完整空快照。
+**目标**：用户切换项目时，AnalyzePanel 自动重置 9 个本地 state + 14 个 sess state + 5 个 store 字段。不碰 messages（铁律 13）。
 
-**当前代码**（`app.py:228-234`）已经输出 `data_path` 和 `project_name`。但 `ctx.get('data_path', '')` 可能返回 `None`（如果 ctx 中没有该 key）。改为 `ctx.get('data_path') or ""` 确保非 None。
+**进入条件**：阶段 0 通过。
 
-**改动**：`app.py:build_snapshot()`
+**改动**：F, G, H（2 文件，+45/-28 行）
 
-```python
-snap: dict[str, Any] = {
-    "project_name": getattr(orch, '_project_name', '') or "",
-    "query": ctx.get('query') or "",
-    "data_path": ctx.get('data_path') or "",   # 改：'' → or ""
-    ...
-}
+**完成审核**：
+```bash
+# resetAll 14 setter
+grep -c "set[A-Z]" hagoku_web/src/panels/AnalyzePanel/hooks/useAnalyzeSession.ts | head -1
+# handleReset/handleStartSession 均调 resetAll()
+grep -B2 "resetAll()" hagoku_web/src/panels/AnalyzePanel/hooks/useAnalyzeSession.ts
+# useEffect deps 只有 currentProject
+grep "}, \[currentProject\]" hagoku_web/src/panels/AnalyzePanel.tsx
+# 无 clearMessages
+grep -c "clearMessages" hagoku_web/src/panels/AnalyzePanel.tsx
+# 预期：=1（仅在 useConversation 解构行）
 ```
 
-**验证**：
-- [ ] 新项目 `build_snapshot()` 返回 `{"project_name": "B", "messages": [], ...}`
-
----
-
-### 阶段 4：STATE_REGISTRY.md + 守门测试
-
-**目标**：锁死状态清单。后续改代码必须同步更新。
-
-**新文件 1**：`hagoku_web/src/panels/AnalyzePanel/STATE_REGISTRY.md`
-
-格式：Markdown 表格，三张表（本地 useState / hook 内部 / store）。每行：状态名、位置、默认值、切换时行为、当前 handler。
-
-**新文件 2**：`tests/test_frontend/test_state_registry.py`
-
-**守门策略**（简化版）：
-- 不解析 MD、不对比 AST
-- 只做三件事：
-  1. `grep 'useState' AnalyzePanel.tsx | wc -l` → 对比注册表的本地 state 行数
-  2. `grep 'useState' useAnalyzeSession.ts | wc -l` → 对比注册表的 hook state 行数
-  3. 注册表中 `handler: 缺失` 的行 = 测试失败
-
-**验证**：
-- [ ] 加新 useState → grep 数量 > 注册表行数 → 测试失败
-- [ ] 注册表有 `缺失` → 测试失败
-- [ ] 改完代码更新注册表 → 数量匹配 → 测试通过
-
----
-
-### 阶段 5：全量回归 + 11 场景验收
-
-**场景矩阵**（比 v1 多 1 个）：
-
-| # | 场景 | 步骤 | 预期 |
-|---|------|------|------|
-| S1 | 分析完成→切换空项目 | Run→完成→点空项目 | 面板清空，显示 setup |
-| S2 | 分析完成→切换有历史项目 | Run→完成→点历史项目 | 恢复历史对话 |
-| S3 | 分析进行中→切换 | 分析中→点其他项目 | 提示"分析进行中"，不切换 |
-| S4 | 停止分析→切换 | 分析中→点停止→切换 | 正常切换 |
-| S5 | WS 断连→切换 | 断网→点项目 | useEffect 清空 + setup，重连后恢复 |
-| S6 | 新建项目→切换 | 创建空项目→点它 | setup 界面，无残留 |
-| S7 | 删除当前项目→自动清 | 删项目→WS 空快照 | setup 界面（走 handleStateSnapshot 路径 ⑤） |
-| S8 | 同一项目反复切换 | A→B→A→B | 每次正确恢复/清空 |
-| S9 | 切换后立即分析 | 切到 B→Start | 分析正常启动，无旧数据污染 |
-| S10 | is_busy 正常 | Run→完成→切换 | 不被阻塞 |
-| S11 | 切换后 WS 重连推快照 | A→B→断开→重连→收到 B 的快照 | 恢复 B 的对话（不走 useEffect，走 handleStateSnapshot） |
-
-**验证命令**：
-- `pytest tests/` 全绿
-- `npx tsc --noEmit` 零错误
-- `grep -r 'setMessages' hagoku_web/src/panels/AnalyzePanel/` 仅 useConversation 内部
-
----
-
-## 五、checklist
-
-### 阶段 0 checklist
-- [ ] `_processing` 在 `Orchestrator.__init__` 初始化
-- [ ] `request_cancel_respond()` 设 `_processing = False`
-- [ ] `_respond_impl` try/finally 管理 `_processing`
-- [ ] `is_busy()` 读 `_processing`
-- [ ] `restore_session` 恢复的 orch `_processing == False`（构造函数保证）
-- [ ] pytest 相关测试通过
-
-### 阶段 1 checklist
-- [ ] `useAnalyzeSession.resetAll()` 覆盖全部 14 个 sess state
-- [ ] `resetAll` 用 `useCallback([])` 空依赖
-- [ ] `handleReset` 复用 `resetAll()`
-- [ ] AnalyzePanel 加 `prevProjectRef = useRef(null)` 守卫
-- [ ] useEffect 用 prevRef 跳过：首次挂载、同项目不变、清空项目
-- [ ] useEffect 清理 9 个本地 state（含 `setPhase("setup")`）
-- [ ] 调用 `sess.resetAll()`
-- [ ] cleanup 不调 `clearMessages()` — 铁律 13 合规
-- [ ] 清理 workspace store 5 个字段（currentDataPath、agents、lastError、reportFiles、snapshot）
-- [ ] useEffect deps 只有 `[currentProject]`（`sess.resetAll` 不放 deps）
-- [ ] 不产生 infinite loop
-- [ ] 刷新页面：快照恢复不被 useEffect 清空
-
-### 阶段 2 checklist
-- [ ] 保留职责 ① 消息同步（含 ConvoMessage 渲染逻辑 + syncFromSnapshot）
-- [ ] 保留职责 ②④ data_path/gate_open/project_name/agent 状态条同步
-- [ ] 保留职责 ⑤ 项目删除处理
-- [ ] 删除行 46-54 的守卫逻辑
-- [ ] 删除 askUser 的 workflow 追加逻辑（注释确认已由 live 事件处理）
-- [ ] 空 snapshot 设 `_setMessages([])` + `setPhase("setup")`（当前行为保留）
-
-### 阶段 3 checklist
-- [ ] `data_path` 用 `or ""` 替代 `get(..., '')` 防止 None
-- [ ] 新项目 `build_snapshot()` 不返回 None
-
-### 阶段 4 checklist
-- [ ] STATE_REGISTRY.md 三张表覆盖全部 39 个状态
-- [ ] 每个状态标注"切换时行为"和"当前 handler"
-- [ ] 守门测试：grep useState 数量 = 注册表行数
-- [ ] 守门测试：注册表无 `缺失`
-
-### 阶段 5 checklist
-- [ ] 11 个场景全部手动验证
-- [ ] `pytest tests/` 全量通过
+**通过标准**：
 - [ ] `npx tsc --noEmit` 零错误
-- [ ] `grep setMessages` 外部无调用
+- [ ] `pytest tests/` 全绿
+- [ ] 手动验证 S3：切项目后 UI 不残留旧数据
+- [ ] 手动验证 S8：A→B→A→B 反复切，每次正确
+
+**通过即进入阶段 2。**
 
 ---
 
-## 六、文件改动清单
+### 阶段 2：handleStateSnapshot 精简
 
-| 阶段 | 文件 | 操作 | 预估行数 |
-|------|------|------|---------|
-| 0 | `orchestrator.py` | 加 `_processing` flag | +2 |
-| 0 | `reply_handlers.py` | try/finally 包裹 | +3 |
-| 0 | `app.py` | `is_busy()` 改实现 | +1/-1 |
-| 1 | `useAnalyzeSession.ts` | 加 `resetAll()`，改 `handleReset` | +20/-15 |
-| 1 | `AnalyzePanel.tsx` | 加 useEffect([currentProject]) | +35 |
-| 2 | `handlers.ts` | 精简 handleStateSnapshot | -15/+5 |
-| 3 | `app.py` | build_snapshot 补全 | +1/-1 |
-| 4 | `STATE_REGISTRY.md` | 新建 | +70 |
-| 4 | `test_state_registry.py` | 新建 | +30 |
-| **合计** | **8 文件** | | **~160 行净增** |
+**目标**：删除守卫行 46-54，职责移给阶段 1 的 useEffect。保留消息同步、agent 状态条、项目删除处理。
 
----
+**进入条件**：阶段 1 通过。
 
-## 七、回退策略
+**改动**：I（1 文件，-15/+5 行）
 
-- 每阶段独立 commit，独立 revert
-- 阶段 0：独立修 bug
-- 阶段 1：`resetAll()` + useEffect —— 核心改动，可独立回退
-- 阶段 2：依赖阶段 1（删了守卫后不能留下缺口），一起 revert
-- 阶段 3：后端小补，独立
-- 阶段 4：纯文档+测试，零风险
+**完成审核**：
+```bash
+# 旧守卫已删除
+grep "snap.project_name.*deps.currentProject" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts
+# 预期：无输出
+# 消息同步保留
+grep -c "syncFromSnapshot\|roleMap\|toolExchange" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts
+# 预期：>=5
+# 项目删除保留
+grep -c "项目被删除" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts
+# 预期：1
+```
 
----
+**通过标准**：
+- [ ] `npx tsc --noEmit` 零错误
+- [ ] 手动验证 S3/S4：快照消息正确渲染
 
-## 八、已知风险（v2 已闭合）
-
-| 风险 | 状态 |
-|------|:--:|
-| useEffect deps 引用不稳定 → 循环 | ✅ `sess.resetAll` 用 `useCallback([])`，不放 deps |
-| useEffect 设 phase → 闪烁 | ✅ cleanup 设 "setup"，React 18 批量处理保证同 render 中 snapshot 覆盖 |
-| 首次挂载 useEffect 破坏快照恢复 | ✅ prevRef 守卫：`prev === null → currentProject` 跳过 |
-| handleStateSnapshot 精简漏功能 | ✅ 保留 agent 状态、项目删除、ConvoMessage 渲染 |
-| useEffect 和 useFileUpload 竞态 | ✅ React effect 按注册顺序执行，新 effect 在 useFileUpload 之后注册 |
-| 删除守卫后断连重连误清 | ✅ 重连时 project_name 相同 → prevRef 跳过 |
-| syncFromSnapshot 漏 ConvoMessage 渲染 | ✅ 阶段 2 保留完整渲染逻辑 |
-| WS 快照在 useEffect 之前到达 | ✅ prevRef 守卫保证首次挂载跳过；真正切换时 snapshot 异步到达在 effect 之后 |
-| restore_session 的 _processing | ✅ 构造函数设 `False` |
-| WS 重连后再次收到同一快照 | ✅ syncFromSnapshot 内部去重 |
-| `clearMessages()` 违反铁律 13 | ✅ 已从 useEffect 中删除，消息只走 handleStateSnapshot |
+**通过即进入阶段 3。**
 
 ---
 
-## 九、审计日志
+### 阶段 3：build_snapshot 防 None
 
-| 版本 | 日期 | 审计结论 | 变更 |
-|------|------|---------|------|
-| v1 | 2026-07-29 | 5 gap + 3 遗漏 | 初始设计 |
-| v2 | 2026-07-29 | 0 gap，0 遗漏 | resetAll 重构、防闪烁、handleStateSnapshot 补全、守门简化 |
-| v3 | 2026-07-29 | 铁律 13 + 功能回归双维审计通过 | 删 clearMessages（铁律 13）、加 prevRef 守卫（防首次挂载误清） |
+**目标**：`data_path`/`query` 空值时返回 `""` 而非 `None`。
+
+**进入条件**：阶段 2 通过。
+
+**改动**：J（1 文件，+1/-1 行）
+
+**完成审核**：
+```bash
+grep 'or ""' hagoku/app.py | grep "data_path\|query"
+# 预期：2行
+```
+
+**通过标准**：
+- [ ] `pytest tests/` 全绿
+- [ ] 手动验证 S4：空项目快照不返回 None
+
+**通过即进入阶段 4。**
+
+---
+
+### 阶段 4：STATE_REGISTRY + 守门测试
+
+**目标**：锁死 38 个状态清单。后续增删 state 必须同步更新注册表。
+
+**进入条件**：阶段 3 通过。
+
+**改动**：K（2 个新文件，+140 行）
+
+**完成审核**：
+```bash
+pytest tests/test_frontend/test_state_registry.py -v
+# 预期：3 passed
+```
+
+**通过标准**：
+- [ ] `pytest tests/test_frontend/test_state_registry.py` 3 passed
+- [ ] 守门测试能拦住改动：临时加一个 useState → 测试失败
+
+**通过即进入阶段 5。**
+
+---
+
+### 阶段 5：WS 消息格式修复 + 启动恢复
+
+**目标**：修复根因 ⑦（ws_handler 取不到 project），补上启动恢复（App mount 自动 switch）。
+
+**进入条件**：阶段 4 通过。
+
+**改动**：L, M（2 文件，+11/-3 行）
+
+**完成审核**：
+```bash
+# payload 路径修复
+grep -c "msg.get.*payload.*or.*msg" hagoku/api/ws_handler.py
+# 预期：3
+# 启动恢复
+grep -A3 "挂载后恢复" hagoku_web/src/App.tsx | grep "send.*switch_project"
+# 预期：1行匹配
+```
+
+**通过标准**：
+- [ ] `npx tsc --noEmit` 零错误
+- [ ] `pytest tests/` 全绿
+- [ ] WS 端到端：`switch_project test0729` 返回 48 条消息
+- [ ] 手动验证 S1：重启应用 → test0729 对话自动出现
+- [ ] 手动验证 S2：新建项目后重启 → setup 界面
+
+**全部阶段通过 → 提交。**
+
+---
+
+### 阶段总览
+
+| 阶段 | 做什么 | 文件数 | 行数 | 关键审核 | 通过标志 |
+|:--:|------|:--:|:--:|------|------|
+| 0 | is_busy 语义修复 | 3 | +6 | `_processing` flag 4 处正确 | pytest 全绿 |
+| 1 | 前端切换清理 | 2 | +45/-28 | resetAll + prevRef + 无 clearMessages | tsc + 手动 S3/S8 |
+| 2 | handleStateSnapshot 精简 | 1 | -15/+5 | 守卫删、核心逻辑保留 | tsc + 手动 S3/S4 |
+| 3 | build_snapshot 防 None | 1 | +1/-1 | `or ""` ×2 | pytest + 手动 S4 |
+| 4 | 状态注册表 | 2 | +140 | 3 守门测试 | pytest 守门通过 |
+| 5 | WS 修复 + 启动恢复 | 2 | +11/-3 | payload 路径 + App mount | WS 端到端 + S1/S2 |
+| **合计** | | **10** | **~175** | | |
+
+## 六、验收场景
+
+| # | 场景 | 预期 |
+|---|------|------|
+| S1 | 启动恢复（有历史） | test0729 对话自动出现 |
+| S2 | 启动恢复（无历史） | setup 界面 |
+| S3 | 手动切换 A→B（B 有历史） | B 对话出现 |
+| S4 | 手动切换 A→B（B 无历史） | setup 界面 |
+| S5 | 分析进行中→切换 | 被拒绝 |
+| S6 | 停止→切换 | 正常 |
+| S7 | A→B→A→B 反复切 | 每次正确 |
+| S8 | 删除项目→自动清 | setup |
+
+## 七、文件改动清单
+
+| 文件 | 改动 | 行数 |
+|------|------|:--:|
+| `orchestrator.py` | `_processing` flag | +3 |
+| `reply_handlers.py` | try/finally | +3 |
+| `app.py` | `is_busy()` + `build_snapshot` | +2/-1 |
+| `ws_handler.py` | payload 路径修复 ×3 | +3/-3 |
+| `App.tsx` | 启动恢复 useEffect | +8 |
+| `AnalyzePanel.tsx` | useEffect + prevRef | +25 |
+| `handlers.ts` | 删守卫 | -15/+5 |
+| `useAnalyzeSession.ts` | `resetAll()` + 复用 | +20/-28 |
+| `STATE_REGISTRY.md` | 新建 | +76 |
+| `test_state_registry.py` | 新建 | +64 |
+| **待清理** | `app.py:126-128` debug 日志 | -2 |
+| **待清理** | `handlers.ts:32` 未用解构 | -1 |
+| **合计** | **10 文件** | **~175 行净增** |
+
+## 八、怎么实施
+
+### 步骤 1：清理残留（5 分钟）
+```bash
+# 1.1 移除 app.py debug 日志
+#     删除 app.py:126-128 两行 logger.info/warning
+
+# 1.2 清理 handlers.ts 未用解构
+#     删除 handlers.ts:32 的 addSystemMsg: addSys,
+```
+
+### 步骤 2：确认代码（2 分钟）
+```bash
+# 逐项核对改动清单 A-O，确认每项代码存在且行号准确
+grep -n "_processing = False" hagoku/manager/orchestrator.py  # A
+grep -n "_processing = True" hagoku/manager/llm_dispatch/reply_handlers.py  # B
+grep -n "_processing = False" hagoku/manager/llm_dispatch/reply_handlers.py  # C
+grep -n "_processing = False" hagoku/manager/orchestrator.py  # D
+grep -n "return self._active_orch._processing" hagoku/app.py  # E
+grep -n "const resetAll" hagoku_web/src/panels/AnalyzePanel/hooks/useAnalyzeSession.ts  # F
+grep -n "resetAll()" hagoku_web/src/panels/AnalyzePanel/hooks/useAnalyzeSession.ts  # G
+grep -n "prevProjectRef" hagoku_web/src/panels/AnalyzePanel.tsx  # H
+grep -n "项目切换时的清理由" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts  # I
+grep -n "or \"\"" hagoku/app.py | grep "data_path\|query"  # J
+ls hagoku_web/src/panels/AnalyzePanel/STATE_REGISTRY.md tests/test_frontend/test_state_registry.py  # K
+grep -n "msg.get.*payload.*or.*msg" hagoku/api/ws_handler.py  # L
+grep -n "send.*switch_project" hagoku_web/src/App.tsx  # M
+```
+
+### 步骤 3：运行测试（3 分钟）
+```bash
+cd hagoku_web && npx tsc --noEmit          # TS 零错误
+cd .. && python3 -m pytest tests/ -q         # pytest 全绿
+python3 -m pytest tests/test_frontend/test_state_registry.py -v  # 守门测试 3 passed
+```
+
+### 步骤 4：重启服务（1 分钟）
+```bash
+pkill -f hagoku-api; pkill -f "vite.*hagoku"
+HAGOKU_API_RELOAD=0 hagoku-api &
+cd hagoku_web && npx vite --host 0.0.0.0 --port 5173 &
+```
+
+### 步骤 5：提交（1 分钟）
+```bash
+git add -A
+git commit -m "fix: 项目切换完整修复
+
+根因: ws_handler msg.get('project') 取不到值（send包装为{cmd,payload}）
+修复: (msg.get('payload') or msg).get('project', '') ×3
+附带: is_busy _processing、useEffect+prevRef、App启动恢复、resetAll重构
+【自检】tsc零错误, pytest全绿, WS端到端48条消息"
+```
+
+## 九、怎么验证
+
+每项场景的 **精确操作步骤** 和 **判定标准**。
+
+### S1：启动恢复（有历史）
+| 步骤 | 操作 | 停留/观察 | 判定 |
+|------|------|----------|------|
+| 1 | 关闭桌面应用 | — | — |
+| 2 | 确认 API 运行中 | `curl localhost:8000/docs` → 200 | — |
+| 3 | 启动桌面应用 | 等待 3 秒 | — |
+| 4 | 观察分析面板 | — | 看到 test0729 的对话，字段理解表/清洗评估/分析发现等内容出现 |
+| ❌ | 不通过 | 看到 setup 界面或空白 | 查 hagoku.log 最后 5 行 |
+
+### S2：启动恢复（无历史）
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 新建空项目 test_empty | — |
+| 2 | 关闭桌面应用 | — |
+| 3 | 重启应用 | 分析面板为 setup 界面，无报错 |
+
+### S3：手动切换 A→B（B 有历史）
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 当前在 test0729 | 对话可见 |
+| 2 | 点击项目列表中的 test0729V3 | — |
+| 3 | 再点击 test0729 | test0729 对话恢复 |
+| ❌ | 不通过 | 切换后内容不变或空白 |
+
+### S4：手动切换 A→B（B 无历史）
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 当前在 test0729 | 对话可见 |
+| 2 | 点击 test0729V2（无历史） | setup 界面，无残留 |
+
+### S5：分析进行中→切换
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 启动分析 | — |
+| 2 | 分析进行中点其他项目 | 提示"当前项目分析进行中"，不切换 |
+
+### S6：停止→切换
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 分析进行中点停止 | — |
+| 2 | 点其他项目 | 正常切换 |
+
+### S7：反复切换
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | test0729 → test0729V3 → test0729 → test0729V3 | 每次切换内容正确，不残留不重复 |
+
+### S8：删除项目
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 1 | 当前在 test0729 | 对话可见 |
+| 2 | 删除 test0729 | 分析面板自动清空 → setup |
+
+## 十、怎么审核
+
+每处改动的 **审核命令**、**预期输出**、**全局影响检查**。
+
+| # | 改动 | 审核命令 | 预期 | 全局影响 |
+|---|------|---------|------|---------|
+| A | `orchestrator.py:74` `_processing=False` | `grep -n "_processing" hagoku/manager/orchestrator.py` | 行 74 和 237 各有 `_processing = False` | 无（构造初始化） |
+| B | `reply_handlers.py:108` `_processing=True` | `grep -n "_processing" hagoku/manager/llm_dispatch/reply_handlers.py` | 行 108 `True`, 行 122 `False`(finally) | respond 入口，finally 保证异常后恢复 |
+| C | `reply_handlers.py:122` `finally` | 同上 | 同上 | 任何异常路径都清 `_processing` |
+| D | `orchestrator.py:237` cancel 清 `_processing` | 同上 A | 行 237 `_processing = False` | 停止后 `is_busy()` 返回 False |
+| E | `app.py:88` `is_busy()` | `grep -A2 "def is_busy" hagoku/app.py` | `return self._active_orch._processing` | 影响 ws_handler:297 和 server.py:182 |
+| F | `useAnalyzeSession.ts:42-57` resetAll | `grep -c "set[A-Z]"` 数 14 个 setter | 14 | handleStartSession/handleReset 均复用 |
+| G | `useAnalyzeSession.ts:59-87` 复用 | `grep "resetAll()"` 所在函数 | handleStartSession 和 handleReset 内 | 不改变原行为 |
+| H | `AnalyzePanel.tsx:127-151` useEffect | `grep -A25 "prevProjectRef"` | 三个跳过条件 + 清理逻辑 | 仅项目切换触发 |
+| I | `handlers.ts` 删守卫 | `grep "snap.project_name.*deps.currentProject"` | 无输出（已删除） | 重连时 project_name 相同 → 不受影响 |
+| J | `app.py:232-233` or "" | `grep 'or ""' hagoku/app.py` | query 和 data_path 行 | 仅影响 build_snapshot 输出 |
+| K | STATE_REGISTRY + 守门 | `pytest tests/test_frontend/test_state_registry.py -v` | 3 passed | 新增文件，零影响 |
+| L | `ws_handler.py:294,313,317` payload | `grep "msg.get.*payload.*or.*msg" hagoku/api/ws_handler.py` | 3 行匹配 | 同时修了 switch/create/delete |
+| M | `App.tsx:131-137` 启动恢复 | `grep -A5 "挂载后恢复" hagoku_web/src/App.tsx` | send("switch_project") | 仅 mount 一次，无副作用 |
+| N | `app.py:126-128` 移除 | `grep "logger.info.*_load_project" hagoku/app.py` | 无输出 | — |
+| O | `handlers.ts:32` 清理 | `grep "addSystemMsg" hagoku_web/src/panels/AnalyzePanel/hooks/handlers.ts` | 仅 `addSystemMsg: addSys` 已删除 | 原已未使用 |
+
+### 全系统回归
+
+```bash
+# 1. TypeScript
+cd hagoku_web && npx tsc --noEmit
+
+# 2. Python 全量
+cd .. && python3 -m pytest tests/ -q
+
+# 3. 铁律守门
+python3 -m pytest tests/test_doctrine_compliance.py tests/test_product/test_information_arrival.py -q
+
+# 4. 消息写入点合规
+grep -rn 'setMessages' hagoku_web/src/panels/AnalyzePanel/ --include='*.ts' --include='*.tsx' \
+  | grep -v 'useConversation' | grep -v 'types.ts' | grep -v '_setMessages' | grep -v '__tests__'
+# 预期：无输出
+
+# 5. clearMessages 合规
+grep -n 'clearMessages' hagoku_web/src/panels/AnalyzePanel.tsx
+# 预期：仅在 useConversation 解构行（109），不在 useEffect 内
+```

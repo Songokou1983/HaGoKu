@@ -29,7 +29,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   eventLog("snapshot", `arrived msgs=${Array.isArray(snap?.messages) ? snap.messages.length : 'N/A'} gate=${snap?.gate_open}`);
   if (!snap) return false;
   const {
-    syncFromSnapshot, _setMessages, addSystemMsg: addSys,
+    syncFromSnapshot, _setMessages,
     setActiveFieldReviewId, setActiveFieldReviewRevision,
     setActiveCleaningReviewId, setActiveCleaningReviewRevision,
     setActiveAnalystReviewId, setActiveAnalystReviewRevision,

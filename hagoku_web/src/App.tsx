@@ -111,7 +111,7 @@ function SystemStatus() {
 }
 
 export default function App() {
-  const { onMessage } = useWebSocket();
+  const { onMessage, send } = useWebSocket();
   const theme = useThemeStore((s) => s.theme);
   const setLastError = useWorkspaceStore((s) => s.setLastError);
   const lastError = useWorkspaceStore((s) => s.lastError);
@@ -127,6 +127,14 @@ export default function App() {
       }
     });
   }, [onMessage, setLastError]);
+
+  // ── 挂载后恢复当前项目 ──
+  useEffect(() => {
+    const proj = useWorkspaceStore.getState().currentProject;
+    if (proj) {
+      send("switch_project", { project: proj });
+    }
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-app-bg" data-theme={theme}>

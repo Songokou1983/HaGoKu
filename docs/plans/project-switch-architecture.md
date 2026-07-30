@@ -1,75 +1,125 @@
-# 项目切换 — 功能架构
+# 唯一真相源 — 完整架构
 
-> 描述应该是什么。不考虑现有代码。
+> 后端 session 是唯一真相。前端只展示快照。所有场景走同一条通道。
 
-## 一、用户需要什么
+## 一、数据真理
 
-| # | 功能 | 用户体验 |
-|---|------|---------|
-| F1 | 打开应用 | 看到上次关闭时正在看的项目对话 |
-| F2 | 切换项目 | 点项目列表中任一项目 → 看到该项目的对话 |
-| F3 | 切换至空项目 | 点无历史数据的项目 → 看到空白开始界面 |
-| F4 | 分析中锁定 | 分析进行中点其他项目 → 提示无法切换 |
-| F5 | 停止后切换 | 点停止 → 可正常切换 |
-| F6 | 反复切换 | A→B→A 来回切，每次内容正确，不残留旧数据 |
-| F7 | 删除项目 | 删除当前项目 → 面板自动清空 |
-
-## 二、用户体验原则
-
-1. **关前什么样，打开就什么样。** 不需要用户做任何操作恢复状态。
-2. **切换即所见。** 点项目的瞬间，要么看到历史对话，要么看到空白界面。不闪烁、不残留。
-3. **项目面板是唯一切换入口。** 用户切换项目的操作只在一处——项目列表。不在分析页重复提供切换功能。
-4. **分析中不可切换。** 保护正在运行的分析不被意外中断。
-5. **删除即清空。** 删除当前项目后，分析面板回到初始状态。
-
-## 三、数据流
+系统只有一份数据：后端 session。前端不存储、不缓存、不预览、不保留。
 
 ```
-启动时：
-  WS 连接 → 后端自动推送当前项目快照 → 前端显示
-
-手动切换：
-  用户点项目 B
-    → 后端加载 B 的会话数据
-    → 后端返回快照
-    → 前端接收快照
-    → 前端显示 B 的对话
+session.json（唯一真相）
+  → build_snapshot()
+  → WS: state_snapshot
+  → handleStateSnapshot（唯一写入点）
+  → 前端渲染
 ```
 
-用户点项目的瞬间，在快照到达之前，前端显示什么？原则 2 的答案：旧内容保留，快照到达后原子替换。这避免"先清空再填充"的闪烁。如果快照延迟超过可感知时间（约 200ms），前端可显示过渡态——但这不是必须的，因为正常网络下快照在 50ms 内到达。
+任何偏离这条链的操作都是 bug。
 
-## 四、快照内容
+## 二、快照何时推送
 
-后端返回的快照必须包含前端需要的全部信息：
+唯一触发：**WS 连接时**。后端在 `ws_handler` 的 `ws_handler` 协程开头推送一次当前快照。
+
+不需要其他推送时机。用户发送消息后，消息已经通过 HTTP 保存到 session。LLM 响应写入 session。下次 WS 连接（重连或下一次连接）时，新快照自然包含全部内容。
+
+但如果 session 在 WS 存活期间更新了（用户发消息、LLM 响应），前端如何知道？答案是：**每次 session 写入后，主动推送一次快照**。这样前端始终与后端同步。
+
+推送时机：
+- WS 连接时
+- 用户消息保存到 session 后
+- LLM 响应完成后（run_step 结束）
+- 项目切换完成时
+
+## 三、前端唯一写入点
+
+`handleStateSnapshot` 是前端对话状态的唯一写入点。它做的事：
+
+1. 接收快照
+2. `messages = snap.messages`（全量替换，不做任何合并或保留）
+3. `phase = snap.messages.length > 0 ? "running" : "setup"`
+4. `currentProject = snap.project_name`
+5. `currentDataPath = snap.data_path`
+
+没有其他函数写 messages。没有 addUserMsg。没有 persist。没有 localStorage。没有 useEffect 清理。
+
+## 四、用户发送消息的完整链路
+
+```
+用户输入 "hello" → 回车
+  → HTTP POST /save_user_msg → 写入 session
+  → WS: send("respond", {text: "hello"})
+  → 后端: _respond_impl → _handle_reply → run_step
+  → LLM 响应写入 session
+  → 后端推送快照
+  → handleStateSnapshot 接收 → 前端显示
+```
+
+用户消息出现在对话中的时机：快照到达时。在此之前，前端不显示任何内容。
+
+## 五、项目切换的完整链路
+
+```
+用户点击项目 B
+  → switchToProject("B")
+  → setCurrentProject("B")
+  → send("switch_project", {project: "B"})
+  → 后端: switch_project("B")
+      → 保存旧项目状态
+      → _load_project("B") → restore_session
+      → build_snapshot()
+      → 推送快照
+  → handleStateSnapshot 接收 → 全部替换为 B 的内容
+```
+
+## 六、启动恢复的完整链路
+
+```
+应用启动
+  → 后端在构造时 _restore_active_project()
+    → 读取 active_project 文件
+    → _load_project(name) → restore_session
+    → _active_orch 就绪
+  → WS 连接
+  → 后端推送当前快照
+  → handleStateSnapshot 接收 → 前端显示
+```
+
+## 七、快照内容
 
 ```
 {
-  project_name: "test0729",
-  query: "分析每个店铺的收入变动趋势",
-  data_path: "/path/to/data.xlsx",
-  report_url: "/path/to/report.html",
-  messages: [...],           // 对话历史
-  stage: "analyst",          // 分析阶段（用于 agent 状态条）
-  gate_open: false           // 输入门状态
+  project_name: string,
+  query: string,
+  data_path: string,
+  report_url: string | null,
+  messages: [...],
+  stage: string | null,
+  gate_open: boolean
 }
 ```
 
-前端收到快照后，用它替换当前的对话、项目信息、数据路径。不做增量更新——做全量替换。
+messages 数组直接来自 session.messages 的渲染结果。前端不做任何二次处理。
 
-**快照是对话的唯一真相源。** 前端不持久化消息——无 localStorage、无本地缓存。消息只存在于后端 session，前端通过快照获取。`addUserMsg` 是即时预览，快照到达时全量替换。
+## 八、不存在的东西
 
-## 五、入口
+- ❌ `addUserMsg` — 前端不提前写消息
+- ❌ `persist` / localStorage — 前端不持久化
+- ❌ `syncFromSnapshot` 的"保留本地消息"逻辑 — 全量替换
+- ❌ `useEffect` 清理 messages — handleStateSnapshot 负责
+- ❌ 分析页项目下拉切换 — 唯一入口是左侧项目面板
+- ❌ 启动时前端主动发 switch_project — 后端自动恢复
 
-只有一个切换入口：项目面板项目列表点击。
+## 九、入口
 
-应用启动时，后端自动恢复上次活跃项目。WS 连接后直接推送快照，前端无需发送 `switch_project`。
+唯一项目切换入口：项目面板。
+应用启动由后端自动恢复。
 
-后端在每次项目切换时持久化 `active_project`，启动时从磁盘恢复。
+## 十、当前代码差距
 
-## 六、不会出现的东西
-
-- 不会有两个地方都能切换项目
-- 不会有"先清空再等快照"的闪烁
-- 不会有时钟依赖（等 3 秒超时）
-- 不会有前端本地判断"我是不是首次挂载"
-- 快照不到达时，显示旧内容（保留用户正在看的东西），不主动清空
+| 文档要求 | 当前代码 | 
+|---------|---------|
+| 无 addUserMsg | submitUserReply 中调用 addUserMsg |
+| 无 persist | persist 是空函数但调用链还在 |
+| 无 useEffect 清理 | useEffect 清理 UI state |
+| 响应后推快照 | 不推快照 |
+| 用户消息保存后推快照 | 不推快照 |

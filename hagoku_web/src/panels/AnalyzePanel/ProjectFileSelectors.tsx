@@ -1,4 +1,4 @@
-import { Loader2, FolderOpen, FileText, Upload, X, Trash2 } from "lucide-react";
+import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2, Trash2 } from "lucide-react";
 import type { ProjectFile } from "./types";
 import { fmtSize } from "./utils";
 
@@ -11,14 +11,11 @@ interface ProjectFileSelectorsProps {
   filesLoading: boolean;
   showFileDropdown: boolean;
   setShowFileDropdown: React.Dispatch<React.SetStateAction<boolean>>;
-  showProjectDropdown: boolean;
-  setShowProjectDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   uploading: boolean;
   uploadError: string | null;
   setUploadError: (v: string | null) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   dropdownRef: React.RefObject<HTMLDivElement | null>;
-  projectDropdownRef: React.RefObject<HTMLDivElement | null>;
   handleUpload: (f: File) => Promise<void>;
   phase: string;
   // Excel 多 sheet 选择
@@ -34,9 +31,8 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
   const {
     currentProject, dataPath, setDataPath, selectedFileName,
     projectFiles, filesLoading, showFileDropdown, setShowFileDropdown,
-    showProjectDropdown, setShowProjectDropdown,
     uploading, uploadError, setUploadError,
-    fileInputRef, dropdownRef, projectDropdownRef, handleUpload, phase,
+    fileInputRef, dropdownRef, handleUpload, phase,
     excelSheets, sheetName, setSheetName, auxSheets, setAuxSheets,
     onDeleteFile,
   } = props;
@@ -46,7 +42,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
       {/* Project selector */}
       <div className="flex items-center gap-2">
         <span className="text-ui-xs text-app-text-muted w-12 shrink-0">项目</span>
-        <div className="relative flex-1" ref={projectDropdownRef}>
+        <div className="relative flex-1">
           <div
             className="w-full flex items-center gap-2 px-2 py-1.5 bg-app-bg border rounded
                        text-ui-sm border-app-border text-app-text"

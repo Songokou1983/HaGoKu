@@ -285,14 +285,11 @@ export default function AnalyzePanel() {
         filesLoading={filesLoading}
         showFileDropdown={showFileDropdown}
         setShowFileDropdown={setShowFileDropdown}
-        showProjectDropdown={showProjectDropdown}
-        setShowProjectDropdown={setShowProjectDropdown}
         uploading={uploading}
         uploadError={uploadError}
         setUploadError={setUploadError}
         fileInputRef={fileInputRef}
         dropdownRef={dropdownRef}
-        projectDropdownRef={projectDropdownRef}
         handleUpload={handleUpload}
         phase={phase}
         excelSheets={excelSheets}

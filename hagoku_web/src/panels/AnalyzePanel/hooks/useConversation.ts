@@ -2,16 +2,8 @@ import { useState } from "react";
 import type { ConvoMessage } from "../types";
 import { uid } from "../utils";
 import { eventLog } from "../../../utils/eventLog";
-import { useWorkspaceStore } from "../../../stores/workspace";
 
 eventLog("load", "useConversation");
-
-const BASE_KEY = "hagoku_session";
-
-function _storageKey(): string {
-  const proj = useWorkspaceStore.getState().currentProject;
-  return proj ? `${BASE_KEY}_${proj}` : BASE_KEY;
-}
 
 export function useConversation(_log?: (msg: string) => void) {
   const [messages, setMessages] = useState<ConvoMessage[]>([]);

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { eventLog } from "../utils/eventLog";
 import { useBatchEvents } from "../hooks/useBatchEvents";
@@ -123,15 +123,6 @@ export default function AnalyzePanel() {
     clearMessages,
     setReplyPending,
   );
-
-  // ── 项目切换：清理已移至 handleStateSnapshot ──
-  const prevProjectRef = useRef<string | null>(null);
-  useEffect(() => {
-    const prev = prevProjectRef.current;
-    prevProjectRef.current = currentProject;
-    // 清理逻辑已移至 handleStateSnapshot（步骤 2 迁移）
-    // useEffect 保留结构，步骤 3 删除
-  }, [currentProject]);
 
   // WS event handler hook
   useWsEventHandler({

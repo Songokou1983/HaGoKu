@@ -25,7 +25,6 @@ import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
 import { sanitizeText } from "../utils/sanitize";
 import { uid } from "./AnalyzePanel/utils";
-import { switchToProject } from "../utils/switchProject";
 
 export default function AnalyzePanel() {
   const { send, log } = useWebSocket();
@@ -289,7 +288,6 @@ export default function AnalyzePanel() {
         auxSheets={auxSheets}
         setAuxSheets={setAuxSheets}
         onDeleteFile={() => reloadFiles()}
-        onSwitchProject={(p: string) => switchToProject(p, send, setCurrentProject)}
       />
       {/* ── Setup idle: start button ── */}
       <StartPanel

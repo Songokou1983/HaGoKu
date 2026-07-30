@@ -31,7 +31,6 @@ interface ProjectFileSelectorsProps {
   auxSheets: string[];
   setAuxSheets: (v: string[]) => void;
   onDeleteFile?: () => void;
-  onSwitchProject?: (project: string) => void;
 }
 
 export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
@@ -44,7 +43,6 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
     fileInputRef, dropdownRef, projectDropdownRef, handleUpload, phase,
     excelSheets, sheetName, setSheetName, auxSheets, setAuxSheets,
     onDeleteFile,
-    onSwitchProject,
   } = props;
 
   return (
@@ -71,7 +69,7 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
               {!projects?.length
                 ? <div className="px-3 py-2 text-ui-xs text-app-text-muted">暂无项目</div>
                 : projects.map((p) => (
-                  <button key={p} onClick={() => { setCurrentProject(p); onSwitchProject?.(p); setShowProjectDropdown(false); }}
+                  <button key={p} onClick={() => { setCurrentProject(p); setShowProjectDropdown(false); }}
                     className={`w-full text-left px-3 py-1.5 text-ui-sm font-mono hover:bg-app-bg cursor-pointer
                       ${p === currentProject ? "text-app-accent" : "text-app-text"}`}>
                     {p === currentProject && <CheckCircle2 size={11} className="inline mr-1.5 text-app-accent" />}

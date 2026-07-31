@@ -1,56 +1,59 @@
-# 项目切换 + 实时对话 — 架构
+# HaGoKu 对话系统 — 架构文档
 
-> 基于市面成熟软件的做法。事件驱动，不编概念。
-
-## 一、基本规则
-
-1. 用户打字立即显示。
-2. AI 回复一条条流式显示。
-3. AI 提问弹出卡片让用户选。
-4. 关前什么样，打开就什么样。
-5. 切换项目就显示那个项目的内容。
-
-## 二、用户发消息怎么走
+## 一、用户发消息
 
 ```
 用户输入文字 → 回车
-  ├─ 前端立即显示这条消息
-  ├─ HTTP 保存到后端
-  └─ WS 发给后端处理
-       └─ 后端回复 → 流式事件一条条推到前端 → 前端逐字显示
+  ├─ 前端立即显示这条消息（addUserMsg）
+  ├─ HTTP PUT /save_user_msg → 写入后端 session
+  └─ WS: send("respond")
+       └─ 后端 run_step → LLM 回复
+            └─ agent_stream_delta 事件一条条推到前端 → 逐字显示
 ```
 
-## 三、AI 问用户怎么走
+## 二、AI 问用户
 
 ```
-LLM 调用 ask_user
-  ├─ 后端推事件 user_input_requested（含 question、选项）
-  └─ 前端收到 → 创建卡片 → 用户看到
-       └─ 用户回复 → 回到第二节的流程
+LLM 调用 ask_user 工具
+  └─ 后端 emit user_input_requested 事件
+       ├─ question / expected_format / options
+       └─ 前端收到 → 创建卡片（AskUserPrompt）→ 用户看到
+            └─ 用户回复 → 回到第一节
 ```
 
-## 四、项目切换怎么走
+## 三、项目切换
 
 ```
 用户点项目 B
-  ├─ 前端切换显示
-  ├─ WS 发 switch_project
-  ├─ 后端加载 B 的会话
-  └─ 后端返回历史消息列表 → 前端替换当前显示
+  ├─ 前端 setCurrentProject("B")
+  ├─ WS: send("switch_project", {project: "B"})
+  ├─ 后端 switch_project → _load_project → build_snapshot
+  └─ WS: state_snapshot → 前端替换消息列表
 ```
 
-## 五、启动怎么走
+## 四、启动恢复
 
 ```
 打开应用
-  ├─ 前端 localStorage 有上次项目名
-  ├─ WS 连接后发 switch_project
-  └─ 后端返回历史消息 → 前端显示
+  ├─ 前端 localStorage 有 currentProject
+  ├─ App mount → send("switch_project")
+  └─ 同第三节
 ```
 
-## 六、不存在的东西
+## 五、后端 session 是真相
 
-- 没有"快照"
-- 没有"唯一真相源"  
-- 没有前端 localStorage 存消息
-- 没有代码替 LLM 判断任何事
+- 所有消息存在 `session.json`
+- 项目切换时通过 `state_snapshot` 批量同步
+- 实时对话时通过 `agent_stream_delta` / `user_input_requested` 事件传递
+- 前端不另存消息（无 localStorage 缓存对话）
+
+## 六、代码位置
+
+| 功能 | 前端 | 后端 |
+|------|------|------|
+| 用户打字显示 | `AnalyzePanel.tsx:submitUserReply` → `addUserMsg` | — |
+| AI 流式回复 | `handlers.ts:agent_stream_delta` | `agent.py:run_step` 流式 |
+| AI 提问卡片 | `handlers.ts:user_input_requested` → `AskUserPrompt` | `reply_handlers.py:_handle_reply` → emit |
+| 项目切换 | `ProjectPanel.tsx` → `switchToProject` | `app.py:switch_project` → `build_snapshot` |
+| 启动恢复 | `App.tsx` mount → `switchToProject` | 同上 |
+| 消息持久化 | — | `reply_handlers.py:save_user_msg` → session |

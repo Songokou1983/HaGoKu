@@ -24,21 +24,25 @@ def _save_review_cards(context: dict, ask: dict | None = None) -> None:
     })
 
     # field_review / cleaning_review / analyst_review：首次出现时写入，后续跳过
-    review_types = [
-        ("field_review", "field_review", context.get("column_semantics", []), context.get("n_rows")),
-        ("cleaning_review", "cleaning_review", context.get("cleaning_assessment"), True),
-        ("analyst_review", "analyst_review", context.get("analyst_review"), True),
-    ]
-    for card_type, data_key, data, has_data in review_types:
-        if not has_data or not data:
-            continue
-        already = any(
-            m.get("role") == "workflow" and m.get("type") == card_type
-            for m in (session.messages or [])
-        )
-        if already:
-            continue
-        session.add_workflow_card(card_type, {data_key: data})
+    cs = context.get("column_semantics", [])
+    if cs and context.get("n_rows"):
+        already = any(m.get("role") == "workflow" and m.get("type") == "field_review" for m in (session.messages or []))
+        if not already:
+            rows = []
+            for s in cs:
+                if isinstance(s, dict) and "column_name" in s:
+                    rows.append({
+                        "field_name": s.get("column_name", ""),
+                        "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
+                        "meaning": s.get("description", ""),
+                        "suggested_role": s.get("suggested_role") or None,
+                        "used_in_analysis": s.get("used_in_analysis"),
+                        "evidence": s.get("evidence", ""),
+                    })
+            if rows:
+                session.add_workflow_card("field_review", {
+                    "field_review": {"n_rows": context["n_rows"], "n_cols": context.get("n_cols", len(rows)), "rows": rows},
+                })
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:

@@ -22,7 +22,23 @@ def _save_review_cards(context: dict, ask: dict | None = None) -> None:
         "expected_format": ask.get("expected_format", ""),
         "options": ask.get("options", []),
     })
-    # field_review / cleaning_review / analyst_review 已在首次出现时写入，不重复追加
+
+    # field_review / cleaning_review / analyst_review：首次出现时写入，后续跳过
+    review_types = [
+        ("field_review", "field_review", context.get("column_semantics", []), context.get("n_rows")),
+        ("cleaning_review", "cleaning_review", context.get("cleaning_assessment"), True),
+        ("analyst_review", "analyst_review", context.get("analyst_review"), True),
+    ]
+    for card_type, data_key, data, has_data in review_types:
+        if not has_data or not data:
+            continue
+        already = any(
+            m.get("role") == "workflow" and m.get("type") == card_type
+            for m in (session.messages or [])
+        )
+        if already:
+            continue
+        session.add_workflow_card(card_type, {data_key: data})
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:

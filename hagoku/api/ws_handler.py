@@ -457,8 +457,8 @@ async def ws_handler(ws: WebSocket) -> None:
                                 None, _respond_task, orch, user_text,
                             )
                             await _safe_send({"type": "ack", "cmd": "respond", "data": result})
-                            # respond 完成后推送快照，前端获取最新会话
-                            if app is not None:
+                            # respond 完成后推送快照（仅在无挂起 ask_user 时）
+                            if app is not None and result.get("status") != "scout_review":
                                 snapshot = app.build_snapshot()
                                 if snapshot:
                                     await _safe_send({"type": "state_snapshot", "data": snapshot})

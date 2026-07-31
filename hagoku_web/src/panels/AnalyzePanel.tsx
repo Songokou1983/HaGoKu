@@ -11,8 +11,6 @@ import {
   WifiOff,
   ArrowRight,
   RotateCcw,
-  CheckCircle2,
-  FileText,
   ShieldAlert,
 } from "lucide-react";
 import { ConvoFeed } from "./AnalyzePanel/ConvoFeed";
@@ -341,31 +339,7 @@ export default function AnalyzePanel() {
                     className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs hover:border-app-error hover:text-app-error cursor-pointer transition-colors">停止</button>
                 </div>
               )}
-              {/* Quick action buttons */}
-              {cleanerCleaningReviewOpen && (
-                <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button type="button" onClick={() => submitUserReply("确认继续")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
-                    <CheckCircle2 size={14} />确认继续</button>
-                </div>
-              )}
-              {analystReviewOpen && (
-                <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button type="button" onClick={() => submitUserReply("确认继续")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
-                    <CheckCircle2 size={14} />确认继续</button>
-                  <button type="button" onClick={() => submitUserReply("已核对上表中的 p 值、效应量与置信区间，同意进入报告阶段")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium border border-app-border text-app-text hover:border-app-accent hover:text-app-accent cursor-pointer motion-safe:transition-colors">
-                    <FileText size={14} />同意进入报告</button>
-                </div>
-              )}
-              {scoutFieldReviewOpen && !sess.gateOpen && (
-                <div className="flex flex-wrap items-center gap-2 mb-2 px-3">
-                  <button type="button" onClick={() => submitUserReply("可以进入下一阶段了")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-ui-xs font-medium bg-app-accent text-white hover:bg-app-accent-hover cursor-pointer motion-safe:transition-colors">
-                    <CheckCircle2 size={14} />进入下一阶段</button>
-                </div>
-              )}
+              {/* 用户通过输入框自由回复，不预设固定文本 */}
               <InputBar
                 placeholder="输入回复后 Enter 发送"
                 value={sess.replyText}

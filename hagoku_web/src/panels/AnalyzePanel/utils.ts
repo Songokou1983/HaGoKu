@@ -17,7 +17,7 @@ export function formatScoutUserInputFactLine(inner: Record<string, unknown>): st
     const hint =
       typeof inner.parse_hint === "string" && inner.parse_hint.trim()
         ? inner.parse_hint.trim()
-        : "未能理解你的说明。请改用原始列名（如 Period、Inc1）或更短的中文名重说。";
+        : "";
     return hint;
   }
   const llmReply = typeof inner.llm_reply === "string" ? inner.llm_reply.trim() : "";

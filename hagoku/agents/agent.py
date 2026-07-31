@@ -159,7 +159,6 @@ class DataAnalystAgent:
             self._emit(EventType.TOOL_RESULT, {"summary": f"加载成功: {len(df)} 行, {len(df.columns)} 列"})
             self._df = df
 
-            self._emit(EventType.AGENT_THINKING, {"thought": "生成数据画像..."})
             profile = generate_profile(df)
             self._emit(EventType.TOOL_RESULT, {"summary": f"质量={profile['quality_score']:.0%}"})
 
@@ -260,8 +259,6 @@ class DataAnalystAgent:
         extra_prefix += memory_notes + command_context
         if extra_prefix.strip():
             user_content = extra_prefix + "\n" + user_content
-
-        self._emit(EventType.AGENT_THINKING, {"thought": "正在推理字段语义..."})
 
         # ── 复用 run_step 统一路径（全量工具 + 流式 + 跟进轮）──
         session = (self._context or {}).get("_session")

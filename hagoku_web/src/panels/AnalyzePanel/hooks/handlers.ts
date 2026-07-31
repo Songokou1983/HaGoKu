@@ -56,6 +56,10 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
           text: m.content || "", timestamp: m.timestamp || "",
           ...(m.toolExchange ? { toolExchange: m.toolExchange } : {}),
           ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.askUser ? { askUser: m.askUser } : {}),
+          ...(m.fieldReview ? { fieldReview: m.fieldReview } : {}),
+          ...(m.cleaningReview ? { cleaningReview: m.cleaningReview } : {}),
+          ...(m.analystReview ? { analystReview: m.analystReview } : {}),
         }));
       syncFromSnapshot(ms);
       setPhase?.("running");

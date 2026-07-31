@@ -13,7 +13,7 @@ export function ThinkingStrip({ text }: ThinkingStripProps) {
       <div className="flex items-center gap-2">
         <Loader2 size={12} className="animate-spin text-app-accent shrink-0" />
         <span className="text-ui-xs text-app-text-muted select-none">
-          正在处理，请稍候…
+          {text}
         </span>
       </div>
     </div>

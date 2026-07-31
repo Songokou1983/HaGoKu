@@ -16,38 +16,13 @@ def _save_review_cards(context: dict, ask: dict | None = None) -> None:
     if not session:
         return
 
-    # ask_user 卡片（每次 ask 都写，因为是新的暂停点）
+    # ask_user 卡片（每次 ask 都写，因为它是新的暂停点）
     session.add_workflow_card("ask_user", {
         "question": ask.get("question", ""),
         "expected_format": ask.get("expected_format", ""),
         "options": ask.get("options", []),
     })
-
-    # field_review: 从 column_semantics 构建（检查所有消息去重，不只看最后一条）
-    cs = context.get("column_semantics", [])
-    if cs and context.get("n_rows"):
-        # 检查是否已有相同的 field_review
-        already = any(
-            m.get("role") == "workflow" and m.get("type") == "field_review"
-            for m in (session.messages or [])
-        )
-        if already:
-            return
-        rows = []
-        for s in cs:
-            if isinstance(s, dict) and "column_name" in s:
-                rows.append({
-                    "field_name": s.get("column_name", ""),
-                    "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
-                    "meaning": s.get("description", ""),
-                    "suggested_role": s.get("suggested_role") or None,
-                    "used_in_analysis": s.get("used_in_analysis"),
-                    "evidence": s.get("evidence", ""),
-                })
-        if rows:
-            session.add_workflow_card("field_review", {
-                "field_review": {"n_rows": context["n_rows"], "n_cols": context.get("n_cols", len(rows)), "rows": rows},
-            })
+    # field_review / cleaning_review / analyst_review 已在首次出现时写入，不重复追加
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:

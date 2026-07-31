@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useWorkspaceStore, type PanelId } from "./stores/workspace";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { switchToProject } from "./utils/switchProject";
 import ProjectPanel from "./panels/ProjectPanel";
 import AnalyzePanel from "./panels/AnalyzePanel";
 import ReportPanel from "./panels/ReportPanel";
@@ -111,13 +112,14 @@ function SystemStatus() {
 }
 
 export default function App() {
-  const { onMessage } = useWebSocket();
+  const { onMessage, send } = useWebSocket();
   const theme = useThemeStore((s) => s.theme);
   const setLastError = useWorkspaceStore((s) => s.setLastError);
   const lastError = useWorkspaceStore((s) => s.lastError);
   const activeView = useWorkspaceStore((s) => s.activeView);
   const setActiveView = useWorkspaceStore((s) => s.setActiveView);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
+  const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
 
   useEffect(() => {
     return onMessage((msg) => {
@@ -127,6 +129,13 @@ export default function App() {
       }
     });
   }, [onMessage, setLastError]);
+
+  useEffect(() => {
+    const proj = useWorkspaceStore.getState().currentProject;
+    if (proj) {
+      switchToProject(proj, send, setCurrentProject);
+    }
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-app-bg" data-theme={theme}>

@@ -334,7 +334,7 @@ export default function AnalyzePanel() {
               {replyPending && (
                 <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 text-ui-xs text-app-text-muted">
 
-                  <Loader2 size={13} className="animate-spin text-app-accent" /><span>处理中…</span>
+                  <Loader2 size={13} className="animate-spin text-app-accent" />
                   <button type="button" onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}
                     className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs hover:border-app-error hover:text-app-error cursor-pointer transition-colors">停止</button>
                 </div>
@@ -348,7 +348,7 @@ export default function AnalyzePanel() {
                 inputRef={sess.replyInputRef}
                 sendLabel="发送"
                 log={log}
-                footerHint={scoutFieldReviewOpen ? "用自然语言说明字段理解即可 · Enter 发送 · Shift+Enter 换行" : "Enter 发送 · Shift+Enter 换行"}
+                footerHint="Enter 发送 · Shift+Enter 换行"
               />
             </div>
           </div>
@@ -358,12 +358,7 @@ export default function AnalyzePanel() {
             sess.resultReportUrl &&
             !sess.guardrailsBlocked && (
               <div className="mx-3 mb-3 p-3 bg-app-bg-secondary border border-app-success rounded flex items-center justify-between gap-3 shrink-0">
-                <div>
-                  <div className="text-ui-xs text-app-success font-semibold mb-0.5">
-                    分析完成
-                  </div>
-                  <div className="text-ui-sm text-app-text">报告已生成</div>
-                </div>
+                <div className="text-ui-sm text-app-text">报告已生成</div>
                 <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={sess.resultReportUrl}
@@ -389,11 +384,9 @@ export default function AnalyzePanel() {
               <div>
                 <div className="text-ui-xs text-app-warning font-semibold mb-0.5 flex items-center gap-1">
                   <ShieldAlert size={12} />
-                  报告未生成
+                  查看护栏说明
                 </div>
-                <div className="text-ui-sm text-app-text">
-                  统计护栏未通过，请查看说明
-                </div>
+                <div className="text-ui-sm text-app-text">统计护栏未通过</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {sess.blockedRunId && currentProject && (

@@ -319,9 +319,9 @@ export default function AnalyzePanel() {
             <div className="h-0.5 bg-app-accent animate-pulse shrink-0" />
           )}
 
-          {/* Conversation feed + input — absolute 定位，输入框永远在底部 */}
-          <div className="flex-1 min-h-0 relative">
-            <div className="absolute inset-0 pb-[100px]">
+          {/* Conversation feed + input — flex 布局，输入框固定底部 */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0">
               <ConvoFeed
                 messages={messages}
                 scrollFieldTableId={sess.activeFieldReviewId}
@@ -329,12 +329,12 @@ export default function AnalyzePanel() {
                 onAskReply={submitUserReply}
               />
             </div>
-            <div className="absolute bottom-0 left-0 right-0 bg-app-bg border-t border-app-border/60 pt-2">
+            <div className="shrink-0 bg-app-bg border-t border-app-border/60 pt-2">
               {/* CO-16: reply pending */}
               {replyPending && (
                 <div className="flex items-center gap-2 px-3 py-2 border-t border-app-border/40 text-ui-xs text-app-text-muted">
 
-                  <Loader2 size={13} className="animate-spin text-app-accent" /><span>分析师正在处理你的回复…</span>
+                  <Loader2 size={13} className="animate-spin text-app-accent" /><span>处理中…</span>
                   <button type="button" onClick={() => { send("cancel_respond", {}); setReplyPending(false); }}
                     className="ml-auto px-2 py-0.5 border border-app-border rounded text-ui-xs hover:border-app-error hover:text-app-error cursor-pointer transition-colors">停止</button>
                 </div>

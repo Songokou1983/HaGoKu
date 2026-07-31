@@ -114,12 +114,17 @@ messages 数组直接来自 session.messages 的渲染结果。前端不做任�
 唯一项目切换入口：项目面板。
 应用启动由后端自动恢复。
 
-## 十、当前代码差距
+## 十、当前状态
 
-| 文档要求 | 当前代码 | 
-|---------|---------|
-| 无 addUserMsg | submitUserReply 中调用 addUserMsg |
-| 无 persist | persist 是空函数但调用链还在 |
-| 无 useEffect 清理 | useEffect 清理 UI state |
-| 响应后推快照 | 不推快照 |
-| 用户消息保存后推快照 | 不推快照 |
+| 文档要求 | 实际 | 
+|---------|------|
+| 无 addUserMsg | ✅ 已移除调用，仅保留解构 |
+| 无 persist | ✅ 空函数，无副作用 |
+| 无 localStorage 消息缓存 | ✅ 已删 |
+| syncFromSnapshot 全量替换 | ✅ |
+| 响应后推快照 | ✅ ws_handler.py respond 完成后推送 |
+| 项目切换后推快照 | ✅ app.switch_project → build_snapshot |
+| 后端自动恢复活跃项目 | ✅ _restore_active_project |
+| 分析页无切换 | ✅ 已删下拉切换 |
+| 无 useEffect 清理 messages | ✅ useEffect 仅清理 UI state |
+| 用户消息保存后推快照 | ⚠️ 未实现——消息通过 respond 后快照送达 |

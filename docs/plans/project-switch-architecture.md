@@ -47,7 +47,14 @@ LLM 调用 ask_user 工具
 - 实时对话时通过 `agent_stream_delta` / `user_input_requested` 事件传递
 - 前端不另存消息（无 localStorage 缓存对话）
 
-## 六、代码位置
+## 六、卡片位置规则
+
+卡片（ask_user / field_review / cleaning_review / analyst_review）是对话的一部分，出现后就固定在它的位置。不重复追加，不重新定位。
+
+- 首次创建时写入 session（通过前端 live event 回调或后端首次触发）
+- 后续暂停只新增 ask_user 卡片（每次暂停是新问题），已存在的 field_review 不重复写
+
+## 七、代码位置
 
 | 功能 | 前端 | 后端 |
 |------|------|------|

@@ -60,6 +60,12 @@
 - **原因**：`_save_review_cards` 每次 LLM 暂停都重新把 field_review 写入 session。会话是时间线，表格应该在它第一次出现的位置，不是每次暂停都往后贴一份。LLM 问了 5 次 = 5 个相同表格堆在末尾
 - **修复**：删除 `_save_review_cards` 中的 field_review 写入。卡片在前端已通过 live 事件在正确位置创建，后端不需要重复写。Reasonix 的卡片就是消息——出现一次，在那个位置。
 
+## 错误11：cleaning_review 和 analyst_review 从未写入 session
+
+- **现象**：重启后清洗评估表和分析结果表丢失
+- **原因**：`_save_review_cards` 只处理了 field_review 和 ask_user，cleaning_review 和 analyst_review 从未被写入 session
+- **修复**：三种卡片统一处理——首次出现时写入，后续跳过
+
 ---
 
 ## 过程违规（反复犯）

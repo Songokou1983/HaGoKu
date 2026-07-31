@@ -53,3 +53,9 @@
 - **现象**：还是挡不住快照顾推
 - **原因**：`_pending_ask_user` 在 `_handle_reply` 里被 pop 了，ws_handler 检查时已经是 None
 - **修复**：整个 respond 后推快照的方案本身就是错的，直接删除
+
+## 错误10：重启后 field_review 表格重复堆在会话末尾
+
+- **现象**：重启或切换项目后，多个相同的字段理解表格出现在对话最下方
+- **原因**：`_save_review_cards` 的重复检查只看了 session 最后一条消息。每次 LLM 调用 ask_user 后，最后一条消息永远是 ask_user（不是 field_review），检查失败 → 新副本追加。分析过程中 LLM 问了 5 次 = 5 个相同表格堆在末尾
+- **修复**：改为扫描全部消息查找是否已有 field_review，不再只看最后一条

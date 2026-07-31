@@ -23,12 +23,15 @@ def _save_review_cards(context: dict, ask: dict | None = None) -> None:
         "options": ask.get("options", []),
     })
 
-    # field_review: 从 column_semantics 构建（幂等：已存在则跳过）
+    # field_review: 从 column_semantics 构建（检查所有消息去重，不只看最后一条）
     cs = context.get("column_semantics", [])
     if cs and context.get("n_rows"):
-        # 检查最后一条 workflow 是否已是 field_review
-        last = session.messages[-1] if session.messages else None
-        if last and last.get("role") == "workflow" and last.get("type") == "field_review":
+        # 检查是否已有相同的 field_review
+        already = any(
+            m.get("role") == "workflow" and m.get("type") == "field_review"
+            for m in (session.messages or [])
+        )
+        if already:
             return
         rows = []
         for s in cs:

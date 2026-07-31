@@ -40,7 +40,7 @@ session.json（唯一真相）
 4. `currentProject = snap.project_name`
 5. `currentDataPath = snap.data_path`
 
-没有其他函数写 messages。没有 addUserMsg。没有 persist。没有 localStorage。没有 useEffect 清理。
+没有其他函数独立写 messages。`addUserMsg` 是即时预览——消息发送后立即显示，但快照到达时全量替换。快照是真相，预览是体验。
 
 ## 四、用户发送消息的完整链路
 
@@ -102,7 +102,7 @@ messages 数组直接来自 session.messages 的渲染结果。前端不做任�
 
 ## 八、不存在的东西
 
-- ❌ `addUserMsg` — 前端不提前写消息
+- `addUserMsg` 即时预览，快照到达时全量替换（预览是 UX，不是真相）
 - ❌ `persist` / localStorage — 前端不持久化
 - ❌ `syncFromSnapshot` 的"保留本地消息"逻辑 — 全量替换
 - ❌ `useEffect` 清理 messages — handleStateSnapshot 负责
@@ -118,7 +118,7 @@ messages 数组直接来自 session.messages 的渲染结果。前端不做任�
 
 | 文档要求 | 实际 | 
 |---------|------|
-| 无 addUserMsg | ✅ 已移除调用，仅保留解构 |
+| addUserMsg 即时预览 | ✅ 预览+快照全量替换 |
 | 无 persist | ✅ 空函数，无副作用 |
 | 无 localStorage 消息缓存 | ✅ 已删 |
 | syncFromSnapshot 全量替换 | ✅ |

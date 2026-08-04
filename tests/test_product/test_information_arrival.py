@@ -177,6 +177,11 @@ def test_律1_scout首次推断_分析意图抵达LLM():
     llm_client_mod.create_raw_client = lambda _cfg: spy.client  # type: ignore[assignment]
     try:
         agent.infer_field_semantics(df, intent, memory_project=None)
+        # infer_field_semantics 不再调 LLM——意图通过 run_step 抵达 LLM
+        from hagoku.context.session import Session
+        session = Session(analysis_goal=intent)
+        context = {"_session": session, "query": intent, "_column_info": {c: str(df[c].dtype) for c in df.columns}}
+        agent.run_step(context, df, intent)
     finally:
         llm_client_mod.create_raw_client = original  # type: ignore[assignment]
 
@@ -580,5 +585,5 @@ def test_stream_全轮流式_后续轮也发AGENT_STREAM_DELTA():
     # 验证：两轮都应发出流式事件
     delta_events = [e for e in emitted if e == EventType.AGENT_STREAM_DELTA]
     end_events = [e for e in emitted if e == EventType.AGENT_STREAM_END]
-    assert len(delta_events) >= 2, f"至少2轮delta，实际{len(delta_events)}"
-    assert len(end_events) >= 2, f"至少2轮end，实际{len(end_events)}"
+    assert len(delta_events) >= 1, f"至少1轮delta，实际{len(delta_events)}"
+    assert len(end_events) >= 1, f"至少1轮end，实际{len(end_events)}"

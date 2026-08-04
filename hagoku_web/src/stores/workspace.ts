@@ -45,7 +45,7 @@ interface WorkspaceStore {
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  activeView: (localStorage.getItem('hagoku_active_view') as PanelId) || "projects",
+  activeView: "projects" as PanelId,
   status: "idle",
   agents: {},
   connectionStatus: "idle",
@@ -57,7 +57,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   snapshot: null,
 
   setActiveView: (activeView) => {
-    if (activeView) localStorage.setItem('hagoku_active_view', activeView);
     set({ activeView });
   },
   setStatus: (status) => set({ status }),

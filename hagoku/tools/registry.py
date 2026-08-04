@@ -60,8 +60,6 @@ class AgentTools:
         result: list[dict[str, Any]] = []
         for t in cls._tools.values():
             desc = t.description
-            if hasattr(t, 'phase_tag') and t.phase_tag:
-                desc = f"{desc}（通常在【{'/'.join(t.phase_tag)}】关注点使用）"
             result.append({
                 "type": "function",
                 "function": {

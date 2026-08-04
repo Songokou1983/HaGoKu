@@ -17,6 +17,8 @@
 | 7 | `sheetName` | AnalyzePanel.tsx:87 | `""` | 清空 | useEffect([currentProject]) ✅ |
 | 8 | `auxSheets` | AnalyzePanel.tsx:88 | `[]` | 清空 | useEffect([currentProject]) ✅ |
 | 9 | `presetName` | AnalyzePanel.tsx:52 | `""` | 清空 | useEffect([currentProject]) ✅ |
+| 10 | `reasoningText` | AnalyzePanel.tsx:45 | `""` | 折叠 | handleStateSnapshot ✅ |
+| 11 | `reasoningCollapsed` | AnalyzePanel.tsx:45 | `false` | 折叠 | agent_stream_delta ✅ |
 
 ## hook 内部 state（useAnalyzeSession.ts）
 

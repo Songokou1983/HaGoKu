@@ -132,8 +132,8 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 
 - **单 Agent**：`DataAnalystAgent`，4 关注点（理解字段/评估清洗/跑统计/写报告）
 - **单入口**：`to_messages_for_llm()` → `build_messages()`，唯一 LLM 消息构造路径
-- **对话循环**：`run_step()` 已含工具调用→dispatch→回传→继续的完整循环。不要自己写。**每轮都必须对称检测控制工具**
-- **流程控制**：`orchestrator.run()` 提供固定分析骨架（加载→画像→推断字段→分析→报告），LLM 通过 `submit_findings`/`submit_assessment`/`ask_user` 工具决定每步内容和推进节奏，代码不做 if-elif 阶段判断
+- **对话循环**：`run_step()`：`while tc_list` 自动续轮，LLM 不再调工具时自然停。对标 Claude Code。不要自己写。
+- **流程控制**：LLM 自主推进，代码只提供纯 I/O 工具。不设 submit/ask_user/route_to 等控制工具。
 - **代码只做机械执行**：不替 LLM 做语义判断，不加"禁止"堵行为
 - **流程保障 ≠ 替代决策**：数据分析有固定骨架（加载→画像→理解字段→清洗→分析→报告）。代码确保每步发生，LLM 决定每步的内容。`run_scout_phase` 调 load_data → generate_profile → 调 LLM 推断字段 是流程保障，不是越界
 - **通道铁律**：代码可以做一切辅助（透传/工具/日志/dump/校验），只要不做决策、不碰 LLM 输出。删掉代码后用户看到的内容不变 → 通道。变了 → 越界。
@@ -150,6 +150,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | -3 | 禁止无证据归因外部 | 不说"可能是模型问题"——贴 dump 行号 |
 | -4 | 禁止绕过已有诊断 | dump 没读完不准加新日志 |
 | 1 | 零硬编码语义 | 关键词列表/中文if-elif/regex → 全禁 |
+| 14 | 工具即 I/O | 工具只做纯 I/O（读数据、算统计、画图、生成报告）。不设 submit/ask_user/route_to 等携带流程信号的工具。LLM 调完 I/O 工具自然回话，代码不替 LLM 管阶段 |
 | **13** | **唯一真相源** | **前端状态只有一个写入点：`handleStateSnapshot`（来自 WS `state_snapshot`）。不准另开 HTTP 路径、不准在 useEffect 里清消息、不准走 localStorage 恢复。违反 = 通道断裂。** |
 | 7 | 失败在场 | LLM失败 → `raise RuntimeError`，不except兜底 |
 | 9 | 配置中性 | 不写死模型名/URL/端口 |
@@ -172,6 +173,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | **I** | 后端改了状态但前端没收到推送 | **状态同步刹车。** 后端 delete/clear/switch 后，问自己：前端有没有显示这份数据？如果有 → 必须通过 WS 推送更新。后端清空自己 ≠ 前端知道了。
 | **J** | "可能是…""估计是…""试试…" | **无证据刹车。** 铁律12：没有日志/dump 就没有发言权。先说"日志不够，需要补 X"，不说无证据猜测。 |
 | **K** | "再加一条 REST 路径保底" / "useEffect 里顺便清一下消息" | **唯一真相源刹车。** 铁律13：`handleStateSnapshot` 是前端状态的唯一写入点。再加新路径 = 绕开架构。必须删代码而非加代码。 |
+| **L** | 新工具带了 submit/ask_user/route_to/pause/confirm 语义 | **工具即 I/O 刹车。** 铁律 14：工具只做纯 I/O。任何携带流程信号的工具最终都会变成 bug——LLM 会把工具返回当成阶段确认。 |
 
 ---
 
@@ -189,6 +191,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | `tail ~/.hagoku/hagoku.log` 失败 → 结论"没日志" | **铁律 31** → 日志路径固定，找不到是命令出错，不是文件不存在。换 `ls -la ~/.hagoku/` 确认 |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I |
 | 说"可能是…""估计是…""试试…"（无日志证据） | 铁律 12 / 刹车 J |
+| 新工具名含 submit/ask/route/pause/confirm | **铁律 14 / 刹车 L — 工具即 I/O** |
 | 另开 REST /switch、useEffect 里手动清消息、localStorage 恢复消息 | **铁律 13 / 刹车 K — 唯一真相源** |
 
 ---

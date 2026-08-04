@@ -68,69 +68,6 @@ def _parse_fm(raw: str) -> dict:
     return result
 
 
-def _handle_query_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dict:
-    question = str(args.get("question", "") or "").strip()
-    scope = args.get("scope")
-    if not question:
-        return {"error": "question 不能为空"}
-    tokens = [t.lower() for t in question.split() if len(t) > 1]
-    matches: list[dict] = []
-    for md in sorted(_METHODS_ROOT.rglob("*.md")):
-        rel = str(md.relative_to(_METHODS_ROOT))
-        if scope:
-            if not any(str(s).lower() in rel.lower() for s in scope):
-                continue
-        text = md.read_text(encoding="utf-8")
-        blob = text.lower()
-
-        # 匹配全文 token
-        if tokens and not any(t in blob for t in tokens):
-            continue
-
-        # 解析 frontmatter
-        fm = _parse_fm(text)
-
-        # 摘要：优先 frontmatter summary，其次正文首段
-        summary = fm.get("summary", "")
-        if not summary:
-            for line in text.splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and not line.startswith("---"):
-                    summary = line[:200]
-                    break
-
-        matches.append({
-            "path": rel,
-            "summary": summary or rel,
-            "title": fm.get("title", ""),
-            "category": fm.get("category", ""),
-            "tags": fm.get("tags", []),
-        })
-    return {"matches": matches[:10], "count": len(matches)}
-
-
-def _handle_read_method(args: dict, _ctx: dict, _df: pd.DataFrame | None) -> dict:
-    path = str(args.get("path", "") or "").strip().lstrip("/")
-    if not path:
-        return {"error": "path 不能为空"}
-    target = (_METHODS_ROOT / path).resolve()
-    if not str(target).startswith(str(_METHODS_ROOT.resolve())):
-        return {"error": "非法路径"}
-    if not target.is_file():
-        return {"error": f"方法文档不存在: {path}"}
-    raw = target.read_text(encoding="utf-8")
-    fm = _parse_fm(raw)
-    return {
-        "path": path,
-        "content": raw,
-        "title": fm.get("title", ""),
-        "summary": fm.get("summary", ""),
-        "category": fm.get("category", ""),
-        "tags": fm.get("tags", []),
-        "tools": fm.get("tools", []),
-    }
-
-
 def _handle_save_lesson(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     store = LessonStore()
     wf = str(args.get("what_failed", "") or "").strip()
@@ -184,19 +121,6 @@ def _handle_query_project_memory(args: dict, ctx: dict, _df: pd.DataFrame | None
 def _register_memory_tools() -> None:
     _common_phase = ["理解字段", "评估清洗", "跑统计", "写报告"]
     specs: list[tuple[str, str, dict, Any, list[str]]] = [
-        ("query_method", "查询学术方法知识库，返回相关方法摘要与路径", {
-            "type": "object",
-            "properties": {
-                "question": {"type": "string"},
-                "scope": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["question"],
-        }, _handle_query_method, _common_phase),
-        ("read_method", "读取方法库 markdown 全文，返回 frontmatter 中的 tools 列表方便 LLM 读完后直接调工具", {
-            "type": "object",
-            "properties": {"path": {"type": "string"}},
-            "required": ["path"],
-        }, _handle_read_method, _common_phase),
         ("save_lesson", "追加一条跨项目成长经验。what_failed 可选，填 none 表示无失败经验", {
             "type": "object",
             "properties": {

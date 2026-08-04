@@ -178,11 +178,6 @@ class DataAnalystAgent:
                 "_aux_sheets": aux_info,
                 "_data_load_error": data_load_error,
             }
-            # 传播 ask_user 到 orchestrator
-            agent_ctx = self._context or {}
-            if agent_ctx.get("_pending_ask_user"):
-                context["_pending_ask_user"] = agent_ctx["_pending_ask_user"]
-
             # Phase D: 项目记忆 / 角色派生 / 质量警告
             if memory_project and project_id:
                 self._apply_project_memory(context, memory_project)
@@ -205,11 +200,7 @@ class DataAnalystAgent:
         query: str,
         memory_project: dict | None = None,
     ) -> list[dict]:
-        """字段语义推断 — 委托 run_step 统一路径。
-
-        Phase D: 整体搬迁，不重写。D7 删 scout/ 后此方法独立存在。
-        """
-        # 构建每列的 profile 摘要
+        """构建字段 profile。不再内嵌 run_step——LLM 首次交互时自己探索。"""
         column_list: list[dict] = []
         for col in df.columns:
             p = self._profile_column(df[col], col, df)
@@ -226,64 +217,7 @@ class DataAnalystAgent:
                 "distribution_summary": p.get("distribution_summary", ""),
                 "time_min": p.get("time_min"), "time_max": p.get("time_max"),
             })
-
-        payload = {"user_query": query, "n_rows": len(df), "n_cols": len(df.columns), "columns": column_list}
-        user_content = f"请分析以下数据集的字段语义：\n```json\n{_json.dumps(payload, ensure_ascii=False, default=str)}\n```"
-
-        memory_notes = ""
-        if memory_project:
-            fields = memory_project.get("fields", {})
-            display_names = memory_project.get("display_names", {})
-            if fields or display_names:
-                lines = ["\n\n【项目记忆 — 以下是历史分析中的字段记录，请沿用其中文名称和业务含义；但字段角色（target/feature/ignore）需根据当前分析目标重新判断：】"]
-                for col, desc in fields.items():
-                    dn = display_names.get(col, "")
-                    if dn:
-                        lines.append(f"  - {col}: 中文名称「{dn}」，含义：{desc}")
-                    else:
-                        lines.append(f"  - {col}: 含义：{desc}")
-                memory_notes = "\n".join(lines)
-
-        command_context = ""
-        try:
-            actx = getattr(self, "_context", {}) or {}
-            pt = (actx.get("_pending_command_text") or "").strip()
-            if pt:
-                command_context = f"\n\n【用户最近提出的指令/纠正（必须采纳并执行，优先级高于其他所有信息）：】\n{pt}"
-        except Exception:
-            actx = {}
-
-        extra_prefix = ""
-        if query and query.strip():
-            extra_prefix += f"\n\n【用户分析目标】\n{query.strip()}\n"
-        extra_prefix += memory_notes + command_context
-        if extra_prefix.strip():
-            user_content = extra_prefix + "\n" + user_content
-
-        # ── 复用 run_step 统一路径（全量工具 + 流式 + 跟进轮）──
-        session = (self._context or {}).get("_session")
-        if session is None:
-            from hagoku.context.session import Session
-            session = Session(analysis_goal=query)
-            if self._context is not None:
-                self._context["_session"] = session
-        context = {
-            "_session": session,
-            "query": query,
-            "column_semantics": [],
-            "_column_info": {c: str(df[c].dtype) for c in df.columns},
-            "_pending_command_text": (actx.get("_pending_command_text") or "").strip() if actx else "",
-        }
-        result = self.run_step(context, df, user_content)
-        # 传递 _pending_ask_user 到外层 context，供 _handle_reply 检测暂停
-        ask = context.get("_pending_ask_user")
-        if ask and self._context is not None:
-            self._context["_pending_ask_user"] = ask
-        raw_text = result.get("text", "")
-        cs = context.get("column_semantics", [])
-        if cs and any("column_name" in s for s in cs):
-            return cs
-        return [{"_scout_text": raw_text}]
+        return column_list
 
     def _profile_column(self, series: pd.Series, name: str, df: pd.DataFrame) -> dict:
         """对单列做数据画像（从 scout._profile_column 迁入）。"""
@@ -482,12 +416,10 @@ class DataAnalystAgent:
         user_input: str = "",
         tools: list | None = None,
     ) -> dict:
-        """单步执行：跑 1 轮 LLM，处理 tool_calls。
-
-        Phase D：统一 tool dispatch。
-        """
+        """单轮执行：一次 LLM 调用 + 工具 dispatch → 返回。对标 Claude Code 模型。"""
         from hagoku.llm.client import create_raw_client
         from hagoku.tools.registry import agent_tools as _agt
+        from hagoku.observability.llm_dump import dump_messages
 
         if df is None:
             df = getattr(self, '_df', None)
@@ -495,7 +427,7 @@ class DataAnalystAgent:
         if tools is not None:
             _tools = [t for t in _agt.to_openai() if t["function"]["name"] in tools]
         else:
-            _tools = _agt.to_openai()  # 全量工具
+            _tools = _agt.to_openai()
 
         session = context.get("_session")
         if session is None:
@@ -504,44 +436,28 @@ class DataAnalystAgent:
             context["_session"] = session
 
         agent_extra = self.prompt
-
-        # P2: 字段元数据持久化——首轮后 context._column_info 注入 system prompt
         col_info = context.get("_column_info")
         if col_info:
-            cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
-            agent_extra += f"\n数据集字段: {cols_str}\n"
+            agent_extra += "\n数据集字段: " + ", ".join(f"{k}({v})" for k, v in col_info.items())
         aux_info = context.get("_aux_sheets")
         if aux_info:
-            aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
-            agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
+            aux_lines = ["  " + a['sheet'] + ": " + str(a['rows']) + "行, " + str(a['cols']) + "列" for a in aux_info]
+            agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines)
         load_err = context.get("_data_load_error")
         if load_err:
             agent_extra += f"\n⚠️ 数据加载失败：{load_err}\n请告知用户此错误，并建议检查文件格式或表单名称。"
 
-        messages = session.to_llm_messages(
-            system_extra=agent_extra,
-            user_input=user_input,
-        )
-
-        from hagoku.observability.llm_dump import dump_messages
+        messages = session.to_llm_messages(system_extra=agent_extra, user_input=user_input)
         dump_messages("agent_run_step", messages, model=self.llm_config.model,
                       extra={"tools": [t["function"]["name"] for t in _tools]})
 
-        # CO-18: 调用 LLM（流式优先，batch 回退）
         txt, tc_list = self._call_llm_step(client, messages, _tools, "agent_run_step_response")
 
-        findings = None
-        assessment = None
-
-        # ── 工具循环：LLM 调工具就继续，不调就停 ──
-        MAX_TOOL_ROUNDS = 99
-        for _round in range(MAX_TOOL_ROUNDS):
-            if not tc_list:
-                if session and txt:
-                    session.add("assistant", txt)
-                break
-
-            # 调度工具，收集所有结果
+        # ── 工具循环：LLM 调工具 → 自动续轮，不调 → 自然停。对标 Claude Code。──
+        _round = 0
+        while tc_list and _round < 20:
+            _round += 1
+            # 批量执行工具
             tool_records = []
             for tc in tc_list:
                 fn = tc.function
@@ -552,22 +468,6 @@ class DataAnalystAgent:
                         tool_call_id=getattr(tc, "id", "") or "",
                         name=fn.name, arguments=fn.arguments,
                         result="", error=f"参数解析失败：{str(fn.arguments)[:200]}",
-                    ))
-                    continue
-                if fn.name == "submit_findings":
-                    findings = _agt.dispatch(fn.name, args, context, df)
-                    tool_records.append(ToolCallRecord(
-                        tool_call_id=getattr(tc, "id", "") or "",
-                        name=fn.name, arguments=fn.arguments,
-                        result=_json.dumps(findings, ensure_ascii=False, default=str),
-                    ))
-                    continue
-                if fn.name == "submit_assessment":
-                    assessment = _agt.dispatch(fn.name, args, context, df)
-                    tool_records.append(ToolCallRecord(
-                        tool_call_id=getattr(tc, "id", "") or "",
-                        name=fn.name, arguments=fn.arguments,
-                        result=_json.dumps(assessment, ensure_ascii=False, default=str),
                     ))
                     continue
                 try:
@@ -583,7 +483,7 @@ class DataAnalystAgent:
                         name=fn.name, arguments=fn.arguments,
                         result="", error=str(exc),
                     ))
-            # 原子写入：assistant(txt+tool_calls) + 全部 tool 结果
+
             if tool_records:
                 oai_calls = [
                     {"id": tc.tool_call_id, "type": "function",
@@ -595,8 +495,7 @@ class DataAnalystAgent:
                     for tc in tool_records
                 ]
                 session.add_tool_call(txt, oai_calls, results)
-
-                # Session 已更新 → 推 snapshot
+                # 工具执行后推 snapshot
                 try:
                     from hagoku.api.ws_handler import WSBridge, _fastapi_app
                     app = _fastapi_app
@@ -609,53 +508,31 @@ class DataAnalystAgent:
                 except Exception:
                     logger.exception("agent push_snapshot 失败")
 
-            # ask_user 被调用 → LLM 决定暂停等用户回复
-            if context.get("_pending_ask_user"):
-                try:
-                    from hagoku.api.ws_handler import WSBridge, _fastapi_app
-                    app = _fastapi_app
-                    if app is not None:
-                        hagoku_app = getattr(app.state, 'hagoku_app', None)
-                        if hagoku_app is not None:
-                            snap = hagoku_app.build_snapshot()
-                            if snap:
-                                WSBridge.get().push_snapshot(snap)
-                except Exception:
-                    logger.exception("agent push_snapshot 失败")
-                self._emit(EventType.USER_INPUT_REQUESTED, {})
-                break
-
-            # 用户点了停止 → 中断处理
+            # 用户点了停止
             if getattr(self, 'orchestrator', None) is not None and self.orchestrator.is_respond_cancelled():
                 break
 
-            # 让 LLM 看到工具结果，决定下一步
-            agent_extra = self.prompt
+            # 自动续轮：让 LLM 看到工具结果
+            agent_extra2 = self.prompt
             if col_info:
-                cols_str = ", ".join(f"{k}({v})" for k, v in col_info.items())
-                agent_extra += f"\n数据集字段: {cols_str}\n"
+                agent_extra2 += "\n数据集字段: " + ", ".join(f"{k}({v})" for k, v in col_info.items())
             if aux_info:
-                aux_lines = [f"  {a['sheet']}: {a['rows']}行, {a['cols']}列 [{', '.join(a['columns'][:8])}]" for a in aux_info]
-                agent_extra += "\n参考数据（副表单）：\n" + "\n".join(aux_lines) + "\n"
-            load_err = context.get("_data_load_error")
-            if load_err:
-                agent_extra += f"\n⚠️ 数据加载失败：{load_err}\n请告知用户此错误，并建议检查文件格式或表单名称。"
-            msgs_next = session.to_llm_messages(
-                system_extra=agent_extra,
-                user_input="",
-            )
-            # 第 2+ 轮 LLM 调用前 dump（与第 1 轮对称）
-            dump_messages(f"agent_run_step_r{_round + 2}", msgs_next,
-                          model=self.llm_config.model,
+                aux_lines2 = ["  " + a['sheet'] + ": " + str(a['rows']) + "行, " + str(a['cols']) + "列" for a in aux_info]
+                agent_extra2 += "\n参考数据（副表单）：\n" + "\n".join(aux_lines2)
+            load_err2 = context.get("_data_load_error")
+            if load_err2:
+                agent_extra2 += f"\n⚠️ 数据加载失败：{load_err2}\n请告知用户此错误，并建议检查文件格式或表单名称。"
+            msgs_next = session.to_llm_messages(system_extra=agent_extra2, user_input="")
+            dump_messages(f"agent_run_step_r{_round + 1}", msgs_next, model=self.llm_config.model,
                           extra={"tools": [t["function"]["name"] for t in _tools]})
-            # 调用 LLM（流式优先，batch 回退）
             txt, tc_list = self._call_llm_step(
                 client, msgs_next, _tools,
-                f"agent_run_step_r{_round + 2}_response",
-                round_label=str(_round + 2),
+                f"agent_run_step_r{_round + 1}_response",
             )
-        return {
-            "text": txt,
-            "submit_findings": findings is not None, "findings": findings,
-            "submit_assessment": assessment is not None, "assessment": assessment,
-        }
+            if not tc_list and session and txt:
+                session.add("assistant", txt)
+
+        if _round == 0 and txt and session:
+            session.add("assistant", txt)
+
+        return {"text": txt}

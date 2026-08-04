@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect } from "react";
+import { useRef, useLayoutEffect, useState } from "react";
 import type { ConvoMessage } from "./types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,7 +19,11 @@ export function ConvoFeed({
 
   return (
     <div ref={containerRef} className="h-full overflow-y-auto">
-      {messages.map((m) => (
+      {messages.map((m) => {
+        if (m.role === "system" && m.collapsible) {
+          return <CollapsibleToolMsg key={m.id} text={m.text} />;
+        }
+        return (
         <div
           key={m.id}
           className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
@@ -48,7 +52,29 @@ export function ConvoFeed({
             )}
           </div>
         </div>
-      ))}
+      )})}
+    </div>
+  );
+}
+
+function CollapsibleToolMsg({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const preview = text.length > 120 ? text.slice(0, 120) + "..." : text;
+  return (
+    <div className="flex justify-start">
+      <div
+        className="max-w-[85%] px-2 py-1 rounded text-ui-xs cursor-pointer
+          bg-app-bg-tertiary border border-app-border/50 text-app-text-muted
+          hover:border-app-border transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="font-mono">🔧 {open ? "▲" : "▼"} {preview}</span>
+        {open && (
+          <pre className="mt-1 whitespace-pre-wrap break-all text-ui-xs text-app-text-muted">
+            {text}
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

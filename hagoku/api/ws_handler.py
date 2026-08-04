@@ -102,12 +102,15 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         # 确保 WSBridge 已订阅（App 懒创建时可能未订阅）
         bridge = WSBridge.get()
         orch.event_bus.subscribe(bridge.on_event)
-        orch.run(
+        result = orch.run(
             data_path=data_path, query=query,
             project_name=project_name,
             sheet_name=sheet_name,
             aux_sheets=aux_sheets or [],
         )
+        # run_scout_phase 完成后触发首次 LLM 交互
+        if isinstance(result, dict) and result.get("status") == "scout_review":
+            orch.respond({"text": ""})
     except Exception as e:
         # LLM 调用失败 → 广播错误给前端
         try:
@@ -421,7 +424,6 @@ async def ws_handler(ws: WebSocket) -> None:
                         ctx = getattr(orch, '_context', None)
                         if ctx:
                             ctx.pop("column_semantics", None)
-                            ctx.pop("_pending_ask_user", None)
                             ctx.pop("_report_html_path", None)
                         with _analysis_busy_lock:
                             _analysis_in_progress = False

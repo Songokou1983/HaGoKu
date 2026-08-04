@@ -174,11 +174,20 @@ class HaGoKuApp:
             else:
                 raw_msgs = []
 
-            # 透传消息全部字段（role/content/timestamp/collapsible 等），不做裁剪
+            # 透传消息：tool 消息映射为可折叠 system 标签
             rendered: list[dict[str, Any]] = []
             for m in raw_msgs:
                 role = m.get("role", "")
                 if role == "tool":
+                    content = m.get("content", "")
+                    # 跳过空工具结果
+                    if not content or content == "{}":
+                        continue
+                    rendered.append({
+                        "role": "system", "collapsible": True,
+                        "content": m.get("content", ""),
+                        "tool_call_id": m.get("tool_call_id", ""),
+                    })
                     continue
                 rendered.append(dict(m))
 

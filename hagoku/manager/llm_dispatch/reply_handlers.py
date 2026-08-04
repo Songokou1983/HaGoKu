@@ -28,21 +28,10 @@ def _push_snapshot(self, context: dict) -> None:
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:
-    """纯通道——不做阶段路由，LLM 自然推进。"""
-
-    if not user_input or not user_input.strip():
-        context.pop("_pending_ask_user", None)
-        self._agent.run_step(context, None, "")
-        return {"status": "scout_review", "message": ""}
-
-    context.pop("_pending_ask_user", None)
+    """纯通道——每轮一次 LLM 调用 + 工具 dispatch，自然停顿等用户。"""
 
     df = self._df_clean if self._df_clean is not None else self._df_raw
-    result = self._agent.run_step(context, df, user_input)
-
-    if context.get("_pending_ask_user"):
-        return {"status": "scout_review", "message": ""}
-
+    result = self._agent.run_step(context, df, user_input or "")
     return {"status": "scout_review", "message": result.get("text", "")}
 
 

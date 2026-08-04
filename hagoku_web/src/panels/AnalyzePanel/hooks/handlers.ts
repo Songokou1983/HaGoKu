@@ -35,6 +35,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
         role: roleMap[m.role] || "system",
         text: m.content || "",
         timestamp: m.timestamp || "",
+        collapsible: m.collapsible || false,
       }));
       setMessages(ms);
       setPhase?.("running");

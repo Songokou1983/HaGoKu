@@ -39,7 +39,6 @@ export function useAnalyzeSession(
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
-    setFieldReviewScrollNonce(0);
     setGateOpen(false);
   }, []);
 

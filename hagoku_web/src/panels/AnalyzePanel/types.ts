@@ -51,8 +51,10 @@ export interface WsEventDeps {
   gateOpen: boolean;
   currentProject: string | null;
   onThinking?: (text: string | null) => void;
+  onReasoning?: (delta: string) => void;
   setReplyPending?: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentProject?: (p: string) => void;
   setCurrentDataPath?: (p: string) => void;
+  setReasoningCollapsed?: (v: boolean) => void;
   log?: (msg: string) => void;
 }

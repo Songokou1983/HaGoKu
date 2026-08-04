@@ -237,8 +237,6 @@ agent_tools.register(Tool(
             "display_name": {"type": "string", "description": "简短中文名称"},
             "description": {"type": "string", "description": "业务含义说明"},
             "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
-            "used_in_analysis": {"type": "boolean", "description": "是否参与后续统计分析"},
-            "evidence": {"type": "string", "description": "参与分析的理由"},
             "columns": {
                 "type": "array",
                 "items": {
@@ -248,8 +246,6 @@ agent_tools.register(Tool(
                         "display_name": {"type": "string"},
                         "description": {"type": "string"},
                         "suggested_role": {"type": "string", "enum": ["target", "feature", "identifier", "ignore"]},
-                        "used_in_analysis": {"type": "boolean", "description": "是否参与后续统计分析"},
-                        "evidence": {"type": "string"},
                     },
                     "required": ["column_name"],
                 },
@@ -261,118 +257,6 @@ agent_tools.register(Tool(
     handler=_handle_set_columns,
     phase_tag=['理解字段'],
 ))
-
-
-def _handle_submit_assessment(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """提交清洗评估结果。"""
-    ctx["_cleaning_assessment"] = args
-    return args
-
-
-agent_tools.register(Tool(
-    name="submit_assessment",
-    description="提交清洗评估结果。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "summary": {"type": "string", "description": "整体评估"},
-            "columns": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "column": {"type": "string"},
-                        "display_name": {"type": "string"},
-                        "action": {"type": "string", "enum": ["clean", "skip"]},
-                        "reason": {"type": "string"},
-                        "operations": {"type": "array", "items": {"type": "object", "properties": {"strategy": {"type": "string"}}}},
-                    },
-                    "required": ["column", "action", "reason"],
-                },
-            },
-        },
-        "required": ["summary", "columns"],
-    },
-    handler=_handle_submit_assessment,
-    phase_tag=['评估清洗'],
-))
-
-
-def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """向用户提问并暂停。"""
-    question = args.get("question", "")
-    pending = {
-        "question": question,
-        "options": args.get("options", []),
-        "expected_format": args.get("expected_format", "free_text"),
-    }
-    ctx["_pending_ask_user"] = pending
-    return pending
-
-
-agent_tools.register(Tool(
-    name="ask_user",
-    description="向用户提问并暂停等待回复。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "question": {"type": "string", "description": "问题文本"},
-            "options": {
-                "type": "array", "items": {"type": "string"},
-                "description": "可选回复项（让用户从中选）；若开放问题不传"
-            },
-            "expected_format": {
-                "type": "string",
-                "enum": ["choice", "free_text", "yes_no"],
-                "description": "期望回复格式——UI 据此渲染单选/输入框/确认按钮"
-            },
-        },
-        "required": ["question", "expected_format"],
-    },
-    handler=_handle_ask_user,
-    phase_tag=['理解字段', '评估清洗', '跑统计', '写报告'],
-))
-
-
-def _handle_submit_findings(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """提交分析发现。"""
-    result = {
-        "findings": args.get("findings", []),
-        "method_used": args.get("method_used", []),
-        "summary": args.get("summary", ""),
-    }
-    ctx["_analyst_review"] = result
-    return result
-
-
-agent_tools.register(Tool(
-    name="submit_findings",
-    description="提交分析发现。可以是首波探索性发现或最终结论。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "detail": {"type": "string"},
-                        "evidence_columns": {"type": "array", "items": {"type": "string"}},
-                        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-                    },
-                    "required": ["title", "detail", "evidence_columns", "confidence"],
-                },
-            },
-            "method_used": {"type": "array", "items": {"type": "string"}},
-            "summary": {"type": "string"},
-        },
-        "required": ["findings", "method_used", "summary"],
-    },
-    handler=_handle_submit_findings,
-    phase_tag=['跑统计'],
-))
-
 
 # ═══════════════════════════════════════════════════════════════════
 # 报告生成工具

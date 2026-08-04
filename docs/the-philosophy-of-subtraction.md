@@ -568,6 +568,8 @@ HaGoKu 的工具从 44 个精简到 15 个。被删掉的 29 个可以分为两�
 
 **冗余工具（错误的）**：`add_field`、`remove_field`、`update_field`——三个工具做同一件事（管理字段）。合并成 `set_columns` 一个。
 
+**信号型工具（最隐蔽的错误）**：这类工具在做 I/O 之外还隐含了"该做什么"的指令。`ask_user` 不光是"等待用户输入"——它隐含了"你该停了"。`submit_assessment` 不光是"保存评估结果"——它隐含了"清洗完成，继续下一步"。`submit_findings` 隐含了"分析完成，继续"。`route_to` 隐含了"你现在在 X 阶段"。LLM 调了这些工具之后，代码做出流程判断——一刀切下去，LLM 可能还没准备好转下一步，但代码已经推动了。**工具不知道自己被用在哪个阶段，不应该告诉 LLM "你到哪了"。** 删掉所有信号型工具之后，剩下的全部是纯 I/O：`get_column_stats`、`run_statistical_test`、`create_plot`、`generate_report`。LLM 在工具循环里自然结束，用户打字继续——不需要任何工具来发"暂停"或"继续"的信号。
+
 剩下的 15 个工具，每一把都可以用一句话验证：**"这件事 LLM 自己能做吗？"** 不能 → 工具是对的。
 
 ### 工具三问
@@ -585,6 +587,8 @@ HaGoKu 的工具从 44 个精简到 15 个。被删掉的 29 个可以分为两�
 | `calc_roi` | ROI 公式在 LLM 脑子里，包成工具是替 LLM 做算术 |
 | `grep_field_name` | LLM 自己会搜索，不需要代码帮它搜索自己的输出 |
 | `add_field` + `remove_field` + `update_field` | 同一件事三个入口，合并为 `set_columns` |
+| `submit_assessment` / `submit_findings` | I/O 之外还发信号"该下一步了"，代码不该替 LLM 判断阶段 |
+| `route_to` | 隐含"你现在在 X 阶段"，工具不该知道被用在哪个阶段 |
 
 ---
 

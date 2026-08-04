@@ -28,14 +28,7 @@ export function useAnalyzeSession(
   const [guardrailsBlocked, setGuardrailsBlocked] = useState(false);
   const [blockedRunId, setBlockedRunId] = useState<string | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
-  const [activeFieldReviewId, setActiveFieldReviewId] = useState<string | null>(null);
-  const [activeFieldReviewRevision, setActiveFieldReviewRevision] = useState<number>(-1);
-  const [activeCleaningReviewId, setActiveCleaningReviewId] = useState<string | null>(null);
-  const [activeCleaningReviewRevision, setActiveCleaningReviewRevision] = useState<number>(-1);
-  const [activeAnalystReviewId, setActiveAnalystReviewId] = useState<string | null>(null);
-  const [activeAnalystReviewRevision, setActiveAnalystReviewRevision] = useState<number>(-1);
   const [gateOpen, setGateOpen] = useState(false);
-  const [fieldReviewScrollNonce, setFieldReviewScrollNonce] = useState(0);
   const replySnapshotRef = useRef<{ agent: AgentKey; gate: boolean } | null>(null);
   const queryRef = useRef("");
 
@@ -46,13 +39,7 @@ export function useAnalyzeSession(
     setResultReportUrl(null);
     setGuardrailsBlocked(false);
     setBlockedRunId(null);
-    setActiveFieldReviewId(null);
-    setActiveFieldReviewRevision(-1);
     setFieldReviewScrollNonce(0);
-    setActiveCleaningReviewId(null);
-    setActiveCleaningReviewRevision(-1);
-    setActiveAnalystReviewId(null);
-    setActiveAnalystReviewRevision(-1);
     setGateOpen(false);
   }, []);
 
@@ -95,14 +82,7 @@ export function useAnalyzeSession(
     guardrailsBlocked, setGuardrailsBlocked,
     blockedRunId, setBlockedRunId,
     replyInputRef,
-    activeFieldReviewId, setActiveFieldReviewId,
-    activeFieldReviewRevision, setActiveFieldReviewRevision,
-    activeCleaningReviewId, setActiveCleaningReviewId,
-    activeCleaningReviewRevision, setActiveCleaningReviewRevision,
-    activeAnalystReviewId, setActiveAnalystReviewId,
-    activeAnalystReviewRevision, setActiveAnalystReviewRevision,
     gateOpen, setGateOpen,
-    fieldReviewScrollNonce, setFieldReviewScrollNonce,
     replySnapshotRef,
     queryRef,
     handleStartSession,

@@ -307,6 +307,8 @@ class Orchestrator(
                 self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
                     "thought": f"📄 导入了 {n} 条进度定义",
                 })
+                if getattr(self, '_session', None):
+                    self._session.add("system", f"📄 导入了 {n} 条进度定义", collapsible=True)
 
         run_dir = self.output_mgr.create_run_dir()
         run_id = run_dir.name
@@ -436,6 +438,8 @@ class Orchestrator(
         self.event_bus.emit(EventType.AGENT_THINKING, "manager", {
             "thought": "分析已由用户中止。",
         })
+        if getattr(self, '_session', None):
+            self._session.add("system", "分析已由用户中止。", collapsible=True)
         self.event_bus.emit(EventType.RUN_COMPLETED, "manager", {
             "duration": f"{duration_ms / 1000:.1f}s",
             "cancelled": True,

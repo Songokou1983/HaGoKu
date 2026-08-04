@@ -47,17 +47,6 @@ class Session:
             self.messages.append(msg)
             self._maybe_save()
 
-    def add_workflow_card(self, card_type: str, data: dict[str, Any]) -> None:
-        """追加一条 workflow 卡片消息（field_review / cleaning_review / ask_user）。
-        
-        这些消息存在 Session 中确保重启可恢复，但 to_llm_messages() 会过滤掉。
-        """
-        msg: dict[str, Any] = {"role": "workflow", "type": card_type, "timestamp": ""}
-        msg.update(data)
-        with self._lock:
-            self.messages.append(msg)
-            self._maybe_save()
-
     def add_tool_call(
         self,
         assistant_text: str,
@@ -91,10 +80,11 @@ class Session:
         with self._lock:
             msgs_snapshot = list(self.messages)
 
-        # 折叠连续重复的 tool 消息 + 过滤 workflow 卡片（LLM 不需要 UI 元素）
+        # 折叠连续重复的 tool 消息
         collapsed: list[dict[str, Any]] = []
         for m in msgs_snapshot:
-            if m.get("role") == "workflow":
+            # system 消息给用户看，不给 LLM
+            if m.get("role") == "system":
                 continue
             if m.get("role") == "tool" and collapsed:
                 prev = collapsed[-1]

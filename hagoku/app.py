@@ -165,65 +165,22 @@ class HaGoKuApp:
 
         try:
             ctx = getattr(orch, '_context', None) or {}
-            session = ctx.get("_session")
+            # 优先读 orch._session（run() 第 321 行创建，全程存在）
+            # _context["_session"] 在 run_scout_phase 之后才赋值（第 401 行）
+            session = getattr(orch, '_session', None) or ctx.get("_session")
             if session:
                 with session._lock:
                     raw_msgs = list(session.messages)
             else:
                 raw_msgs = []
 
-            # 将 tool 消息转换为 toolExchange 卡片，前端直接用
+            # 透传消息全部字段（role/content/timestamp/collapsible 等），不做裁剪
             rendered: list[dict[str, Any]] = []
-            tool_batch: list[dict[str, Any]] = []
-            pending_asst: dict[str, Any] | None = None
             for m in raw_msgs:
                 role = m.get("role", "")
-                if role == "workflow":
-                    if tool_batch:
-                        rendered.append({"role": "agent", "text": "",
-                            "toolExchange": {"stage": "工具", "tool_calls": tool_batch}})
-                        tool_batch = []
-                    wtype = m.get("type", "")
-                    if wtype == "field_review":
-                        rendered.append({"role": "workflow", "text": "", "fieldReview": m.get("field_review", m)})
-                    elif wtype == "cleaning_review":
-                        rendered.append({"role": "workflow", "text": "", "cleaningReview": m.get("cleaning_review", m)})
-                    elif wtype == "ask_user":
-                        rendered.append({"role": "workflow", "text": "", "askUser": {"question": m.get("question", ""), "expected_format": m.get("expected_format", ""), "options": m.get("options")}})
-                    continue
                 if role == "tool":
-                    tc_id = m.get("tool_call_id", "")
-                    tc_name = ""
-                    if pending_asst and pending_asst.get("tool_calls"):
-                        for tc in pending_asst["tool_calls"]:
-                            if tc.get("id") == tc_id:
-                                tc_name = tc.get("function", {}).get("name", "")
-                                break
-                    tool_batch.append({
-                        "id": tc_id, "name": tc_name,
-                        "arguments_summary": "", "result_summary": str(m.get("content", ""))[:200],
-                        "error": None, "duration_ms": 0,
-                    })
-                else:
-                    if tool_batch:
-                        rendered.append({
-                            "role": "agent", "text": "",
-                            "toolExchange": {"stage": "工具", "tool_calls": tool_batch},
-                        })
-                        tool_batch = []
-                    if role == "assistant":
-                        pending_asst = m
-                    rendered.append({
-                        "role": role,
-                        "content": m.get("content", ""),
-                        "tool_calls": m.get("tool_calls"),
-                        "timestamp": m.get("timestamp", ""),
-                    })
-            if tool_batch:
-                rendered.append({
-                    "role": "agent", "text": "",
-                    "toolExchange": {"stage": "工具", "tool_calls": tool_batch},
-                })
+                    continue
+                rendered.append(dict(m))
 
             snap: dict[str, Any] = {
                 "project_name": getattr(orch, '_project_name', '') or "",
@@ -234,7 +191,14 @@ class HaGoKuApp:
             }
             return snap
         except Exception:
-            return None
+            logger.exception("build_snapshot 异常——返回安全空快照")
+            return {
+                "project_name": getattr(orch, '_project_name', '') or "",
+                "query": "",
+                "data_path": "",
+                "report_url": None,
+                "messages": [],
+            }
 
     # ── 会话恢复 ───────────────────────────────────────────────
 

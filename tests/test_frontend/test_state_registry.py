@@ -37,8 +37,8 @@ def test_use_analyze_session_usestate_count():
     actual = count_usestate_in_file(
         ANALYZE_DIR / "hooks" / "useAnalyzeSession.ts"
     )
-    # 注册表记录 14 个 sess state
-    expected = 14
+    # 注册表记录 7 个 sess state
+    expected = 7
     assert actual == expected, (
         f"useAnalyzeSession.ts 有 {actual} 个 useState，"
         f"注册表记录 {expected} 个。如有增删请同步更新 STATE_REGISTRY.md"

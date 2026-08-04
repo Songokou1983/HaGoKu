@@ -4,77 +4,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...observability.events import EventType
+import logging
+
+_log = logging.getLogger("hagoku.reply_handlers")
 
 
-def _save_review_cards(context: dict, ask: dict | None = None) -> None:
-    """将 context 中的 review 数据写入 Session——仅当 LLM 正在等待用户确认时。"""
-    ask = ask or context.get("_pending_ask_user")
-    if not ask:
-        return
-    session = context.get("_session")
-    if not session:
-        return
-
-    # ask_user 卡片（每次 ask 都写，因为它是新的暂停点）
-    session.add_workflow_card("ask_user", {
-        "question": ask.get("question", ""),
-        "expected_format": ask.get("expected_format", ""),
-        "options": ask.get("options", []),
-    })
-
-    # field_review / cleaning_review / analyst_review：首次出现时写入，后续跳过
-    cs = context.get("column_semantics", [])
-    if cs and context.get("n_rows"):
-        already = any(m.get("role") == "workflow" and m.get("type") == "field_review" for m in (session.messages or []))
-        if not already:
-            rows = []
-            for s in cs:
-                if isinstance(s, dict) and "column_name" in s:
-                    rows.append({
-                        "field_name": s.get("column_name", ""),
-                        "chinese_name": s.get("display_name") or s.get("chinese_name") or None,
-                        "meaning": s.get("description", ""),
-                        "suggested_role": s.get("suggested_role") or None,
-                        "used_in_analysis": s.get("used_in_analysis"),
-                        "evidence": s.get("evidence", ""),
-                    })
-            if rows:
-                session.add_workflow_card("field_review", {
-                    "field_review": {"n_rows": context["n_rows"], "n_cols": context.get("n_cols", len(rows)), "rows": rows},
-                })
+def _push_snapshot(self, context: dict) -> None:
+    """通过 WS 推送当前 Session 状态快照。"""
+    try:
+        from hagoku.api.ws_handler import WSBridge, _fastapi_app
+        app = _fastapi_app
+        if app is None:
+            return
+        hagoku_app = getattr(app.state, 'hagoku_app', None)
+        if hagoku_app is None:
+            return
+        snap = hagoku_app.build_snapshot()
+        if not snap:
+            return
+        WSBridge.get().push_snapshot(snap)
+    except Exception:
+        _log.exception("_push_snapshot 失败")
 
 
 def _handle_reply(self, user_input: str, context: dict) -> dict:
     """纯通道——不做阶段路由，LLM 自然推进。"""
 
-    # ── 首次暂停 ──
     if not user_input or not user_input.strip():
-        ask = context.pop("_pending_ask_user", None)
-        _save_review_cards(context, ask)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask or {})
+        context.pop("_pending_ask_user", None)
+        self._agent.run_step(context, None, "")
         return {"status": "scout_review", "message": ""}
 
-    # 用户已回复，清除上一次 ask_user 的残留信号
     context.pop("_pending_ask_user", None)
 
     df = self._df_clean if self._df_clean is not None else self._df_raw
     result = self._agent.run_step(context, df, user_input)
 
-    ask = context.pop("_pending_ask_user", None)
-    if ask:
-        _save_review_cards(context, ask)
-        self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "", ask)
+    if context.get("_pending_ask_user"):
         return {"status": "scout_review", "message": ""}
 
-    self.event_bus.emit(EventType.USER_INPUT_REQUESTED, "")
     return {"status": "scout_review", "message": result.get("text", "")}
 
 
 # ── respond（外层入口）────────────────────────────
 
 def respond(self, user_input: dict) -> dict[str, Any]:
-    """处理用户回复 — 消息由 HTTP save_user_msg 落盘，此处不重复写入。"""
+    """处理用户回复 — 消息由 WS respond 写入 Session。"""
 
     text = user_input.get("text", "").strip()
 
@@ -91,7 +66,6 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     if self._error:
         return {"status": "error", "message": str(self._error)}
 
-    # R6 防护
     if not text:
         empty_count = getattr(self, '_empty_respond_count', 0) + 1
         setattr(self, '_empty_respond_count', empty_count)
@@ -101,7 +75,6 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     else:
         setattr(self, '_empty_respond_count', 0)
 
-    # ── 清除上次停止标记，标记处理中 ──
     self._respond_cancelled = False
     self._processing = True
 
@@ -109,8 +82,6 @@ def _respond_impl(self, user_input: dict) -> dict[str, Any]:
     if ctx is not None:
         if text:
             ctx["_pending_command_text"] = text
-
-    # 写 Session（外层 respond 已提前写入，此处不重复）
 
     try:
         result = _handle_reply(self, text, ctx or {})

@@ -102,7 +102,7 @@ export default function AnalyzePanel() {
   };
 
   // Conversation hook
-  const { messages, addSystemMsg, addUserMsg, addAgentMsg, addWorkflowCard, updateWorkflowCard, syncFromSnapshot, clearMessages, addRawMsg, _setMessages } =
+  const { messages, addUserMsg, setMessages, appendDelta, endStream, clearMessages } =
     useConversation();
 
 
@@ -149,24 +149,15 @@ export default function AnalyzePanel() {
   // WS event handler hook
   useWsEventHandler({
     batch: useBatchEvents(),
-    addWorkflowCard,
-    updateWorkflowCard,
-    syncFromSnapshot,
-    addSystemMsg,
-    addAgentMsg,
-    addRawMsg,
-    _setMessages,
+    setMessages,
+    appendDelta,
+    addUserMsg,
+    clearMessages,
+    endStream,
     setAgentElapsed: sess.setAgentElapsed,
     agentStartTimes: sess.agentStartTimes,
     setWaitingAgent: sess.setWaitingAgent,
     setPhase,
-    setActiveFieldReviewId: sess.setActiveFieldReviewId,
-    setActiveFieldReviewRevision: sess.setActiveFieldReviewRevision,
-    setFieldReviewScrollNonce: sess.setFieldReviewScrollNonce,
-    setActiveCleaningReviewId: sess.setActiveCleaningReviewId,
-    setActiveCleaningReviewRevision: sess.setActiveCleaningReviewRevision,
-    setActiveAnalystReviewId: sess.setActiveAnalystReviewId,
-    setActiveAnalystReviewRevision: sess.setActiveAnalystReviewRevision,
     setGateOpen: sess.setGateOpen,
     setGuardrailsBlocked: sess.setGuardrailsBlocked,
     setBlockedRunId: sess.setBlockedRunId,
@@ -175,12 +166,6 @@ export default function AnalyzePanel() {
     replyInputRef: sess.replyInputRef,
     waitinAgent: sess.waitingAgent,
     gateOpen: sess.gateOpen,
-    activeFieldReviewId: sess.activeFieldReviewId,
-    activeFieldReviewRevision: sess.activeFieldReviewRevision,
-    activeCleaningReviewId: sess.activeCleaningReviewId,
-    activeCleaningReviewRevision: sess.activeCleaningReviewRevision,
-    activeAnalystReviewId: sess.activeAnalystReviewId,
-    activeAnalystReviewRevision: sess.activeAnalystReviewRevision,
     currentProject,
     onThinking: setThinkingText,
     setReplyPending,
@@ -198,19 +183,11 @@ export default function AnalyzePanel() {
         agent: "analyst",
         gate: sess.gateOpen,
       };
-      // 先保存到后端 session（HTTP POST，不依赖 WS）
       eventLog("submit", `gateOpen=${sess.gateOpen} replyPending=${replyPending} text=${outgoing.slice(0, 40)}`);
-      fetch("/api/save_user_msg", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ text: outgoing }),
-      }).catch((e) => { eventLog("fetch_error", `save_user_msg: ${e}`); });
       const s = send("respond", { text: outgoing });
       if (!s) {
         sess.replySnapshotRef.current = null;
-        addSystemMsg(
-          "当前未连接到服务器，回复未发出。请确认右上角连接状态后重试。",
-        );
+        eventLog("submit", "send_failed — WS not connected");
         return;
       }
       addUserMsg(outgoing);
@@ -227,12 +204,6 @@ export default function AnalyzePanel() {
     !!dataPath &&
     fileExists &&
     connectionStatus === "connected";
-  const scoutFieldReviewOpen =
-    Boolean(sess.activeFieldReviewId);
-  const cleanerCleaningReviewOpen =
-    Boolean(sess.activeCleaningReviewId);
-  const analystReviewOpen =
-    Boolean(sess.activeAnalystReviewId);
 
 
   return (
@@ -324,9 +295,6 @@ export default function AnalyzePanel() {
             <div className="flex-1 min-h-0">
               <ConvoFeed
                 messages={messages}
-                scrollFieldTableId={sess.activeFieldReviewId}
-                scrollFieldTableNonce={sess.fieldReviewScrollNonce}
-                onAskReply={submitUserReply}
               />
             </div>
             <div className="shrink-0 bg-app-bg border-t border-app-border/60 pt-2">

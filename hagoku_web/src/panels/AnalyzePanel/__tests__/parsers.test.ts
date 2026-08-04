@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { significanceShort, resolveAgentKey, parsePauseInteractionRevision } from "../parsers";
+import { significanceShort, resolveAgentKey } from "../parsers";
 
 describe("significanceShort", () => {
   it('returns "显著" for "significant"', () => {
@@ -38,19 +38,5 @@ describe("resolveAgentKey", () => {
 
   it("returns null for unknown agent", () => {
     expect(resolveAgentKey("unknown")).toBeNull();
-  });
-});
-
-describe("parsePauseInteractionRevision", () => {
-  it("returns number for valid revision", () => {
-    expect(parsePauseInteractionRevision({ interaction_revision: 5 })).toBe(5);
-  });
-
-  it("returns null for missing field", () => {
-    expect(parsePauseInteractionRevision({})).toBeNull();
-  });
-
-  it("returns null for non-number value", () => {
-    expect(parsePauseInteractionRevision({ interaction_revision: "abc" })).toBeNull();
   });
 });

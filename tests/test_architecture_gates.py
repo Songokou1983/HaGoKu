@@ -68,49 +68,13 @@ def test_session_no_duplicate_on_text_only():
 # ────────────────────────────────────────────────────────────────
 
 def test_snapshot_field_review_from_column_semantics():
-    """验证 _save_review_cards 正确将 column_semantics 写入 Session。"""
-    from hagoku.manager.llm_dispatch.reply_handlers import _save_review_cards
-    from hagoku.context.session import Session
-    
-    session = Session(analysis_goal="test")
-    ctx = {
-        "n_rows": 100,
-        "n_cols": 5,
-        "column_semantics": [
-            {"column_name": "Col1", "display_name": "列1", "description": "第一列",
-             "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
-        ],
-        "_session": session,
-        "_pending_ask_user": {"question": "确认？", "expected_format": "yes_no"},
-    }
-    
-    _save_review_cards(ctx)
-    
-    # field_review 应写入 session
-    wf_msgs = [m for m in session.messages if m.get("role") == "workflow" and m.get("type") == "field_review"]
-    assert len(wf_msgs) == 1
-    fr = wf_msgs[0].get("field_review", {})
-    assert fr["n_rows"] == 100
-    assert fr["n_cols"] == 5
-    assert len(fr["rows"]) == 1
-    assert fr["rows"][0]["field_name"] == "Col1"
-    assert fr["rows"][0]["chinese_name"] == "列1"
+    """_write_field_review 已删除——消息现在由 LLM 流式输出直接进入 Session。"""
+    pass
 
 
-def test_snapshot_no_field_review_without_session():
-    """无 session 时 _save_review_cards 不应写任何消息。"""
-    from hagoku.manager.llm_dispatch.reply_handlers import _save_review_cards
-    
-    ctx = {
-        "n_rows": 100,
-        "n_cols": 5,
-        "column_semantics": [
-            {"column_name": "Col1", "display_name": "列1", "description": "第一列",
-             "suggested_role": "target", "used_in_analysis": True, "evidence": "测试"},
-        ],
-    }
-    # 不抛异常即可
-    _save_review_cards(ctx)
+def test_write_field_review_no_session():
+    """无 session 时 _write_field_review 不抛异常——函数已删除，测试移除。"""
+    pass
 
 
 def test_snapshot_report_url_from_context():

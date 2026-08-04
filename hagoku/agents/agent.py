@@ -596,23 +596,33 @@ class DataAnalystAgent:
                 ]
                 session.add_tool_call(txt, oai_calls, results)
 
-                # ── 工具执行进度：每轮 emit TOOL_EXCHANGE，前端渲染为内联工具卡片 ──
-                self._emit(EventType.TOOL_EXCHANGE, {
-                    "stage": f"第 {_round + 1} 轮",
-                    "tool_calls": [
-                        {
-                            "id": tc.tool_call_id,
-                            "name": tc.name,
-                            "arguments_summary": tc.arguments[:120] if tc.arguments else "",
-                            "result_summary": (tc.result or "")[:200],
-                            "error": tc.error,
-                        }
-                        for tc in tool_records
-                    ],
-                })
+                # Session 已更新 → 推 snapshot
+                try:
+                    from hagoku.api.ws_handler import WSBridge, _fastapi_app
+                    app = _fastapi_app
+                    if app is not None:
+                        hagoku_app = getattr(app.state, 'hagoku_app', None)
+                        if hagoku_app is not None:
+                            snap = hagoku_app.build_snapshot()
+                            if snap:
+                                WSBridge.get().push_snapshot(snap)
+                except Exception:
+                    logger.exception("agent push_snapshot 失败")
 
-            # ask_user 被调用 → LLM 决定暂停等用户回复，停止工具循环
+            # ask_user 被调用 → LLM 决定暂停等用户回复
             if context.get("_pending_ask_user"):
+                try:
+                    from hagoku.api.ws_handler import WSBridge, _fastapi_app
+                    app = _fastapi_app
+                    if app is not None:
+                        hagoku_app = getattr(app.state, 'hagoku_app', None)
+                        if hagoku_app is not None:
+                            snap = hagoku_app.build_snapshot()
+                            if snap:
+                                WSBridge.get().push_snapshot(snap)
+                except Exception:
+                    logger.exception("agent push_snapshot 失败")
+                self._emit(EventType.USER_INPUT_REQUESTED, {})
                 break
 
             # 用户点了停止 → 中断处理

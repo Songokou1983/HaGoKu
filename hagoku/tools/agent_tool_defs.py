@@ -1,103 +1,113 @@
-"""HaGoKu 工具定义 — 在注册表中注册所有 Agent 可用的工具。
-
-导入此模块即完成注册。新增工具只需在此文件添加。
-"""
+"""统一注册 agent 工具定义。"""
 
 from __future__ import annotations
 
 import json as _json
 from typing import Any
 
-from hagoku.tools.registry import Tool, agent_tools
+import pandas as pd
+
+from .registry import agent_tools
+from .registry import Tool
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 通用数据探查工具（所有 Agent 可用）
+# 辅助函数
 # ═══════════════════════════════════════════════════════════════════
 
-def _handle_get_column_stats(args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
-    import pandas as pd
-    col = str(args.get("column", "") or args.get("column_name", ""))
-    if df is None or col not in df.columns:
-        return {"error": f"列 {col} 不存在"}
-    s = df[col].dropna()
-    result: dict[str, Any] = {"column": col, "dtype": str(df[col].dtype), "count": len(s)}
-    if pd.api.types.is_numeric_dtype(s):
-        result.update({
-            "min": float(s.min()), "q25": float(s.quantile(0.25)),
-            "median": float(s.median()), "q75": float(s.quantile(0.75)),
-            "max": float(s.max()), "mean": round(float(s.mean()), 4),
-            "std": round(float(s.std()), 4),
-        })
-    result["null_count"] = int(df[col].isna().sum())
-    result["null_pct"] = round(result["null_count"] / max(len(df), 1), 4)
+def _df_safe(df: pd.DataFrame | None) -> pd.DataFrame:
+    import pandas as _pd
+    return df if df is not None else _pd.DataFrame()
+
+
+def _safe_float(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(v: Any) -> int | None:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 查询工具（所有 Agent 可用）
+# ═══════════════════════════════════════════════════════════════════
+
+def _handle_get_column_names(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    df = _df_safe(_df)
+    return {"columns": list(df.columns), "count": len(df.columns)}
+
+
+agent_tools.register(Tool(
+    name="get_column_names",
+    description="获取数据集全部列名及数量。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    handler=_handle_get_column_names,
+    phase_tag=['理解字段', '评估清洗', '跑统计'],
+))
+
+
+def _handle_get_column_stats(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    df = _df_safe(_df)
+    col = str(args.get("column", ""))
+    if col not in df.columns:
+        return {"error": f"列 {col} 不存在", "available": list(df.columns)}
+    s = df[col]
+    result: dict[str, Any] = {"column": col, "dtype": str(s.dtype), "count": int(s.count())}
+    try:
+        if pd.api.types.is_numeric_dtype(s):
+            result.update({
+                "min": _safe_float(s.min()), "q25": _safe_float(s.quantile(0.25)),
+                "median": _safe_float(s.median()), "q75": _safe_float(s.quantile(0.75)),
+                "max": _safe_float(s.max()), "mean": _safe_float(s.mean()),
+                "std": _safe_float(s.std()),
+            })
+        else:
+            val_counts = s.value_counts().head(5).to_dict()
+            result["top_values"] = {str(k): int(v) for k, v in val_counts.items()}
+    except Exception:
+        pass
+    result["null_count"] = int(s.isna().sum())
+    result["null_pct"] = round(s.isna().mean() * 100, 2)
     return result
-
-
-def _handle_get_sample_rows(args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
-    col = str(args.get("column", "") or args.get("column_name", ""))
-    n = int(args.get("n", 10))
-    if df is None or col not in df.columns:
-        return {"error": f"列 {col} 不存在"}
-    vals = df[col].dropna().unique()[:n].tolist()
-    return {"column": col, "sample": [str(v) for v in vals], "unique_count": len(vals), "total": len(df[col].dropna())}
-
-
-def _handle_list_columns(_args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
-    if df is None:
-        return {"columns": []}
-    return {
-        "columns": [
-            {"name": c, "dtype": str(df[c].dtype)}
-            for c in df.columns
-        ]
-    }
-
-
-def _handle_group_stats(args: dict, _ctx: dict, df: pd.DataFrame | None) -> dict:
-    col = str(args.get("column", "") or args.get("column_name", ""))
-    by = str(args.get("by", "") or args.get("group_by", ""))
-    if df is None or col not in df.columns or by not in df.columns:
-        return {"error": f"列 {col} 或分组列 {by} 不存在"}
-    grouped = df.groupby(by)[col].agg(["count", "mean", "median", "min", "max"])
-    return {str(k): v.to_dict() for k, v in grouped.iterrows()}
 
 
 agent_tools.register(Tool(
     name="get_column_stats",
-    description="获取某列的统计信息：min/q25/median/q75/max/mean/std/null_count",
+    description="对单列做完整统计。",
     parameters={
         "type": "object",
         "properties": {"column": {"type": "string", "description": "列名"}},
         "required": ["column"],
     },
     handler=_handle_get_column_stats,
+    phase_tag=['评估清洗', '跑统计'],
 ))
 
-agent_tools.register(Tool(
-    name="get_sample_rows",
-    description="获取某列的抽样值，用于理解字段内容",
-    parameters={
-        "type": "object",
-        "properties": {
-            "column": {"type": "string", "description": "列名"},
-            "n": {"type": "integer", "description": "抽取行数，默认 10"},
-        },
-        "required": ["column"],
-    },
-    handler=_handle_get_sample_rows,
-))
+
+def _handle_get_group_stats(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    df = _df_safe(_df)
+    col = str(args.get("column", ""))
+    by = str(args.get("by", ""))
+    if col not in df.columns:
+        return {"error": f"列 {col} 不存在"}
+    if by not in df.columns:
+        return {"error": f"分组列 {by} 不存在"}
+    try:
+        grouped = df.groupby(by)[col].agg(["count", "mean", "std", "min", "max"]).reset_index()
+        return {"column": col, "by": by, "groups": grouped.to_dict(orient="records")}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 agent_tools.register(Tool(
-    name="list_columns",
-    description="列出数据集中所有列名和类型",
-    parameters={"type": "object", "properties": {}, "required": []},
-    handler=_handle_list_columns,
-))
-
-agent_tools.register(Tool(
-    name="group_stats",
-    description="按某列分组，查看另一列的统计量。用于判断极端值是业务规律还是数据错误",
+    name="get_group_stats",
+    description="对列按分组做聚合统计。",
     parameters={
         "type": "object",
         "properties": {
@@ -106,16 +116,9 @@ agent_tools.register(Tool(
         },
         "required": ["column", "by"],
     },
-    handler=_handle_group_stats,
-    phase_tag=['评估清洗', '跑统计'],  # 仅 Cleaner/Analyst
+    handler=_handle_get_group_stats,
+    phase_tag=['评估清洗', '跑统计'],
 ))
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 统一表格工具（所有 Agent 可用）
-# ═══════════════════════════════════════════════════════════════════
-
-
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -124,7 +127,6 @@ agent_tools.register(Tool(
 
 def _handle_set_columns(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     """更新字段的中文名和含义，同步写入 column_semantics。支持单列或批量。"""
-    # 批量模式: {"columns": [{"column_name": ..., "display_name": ..., ...}, ...]}
     batch = args.get("columns")
     if batch and isinstance(batch, list):
         results = []
@@ -133,8 +135,8 @@ def _handle_set_columns(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict
                 results.append(_update_one_field(item, ctx))
         return {"updated_batch": results}
 
-    # 单列模式（向后兼容）
-    return _update_one_field(args, ctx)
+    r = _update_one_field(args, ctx)
+    return r
 
 
 def _update_one_field(args: dict, ctx: dict) -> dict:
@@ -187,14 +189,13 @@ def _update_one_field(args: dict, ctx: dict) -> dict:
 
 
 
+
 def _handle_update_analysis_scope(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     """更新分析范围——纳入或排除字段。"""
     add_columns = args.get("add_columns", []) or []
     remove_columns = args.get("remove_columns", []) or []
     reason = args.get("reason", "")
 
-    # F-067 修复：检测 add/remove 交集。同一列同时出现在两侧说明 LLM
-    # 给出了矛盾指令 —— 拒绝写入而非静默选一边（铁律 2 路径 A）。
     add_set = set(add_columns)
     remove_set = set(remove_columns)
     conflict = add_set & remove_set
@@ -262,7 +263,10 @@ agent_tools.register(Tool(
 ))
 
 
-
+def _handle_submit_assessment(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
+    """提交清洗评估结果。"""
+    ctx["_cleaning_assessment"] = args
+    return args
 
 
 agent_tools.register(Tool(
@@ -289,28 +293,22 @@ agent_tools.register(Tool(
         },
         "required": ["summary", "columns"],
     },
-    handler=lambda args, ctx, df: args,
+    handler=_handle_submit_assessment,
     phase_tag=['评估清洗'],
 ))
 
 
-
-# ═══════════════════════════════════════════════════════════════════
-# Analyst 对话式分析工具
-# ═══════════════════════════════════════════════════════════════════
-
-
-
-
 def _handle_ask_user(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    """处理 LLM 的 ask_user 调用——触发暂停信号写入 context。"""
+    """向用户提问并暂停。"""
+    question = args.get("question", "")
     pending = {
-        "question": args.get("question", ""),
+        "question": question,
         "options": args.get("options", []),
         "expected_format": args.get("expected_format", "free_text"),
     }
     ctx["_pending_ask_user"] = pending
     return pending
+
 
 agent_tools.register(Tool(
     name="ask_user",
@@ -337,11 +335,15 @@ agent_tools.register(Tool(
 
 
 def _handle_submit_findings(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
-    return {
+    """提交分析发现。"""
+    result = {
         "findings": args.get("findings", []),
         "method_used": args.get("method_used", []),
         "summary": args.get("summary", ""),
     }
+    ctx["_analyst_review"] = result
+    return result
+
 
 agent_tools.register(Tool(
     name="submit_findings",
@@ -385,7 +387,6 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     sections = []
     for s in sections_data:
         content = s.get("content", "")
-        # 将 LLM 输出的 markdown 转为 HTML
         if content:
             try:
                 import markdown as _md
@@ -400,7 +401,6 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             headline=s.get("headline"),
         ))
 
-    # ── 标准化图表格式：LLM 可能只传 html_snippet 缺 type，统一补全 ──
     for s in sections:
         normalized = []
         for c in (s.charts or []):
@@ -409,10 +409,9 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
                     c["type"] = "inline_html"
                 normalized.append(c)
             elif isinstance(c, str):
-                normalized.append(c)  # 保留 chart_id 字符串，供后续按 ID 绑定
+                normalized.append(c)
         s.charts = normalized
 
-    # ── 图表注入：LLM 显式绑定 chart_id 到 section.charts ──
     generated = ctx.get("_generated_charts") or []
     chart_by_id = {c.get("chart_id", c.get("title", "")): c for c in generated}
     for s in sections:
@@ -421,10 +420,8 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
         else:
             s.charts = []
 
-    # 消费后清空，防跨轮次泄漏
     ctx["_generated_charts"] = []
 
-    # ── page_width: wide=无限制, normal=960px（默认）──
     page_width = args.get("page_width", "normal") or "normal"
     custom_css = args.get("custom_css") or ""
 
@@ -450,7 +447,6 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
     gen = ReportGenerator()
     gen.generate_html(report, output_path=output_path, template_name=args.get("template", "default"))
 
-    # ── 注入 page_width 和 custom_css ──
     if (page_width == "wide" or custom_css) and output_path:
         html = output_path and __import__("pathlib").Path(output_path).read_text(encoding="utf-8")
         if html:
@@ -462,15 +458,13 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             html = html.replace("</head>", f"{extra}\n</head>")
             __import__("pathlib").Path(output_path).write_text(html, encoding="utf-8")
 
-    # 同步生成打印版
     if output_path:
         print_path = output_path.replace(".html", "_print.html")
         gen.generate_html(report, output_path=print_path, template_name="print")
 
-    # ── 更新项目报告链接 ──
     if run_dir and output_path:
         try:
-            proj_dir = Path(run_dir).parent.parent  # runs/{id} → {project}
+            proj_dir = Path(run_dir).parent.parent
             reports_dir = proj_dir / "reports"
             reports_dir.mkdir(parents=True, exist_ok=True)
             latest_link = reports_dir / "latest.html"
@@ -481,7 +475,6 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
             import logging
             logging.getLogger("hagoku.tools").debug("符号链接创建失败（非关键）", exc_info=True)
 
-    # ── 图表注入摘要 ──
     chart_bindings = []
     for s in sections:
         for c in (s.charts or []):
@@ -501,7 +494,7 @@ def _handle_generate_report(args: dict, ctx: dict, _df: pd.DataFrame | None) -> 
 
 agent_tools.register(Tool(
     name="generate_report",
-    description="生成 HTML 分析报告。findings 为报告级别摘要（可选，不重复 section.content）。图表用 create_plot 的 chart_id 显式绑定（section.charts: [\"chart_1\"]）。page_width: wide 时内容撑满页面。",
+    description="生成 HTML 分析报告。",
     parameters={
         "type": "object",
         "properties": {
@@ -517,7 +510,7 @@ agent_tools.register(Tool(
                         "charts": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "create_plot 返回的 chart_id 列表，不传则自动分配",
+                            "description": "create_plot 返回的 chart_id 列表",
                         },
                     },
                     "required": ["title", "content"],
@@ -526,8 +519,8 @@ agent_tools.register(Tool(
             "headline": {"type": "string"},
             "findings": {"type": "array", "items": {"type": "object"}},
             "template": {"type": "string"},
-            "page_width": {"type": "string", "enum": ["normal", "wide"], "description": "normal=960px 版心, wide=撑满页面"},
-            "custom_css": {"type": "string", "description": "自定义 CSS 样式（高级用户微调）"},
+            "page_width": {"type": "string", "enum": ["normal", "wide"]},
+            "custom_css": {"type": "string"},
         },
         "required": ["sections"],
     },
@@ -536,22 +529,11 @@ agent_tools.register(Tool(
 ))
 
 
-# ═══════════════════════════════════════════════════════════════════
-# Cleaner 对话式清洗工具
-# ═══════════════════════════════════════════════════════════════════
+import hagoku.tools.memory_tools  # noqa: F401
+import hagoku.tools.stat_tools    # noqa: F401
+import hagoku.tools.cleaning_tools  # noqa: F401
+import hagoku.tools.viz_tools     # noqa: F401
 
-
-
-
-
-
-import hagoku.tools.memory_tools  # noqa: F401  — 项目记忆 + Agent 成长经验
-import hagoku.tools.stat_tools    # noqa: F401  — CO-T05～T11: 统计/诊断/功效
-# biz_tools 已移除 — ROI/ROAS/LTV 等公式不是工具，LLM 训练数据自带
-import hagoku.tools.cleaning_tools  # noqa: F401  — CO-T19～T21: 清洗增强
-import hagoku.tools.viz_tools     # noqa: F401  — CO-T22: 可视化
-
-# Doctor 创建的临时工具桩（文件不存在时跳过）
 try:
     import hagoku.tools._doctor_tools  # noqa: F401
 except ImportError:

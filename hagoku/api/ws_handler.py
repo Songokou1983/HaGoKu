@@ -102,15 +102,12 @@ def _run_analysis_task(data_path: str, query: str, project_name: str, phase: str
         # 确保 WSBridge 已订阅（App 懒创建时可能未订阅）
         bridge = WSBridge.get()
         orch.event_bus.subscribe(bridge.on_event)
-        result = orch.run(
+        orch.run(
             data_path=data_path, query=query,
             project_name=project_name,
             sheet_name=sheet_name,
             aux_sheets=aux_sheets or [],
         )
-        # run() 截断在 Scout → 自动调一次 respond 启动事件循环
-        if isinstance(result, dict) and result.get("status") == "scout_review":
-            orch.respond({"text": ""})
     except Exception as e:
         # LLM 调用失败 → 广播错误给前端
         try:
@@ -194,6 +191,18 @@ class WSBridge:
         for r in results:
             if isinstance(r, str) and r:
                 self._clients.pop(r, None)
+
+    def push_snapshot(self, snap: dict) -> None:
+        """从非 asyncio 线程安全推送 state_snapshot 到所有客户端。"""
+        import asyncio as _asyncio
+        loop = self._loop
+        if loop is None or not loop.is_running():
+            logger.warning("push_snapshot DROPPED — loop not running")
+            return
+        _asyncio.run_coroutine_threadsafe(
+            self.broadcast({"type": "state_snapshot", "data": snap}),
+            loop,
+        )
 
     def on_event(self, event: Event):
         """Callback subscribed to EventBus, called from orchestrator thread."""
@@ -429,16 +438,6 @@ async def ws_handler(ws: WebSocket) -> None:
                 if orch is not None:
                     orch.request_cancel_respond()
                 await _safe_send({"type": "ack", "cmd": "cancel_respond"})
-            elif cmd == "save_msg":
-                orch = get_orchestrator()
-                if orch is not None:
-                    text = (msg.get("payload", {}) or {}).get("text", "").strip()
-                    if text:
-                        ctx = getattr(orch, '_context', None) or {}
-                        session = ctx.get("_session") if ctx else None
-                        if session:
-                            session.add("user", text)
-                await _safe_send({"type": "ack", "cmd": "save_msg"})
             elif cmd == "respond":
                 payload = msg.get("payload", {})
                 payload = {k: (v.replace('\x00', '') if isinstance(v, str) else v) for k, v in payload.items()}
@@ -450,6 +449,14 @@ async def ws_handler(ws: WebSocket) -> None:
                     # 立即确认收到，不阻塞 ws_handler 协程
                     # 否则 ping/pong 堆积在 TCP 缓冲区 → 超时断连
                     await _safe_send({"type": "ack", "cmd": "respond_received"})
+
+                    # ── 用户输入先存 Session，再跑 LLM ──
+                    if user_text:
+                        ctx = getattr(orch, '_context', None) or {}
+                        session = ctx.get("_session") if ctx else None
+                        if session:
+                            session.add("user", user_text)
+
                     async def _process():
                         try:
                             loop = asyncio.get_running_loop()

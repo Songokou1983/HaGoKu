@@ -64,7 +64,7 @@
 ### CH-1 修复 `Analyst.run()` 的 `except → _done` 兜底（🔴 铁律 7）
 
 **根因**
-`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:448-450` 的 `except Exception: return self._done(...)` 把通道层异常吞掉、向下游 Reporter 输出"已完成"假信号。违反铁律 7 路径 1（LLM 异常应 `raise RuntimeError`）。
+`@HaGoKu/hagoku/agents/analyst/agent.py:448-450` 的 `except Exception: return self._done(...)` 把通道层异常吞掉、向下游 Reporter 输出"已完成"假信号。违反铁律 7 路径 1（LLM 异常应 `raise RuntimeError`）。
 
 **改动范围**
 - 仅 `hagoku/agents/analyst/agent.py:406-450` `begin()` 方法。
@@ -87,7 +87,7 @@
 ### CH-2 删除/收紧 `DataAgentBase.call_llm` 的静默失败（🔴 铁律 7 + 死代码）
 
 **根因**
-`@/home/son_goku/HaGoKu/hagoku/agents/base.py:174-182` 的 `call_llm` 在 LLM 异常时 `return ""`。虽然当前 4 个 Agent 均未继承 `DataAgentBase`（实际为死代码），但它仍位于 `tests/test_doctrine_compliance.py` 的扫描路径上，是"潜伏复辟点"——新 Agent 一旦继承就立刻违规。
+`@HaGoKu/hagoku/agents/base.py:174-182` 的 `call_llm` 在 LLM 异常时 `return ""`。虽然当前 4 个 Agent 均未继承 `DataAgentBase`（实际为死代码），但它仍位于 `tests/test_doctrine_compliance.py` 的扫描路径上，是"潜伏复辟点"——新 Agent 一旦继承就立刻违规。
 
 **改动范围**
 
@@ -117,7 +117,7 @@
 ### CH-3 修复 `ProjectContext._on_event` 的静默降级（🔴 律 7 通道自身）
 
 **根因**
-`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:256-260` 在 `_context_ref is None` 时 `logging.warning + ctx = {}` 继续。律 7 明确：「`logging.warning` 只对开发者可见，不算履行义务」。**信息通道的载体丢失**是通道断裂，不是降级。
+`@HaGoKu/hagoku/context/project_context.py:256-260` 在 `_context_ref is None` 时 `logging.warning + ctx = {}` 继续。律 7 明确：「`logging.warning` 只对开发者可见，不算履行义务」。**信息通道的载体丢失**是通道断裂，不是降级。
 
 **改动范围**
 - `project_context.py:256-275`（含 `AGENT_COMPLETED` 和 `USER_INPUT_RECEIVED` 两个分支）
@@ -131,7 +131,7 @@
 
 **红线**
 - 不许把 raise 包成 try/except 在 EventBus 那一层吞掉
-- 注意 `EventBus.emit` 的 subscriber callback 异常处理（`@/home/son_goku/HaGoKu/hagoku/observability/event_bus.py:36-39`）——它 `logger.warning` 吞了。这次**不要顺手改 EventBus**（surgical），但要在 commit message 里 flag 这是后续 CH-X 候选
+- 注意 `EventBus.emit` 的 subscriber callback 异常处理（`@HaGoKu/hagoku/observability/event_bus.py:36-39`）——它 `logger.warning` 吞了。这次**不要顺手改 EventBus**（surgical），但要在 commit message 里 flag 这是后续 CH-X 候选
 
 ---
 
@@ -174,7 +174,7 @@
 ### CH-5 拆分 `orchestrator.py`（🟡 复杂度）
 
 **根因**
-`@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py` 2507 行，承担 ≥6 项职责（pipeline / kanban / payload 渲染 / LLM 调度 / 命令路由 / guardrails）。
+`@HaGoKu/hagoku/manager/orchestrator.py` 2507 行，承担 ≥6 项职责（pipeline / kanban / payload 渲染 / LLM 调度 / 命令路由 / guardrails）。
 
 **改动范围**
 

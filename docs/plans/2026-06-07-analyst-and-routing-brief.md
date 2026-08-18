@@ -59,7 +59,7 @@
 ```
 [前端 textarea {text: "..."}]
     ↓
-@/home/son_goku/HaGoKu/hagoku/manager/llm_dispatch/reply_handlers.py:100
+@HaGoKu/hagoku/manager/llm_dispatch/reply_handlers.py:100
 respond(): text = user_input.get("text").strip()
     ↓
 self._STAGE_HANDLERS[self._stage] →
@@ -87,7 +87,7 @@ self._STAGE_HANDLERS[self._stage] →
 
 #### 1.3.1 `run_step` 不注入 system prompt
 
-```@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:190-204
+```@HaGoKu/hagoku/agents/analyst/agent.py:190-204
 def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None = None) -> dict:
     """单步执行：跑 1 轮 LLM，处理 tool_calls，返回 (messages, findings or None)"""
     import json as _json
@@ -107,7 +107,7 @@ def run_step(self, messages: list[dict], context: dict, df: pd.DataFrame | None 
 
 #### 1.3.2 `_handle_analyst_reply` 不注入 ProjectContext
 
-```@/home/son_goku/HaGoKu/hagoku/manager/llm_dispatch/reply_handlers.py:79-87
+```@HaGoKu/hagoku/manager/llm_dispatch/reply_handlers.py:79-87
 if self._analyst_agent is None:
     from hagoku.agents.analyst import AnalystAgent
     self._analyst_agent = AnalystAgent(self.config.llm, self.event_bus, llm_client=self.llm_deep)
@@ -127,7 +127,7 @@ result = self._analyst_agent.run_step(self._analyst_messages, context, self._df_
 
 #### 1.4.1 工具实现
 
-```@/home/son_goku/HaGoKu/hagoku/tools/agent_tool_defs.py:557-561
+```@HaGoKu/hagoku/tools/agent_tool_defs.py:557-561
 def _handle_route_to(args: dict, ctx: dict, _df: pd.DataFrame | None) -> dict:
     """处理 route_to 调用：在 ctx 中标记目标阶段，由调用方决定后续。"""
     stage = args.get("stage")

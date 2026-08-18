@@ -123,7 +123,7 @@ user: [本轮]
 
 ### 2.3 阶段衔接现状
 
-`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:155-169` 已经计算 `upstream_summary`，**但只有 Scout `_apply_scout_reply_with_llm` 调 build_prompt，Cleaner 不调用**。所以：
+`@HaGoKu/hagoku/context/project_context.py:155-169` 已经计算 `upstream_summary`，**但只有 Scout `_apply_scout_reply_with_llm` 调 build_prompt，Cleaner 不调用**。所以：
 
 - Cleaner 启动时 → 读 `context` dict（结构化 column_semantics），看不到 Scout 与用户的对话历史
 - Cleaner 不读 ProjectContext.entries，更不读 upstream_summary
@@ -222,7 +222,7 @@ ls .hagoku/llm_dumps/<run_id>/  # 期望看到 4-6 份 JSON
 
 #### 任务 H：修复 Cleaner tool_calls 协议违反（P4 —— 「白痴」的真现行犯）
 
-**现状**：`@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:616` 把 tool_calls 序列化为字符串 `"[调用] {fn.name}({fn.arguments})"` 塑进 conv_history。下一轮 LLM 看到中文串但看不到 tool_call 结果。LLM 认为「以前调过 submit_assessment 但没看到返回」→ 反复调用、反复探索、表现「白痴」。
+**现状**：`@HaGoKu/hagoku/agents/cleaner/agent.py:616` 把 tool_calls 序列化为字符串 `"[调用] {fn.name}({fn.arguments})"` 塑进 conv_history。下一轮 LLM 看到中文串但看不到 tool_call 结果。LLM 认为「以前调过 submit_assessment 但没看到返回」→ 反复调用、反复探索、表现「白痴」。
 
 **改动**：
 
@@ -234,7 +234,7 @@ ls .hagoku/llm_dumps/<run_id>/  # 期望看到 4-6 份 JSON
 
 **验收指标**：同一任务不再出现 LLM 重复调用 `submit_assessment` ；工具返回值出现在 dump messages 中。
 
-**Follow-up H'（低优，不阻塞 Tier 1）**：当前实现（`@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:617-630`）在循环中按每个 `tool_call` 各 append 一个 `assistant` message + 一个 `tool` message，导致：
+**Follow-up H'（低优，不阻塞 Tier 1）**：当前实现（`@HaGoKu/hagoku/agents/cleaner/agent.py:617-630`）在循环中按每个 `tool_call` 各 append 一个 `assistant` message + 一个 `tool` message，导致：
 
 - 同一次 LLM response 被拆成 N 个 assistant turn（应为 1 个含 N tool_calls 的 turn）
 - `txt` 内容被复制 N 次，浪费上下文 token
@@ -243,7 +243,7 @@ OpenAI 协议接受这种结构（每对 assistant/tool 自洽），所以 H 主
 
 #### 任务 I：build_prompt upstream_summary 增加上游用户原话（P3 设计层修复）
 
-**现状**：`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190` 的 upstream_summary 只取 `agent_response.snapshot` 结构化字段（target / features / pending），**不传上游 user_feedback 原话**。下游 Agent 一个字都看不到用户说过什么。
+**现状**：`@HaGoKu/hagoku/context/project_context.py:179-190` 的 upstream_summary 只取 `agent_response.snapshot` 结构化字段（target / features / pending），**不传上游 user_feedback 原话**。下游 Agent 一个字都看不到用户说过什么。
 
 **改动**：`build_prompt` 拼装 upstream_summary 时，除 agent_response 结构化摘要外，加入上游阶段的关键 user_feedback 原话（以 raw_user_text 取原始，不刪减）。建议格式：
 
@@ -260,11 +260,11 @@ scout 阶段完成: target=Inc1, features=['BU','Code','Period']
 
 #### 任务 M：Cleaner / Analyst / Reporter 注入 `messages_history`（升 Tier 1，2026-06-01 dump 验收发现）
 
-**现状**：四个下游 Agent 中仅 Scout 在 `@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:921-927` 展开 `*ctx_block["messages_history"]`，其余三个仅拼 system_prefix + upstream_summary，丢弃 `ctx_block["messages_history"]`：
+**现状**：四个下游 Agent 中仅 Scout 在 `@HaGoKu/hagoku/manager/orchestrator.py:921-927` 展开 `*ctx_block["messages_history"]`，其余三个仅拼 system_prefix + upstream_summary，丢弃 `ctx_block["messages_history"]`：
 
-- `@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:579-580` ❌
-- `@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:874-875` ❌
-- `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-418` ❌
+- `@HaGoKu/hagoku/agents/cleaner/agent.py:579-580` ❌
+- `@HaGoKu/hagoku/agents/analyst/agent.py:874-875` ❌
+- `@HaGoKu/hagoku/agents/reporter/agent.py:417-418` ❌
 
 **证据**：Tier 1 后 dump 005/006/007 三次独立 `assess()` 调用 messages 永远是 `[system, user_intro]`，跨轮不累积 → 直接对应「LLM 变白痴」用户主诉。
 
@@ -288,15 +288,15 @@ Analyst / Reporter 同样几行改动，位置同上表。
 
 **重做指引（2026-06-01，首次 commit 1e252f4 审查不通过）**：
 
-首次提交只 Cleaner 真改对。Analyst 文件未触碰；Reporter `_call_llm` 加了 `messages_history` 参数但 caller (`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425`) 没传，新参数为死代码；守门测试只测了 `build_prompt` 输出而非 Agent 实际拼装出的 messages，无法构成真守门。重做要点：
+首次提交只 Cleaner 真改对。Analyst 文件未触碰；Reporter `_call_llm` 加了 `messages_history` 参数但 caller (`@HaGoKu/hagoku/agents/reporter/agent.py:425`) 没传，新参数为死代码；守门测试只测了 `build_prompt` 输出而非 Agent 实际拼装出的 messages，无法构成真守门。重做要点：
 
-1. **Analyst**：`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:872-876` 之后的 messages 拼装位置 extend `ctx_block["messages_history"]`（先看 system_prompt 怎么进 LLM 的，找到 `messages = [...]` 那一行夹入）。
-2. **Reporter caller**：`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425` 改为 `self._call_llm(system=system, user=user_prompt, messages_history=ctx_block["messages_history"] if project_ctx else None)`（注意 `ctx_block` 此时作用域）。
+1. **Analyst**：`@HaGoKu/hagoku/agents/analyst/agent.py:872-876` 之后的 messages 拼装位置 extend `ctx_block["messages_history"]`（先看 system_prompt 怎么进 LLM 的，找到 `messages = [...]` 那一行夹入）。
+2. **Reporter caller**：`@HaGoKu/hagoku/agents/reporter/agent.py:425` 改为 `self._call_llm(system=system, user=user_prompt, messages_history=ctx_block["messages_history"] if project_ctx else None)`（注意 `ctx_block` 此时作用域）。
 3. **守门测试**：新增 `test_下游_agent_实际注入_messages_history`，monkeypatch `chat.completions.create` 截 `messages=` 参数，分别触发 cleaner/analyst/reporter 拼装路径，断言截获 messages 含 `messages_history` 条目。原 `test_下游_agent_注入_messages_history` 测 `build_prompt`，可保留但改名 `test_build_prompt_messages_history_分组` 或移至 `tests/test_context/`。
 
 **第二次重做指引（2026-06-01，commit 7a522fb 又出 Bug 4 + 覆盖缺口）**：
 
-第二次提交修对了 Analyst 与 Cleaner 守门，但 Reporter caller `rpt_history` 变量从未定义（`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425`），运行时必 `NameError`；守门测试只 spy 了 Cleaner，未覆盖 Analyst / Reporter，故 Bug 4 被「未覆盖路径」遮蔽。重做要点：
+第二次提交修对了 Analyst 与 Cleaner 守门，但 Reporter caller `rpt_history` 变量从未定义（`@HaGoKu/hagoku/agents/reporter/agent.py:425`），运行时必 `NameError`；守门测试只 spy 了 Cleaner，未覆盖 Analyst / Reporter，故 Bug 4 被「未覆盖路径」遮蔽。重做要点：
 
 1. **Reporter rpt_history 初始化**：在 `project_ctx` 分支外预置 `rpt_history: list[dict] = []`，分支内赋值 `rpt_history = ctx_block.get("messages_history", [])`，确保 caller 处变量永远已定义。
 2. **守门参数化**：把 `test_下游_agent_实际注入_messages_history` 改为 `@pytest.mark.parametrize("agent_key", ["cleaner", "analyst", "reporter"])`，三 Agent 各跑一次。Cleaner / Analyst spy `hagoku.llm.client.create_raw_client`；Reporter 走 `self._llm_client`，需要单独 monkeypatch 其客户端实例的 `chat.completions.create`。
@@ -308,11 +308,11 @@ Analyst / Reporter 同样几行改动，位置同上表。
 
 #### 任务 J：upstream_summary 去重（P2）— ✅ 已随任务 I 完成
 
-诊断发现 P2 实现与 P3 同位置，任务 I 重写 `build_prompt` upstream_summary 拼装时顺手修了去重逻辑（`@/home/son_goku/HaGoKu/hagoku/context/project_context.py:181-194`，`reversed + seen_stages + insert(0)`）。Tier 1 dump 验收后 P2 5→1 。保留本节作为此决策留纪录。
+诊断发现 P2 实现与 P3 同位置，任务 I 重写 `build_prompt` upstream_summary 拼装时顺手修了去重逻辑（`@HaGoKu/hagoku/context/project_context.py:181-194`，`reversed + seen_stages + insert(0)`）。Tier 1 dump 验收后 P2 5→1 。保留本节作为此决策留纪录。
 
 #### 任务 K：agent_response.content 记录 LLM 实际输出（P6）
 
-**现状**：`@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:1083` 只记 `applied_summary`（「无字段更新」/「BU←公司」这种摘要）。LLM 实际调的 tool_calls / 思考全部丢。
+**现状**：`@HaGoKu/hagoku/manager/orchestrator.py:1083` 只记 `applied_summary`（「无字段更新」/「BU←公司」这种摘要）。LLM 实际调的 tool_calls / 思考全部丢。
 
 **改动**：agent_response.content 同时保留 LLM 原始 assistant turn（含 raw_text + tool_calls）。拆为两个字段或考虑为 entry 加 `tool_calls` 结构化字段。
 

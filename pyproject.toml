@@ -7,22 +7,28 @@ name = "hagoku"
 version = "2.3.1"
 description = "让每个小模型，都能做专业级商业分析"
 readme = "README.md"
-license = "MIT"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
-    { name = "HaGoKu Studio Team" },
+    { name = "Songokou1983" },
 ]
 keywords = ["data-analysis", "multi-agent", "statistics", "llm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
+
+[project.urls]
+Repository = "https://github.com/Songokou1983/HaGoKu"
+Issues = "https://github.com/Songokou1983/HaGoKu/issues"
+Documentation = "https://github.com/Songokou1983/HaGoKu/blob/master/PROJECT.md"
 
 dependencies = [
     # Structured output

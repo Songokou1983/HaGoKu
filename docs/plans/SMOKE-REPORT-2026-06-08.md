@@ -3,7 +3,7 @@
 ## 运行环境
 - **模型**：MiniMax-M3（通过 `~/.hagoku/.env` 配置）
 - **数据集**：`tests/fixtures/smoke_demo.csv`（6 行，channel/roi/cost/clicks/impressions）
-- **dump 目录**：`/home/son_goku/.hagoku/projects/smoke_demo/runs/20260608_173534/llm_dumps/`
+- **dump 目录**：`~.hagoku/projects/smoke_demo/runs/20260608_173534/llm_dumps/`
 - **运行时长**：~315s（5 分 15 秒）
 - **冒烟版本**：v7（SK-FIX-0e 后）
 

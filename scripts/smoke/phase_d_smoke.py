@@ -10,7 +10,7 @@ from hagoku.agents.agent import DataAnalystAgent
 from hagoku.context.session import Session
 
 cfg = HaGoKuConfig.load()
-df = pd.read_csv(sys.argv[1] if len(sys.argv) > 1 else '/home/son_goku/smoke_demo.csv')
+df = pd.read_csv(sys.argv[1] if len(sys.argv) > 1 else 'tests/fixtures/smoke_demo.csv')
 query = sys.argv[2] if len(sys.argv) > 2 else '哪个渠道ROI最高'
 bus = EventBus()
 session = Session(analysis_goal=query)

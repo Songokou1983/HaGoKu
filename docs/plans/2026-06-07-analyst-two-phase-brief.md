@@ -4,7 +4,7 @@
 >
 > **作废原因**：本 brief §1 现状盘点基于错误的生产路径假设——以为 WebSocket 路径走 `AnalystAgent.begin()` / `respond()`，实际走 `_handle_analyst_reply` → `run_step()`。`begin/respond/run` 全部是死代码。
 >
-> **替代 brief**：`@/home/son_goku/HaGoKu/docs/plans/2026-06-07-analyst-and-routing-brief.md`
+> **替代 brief**：`@HaGoKu/docs/plans/2026-06-07-analyst-and-routing-brief.md`
 >
 > 本文件保留作为审计史料，不删除。
 >

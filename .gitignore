@@ -60,6 +60,8 @@ UI_CHANGELOG_backup_*
 # 本地快照归档（mv 而非 rm，保留历史）
 .archive/
 reasonix.toml
+reasonix.toml.bak.*
+*.bak
 smoke_runs/
 desktop/node_modules/
 hagoku/tools/_doctor_tools.py

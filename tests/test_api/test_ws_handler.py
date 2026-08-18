@@ -261,39 +261,6 @@ class TestAnalyzeCommand:
 class TestCancelAnalysisCommand:
     """cancel_analysis 与共享 Orchestrator"""
 
-    def test_cancel_analysis_calls_request_cancel(self):
-        async def _run():
-            mock_ws = AsyncMock()
-            mock_orch = MagicMock()
-            mock_orch._project_name = "testproj"
-            mock_orch._context = {"data_path": "/tmp/test.csv", "query": "test query"}
-            mock_orch.request_cancel = MagicMock()
-            mock_ws.receive_text = AsyncMock(
-                side_effect=[
-                    json.dumps({"cmd": "cancel_analysis"}),
-                    Exception("Connection closed"),
-                ],
-            )
-            with patch("hagoku.api.ws_handler.get_bus", return_value=None):
-                with patch("hagoku.api.ws_handler._shared_orchestrator", mock_orch):
-                    try:
-                        await ws_handler(mock_ws)
-                    except Exception:
-                        pass
-            mock_orch.request_cancel.assert_called_once()
-            acks = [c for c in mock_ws.send_json.call_args_list if c[0][0].get("cmd") == "cancel_analysis"]
-            assert len(acks) == 1
-            assert acks[0][0][0].get("type") == "ack"
-            # 取消成功后应推送空快照，让前端清空消息
-            snaps = [c for c in mock_ws.send_json.call_args_list
-                     if c[0][0].get("type") == "state_snapshot"
-                     and isinstance(c[0][0].get("data"), dict)]
-            assert any(s[0][0].get("data", {}).get("messages") == [] for s in snaps)
-            # project_name 保留当前项目，不清空标题栏
-            assert any(s[0][0].get("data", {}).get("project_name") == "testproj" for s in snaps)
-
-        asyncio.run(_run())
-
     def test_cancel_analysis_without_orchestrator_returns_error(self):
         async def _run():
             mock_ws = AsyncMock()

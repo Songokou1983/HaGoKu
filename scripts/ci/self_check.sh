@@ -22,7 +22,7 @@ echo "=== 4. 流式通道 ==="
 grep -q "stream_chat_completion" "$ROOT/hagoku/agents/agent.py" && echo "  ✅ infer 流式" || { echo "  ❌ infer 流式缺失"; exit 1; }
 
 echo "=== 5. 堵路检查 ==="
-grep -q "for _round in range" "$ROOT/hagoku/agents/agent.py" && echo "  ✅ 工具循环(while)" || { echo "  ❌ 工具循环缺失"; exit 1; }
+grep -q "while tc_list" "$ROOT/hagoku/agents/agent.py" && echo "  ✅ 工具循环(while)" || { echo "  ❌ 工具循环缺失"; exit 1; }
 grep -q "not txt.strip()" "$ROOT/hagoku/agents/agent.py" && { echo "  ❌ txt.strip() 阻断续轮"; exit 1; } || echo "  ✅ 无 txt 阻断"
 grep -q "只确认完成\|禁止沉默\|禁止回复" "$ROOT/hagoku/agents/prompt.md" && { echo "  ❌ 沉默指令"; exit 1; } || echo "  ✅ 无沉默指令"
 grep -q 'phase_hint.*==.*"scout"' "$ROOT/hagoku/agents/agent.py" 2>/dev/null && { echo "  ❌ scout 工具锁"; exit 1; } || echo "  ✅ 无工具锁"

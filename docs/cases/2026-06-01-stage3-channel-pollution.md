@@ -55,14 +55,14 @@ LLM 看到的不是"用户问 → 我答 → 用户问 → 我答"，而是"我�
 
 **根因**：
 
-```@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:1077
+```@HaGoKu/hagoku/manager/orchestrator.py:1077
             project_ctx.add_agent_response(
                 stage="scout",
                 ...
             )
 ```
 
-每轮 `_apply_scout_reply_with_llm` **在 LLM 调用后立即** add_agent_response，但 `USER_INPUT_RECEIVED` 事件是在函数**返回之后**才 emit（`@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:2290` 附近）。
+每轮 `_apply_scout_reply_with_llm` **在 LLM 调用后立即** add_agent_response，但 `USER_INPUT_RECEIVED` 事件是在函数**返回之后**才 emit（`@HaGoKu/hagoku/manager/orchestrator.py:2290` 附近）。
 
 时序：
 
@@ -96,7 +96,7 @@ scout 阶段完成: target=Inc1, features=['BU', 'Code', 'Period']
 
 **根因**：
 
-```@/home/son_goku/HaGoKu/hagoku/context/project_context.py:179-190
+```@HaGoKu/hagoku/context/project_context.py:179-190
         upstream_entries = [e for e in self.entries if e.stage != agent]
         upstream_parts: list[str] = []
         for e in upstream_entries:
@@ -131,7 +131,7 @@ Scout 阶段每轮 add_agent_response 都生成一条 agent_response entry。Cle
 
 1. **build_prompt 设计层缺陷**：
 
-```@/home/son_goku/HaGoKu/hagoku/context/project_context.py:194-200
+```@HaGoKu/hagoku/context/project_context.py:194-200
         current_stage_entries = [e for e in self.entries if e.stage == agent]
         messages_history: list[dict[str, str]] = []
         for e in current_stage_entries:
@@ -147,7 +147,7 @@ Scout 阶段每轮 add_agent_response 都生成一条 agent_response entry。Cle
 
 2. **Cleaner 拼装层遗漏**：
 
-```@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:578-583
+```@HaGoKu/hagoku/agents/cleaner/agent.py:578-583
         project_ctx = context.get("_project_context")
         if project_ctx:
             ctx_block = project_ctx.build_prompt("cleaner", context)
@@ -184,7 +184,7 @@ turn 5 (assistant): <think>All columns look clean...</think>
 
 **根因**：
 
-```@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:616
+```@HaGoKu/hagoku/agents/cleaner/agent.py:616
                     conv_history.append({"role": "assistant", "content": f"[调用] {fn.name}({fn.arguments})"})
 ```
 
@@ -209,7 +209,7 @@ Cleaner system 已经接入 ProjectContext.build_prompt，但拼装仍用旧的 
 
 dump 003 中 assistant 消息是「字段推断完成：理解 8 个字段」「无字段更新」——**LLM 实际调的 tool_calls 全部丢失**，下一轮 LLM 看到的是空话。
 
-```@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:1083-1089
+```@HaGoKu/hagoku/manager/orchestrator.py:1083-1089
             applied_summary = ", ".join(applied) if applied else "无字段更新"
             project_ctx.add_agent_response(
                 stage="scout",
@@ -392,10 +392,10 @@ Cleaner dump 005-007 每次都是 `system → user(intro)` 两条消息，无对
 
 | Agent | 文件位置 | 是否展开 `messages_history` |
 |-------|---------|---------------------------|
-| Scout | `@/home/son_goku/HaGoKu/hagoku/manager/orchestrator.py:921-927` | ✅ |
-| Cleaner | `@/home/son_goku/HaGoKu/hagoku/agents/cleaner/agent.py:579-580` | ❌ |
-| Analyst | `@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:874-875` | ❌ |
-| Reporter | `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-418` | ❌ |
+| Scout | `@HaGoKu/hagoku/manager/orchestrator.py:921-927` | ✅ |
+| Cleaner | `@HaGoKu/hagoku/agents/cleaner/agent.py:579-580` | ❌ |
+| Analyst | `@HaGoKu/hagoku/agents/analyst/agent.py:874-875` | ❌ |
+| Reporter | `@HaGoKu/hagoku/agents/reporter/agent.py:417-418` | ❌ |
 
 四个 Agent 中三个违反律 3。这是 ProjectContext 接入时的统一遗漏，不是 Cleaner 单点 bug。
 
@@ -414,11 +414,11 @@ Cleaner dump 005-007 每次都是 `system → user(intro)` 两条消息，无对
 
 ### Bug 1：Analyst 根本没改
 
-commit message 写「Analyst: _messages list 拼装后 extend」，`git show HEAD --stat` 显示**未触碰 `hagoku/agents/analyst/agent.py`**。`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:872-876` 仍只拼 `system_prefix + upstream_summary`，丢弃 `messages_history`。
+commit message 写「Analyst: _messages list 拼装后 extend」，`git show HEAD --stat` 显示**未触碰 `hagoku/agents/analyst/agent.py`**。`@HaGoKu/hagoku/agents/analyst/agent.py:872-876` 仍只拼 `system_prefix + upstream_summary`，丢弃 `messages_history`。
 
 ### Bug 2：Reporter 加了参数但 caller 没传
 
-`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:103-106` 改造 `_call_llm` 接口加 `messages_history` 参数 ✅，但唯一 caller `@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:425` 调用时未传该参数：
+`@HaGoKu/hagoku/agents/reporter/agent.py:103-106` 改造 `_call_llm` 接口加 `messages_history` 参数 ✅，但唯一 caller `@HaGoKu/hagoku/agents/reporter/agent.py:425` 调用时未传该参数：
 
 ```python
 response = self._call_llm(system=system, user=user_prompt)  # 缺 messages_history=
@@ -428,7 +428,7 @@ response = self._call_llm(system=system, user=user_prompt)  # 缺 messages_histo
 
 ### Bug 3：守门测试错位（最严重）
 
-`@/home/son_goku/HaGoKu/tests/test_product/test_stage_handoff.py` 的 `test_下游_agent_注入_messages_history` 测的是 **`build_prompt` 输出**，不是 **3 个 Agent 实际发给 LLM 的 messages**：
+`@HaGoKu/tests/test_product/test_stage_handoff.py` 的 `test_下游_agent_注入_messages_history` 测的是 **`build_prompt` 输出**，不是 **3 个 Agent 实际发给 LLM 的 messages**：
 
 ```python
 block = ctx.build_prompt("cleaner", context={})
@@ -452,14 +452,14 @@ assert len(mh) >= 2, ...
 
 ### ✅ 通过项
 
-- Analyst 真改对：`@/home/son_goku/HaGoKu/hagoku/agents/analyst/agent.py:879-883` 用 `_analyst_messages` 拼装含 `messages_history.extend`
+- Analyst 真改对：`@HaGoKu/hagoku/agents/analyst/agent.py:879-883` 用 `_analyst_messages` 拼装含 `messages_history.extend`
 - Cleaner 守门测试可证伪：用「锚点_确认_A/B」字符串锚点，删 extend 必 fail
 - 旧测试改名 `test_build_prompt_messages_history_分组` 归位
 - 38 测试全绿
 
 ### ❌ Bug 4：Reporter `rpt_history` 未定义 — 运行时 NameError
 
-`@/home/son_goku/HaGoKu/hagoku/agents/reporter/agent.py:417-425`：
+`@HaGoKu/hagoku/agents/reporter/agent.py:417-425`：
 
 ```python
 project_ctx = context.get("_project_context")

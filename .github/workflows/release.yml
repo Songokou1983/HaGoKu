@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (例如 v2.3.1)，留空用最新 tag'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tests still pass
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e ".[dev]"
+          bash scripts/ci/self_check.sh
+          python3 -m pytest tests/ -q --tb=short
+
+      - name: Read CHANGELOG for this version
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Release notes for $TAG"
+          # 从 CHANGELOG.md 提取对应版本的段落
+          awk '/^## \[?'"$TAG"'\]?/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md > /tmp/release_notes.md || true
+          if [ -s /tmp/release_notes.md ]; then
+            echo "Found CHANGELOG entry"
+          else
+            echo "No CHANGELOG entry found, will use auto-generated notes"
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          generate_release_notes: true
+          body_path: /tmp/release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

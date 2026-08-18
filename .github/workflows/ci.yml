@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Self-check + pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e ".[dev]"
+
+      - name: Self-check (守门脚本)
+        run: bash scripts/ci/self_check.sh
+
+      - name: Run pytest
+        run: python3 -m pytest tests/ -v --tb=short
+
+      - name: TypeScript check (frontend)
+        run: |
+          cd hagoku_web
+          npm ci --silent
+          npx tsc -b --noEmit

@@ -3,7 +3,8 @@
 <!-- badges:start -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-445%20passed-brightgreen.svg)](tests/)
+[![CI](https://github.com/Songokou1983/HaGoKu/actions/workflows/ci.yml/badge.svg)](https://github.com/Songokou1983/HaGoKu/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Songokou1983/HaGoKu)](https://github.com/Songokou1983/HaGoKu/releases)
 [![Tools](https://img.shields.io/badge/tools-12-orange.svg)](docs/TOOL_DESIGN.md)
 [![Single Agent](https://img.shields.io/badge/agents-1-purple.svg)](docs/CHANNEL.md)
 [![PRs](https://img.shields.io/badge/PRs-not%20accepted-lightgrey.svg)](CONTRIBUTING.md)

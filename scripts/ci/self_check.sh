@@ -191,7 +191,10 @@ fi
 echo "  ✅ 通过"
 
 echo "=== 10. commit-msg hook 已安装 ==="
-if [ -x "$ROOT/.git/hooks/commit-msg" ]; then
+# CI 环境（GitHub Actions 等）没有 .git/hooks/，跳过此项检查
+if [ -n "$GITHUB_ACTIONS" ] || [ -n "$CI" ]; then
+    echo "  ⏭️ CI 环境跳过 hook 检查（hooks 是本地开发守门）"
+elif [ -x "$ROOT/.git/hooks/commit-msg" ]; then
     echo "  ✅ dump证据检查hook就位"
 else
     echo "  ❌ 缺失: cp scripts/check_dump_evidence.py .git/hooks/commit-msg"

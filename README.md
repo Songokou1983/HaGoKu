@@ -1,5 +1,15 @@
 # HaGoKu Studio
 
+<!-- badges:start -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://img.shields.io/badge/tests-445%20passed-brightgreen.svg)](tests/)
+[![Tools](https://img.shields.io/badge/tools-12-orange.svg)](docs/TOOL_DESIGN.md)
+[![Single Agent](https://img.shields.io/badge/agents-1-purple.svg)](docs/CHANNEL.md)
+[![PRs](https://img.shields.io/badge/PRs-not%20accepted-lightgrey.svg)](CONTRIBUTING.md)
+[![Issues](https://img.shields.io/badge/issues-welcome-green.svg)](https://github.com/Songokou1983/HaGoKu/issues)
+<!-- badges:end -->
+
 > **单 Agent + 预设 + 12 工具 = 不写代码切换分析领域。**
 > **让本地 35B 也能跑专业级商业分析。**
 
@@ -219,7 +229,33 @@ cd hagoku_web && npm install && npm run dev   # 前端（Vite，:5173）
 
 ---
 
+## ⭐ Star History
+
+如果觉得有用，⭐ 一下是对个人开发者最大的支持：
+
+<a href="https://star-history.com/#Songokou1983/HaGoKu">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Songokou1983/HaGoKu&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Songokou1983/HaGoKu&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Songokou1983/HaGoKu&type=Date" />
+  </picture>
+</a>
+
+---
+
+## 🤝 贡献 & 社区
+
+- **Bug / 问题 / 文档不清**：开 [Issue](https://github.com/Songokou1983/HaGoKu/issues)（模板已就绪）
+- **架构讨论 / 用例分享**：[Discussions](https://github.com/Songokou1983/HaGoKu/discussions)
+- **怎么贡献**：[CONTRIBUTING.md](CONTRIBUTING.md)（一句话：**Issue 欢迎，PR 不接受**，单 master 不开分支）
+- **变更历史**：[CHANGELOG.md](CHANGELOG.md)
+
+⭐ 如果觉得有用，给个 star 是对个人开发者最大的支持 ❤️
+
+---
+
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — 免费用于非商业用途（学习、研究、个人项目、开源贡献）。
-商业使用需另行授权。
+[MIT](LICENSE) — 自由使用、修改、商用、再分发。详见 [LICENSE](LICENSE)。
+
+Copyright (c) 2026 Songokou1983

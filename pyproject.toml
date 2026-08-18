@@ -7,7 +7,7 @@ name = "hagoku"
 version = "2.3.1"
 description = "让每个小模型，都能做专业级商业分析"
 readme = "README.md"
-license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
@@ -17,7 +17,7 @@ keywords = ["data-analysis", "multi-agent", "statistics", "llm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

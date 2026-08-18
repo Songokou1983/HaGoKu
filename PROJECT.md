@@ -859,4 +859,4 @@ v0.9 删除：`infer_current_focus()`、`phase_hint` 注入、prompt 的"当前�
 - **名称**: HaGoKu Studio
 - **灵魂**: 用本地模型，做专业级商业分析
 - **原则**: 精、准、狠
-- **许可**: PolyForm Noncommercial 1.0.0
+- **许可**: MIT

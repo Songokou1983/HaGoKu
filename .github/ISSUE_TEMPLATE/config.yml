@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions（推荐先讨论再开 Issue）
+    url: https://github.com/Songokou1983/HaGoKu/discussions
+    about: 大问题/讨论/想法先在这里聊
+  - name: 📚 文档
+    url: https://github.com/Songokou1983/HaGoKu/blob/master/README.md
+    about: 项目主文档

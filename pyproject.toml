@@ -57,6 +57,9 @@ dependencies = [
     "python-multipart>=0.0.9",  # FastAPI UploadFile/Form 必需
     "uvicorn[standard]>=0.30.0",
     "markdown>=3.5",
+    # Quant 3.0 — 数据接入
+    "akshare>=1.13.0",
+    "ccxt>=4.0.0",
 ]
 
 [project.optional-dependencies]

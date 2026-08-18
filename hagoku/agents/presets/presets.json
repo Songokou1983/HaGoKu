@@ -7,9 +7,10 @@
   },
   {
     "id": "stock",
-    "name": "股市技术分析",
+    "name": "量化分析",
     "icon": "trending-up",
-    "description": "趋势分解、波动率检验、K线形态识别，适合股票/期货/加密货币等金融时间序列数据"
+    "description": "系统化量化分析：因子、回测、风险拆解",
+    "file": "quant.md"
   },
   {
     "id": "ecommerce",

@@ -1,5 +1,6 @@
 """LessonAuditor 测试 — 启发式 + API mock"""
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -65,6 +66,12 @@ def test_low_confidence_flag(tmp_path):
     assert len(report.low_confidence) == 1
 
 
+@pytest.mark.skipif(
+    not Path.home().joinpath(".hagoku", ".env").exists()
+    and not any(os.environ.get(v) for v in ("HAGOKU_LLM_BASE_URL", "OPENAI_BASE_URL"))
+    and not os.environ.get("HAGOKU_RUN_LLM_TESTS"),
+    reason="需要真实 LLM 端点（~/.hagoku/.env 存在或 HAGOKU_LLM_BASE_URL 设了）；CI 默认跳过",
+)
 def test_audit_api_endpoint():
     resp = client.post("/api/doctor/audit/methods")
     assert resp.status_code == 200

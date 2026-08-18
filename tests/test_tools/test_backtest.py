@@ -67,3 +67,58 @@ def test_run_backtest_expression_eval_error():
     }
     with pytest.raises(RuntimeError, match="策略表达式求值失败"):
         run_backtest(spec, df)
+
+
+def test_run_backtest_stop_loss_triggers_exit():
+    """止损触发时 exit_reason='stop_loss'"""
+    # 构造价格先涨 50% 然后跌
+    dates = pd.date_range("2025-01-01", periods=20, freq="D")
+    close = [100] * 5 + [150] * 5 + [60] * 10  # 涨 50% 后跌 60%
+    df = pd.DataFrame({
+        "date": dates,
+        "open": pd.Series(close) - 1,
+        "high": pd.Series(close) + 1,
+        "low": pd.Series(close) - 2,
+        "close": close,
+        "volume": [1000] * 20,
+    })
+
+    spec = {
+        "name": "always_in",
+        "entry": "close > 0",          # 永远入场
+        "exit": "close < 0",           # 永不出场（除止损）
+        "stop_loss": 0.10,             # 跌 10% 止损
+    }
+    result = run_backtest(spec, df)
+    stop_loss_trades = [t for t in result["trades"] if t["exit_reason"] == "stop_loss"]
+    assert len(stop_loss_trades) >= 1
+    # 验证止损 trade pnl <= -0.10
+    for t in stop_loss_trades:
+        assert t["pnl"] <= -0.10
+
+
+def test_run_backtest_take_profit_triggers_exit():
+    """止盈触发时 exit_reason='take_profit'"""
+    dates = pd.date_range("2025-01-01", periods=20, freq="D")
+    close = [100] * 20
+    close[5] = 130  # 第 6 天涨 30%
+    df = pd.DataFrame({
+        "date": dates,
+        "open": pd.Series(close) - 1,
+        "high": pd.Series(close) + 1,
+        "low": pd.Series(close) - 2,
+        "close": close,
+        "volume": [1000] * 20,
+    })
+
+    spec = {
+        "name": "tp_test",
+        "entry": "close > 0",
+        "exit": "close < 0",           # 永不出场（除止盈）
+        "take_profit": 0.20,           # 涨 20% 止盈
+    }
+    result = run_backtest(spec, df)
+    tp_trades = [t for t in result["trades"] if t["exit_reason"] == "take_profit"]
+    assert len(tp_trades) >= 1
+    for t in tp_trades:
+        assert t["pnl"] >= 0.20

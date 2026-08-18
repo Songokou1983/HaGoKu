@@ -250,7 +250,7 @@ def fetch_market_data(
     market: str,         # "a_stock" | "crypto"
     symbol: str,         # "600519" | "BTC-USDT"
     period: str,         # "1y" | "90d" | "30d" | "2025-01-01,2026-08-18"
-    interval: str,       # "d1" | "h1"
+    interval: str,       # "d1" | "h1"   （A 股仅 d1，crypto 支持 d1 + h1）
     ctx: dict,           # 框架上下文（含 _project_name 等）
 ) -> dict:
     """
@@ -265,6 +265,10 @@ def fetch_market_data(
     }
     """
 ```
+
+**周期约束（重要）**：
+- **A 股**：`akshare.stock_zh_a_hist` 仅支持 `daily` / `weekly` / `monthly`。**3.0 锁定 daily**（interval 只接受 `"d1"`，传 `"h1"` 抛 RuntimeError + 提示用加密货币）。
+- **加密货币**：ccxt 支持 d1 + h1。但 `fetch_ohlcv` 单次最多约 1000 根 K 线。**长区间需要循环**：h1 模式超过 ~41 天自动分批拼接。
 
 #### 4.2.2 内部流程
 
@@ -299,22 +303,51 @@ def fetch_market_data(
 6. return ok dict
 ```
 
-#### 4.2.3 失败错误信息
+#### 4.2.3 失败错误信息（统一 RuntimeError + 4 条建议）
 
 ```python
-except Exception as e:
-    raise RuntimeError(
-        f"akshare 获取 {symbol} 失败。\n"
-        f"原始错误: {type(e).__name__}: {e}\n"
+def _format_error(market: str, symbol: str, error: Exception, error_kind: str = "fetch") -> RuntimeError:
+    """统一错误格式：RuntimeError + 原始异常 + 4 条建议。
+    
+    error_kind: "fetch" | "columns" | "interval" | "market"
+    """
+    src = "akshare" if market == "a_stock" else "ccxt"
+    if error_kind == "interval" and market == "a_stock":
+        return RuntimeError(
+            f"akshare 不支持小时级 A 股数据。\n"
+            f"原始错误: interval='h1' 不被 akshare.stock_zh_a_hist 接受（仅 daily/weekly/monthly）\n"
+            f"建议:\n"
+            f"  1. 把 interval 改为 'd1'（日线）\n"
+            f"  2. 切换到加密货币（ccxt 支持 h1）\n"
+            f"  3. 用上传 CSV 方式提供数据"
+        )
+    if error_kind == "market":
+        return RuntimeError(
+            f"未知市场类型: {market}。\n"
+            f"原始错误: {type(error).__name__}: {error}\n"
+            f"建议:\n"
+            f"  1. market 只接受 'a_stock' 或 'crypto'\n"
+            f"  2. 检查参数拼写"
+        )
+    # 默认 fetch 错误
+    return RuntimeError(
+        f"{src} 获取 {symbol} 失败。\n"
+        f"原始错误: {type(error).__name__}: {error}\n"
         f"建议:\n"
-        f"  1. 升级 akshare: pip install -U akshare\n"
+        f"  1. 升级 {src}: pip install -U {src}\n"
         f"  2. 用上传 CSV 方式提供数据\n"
-        f"  3. 切换到加密货币试试 (ccxt 接口更稳定)\n"
+        f"  3. 切换到另一种市场试试\n"
         f"  4. 检查网络/防火墙设置"
     )
 ```
 
-**不兜底**（铁律 7）：失败抛 RuntimeError，原始异常 + 4 条建议。
+**不兜底**（铁律 7）：所有失败统一抛 RuntimeError，**不走 except: pass**。
+
+**异常类型覆盖**：
+- `ConnectionError` / `TimeoutError` → 走重试 → 最终 RuntimeError ("fetch")
+- `ValueError("未知市场")` → RuntimeError ("market")
+- `KeyError`（akshare 列名改了）→ RuntimeError ("columns")
+- A 股 `interval="h1"` → RuntimeError ("interval")，**不重试**
 
 #### 4.2.4 工具描述（给 LLM 看）
 
@@ -418,6 +451,12 @@ if len(df) > 1:
 else:
     periods_per_year = 252  # 默认
 ```
+
+**时区处理**：
+- akshare 返回的日期是 `Asia/Shanghai` 时区的 naive datetime
+- ccxt 返回的 timestamp 是 UTC ms，转 datetime 后去掉时区（naive UTC）
+- 写入 parquet 前统一：**A 股标 `Asia/Shanghai`，crypto 标 `UTC`**，便于后续分析时区一致
+- 3.0 不做时区转换（数据原样保存），但元数据记录 `_timezone` 字段
 
 **step 4: 模拟交易（事件驱动简化版）**
 
@@ -621,8 +660,15 @@ win_rate = summary["n_positive_trades"] / summary["n_trades"] if summary["n_trad
 ```
 你是 HaGoKu Studio 的量化分析师...
 
-数据来源：通常从「量化数据集」侧边栏拉取的 OHLCV 行情；
+数据来源：通常从「量化数据集」侧边栏拉取的 OHLCV 行情（A 股用 akshare，加密货币用 ccxt）。
          也可能用户上传 CSV；也可能通过 fetch_market_data 即时拉取。
+
+⚠️ 数据列名约定：你假设当前项目数据是 OHLCV（date/open/high/low/close/volume）格式。
+  如果 get_column_stats 显示的列名不是 OHLCV，**先停下来告诉用户**：当前数据不是行情数据，
+  推荐用户：
+    - 切到其他 preset（如通用商业分析），或
+    - 重新拉取行情数据，或
+    - 确认是否要继续（强行套用 quant 方法可能没意义）
 
 工作流程：
  1. 理解数据字段（date/open/high/low/close/volume 已是标准列名）
@@ -632,7 +678,7 @@ win_rate = summary["n_positive_trades"] / summary["n_trades"] if summary["n_trad
  5. 解读结果（Sharpe / MaxDD / Annual Return / Win Rate 等由你推导）
 
 常用工具：
- - fetch_market_data: 拉新行情（A 股用 akshare，加密货币用 ccxt）
+ - fetch_market_data: 拉新行情（A 股日线、加密货币日/小时线）
  - run_backtest: 跑策略回测
  - get_column_stats / get_group_stats: 基础统计
 
@@ -755,7 +801,7 @@ LLM                            框架                    run_backtest
 
 ---
 
-## 7. 预设迁移
+## 7. 数据迁移
 
 ### 7.1 文件改动
 
@@ -766,10 +812,27 @@ LLM                            框架                    run_backtest
 | `hagoku/agents/presets/presets.json` | 改 display name + file 字段 |
 | `hagoku/api/doctor_router.py:373` | 删硬编码，调 presets.json |
 
-### 7.2 用户数据
+### 7.2 用户数据（preset）
 
 - `~/.hagoku/active_preset` 写的是 `"stock"` → **无需迁移**（id 不变）
 - 用户下次启动 UI，看到「量化分析」显示，原「股市技术」自动变成 quant 能力
+
+### 7.3 用户数据（项目 — scene 字段）
+
+**现状**：`hagoku/storage/database.py:29-35` 的 `projects` 表无 `scene` 字段；`CreateProjectRequest` 只有 `name` + `description`。
+
+**3.0 改动**：
+
+1. **Schema 迁移**：首次启动 backend 时执行
+   ```sql
+   ALTER TABLE projects ADD COLUMN scene TEXT DEFAULT 'general';
+   ```
+
+2. **白名单**：`_PROJECT_ALLOWED_FIELDS` 加 `"scene"`
+
+3. **CreateProjectRequest**：加 `scene: str = "general"` 字段
+
+4. **scene 加载 fallback**：项目加载时若 `scene` 字段为 NULL 或缺失，默认 `"general"`（不写 DB，读时补）
 
 ---
 

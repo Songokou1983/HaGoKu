@@ -133,9 +133,16 @@ git commit -m "deps: + akshare + ccxt for 3.0 量化数据集"
  - 用户在「量化数据集」侧边栏拉取，独立文件存于 ~/.hagoku/datasets/，分析时选取其中之一（副本模式）
  - 你（LLM）通过 fetch_market_data 工具即时拉取（写入数据集库 + 当前项目副本）
 
+⚠️ 数据列名约定：你假设当前项目数据是 OHLCV（date/open/high/low/close/volume）格式。
+  如果 get_column_stats 显示的列名不是 OHLCV，**先停下来告诉用户**：当前数据不是行情数据，
+  推荐用户：
+    - 切到其他 preset（如通用商业分析），或
+    - 重新拉取行情数据，或
+    - 确认是否要继续（强行套用 quant 方法可能没意义）
+
 分析按五阶段推进：
 
-理解字段：date/open/high/low/close/volume 是标准列名，复权一致性已由工具保证（前复权）。展示给用户确认字段含义和量纲。
+理解字段：date/open/high/low/close/volume 是标准列名，复权一致性已由工具保证（前复权 qfq，A 股）。展示给用户确认字段含义和量纲。
 评估清洗：围绕策略目标，检查停牌导致的缺失值、异常波动（涨跌停/乌龙指）、量价背离。给出处理建议后等待用户确认。
 策略定义：用 pandas 表达式表达入场/出场信号，例如：
  - 入场: "close > close.rolling(20).mean()"
@@ -384,32 +391,23 @@ DATASETS_ROOT = Path.home() / ".hagoku" / "datasets"
 
 
 def fetch_market_data(
-    market: Literal["a_stock", "crypto"],
+    market: str,
     symbol: str,
     period: str,
-    interval: Literal["d1", "h1"],
+    interval: str,
     ctx: dict | None = None,
 ) -> dict:
     """拉取 OHLCV 数据并写入量化数据集库。
 
-    Args:
-        market: "a_stock" 或 "crypto"
-        symbol: A 股代码 "600519" 或加密 "BTC-USDT"
-        period: "1y" | "90d" | "30d" | "2025-01-01,2026-08-18"
-        interval: "d1"（日）或 "h1"（小时）
-
-    Returns:
-        {
-            "ok": True,
-            "dataset_id": "a_stock__600519__1y__d1__20260818T...",
-            "rows": 245,
-            "columns": ["date", "open", "high", "low", "close", "volume"],
-            "fetched_at": "2026-08-18T10:00:00Z",
-        }
-
     Raises:
-        RuntimeError: 拉取失败（akshare/ccxt 异常 + 4 条建议）
+        RuntimeError: 拉取失败（统一格式：market / interval / fetch / columns）
     """
+    # 提前校验（不重试，直接 RuntimeError）
+    if market not in ("a_stock", "crypto"):
+        raise _format_error(market, symbol, ValueError(f"market must be 'a_stock' or 'crypto', got '{market}'"), "market")
+    if market == "a_stock" and interval not in ("d1",):
+        raise _format_error(market, symbol, ValueError(f"akshare 不支持 interval='{interval}'"), "interval")
+
     key = (market, symbol, period, interval)
     if key in _session_cache:
         df = _session_cache[key]
@@ -418,7 +416,7 @@ def fetch_market_data(
         return _ok_result(ds_id, df, fetched_at)
 
     df = _fetch_with_retry(market, symbol, period, interval)
-    df = _standardize_columns(df)
+    df = _standardize_columns(df, market)
 
     fetched_at = _format_fetched_at()
     ds_id = _build_dataset_id(market, symbol, period, interval, fetched_at)
@@ -439,7 +437,7 @@ def _ok_result(ds_id: str, df: pd.DataFrame, fetched_at: str) -> dict:
 
 
 def _fetch_with_retry(market, symbol, period, interval):
-    """3 次指数退避重试，失败抛 RuntimeError。"""
+    """3 次指数退避重试；ValueError 不重试（参数错）。"""
     import time
     last_error = None
     for attempt in range(1, 4):
@@ -448,38 +446,48 @@ def _fetch_with_retry(market, symbol, period, interval):
                 return _fetch_akshare(symbol, period, interval)
             elif market == "crypto":
                 return _fetch_ccxt(symbol, period, interval)
-            else:
-                raise ValueError(f"未知市场: {market}")
         except (ConnectionError, TimeoutError) as e:
             last_error = e
             if attempt < 3:
                 time.sleep(2 ** attempt)
-    raise _format_error(market, symbol, last_error)
+        except ValueError:
+            raise  # 参数错不重试
+    raise _format_error(market, symbol, last_error, "fetch")
 
 
 def _fetch_akshare(symbol: str, period: str, interval: str) -> pd.DataFrame:
+    """3.0 锁定 daily（akshare 仅支持 daily/weekly/monthly）。adjust='qfq' 前复权。"""
     import akshare as ak
     start_date, end_date = _parse_period(period)
-    timeframe = "daily" if interval == "d1" else "60m"
     df = ak.stock_zh_a_hist(
         symbol=symbol,
-        period=timeframe,
+        period="daily",  # 3.0 锁定 daily
         start_date=start_date,
         end_date=end_date,
-        adjust="qfq",  # 3.0 默认前复权
+        adjust="qfq",
     )
     return df
 
 
 def _fetch_ccxt(symbol: str, period: str, interval: str) -> pd.DataFrame:
-    """3.0 锁定 binance；symbol 格式 BTC-USDT。"""
+    """3.0 锁定 binance。>1000 根 K 线自动循环拼接。"""
     import ccxt
     trading_symbol = symbol.replace("-", "/")
     exchange = ccxt.binance()
-    since, limit = _parse_period_ccxt(period, interval)
     timeframe = "1d" if interval == "d1" else "1h"
-    ohlcv = exchange.fetch_ohlcv(trading_symbol, timeframe, since=since, limit=limit)
-    return pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+    since_ms, total_limit = _parse_period_ccxt(period, interval)
+    all_ohlcv = []
+    while len(all_ohlcv) < total_limit:
+        batch_limit = min(1000, total_limit - len(all_ohlcv))
+        batch = exchange.fetch_ohlcv(trading_symbol, timeframe, since=since_ms, limit=batch_limit)
+        if not batch:
+            break  # 交易所返回空，到顶了
+        all_ohlcv.extend(batch)
+        since_ms = batch[-1][0] + 1  # 下一页起点
+        if len(batch) < batch_limit:
+            break  # 没满 = 到底了
+    return pd.DataFrame(all_ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
 
 
 def _parse_period(period: str) -> tuple[str, str]:
@@ -497,7 +505,7 @@ def _parse_period(period: str) -> tuple[str, str]:
 
 
 def _parse_period_ccxt(period: str, interval: str):
-    """ccxt 的 since (ms timestamp) + limit。"""
+    """ccxt 的 (since_ms, total_limit)。total_limit 是预期总根数（可能超过 1000）。"""
     end_ms = int(datetime.utcnow().timestamp() * 1000)
     if period.endswith("y"):
         n_days = 365 * int(period[:-1])
@@ -505,27 +513,33 @@ def _parse_period_ccxt(period: str, interval: str):
         n_days = int(period[:-1])
     else:
         raise ValueError(f"不支持的 period: {period}")
+    since_ms = end_ms - n_days * 86400 * 1000
     if interval == "d1":
-        since_ms = end_ms - n_days * 86400 * 1000
-        limit = min(n_days, 1000)
+        total_limit = n_days
     else:  # h1
-        since_ms = end_ms - n_days * 24 * 3600 * 1000
-        limit = min(n_days * 24, 1000)
-    return since_ms, limit
+        total_limit = n_days * 24
+    return since_ms, total_limit
 
 
-def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """akshare 中文列名 → 英文；ccxt timestamp → date；统一输出列序。"""
+def _standardize_columns(df: pd.DataFrame, market: str = "") -> pd.DataFrame:
+    """akshare 中文列名 → 英文；ccxt timestamp → date；统一输出列序。
+
+    Raises:
+        RuntimeError: 缺必要列（akshare 接口改了）→ 走 _format_error("columns")
+    """
     column_map_akshare = {
         "日期": "date", "开盘": "open", "收盘": "close",
         "最高": "high", "最低": "low", "成交量": "volume",
     }
-    if "日期" in df.columns:
-        df = df.rename(columns=column_map_akshare)
-    if "timestamp" in df.columns:
-        df = df.rename(columns={"timestamp": "date"})
-    df["date"] = pd.to_datetime(df["date"])
-    df = df[["date", "open", "high", "low", "close", "volume"]].copy()
+    try:
+        if "日期" in df.columns:
+            df = df.rename(columns=column_map_akshare)
+        if "timestamp" in df.columns:
+            df = df.rename(columns={"timestamp": "date"})
+        df["date"] = pd.to_datetime(df["date"])
+        df = df[["date", "open", "high", "low", "close", "volume"]].copy()
+    except KeyError as e:
+        raise _format_error(market, "", e, "columns")
     df = df.sort_values("date").reset_index(drop=True)
     return df
 
@@ -559,6 +573,7 @@ def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, inter
         "rows": len(df),
         "source": source,
         "source_version": source_version,
+        "_timezone": "Asia/Shanghai" if market == "a_stock" else "UTC",
     }
     (ds_dir / "meta.json").write_text(
         _json.dumps(meta, ensure_ascii=False, indent=2),
@@ -566,8 +581,28 @@ def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, inter
     )
 
 
-def _format_error(market: str, symbol: str, error: Exception) -> RuntimeError:
-    """把 akshare/ccxt 异常翻译成 RuntimeError + 4 条建议。"""
+def _format_error(market: str, symbol: str, error: Exception, error_kind: str = "fetch") -> RuntimeError:
+    """统一错误格式：RuntimeError + 原始异常 + 4 条建议。
+
+    error_kind: "fetch" | "columns" | "interval" | "market"
+    """
+    if error_kind == "interval" and market == "a_stock":
+        return RuntimeError(
+            f"akshare 不支持小时级 A 股数据。\n"
+            f"原始错误: interval='h1' 不被 akshare.stock_zh_a_hist 接受（仅 daily/weekly/monthly）\n"
+            f"建议:\n"
+            f"  1. 把 interval 改为 'd1'（日线）\n"
+            f"  2. 切换到加密货币（ccxt 支持 h1）\n"
+            f"  3. 用上传 CSV 方式提供数据"
+        )
+    if error_kind == "market":
+        return RuntimeError(
+            f"未知市场类型: {market}。\n"
+            f"原始错误: {type(error).__name__}: {error}\n"
+            f"建议:\n"
+            f"  1. market 只接受 'a_stock' 或 'crypto'\n"
+            f"  2. 检查参数拼写"
+        )
     src = "akshare" if market == "a_stock" else "ccxt"
     return RuntimeError(
         f"{src} 获取 {symbol} 失败。\n"
@@ -610,20 +645,20 @@ git commit -m "feat(market_data): fetch_market_data akshare 路径 + 列名标�
 在 `tests/test_tools/test_market_data.py` 末尾追加：
 
 ```python
-def _mock_ccxt_ohlcv():
+def _mock_ccxt_ohlcv(n=5):
     """模拟 ccxt.fetch_ohlcv 返回 [timestamp, open, high, low, close, volume] 列表。"""
     import time
     base_ts = int(time.mktime(time.strptime("2025-01-01", "%Y-%m-%d"))) * 1000
     return [
         [base_ts + i * 86400000, 100.0 + i, 105.0 + i, 99.0 + i, 102.0 + i, 1000.0]
-        for i in range(5)
+        for i in range(n)
     ]
 
 
 def test_fetch_market_data_ccxt_basic():
     """ccxt 拉取成功 → 标准化列名"""
     mock_exchange = MagicMock()
-    mock_exchange.fetch_ohlcv.return_value = _mock_ccxt_ohlcv()
+    mock_exchange.fetch_ohlcv.return_value = _mock_ccxt_ohlcv(5)
     with patch("ccxt.binance", return_value=mock_exchange), \
          patch("hagoku.tools.market_data._persist_to_library"):
         result = fetch_market_data(
@@ -635,6 +670,44 @@ def test_fetch_market_data_ccxt_basic():
     assert result["ok"] is True
     assert "BTC-USDT" in result["dataset_id"]
     assert result["rows"] == 5
+
+
+def test_fetch_market_data_ccxt_long_period_loops():
+    """90d h1 = 2160 根 > 1000 限制 → 多次循环拼接"""
+    mock_exchange = MagicMock()
+
+    # 模拟：第一次返回 1000 根，第二次返回 1000 根，第三次返回 160 根
+    call_count = {"n": 0}
+    def ohlvc_paged(symbol, timeframe, since=None, limit=None):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return _mock_ccxt_ohlcv(1000)
+        elif call_count["n"] == 2:
+            # 时间戳接着上一批
+            base_ts = int(time.mktime(time.strptime("2025-01-01", "%Y-%m-%d"))) * 1000
+            return [
+                [base_ts + i * 3600000, 100.0 + i, 105.0 + i, 99.0 + i, 102.0 + i, 1000.0]
+                for i in range(1000, 2000)
+            ]
+        else:
+            base_ts = int(time.mktime(time.strptime("2025-01-01", "%Y-%m-%d"))) * 1000
+            return [
+                [base_ts + i * 3600000, 100.0 + i, 105.0 + i, 99.0 + i, 102.0 + i, 1000.0]
+                for i in range(2000, 2160)
+            ]
+
+    import time
+    mock_exchange.fetch_ohlcv.side_effect = ohlvc_paged
+    with patch("ccxt.binance", return_value=mock_exchange), \
+         patch("hagoku.tools.market_data._persist_to_library"):
+        result = fetch_market_data(
+            market="crypto",
+            symbol="BTC-USDT",
+            period="90d",
+            interval="h1",
+        )
+    assert result["rows"] == 2160
+    assert mock_exchange.fetch_ohlcv.call_count == 3
 
 
 def test_fetch_market_data_akshare_failure_raises_runtime_error():
@@ -653,6 +726,33 @@ def test_fetch_market_data_akshare_failure_raises_runtime_error():
         assert "refused" in err
         assert "升级 akshare" in err
         assert "上传 CSV" in err
+
+
+def test_fetch_market_data_a_stock_h1_raises_interval_error():
+    """A 股 interval='h1' → RuntimeError 含 'akshare 不支持小时级' 提示"""
+    with pytest.raises(RuntimeError) as exc_info:
+        fetch_market_data(market="a_stock", symbol="600519", period="30d", interval="h1")
+    err = str(exc_info.value)
+    assert "akshare 不支持小时级" in err
+    assert "d1" in err
+    assert "加密货币" in err
+
+
+def test_fetch_market_data_invalid_market_raises_market_error():
+    """market='stock' → RuntimeError 含 '未知市场' 提示"""
+    with pytest.raises(RuntimeError) as exc_info:
+        fetch_market_data(market="stock", symbol="600519", period="1y", interval="d1")
+    err = str(exc_info.value)
+    assert "未知市场" in err
+    assert "a_stock" in err or "crypto" in err
+
+
+def test_fetch_market_data_akshare_unexpected_columns_raises():
+    """akshare 列名改了（缺 '日期' 等）→ RuntimeError 含 columns 提示"""
+    bad_df = pd.DataFrame({"some_col": [1, 2, 3]})  # 没有 "日期"
+    with patch("akshare.stock_zh_a_hist", return_value=bad_df):
+        with pytest.raises(RuntimeError, match="列名"):
+            fetch_market_data(market="a_stock", symbol="600519", period="1y", interval="d1")
 
 
 def test_fetch_market_data_cache_hit():
@@ -1513,68 +1613,148 @@ git commit -m "feat(api): /api/quant/datasets DELETE + GET parquet endpoints"
 
 ---
 
-## Task 12: 项目创建 API 接受 scene 字段
+## Task 12: 项目创建 API 接受 scene 字段 + DB schema 迁移
 
 **Files:**
-- Modify: `hagoku/api/projects.py`（或同等文件 — 找现有 POST /api/projects handler）
-- Modify: `hagoku/repository/project.py`（project.json schema 加 scene）
+- Modify: `hagoku/storage/database.py`（schema + 白名单 + create_project）
+- Modify: `hagoku/api/server.py`（CreateProjectRequest + handler）
 
 **Interfaces:**
-- 现状 POST /api/projects 接受 `{name, description}`
-- 期望: 增加可选 `{scene: "stock"}`，写入 project.json 的 `scene` 字段
-- 默认 scene: `"general"`
+- 现状 POST /api/projects 接受 `{name, description}`；`projects` 表无 `scene` 字段
+- 期望: DB 加 `scene TEXT DEFAULT 'general'`；；白名单加 "scene"；Request 加 `scene: str = "general"`
 
 **步骤:**
-- [ ] **Step 1: 找现有 POST /api/projects handler**
+- [ ] **Step 1: DB schema 迁移**
 
-```bash
-grep -n "POST\|name.*description\|create.*project" hagoku/api/projects.py 2>/dev/null | head -20
+在 `hagoku/storage/database.py` 顶部找到 `CREATE TABLE IF NOT EXISTS projects` 的 SQL（约 line 29），加新列：
+
+```sql
+CREATE TABLE IF NOT EXISTS projects (
+    id          TEXT PRIMARY KEY,
+    created_at  DATETIME,
+    description TEXT,
+    data_path   TEXT,
+    schema_path TEXT,
+    scene       TEXT DEFAULT 'general'   -- 新增：项目级场景（preset id）
+);
 ```
 
-确认 handler 位置。
+（首次启动时会自动 ALTER 创建新列。SQLite 不支持 `IF NOT EXISTS` 加列，需在 `_init_db` 里加 try/except 或 ALTER TABLE 处理。**简化方案**：用 `ALTER TABLE projects ADD COLUMN scene TEXT DEFAULT 'general'` 包在 try/except 里，列已存在则忽略。）
 
-- [ ] **Step 2: 修改 handler 接受 scene**
-
-如果 handler 用 Pydantic BaseModel：
+修改 `_init_db` 函数加：
 ```python
-class CreateProjectReq(BaseModel):
+try:
+    self.conn.execute("ALTER TABLE projects ADD COLUMN scene TEXT DEFAULT 'general'")
+    self.conn.commit()
+except Exception:
+    pass  # 列已存在
+```
+
+- [ ] **Step 2: 白名单加 scene**
+
+`_PROJECT_ALLOWED_FIELDS`（line 14）改为：
+```python
+_PROJECT_ALLOWED_FIELDS = frozenset({"description", "data_path", "schema_path", "scene"})
+```
+
+- [ ] **Step 3: create_project 接受 scene**
+
+`create_project` 方法（line 199）加参数：
+```python
+def create_project(
+    self,
+    project_id: str,
+    description: str = "",
+    data_path: str = "",
+    schema_path: str = "",
+    scene: str = "general",
+) -> dict[str, Any] | None:
+    """创建项目"""
+    now = datetime.now().isoformat()
+    self.conn.execute(
+        "INSERT OR IGNORE INTO projects (id, created_at, description, data_path, schema_path, scene) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (project_id, now, description, data_path, schema_path, scene),
+    )
+    self.conn.commit()
+    return self.get_project(project_id)
+```
+
+- [ ] **Step 4: CreateProjectRequest 加 scene 字段**
+
+`hagoku/api/server.py:129`：
+```python
+class CreateProjectRequest(BaseModel):
     name: str
     description: str = ""
-    scene: str = "general"  # 新增，默认 general
+    scene: str = "general"   # 新增：项目级场景，默认 general
 ```
 
-修改 `_create_project` 函数（找现有 project.json 写入逻辑）：
+- [ ] **Step 5: 修改 handler 传 scene 到 DB**
+
+`hagoku/api/server.py:154` 把：
 ```python
-project_meta = {
-    "name": req.name,
-    "description": req.description,
-    "scene": req.scene,  # 新增
-    "created_at": datetime.utcnow().isoformat(),
-}
+db.create_project(name, description=desc)
+```
+改为：
+```python
+scene = req.scene.strip() or "general"
+db.create_project(name, description=desc, scene=scene)
 ```
 
-（具体实现参考现有 schema，保持风格一致）
+并 update 调用（line 156）：
+```python
+if desc:
+    db.update_project(name, description=desc)
+# scene 通过 create_project 直接写入，不需 update
+```
 
-- [ ] **Step 3: 验证 scene 持久化**
+- [ ] **Step 6: scene 加载 fallback**
 
-写一个临时测试脚本：
+找到现有 `get_project`（line 216）返回 dict；如果 `scene` 字段为 None 或缺失，调用方在读取时补默认值 `"general"`。
+
+或者更简单：在 `get_project` 里加 fallback：
+```python
+def get_project(self, project_id: str) -> dict[str, Any] | None:
+    row = self.conn.execute(
+        "SELECT * FROM projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    if not row:
+        return None
+    project = dict(row)
+    project.setdefault("scene", "general")  # 老项目 fallback
+    return project
+```
+
+- [ ] **Step 7: 验证 scene 持久化 + 老项目 fallback**
+
 ```bash
 cd /home/son_goku/HaGoKu
 python -c "
 from fastapi.testclient import TestClient
 from hagoku.app import app
 client = TestClient(app)
-resp = client.post('/api/projects', json={'name': 'test_scene', 'description': '', 'scene': 'stock'})
-print(resp.status_code, resp.json())
-import json
-proj = json.load(open('/tmp/test_scene/project.json'))
-print('scene in meta:', proj.get('scene'))
+
+# 1. 新项目带 scene
+r = client.post('/api/projects', json={'name': 'test_new', 'description': '', 'scene': 'stock'})
+print('new project:', r.status_code)
+from hagoku.storage.database import HaGoKuDB
+proj = HaGoKuDB.get_instance().get_project('test_new')
+print('scene:', proj.get('scene'))
+
+# 2. 老项目（DB 里已有但无 scene）应 fallback
+# 直接改一个老项目的 scene 为 NULL
+db = HaGoKuDB.get_instance()
+db.conn.execute(\"UPDATE projects SET scene = NULL WHERE id = 'test_new'\")
+db.conn.commit()
+proj = db.get_project('test_new')
+print('after fallback:', proj.get('scene'))
 "
 ```
 
-Expected: scene 字段写入 project.json。
+Expected: 新项目 `scene=stock`；手动置 NULL 后读出 `scene=general`。
 
-- [ ] **Step 4: 跑现有项目测试**
+- [ ] **Step 8: 跑现有项目测试**
 
 ```bash
 cd /home/son_goku/HaGoKu
@@ -1583,11 +1763,11 @@ pytest tests/test_api/ -v -k "project"
 
 Expected: 既有测试全过（scene 默认 "general"，不影响）。
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 9: 提交**
 
 ```bash
-git add hagoku/api/projects.py hagoku/repository/project.py
-git commit -m "feat(project): 创建项目接受 scene 字段（项目级 quant preset 选择）"
+git add hagoku/storage/database.py hagoku/api/server.py
+git commit -m "feat(project): scene 字段 — DB schema 迁移 + 项目级 preset 选择"
 ```
 
 ---

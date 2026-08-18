@@ -3,11 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Stethoscope,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   Loader2,
-  RefreshCw,
   Send,
   User,
   Bot,
@@ -46,12 +42,9 @@ type AuditTab = "methods" | "tools" | "all";
 export default function DoctorPanel() {
   // 健康检查
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
-  const [healthError, setHealthError] = useState<string | null>(null);
 
   // 审计
   const [auditRunning, setAuditRunning] = useState<AuditTab | null>(null);
-  const [auditMessage, setAuditMessage] = useState<string | null>(null);
 
   // Doctor 状态
   const [status, setStatus] = useState<DoctorStatus | null>(null);
@@ -99,32 +92,13 @@ export default function DoctorPanel() {
 
   // ── 加载健康检查 ──
   const loadHealth = useCallback(async () => {
-    setHealthLoading(true);
-    setHealthError(null);
     try {
       const r = await fetch("/api/doctor/health");
       if (!r.ok) throw new Error(`加载失败 (${r.status})`);
       const d = (await r.json()) as HealthResponse;
       setHealth(d);
-    } catch (e: unknown) {
-      setHealthError(e instanceof Error ? e.message : "加载失败");
-    } finally {
-      setHealthLoading(false);
-    }
-  }, []);
-
-  // ── 加载审计列表 ──
-  const loadAudits = useCallback(async () => {
-    setAuditsLoading(true);
-    try {
-      const r = await fetch("/api/doctor/audits");
-      if (!r.ok) throw new Error(`加载失败 (${r.status})`);
-      const d = (await r.json()) as { audits: AuditItem[] };
-      setAudits(d.audits || []);
     } catch {
-      // 静默失败
-    } finally {
-      setAuditsLoading(false);
+      // 静默失败（健康检查非关键路径）
     }
   }, []);
 
@@ -150,18 +124,15 @@ export default function DoctorPanel() {
   // ── 触发审计 ──
   const triggerAudit = async (tab: AuditTab) => {
     setAuditRunning(tab);
-    setAuditMessage(null);
     if (tab === "all") {
-        setAuditMessage("⏳ 全面检查中…");
         try {
           const r = await fetch("/api/doctor/full-check", { method: "POST" });
           const d = await r.json().catch(() => ({})) as any;
-          setAuditMessage("✅ 完成");
           if (d.report) {
             await sendChatMessage(`请全面分析以下健康检查报告:\n\n${d.report}`);
           }
-        } catch (e: unknown) {
-          setAuditMessage(`❌ ${e instanceof Error ? e.message : "检查失败"}`);
+        } catch {
+          // 静默失败
         }
         setAuditRunning(null);
         return;
@@ -173,7 +144,6 @@ export default function DoctorPanel() {
       if (!r.ok) {
         throw new Error(typeof d.detail === "string" ? d.detail : `审计失败 (${r.status})`);
       }
-      setAuditMessage(`✅ 审计完成`);
       // 读取审计报告内容，直接喂给 Doctor 分析
       const reportName = d.report_path?.split("/").pop() || "";
       const tabLabel = tab === "methods" ? "方法库" : "工具箱";
@@ -188,36 +158,14 @@ ${summary}`);
       } catch {
         await sendChatMessage(`我刚完成了${tabLabel}审计，请帮我分析结果。`);
       }
-    } catch (e: unknown) {
-      setAuditMessage(`❌ ${e instanceof Error ? e.message : "审计失败"}`);
     } finally {
       setAuditRunning(null);
-    }
-  };
-
-  // ── 查看报告 ──
-  const viewReport = async (name: string) => {
-    setSelectedReport(name);
-    setReportLoading(true);
-    setReportContent(null);
-    try {
-      const r = await fetch(`/api/doctor/audits/${encodeURIComponent(name)}`);
-      if (!r.ok) throw new Error(`加载失败 (${r.status})`);
-      const d = (await r.json()) as { content: string };
-      setReportContent(d.content);
-    } catch (e: unknown) {
-      setReportContent(`❌ ${e instanceof Error ? e.message : "加载失败"}`);
-    } finally {
-      setReportLoading(false);
     }
   };
 
   // ── 样式 ──
   const inputClass =
     "w-full bg-app-bg-secondary border border-app-border rounded px-2 py-1 text-ui-sm text-app-text placeholder-app-text-muted outline-none focus:border-app-accent transition-colors duration-150";
-
-  const btnClass =
-    "flex items-center gap-2 px-3 py-1.5 text-ui-sm rounded border border-app-border bg-app-bg-secondary hover:bg-app-bg disabled:opacity-40 disabled:cursor-not-allowed text-app-text transition-colors cursor-pointer";
 
   const accentBtnClass =
     "flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-ui-base rounded transition-colors cursor-pointer";

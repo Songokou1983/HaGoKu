@@ -10,6 +10,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { switchToProject } from "../utils/switchProject";
 import { PanelHeader } from "../components/PanelHeader";
+import { eventLog } from "../utils/eventLog";
 
 interface ProjectDetail {
   name: string;

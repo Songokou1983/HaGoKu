@@ -2,7 +2,6 @@ import { useRef, useLayoutEffect, useState } from "react";
 import type { ConvoMessage } from "./types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { sanitizeHtml } from "../../utils/sanitize";
 
 export function ConvoFeed({
   messages,

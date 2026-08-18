@@ -34,7 +34,6 @@ export function InputBar({
   footerHint,
   inputRef: externalRef,
   sendLabel,
-  log,
 }: InputBarProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const [internalValue, setInternalValue] = useState("");

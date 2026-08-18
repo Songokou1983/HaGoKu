@@ -419,7 +419,7 @@ export default function PromptLabPanel() {
                 </ActionButton>
               </div>
 
-              {error && <StatusBanner type="error" message={error} />}
+              {error && <StatusBanner variant="error" message={error} />}
 
               {labResult && (
                 <div className="bg-app-bg border border-app-border rounded p-3 max-h-64 overflow-y-auto">
@@ -550,7 +550,7 @@ function PresetEditor({
             />
           </div>
 
-          {error && <StatusBanner type="error" message={error} />}
+          {error && <StatusBanner variant="error" message={error} />}
 
           <div className="flex items-center gap-2 justify-end">
             <button

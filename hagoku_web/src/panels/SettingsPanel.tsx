@@ -8,8 +8,6 @@ import {
   Loader2,
   AlertCircle,
   SlidersHorizontal,
-  ChevronDown,
-  ChevronRight,
   Zap,
   XCircle,
 } from "lucide-react";
@@ -88,9 +86,6 @@ export default function SettingsPanel() {
   const [testTimeMeta, setTestTimeMeta] = useState<string | null>(null);
 
   // 高级 LLM 配置
-  const [advancedLlmOpen, setAdvancedLlmOpen] = useState(false);
-  const [subModelQuick, setSubModelQuick] = useState("");
-
   const loadConfig = useCallback(() => {
     setLoading(true);
     setLoadError(null);
@@ -103,32 +98,14 @@ export default function SettingsPanel() {
         const raw = (d.llm ?? {}) as Record<string, unknown>;
         if (Object.keys(raw).length) {
           const n = normalizeLlmFromApi(raw);
-          const metaFromApi = (d.meta_llm as any)?.model || "";
+          const metaFromApi = ((d as { meta_llm?: { model?: string } }).meta_llm)?.model || "";
           setMetaModel(metaFromApi);
           // CO-21: 读 stream_enabled
           const streamFromApi = (raw as any).stream_enabled;
           if (typeof streamFromApi === "boolean") setStreamEnabled(streamFromApi);
           setLlm(formFromNormalized(n));
-          const distinct = !!(n.sub_model && n.sub_model.trim()) || !!metaFromApi;
-          if (distinct) {
-            setAdvancedLlmOpen(true);
-            setSubModelQuick(n.sub_model.trim() || metaFromApi);
-          } else {
-            setSubModelQuick("");
-            try {
-              setAdvancedLlmOpen(localStorage.getItem("hagoku_advanced_llm_open") === "1");
-            } catch {
-              setAdvancedLlmOpen(false);
-            }
-          }
         } else {
           setLlm(emptyLlm);
-          setSubModelQuick("");
-          try {
-            setAdvancedLlmOpen(localStorage.getItem("") === "1");
-          } catch {
-            setAdvancedLlmOpen(false);
-          }
         }
       })
       .catch((e: unknown) => {
@@ -264,13 +241,6 @@ export default function SettingsPanel() {
       if (d.llm) {
         const n = normalizeLlmFromApi(d.llm as unknown as Record<string, unknown>);
         setLlm(formFromNormalized(n));
-        const distinct = !!(n.sub_model && n.sub_model.trim());
-        if (distinct) {
-          setAdvancedLlmOpen(true);
-          setSubModelQuick(n.sub_model.trim());
-        } else {
-          setSubModelQuick("");
-        }
       }
       setSaved(true);
       setSaveHint(typeof d.hint === "string" ? d.hint : null);

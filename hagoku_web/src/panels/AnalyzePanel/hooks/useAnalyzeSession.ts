@@ -1,11 +1,8 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import type { AgentKey, AgentRunState, SessionPhase } from "../types";
-import type { ConvoMessage } from "../types";
+import { useState, useRef, useCallback } from "react";
+import type { AgentKey, SessionPhase } from "../types";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { sanitizeText } from "../../../utils/sanitize";
 import { eventLog } from "../../../utils/eventLog";
-
-const SESSION_KEY = "hagoku_session";
 
 export function useAnalyzeSession(
   send: (cmd: string, payload: Record<string, unknown>) => boolean,
@@ -48,7 +45,7 @@ export function useAnalyzeSession(
     resetAll();
     clearMessages();
     setReplyPending(true);
-    useWorkspaceStore.getState().resetAgentStates();
+    useWorkspaceStore.getState().resetRunUiState();
     setPhase("running");
     const q = sanitizeText(queryText.trim());
     queryRef.current = q;
@@ -69,7 +66,7 @@ export function useAnalyzeSession(
     resetRunUiState();
     setPhase("setup");
     clearMessages();
-    useWorkspaceStore.getState().resetAgentStates();
+    useWorkspaceStore.getState().resetRunUiState();
   }, [send, resetAll, resetRunUiState, setPhase, clearMessages]);
 
   return {

@@ -22,7 +22,6 @@ import { useConversation } from "./AnalyzePanel/hooks/useConversation";
 import { useAnalyzeSession } from "./AnalyzePanel/hooks/useAnalyzeSession";
 import { useWsEventHandler } from "./AnalyzePanel/hooks/useWsEventHandler";
 import { sanitizeText } from "../utils/sanitize";
-import { uid } from "./AnalyzePanel/utils";
 
 export default function AnalyzePanel() {
   const { send, log } = useWebSocket();
@@ -30,8 +29,6 @@ export default function AnalyzePanel() {
   const connectionStatus = useWorkspaceStore((s) => s.connectionStatus);
   const currentProject = useWorkspaceStore((s) => s.currentProject);
   const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject);
-  const projects = useWorkspaceStore((s) => s.projects);
-  const setActiveView = useWorkspaceStore((s) => s.setActiveView);
   const resetRunUiState = useWorkspaceStore((s) => s.resetRunUiState);
   const currentDataPath = useWorkspaceStore((s) => s.currentDataPath);
   const setCurrentDataPath = useWorkspaceStore((s) => s.setCurrentDataPath);
@@ -68,7 +65,6 @@ export default function AnalyzePanel() {
     fileExists,
     fileInputRef,
     dropdownRef,
-    projectDropdownRef,
     loadFiles,
     handleUpload,
   } = useFileUpload(currentProject, dataPath, setDataPath);

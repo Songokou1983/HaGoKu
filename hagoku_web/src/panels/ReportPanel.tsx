@@ -1,4 +1,4 @@
-import { FileText, Loader2, FolderOpen, ChevronDown, CheckCircle2, ShieldAlert, ArrowRight } from "lucide-react";
+import { FileText, Loader2, FolderOpen, ChevronDown, CheckCircle2, ShieldAlert } from "lucide-react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAgentStatusSync } from "../hooks/useAgentStatusSync";
 import { useBatchEvents } from "../hooks/useBatchEvents";

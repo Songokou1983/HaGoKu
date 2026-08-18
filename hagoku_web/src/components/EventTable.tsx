@@ -16,15 +16,6 @@ interface EventTableProps {
   entries: EventEntry[];
 }
 
-const AGENT_COLORS: Record<string, string> = {
-  scout:    "text-app-accent",
-  cleaner:  "text-app-warning",
-  analyst:  "text-event-purple",
-  reporter: "text-app-success",
-  manager:  "text-app-text-muted",
-  scribe:   "text-app-text-muted",
-};
-
 const eventColorClass: Record<string, string> = {
   run_started:          "text-event-run",
   agent_started:        "text-event-run",
@@ -38,7 +29,6 @@ const eventColorClass: Record<string, string> = {
 };
 
 function EventRow({ entry }: { entry: EventEntry }) {
-  const agentColor = AGENT_COLORS[entry.agent?.toLowerCase() ?? ""] ?? "text-app-agent";
   const gr = entry.guardrailsBlocked === true;
   const eventCls = gr
     ? "text-app-warning font-medium"

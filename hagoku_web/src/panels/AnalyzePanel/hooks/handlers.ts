@@ -7,7 +7,8 @@
 import { uid } from "../utils";
 import { eventLog } from "../../../utils/eventLog";
 import { useWorkspaceStore } from "../../../stores/workspace";
-import type { WsEventDeps, ConvoMessage, AgentStatus } from "../types";
+import type { WsEventDeps, ConvoMessage } from "../types";
+import type { AgentStatus } from "../../../types/events";
 import { resolveAgentKey } from "../parsers";
 import { guardrailsRunCompletedInfo } from "../../../utils/wsGuardrails";
 
@@ -18,7 +19,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   eventLog("snapshot", `arrived msgs=${Array.isArray(snap?.messages) ? snap.messages.length : 'N/A'} gate=${snap?.gate_open}`);
   if (!snap) return false;
   const {
-    setMessages, setGateOpen, setPhase, setWaitingAgent,
+    setMessages, setGateOpen, setPhase,
     setCurrentProject, setCurrentDataPath,
   } = deps;
 
@@ -62,7 +63,7 @@ export function handleStateSnapshot(deps: WsEventDeps, msg: any): boolean {
   if (!snap.project_name && snap.messages && snap.messages.length === 0) {
     setMessages([]);
     setPhase?.("setup");
-    deps.setCurrentProject?.(null);
+    deps.setCurrentProject?.(null as unknown as string);
     useWorkspaceStore.getState().setCurrentProject(null);
   }
   return true;
@@ -201,7 +202,7 @@ export function handleEvent(deps: WsEventDeps, msg: any): void {
       deps.setWaitingAgent(null);
       deps.setGateOpen(false);
       deps.setPhase("setup");
-      useWorkspaceStore.getState().resetAgentStates();
+      useWorkspaceStore.getState().resetRunUiState();
       deps.setAgentElapsed({ scout: 0, cleaner: 0, analyst: 0, reporter: 0 });
       deps.setResultReportUrl(null);
       deps.setGuardrailsBlocked(false);

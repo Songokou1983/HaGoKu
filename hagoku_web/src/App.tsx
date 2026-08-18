@@ -20,7 +20,6 @@ import {
   BookOpen,
   Settings,
   Activity,
-  List,
   X,
   FlaskConical,
   Stethoscope,

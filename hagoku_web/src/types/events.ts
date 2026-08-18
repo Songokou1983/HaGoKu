@@ -39,7 +39,7 @@ export type ConnectionStatus =
   | "disconnected";
 
 export interface WSMessage {
-  type: "welcome" | "event" | "pong" | "ack" | "error";
+  type: "welcome" | "event" | "pong" | "ack" | "error" | "project_list" | "state_snapshot";
   message?: string;
   data?: EventData;
   cmd?: string;

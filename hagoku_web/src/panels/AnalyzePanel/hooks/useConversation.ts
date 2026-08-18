@@ -29,7 +29,7 @@ export function useConversation(_log?: (msg: string) => void) {
     eventLog("msg", `send ${text.slice(0, 40)}`);
     setMessages((prev) => {
       if (prev.length > 0 && prev[prev.length - 1].role === "user" && prev[prev.length - 1].text === text) return prev;
-      const next = [...prev, { id: uid(), role: "user", text, timestamp: ts }];
+      const next: ConvoMessage[] = [...prev, { id: uid(), role: "user", text, timestamp: ts }];
       return next;
     });
   };

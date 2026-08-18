@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ try:
 except Exception:
     import tempfile
     _LOG_PATH = str(Path(tempfile.gettempdir()) / "hagoku.log")
+# 确保日志目录存在（CI 干净环境需要）
+Path(_LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)-25s %(levelname)-8s %(message)s",
@@ -26,7 +29,6 @@ logging.basicConfig(
 )
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Request
 from fastapi.responses import HTMLResponse

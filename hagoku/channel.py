@@ -13,7 +13,8 @@ Phase B (CO-B1) 升级：
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal
+from typing_extensions import TypedDict  # Python < 3.12 需要 typing_extensions
 
 from pydantic import BaseModel, Field, model_validator
 

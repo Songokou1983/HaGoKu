@@ -227,6 +227,17 @@ def _format_error(market: str, symbol: str, error: Exception, error_kind: str = 
             f"  1. market 只接受 'a_stock' 或 'crypto'\n"
             f"  2. 检查参数拼写"
         )
+    if error_kind == "columns":
+        src = "akshare" if market == "a_stock" else "ccxt"
+        return RuntimeError(
+            f"{src} 接口列名变了，缺少标准列（如 '日期'/'date'）。\n"
+            f"原始错误: {type(error).__name__}: {error}\n"
+            f"建议:\n"
+            f"  1. 升级 {src}: pip install -U {src}\n"
+            f"  2. 用上传 CSV 方式提供数据\n"
+            f"  3. 切换到另一种市场试试\n"
+            f"  4. 检查网络/防火墙设置"
+        )
     src = "akshare" if market == "a_stock" else "ccxt"
     return RuntimeError(
         f"{src} 获取 {symbol} 失败。\n"

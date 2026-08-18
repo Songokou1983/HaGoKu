@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json as _json
+import shutil
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/quant", tags=["quant-datasets"])
@@ -70,3 +72,28 @@ async def create_dataset(req: CreateDatasetReq) -> dict:
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return result
+
+
+@router.delete("/datasets/{dataset_id}")
+async def delete_dataset(dataset_id: str) -> dict:
+    """删除一个数据集目录。"""
+    ds_dir = DATASETS_ROOT / dataset_id
+    if not ds_dir.exists():
+        raise HTTPException(status_code=404, detail=f"数据集 {dataset_id} 不存在")
+    shutil.rmtree(ds_dir)
+    return {"ok": True, "deleted": dataset_id}
+
+
+@router.get("/datasets/{dataset_id}/parquet")
+async def get_dataset_parquet(dataset_id: str) -> Response:
+    """返回 data.parquet 二进制（项目创建时复制用）。"""
+    ds_dir = DATASETS_ROOT / dataset_id
+    if not ds_dir.exists():
+        raise HTTPException(status_code=404, detail=f"数据集 {dataset_id} 不存在")
+    parquet_path = ds_dir / "data.parquet"
+    if not parquet_path.exists():
+        raise HTTPException(status_code=500, detail="数据集 parquet 缺失")
+    return Response(
+        content=parquet_path.read_bytes(),
+        media_type="application/octet-stream",
+    )

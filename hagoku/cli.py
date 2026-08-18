@@ -78,12 +78,8 @@ WELCOME_SCREEN = """
    hagoku profile <file>               # 数据画像
    hagoku project create <名称>         # 创建项目
    hagoku doctor                         # 检查系统状态
-   hagoku-ui                            # 启动 Web UI
-
-💡 示例数据（无需准备，直接体验）：
-   ad_campaign   广告投放数据（百度/抖音/微信）
-   conversion   转化漏斗数据
-   user_cohort  用户队列数据
+   hagoku-api                            # 启动后端 API（默认 :8000）
+   # Web UI 开发：cd hagoku_web && npm install && npm run dev（Vite，默认 :5173）
 
 文档：https://github.com/hagoku/hagoku
 """

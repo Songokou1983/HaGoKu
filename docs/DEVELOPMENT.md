@@ -138,20 +138,19 @@ with sync_playwright() as p:
 1. **通道完整性**：用户输入语义解析路径中是否出现中文硬匹配？
    ```bash
    # 审查命令：通道区域内禁止中文动词匹配
-   grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/agents/scout/agent.py
+   grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/agents/agent.py
    grep -nE '(代表|表示|意为|是|当成|看作)' hagoku/manager/orchestrator.py
    ```
    若新增中文字符串匹配或 if-else 语义分支 → 拒绝合并，改为补通道。
 
 2. `emit_event` 调用是否有遗漏的 3 参数形式？
    ```bash
-   grep -n "emit_event(" hagoku/agents/*.py
+   grep -rn "emit_event(" hagoku/agents/ hagoku/manager/
    ```
 
 3. `column_semantics` 是否正确传递？
    ```bash
-   grep -n "column_semantics" hagoku/manager/orchestrator.py
-   grep -n "column_semantics" hagoku/agents/scout/agent.py
+   grep -rn "column_semantics" hagoku/manager/orchestrator.py hagoku/agents/agent.py
    ```
 
 4. SQLite 线程安全是否完整？
@@ -160,15 +159,15 @@ with sync_playwright() as p:
 
 5. pytest 是否通过？
    ```bash
-   .venv/bin/python -m pytest tests/ -q
+   .venv/bin/python3 -m pytest tests/ -q
    ```
 
 6. 若改动 `hagoku_web/src/utils/wsGuardrails.ts`：是否已同步 `tests/test_web/test_ws_guardrails_parity.py` 并通过？
 
-7. orchestrator 3 个阶段是否都返回正确 status？
-   - `scout_first` → `scout_done`
-   - `cleaning_first` → `cleaner_strategy`
-   - `analyst_first` → `analyst_preliminary`
+7. orchestrator 返回 status 是否正确？（Phase D 后单 Agent 自驱动）
+   - 阶段判断由 LLM 读对话历史决定，代码不替 LLM 做阶段决策
+   - `Orchestrator.run` 仅返回 `{"status": "scout_review"}`（见 `orchestrator.py:411`），表示「首轮 LLM 回复已就绪，待 WS 事件驱动后续」
+   - 若新增 status 字段，须更新 `hagoku/api/ws_handler.py` 的状态判断逻辑
 
 8. 本地 `UI_CHANGELOG_backup_*` 快照是否误加入暂存区？
 
@@ -364,7 +363,7 @@ HaGoKu Studio 的字段理解完全依赖 LLM。任何「字段含义」相关�
 | 层级 | 触发条件 | 处理方式 | 负责模块 |
 |------|---------|---------|---------|
 | **1. 前置健康检查** | pipeline 启动前 | `check_llm_health()` 验证 LLM 可达；失败 → 返回错误，不进 pipeline | `hagoku/tools/health.py` |
-| **2. Agent 异常上报** | Scout LLM 调用失败/返回空 | emit `AGENT_FAILED` → Orchestrator 看板 block + 前端展示错误 | `scout/agent.py` → `manager/orchestrator.py` |
+| **2. Agent 异常上报** | DataAnalystAgent LLM 调用失败/返回空 | emit `AGENT_FAILED` → Orchestrator 看板 block + 前端展示错误 | `hagoku/agents/agent.py` → `manager/orchestrator.py` |
 | ~~**3. Scribe LLM 兜底恢复**~~ | ~~Scout 产出部分列描述缺失~~ | ~~Scribe 用 LLM 补全遗漏列；失败 → emit `AGENT_FAILED`~~ | ~~`_scribe/agent.py`~~ — **2026-06-06 Scribe 类删除，本层防护不再存在；Scout 走 `needs_user_input=True` 让用户填** |
 
 ### 健康检查流程

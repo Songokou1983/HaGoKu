@@ -68,7 +68,7 @@ done
 | `return null` / `pass` 在渲染路径 | 检查 → 是否静默吞行为 |
 | 不看日志就说"后端没问题" | 铁律 12 → 先 `tail -30 ~/.hagoku/hagoku.log` |
 | 不看 session 就问用户"你看到了什么" | 铁律 13 → session 是前端对话镜像 |
-| 找不到日志/session/数据 | **铁律 31 → 只跑一条命令就结论不存在 = 撒谎。** 必须试 3 种以上方法再下结论。固定路径优先：`~/.hagoku/hagoku.log` / `{project_dir}/session.latest.json` |
+| 找不到日志/session/数据 | **铁律 12 扩展 → 只跑一条命令就结论不存在 = 撒谎。** 必须试 3 种以上方法再下结论。固定路径优先：`~/.hagoku/hagoku.log` / `{project_dir}/session.latest.json` |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I → 状态同步：后端清空自己 ≠ 前端知道了 |
 | 说"可能是…""估计是…""试试…"（无日志证据） | **铁律 12 / 刹车 J** → 停下来补日志系统，拿到证据再开口 |
 | 另开 REST /switch、useEffect 清消息、localStorage 恢复 | **铁律 13 / 刹车 K** → `handleStateSnapshot` 是前端状态唯一写入点。不准绕开。 |
@@ -76,9 +76,9 @@ done
 
 ## 系统认知
 
-- **单入口**: `to_messages_for_llm()` → `build_messages()` — 唯一 LLM 消息路径
-- **对话循环**: `run_step()` — 已有工具调用→dispatch→回传→继续。不自己写循环
-- **流程控制**: LLM 通过 `route_to` 决定阶段。代码不做 if-elif 判断
+- **单入口**: `session.to_llm_messages()` → `build_messages()` — 唯一 LLM 消息路径
+- **对话循环**: `run_step()` (`hagoku/agents/agent.py` 中的 `while tc_list and _round < 20` 自续轮) — 已有工具调用→dispatch→回传→继续。不自己写循环
+- **流程控制**: LLM 自驱动（读对话历史判断当前阶段）。代码不做 if-elif 阶段判断。`route_to` 工具已于 2026-06-24 永久删除
 - **代码=通道**: 不替 LLM 做语义判断，不替用户做选择
 - **唯一真相源**: `handleStateSnapshot` 是前端状态的唯一写入点。WS `state_snapshot` 是项目切换和断连重连的唯一数据通道。不准另开路径。
 - **项目真相**: `PROJECT.md`、`CLAUDE.md`、`reasonix.toml`

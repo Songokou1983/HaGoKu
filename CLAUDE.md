@@ -188,7 +188,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 | prompt里「必须判断为」「应该理解成」「不要分析」 | 铁律 11 |
 | prompt里「禁止」「不要」「不准」 | 刹车 G |
 | `@lru_cache` 装饰 LLM 调用 | 铁律 7 |
-| `tail ~/.hagoku/hagoku.log` 失败 → 结论"没日志" | **铁律 31** → 日志路径固定，找不到是命令出错，不是文件不存在。换 `ls -la ~/.hagoku/` 确认 |
+| `tail ~/.hagoku/hagoku.log` 失败 → 结论"没日志" | **铁律 12 扩展** → 日志路径固定，找不到是命令出错，不是文件不存在。换 `ls -la ~/.hagoku/` 确认 |
 | 后端改了状态只发 ack 不发 WS 推送 | 刹车 I |
 | 说"可能是…""估计是…""试试…"（无日志证据） | 铁律 12 / 刹车 J |
 | 新工具名含 submit/ask/route/pause/confirm | **铁律 14 / 刹车 L — 工具即 I/O** |
@@ -213,7 +213,7 @@ prompt 越短越好，工具越少越好，数据越完整越好。
 
 ## 项目
 
-**HaGoKu Studio — 用本地模型做专业级商业分析**（单 DataAnalystAgent + 15 工具 + Session 会话）。详见 [`PROJECT.md`](PROJECT.md)。
+**HaGoKu Studio — 用本地模型做专业级商业分析**（单 DataAnalystAgent + 12 工具 + Session 会话）。详见 [`PROJECT.md`](PROJECT.md)。
 
 ## 已由架构自动守门（不需人记）
 - `build_messages()` 唯一入口 → pre-commit hook 自动拦截

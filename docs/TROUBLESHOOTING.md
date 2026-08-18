@@ -24,7 +24,7 @@ from hagoku.manager.orchestrator import Orchestrator
 from hagoku.config import HaGoKuConfig
 config = HaGoKuConfig.load()
 orch = Orchestrator(config)
-result = orch.run('data.csv', '分析问题', project_name='test', phase='scout_first')
+result = orch.run('data.csv', '分析问题', project_name='test')
 print(result['status'])
 "
 ```
@@ -118,22 +118,16 @@ grep -n "emit_event(" hagoku/agents/*.py
 **验证**：
 ```bash
 grep -n "column_semantics" hagoku/manager/orchestrator.py
-grep -n "scout_data.get" hagoku/ui/_pages/app_analyze.py
+# UI 已从 Streamlit 迁到 hagoku_web/（React/Vite），前端逻辑在 hagoku_web/src/components/
 ```
 
 ---
 
-## 6. 进度条显示全部完成（Scout 刚完就全 ✓）
+## 6. 进度条显示全部完成（首轮 LLM 回复即触发全 ✓）
 
-**根因**：`_render_agent_pipeline` 只检查 `"complete" in etype`，不区分哪个 agent。
+**根因**：前端 `_render_agent_pipeline` 检查 `"complete" in etype` 后即认为所有阶段完成，未结合当前实际阶段做进度判断。
 
-**修复**：按 `agent` 名字判断阶段：
-```python
-if agent_name == "Reporter":   current_stage = 3; pct = 100
-elif agent_name == "Analyst":  current_stage = 2; pct = 75
-elif agent_name == "Cleaner":  current_stage = 1; pct = 50
-elif agent_name == "Scout":    current_stage = 0; pct = 25
-```
+**修复**：Phase D 后单 `DataAnalystAgent` 自驱动，阶段由 LLM 读对话历史决定，前端应基于 LLM 实际回复内容（理解字段/评估清洗/统计分析/撰写报告）判断进度，而非 event_type 字符串。可参考 `hagoku_web/src/components/EventTable.tsx` 与 `TitleBar.tsx` 的事件流。
 
 **验证**：Web UI 手动测试流程，确认每个阶段完成后进度条只到对应位置。
 

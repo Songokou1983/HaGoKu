@@ -14,9 +14,9 @@ HaGoKu Studio 追求统计分析深度：自动检验假设、报告效应量、
 
 ## 演进方向
 
-> **Phase A-D 已完成（2026-06-11）**：4 agent 合 1 DataAnalystAgent + 23 工具全集 + Meta v2 四组件。[详见](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)。
+> **Phase A-D 已完成（2026-06-11）**：4 agent 合 1 DataAnalystAgent + 12 工具全集 + Meta v2 四组件。[详见](docs/plans/2026-06-11-collapse-to-single-agent-brief.md)。
 >
-> **v0.9（2026-06-25）**：删除代码替 LLM 做阶段判断的所有逻辑。LLM 从对话历史自主判断当前阶段。状态持久化（重启恢复会话）。输入框永远可见 + 停止按钮。报告循环（报告生成后对话继续）。23 工具（含 generate_report）。[通道参考](docs/CHANNEL.md)。
+> **v0.9（2026-06-25）**：删除代码替 LLM 做阶段判断的所有逻辑。LLM 从对话历史自主判断当前阶段。状态持久化（重启恢复会话）。输入框永远可见 + 停止按钮。报告循环（报告生成后对话继续）。12 工具（含 generate_report）。[通道参考](docs/CHANNEL.md)。
 
 ---
 
@@ -50,7 +50,7 @@ HaGoKu 的架构产生了一个独特能力：**不改一行代码，仅切换�
 
 **为什么这是竞争力：**
 - 传统方案：每个领域需要独立的 agent + 独立的工具集 + 独立的 prompt 工程
-- HaGoKu 方案：同一个 DataAnalystAgent + 同一套 23 工具 + 不同的 prompt.md 预设 = 不同领域的分析能力
+- HaGoKu 方案：同一个 DataAnalystAgent + 同一套 12 工具 + 不同的 prompt.md 预设 = 不同领域的分析能力
 - 用户无需理解 LLM 或写代码——在「分析能力」面板一键切换，后续所有分析自动按该领域方向执行
 - 新建领域零代码：写一段 prompt + 起个名字，立即可用
 
@@ -183,7 +183,7 @@ hagoku/tools/
 2. 工具描述里有没有"什么时候该用"的规则？——有 → 规则该在 prompt，不在描述里
 3. 同一件事有几个工具入口？——超过 1 个 → LLM 会犹豫，合并
 
-**当前工具清单**（23 个）详见 `docs/TOOL_DESIGN.md`。分五类：读数据（4）、跑计算（7）、写状态（1）、流程控制（3）、画图（1）+ 报告生成（1）。
+**当前工具清单**（12 个）详见 `docs/TOOL_DESIGN.md`。分四类：数据探查（3）/ 字段管理（1）/ 统计与清洗（3）/ 可视化·报告·记忆（5）。所有工具均为纯 I/O，不携带流程信号。
 
 **检验标准**：新增能力时，若要在 prompt 里手写 JSON 格式让 LLM 输出 → 说明缺工具，应在注册表补。
 
@@ -334,7 +334,7 @@ HaGoKu 的 prompt.md 当前 ~3KB / 74 行。长度本身不是目标——但如
 
 > **Phase D 后**：单 agent + 单 Session（`context/session.py`）+ `to_llm_messages()` 统一入口已物理保证原律 1-6/8-10 自动满足。仅保留配置中性（铁律 9）作为文档规范。契约测试（`tests/test_product/test_information_arrival.py`）持续守门。
 
-> 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过 `hagoku-ui` 设置功能选择的，不是项目真理。
+> 项目文档（`CLAUDE.md` / `PROJECT.md` / `.env.example` / commit message / memory / AI 输出）**不绑具体部署配置**——LLM 模型名、API 端点 URL、端口等都是用户运行时通过环境变量或 Web UI 设置面板配置的，不是项目真理。
 
 **反例**：
 - `PROJECT.md` 写 `HAGOKYU_LLM_MODEL=Qwen3.6-35B-A3B` 当默认值——一旦换模型就过时
@@ -391,7 +391,7 @@ grep -rn "minimax\|claude\|gpt-\|gemini" hagoku/ docs/  # AI 内部输出不留�
 
 ## Agent
 
-**唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 阶段工作（理解字段/评估清洗/跑统计/写报告），LLM 从对话历史自主判断当前阶段。统一 prompt（`hagoku/agents/prompt.md`）。16 工具全集可见（详见 `docs/TOOL_DESIGN.md`）。
+**唯一 DataAnalystAgent**（`hagoku/agents/agent.py`）。按 4 阶段工作（理解字段/评估清洗/跑统计/写报告），LLM 从对话历史自主判断当前阶段。统一 prompt（`hagoku/agents/prompt.md`）。12 工具全集可见（详见 `docs/TOOL_DESIGN.md`）。
 
 Session 持有 messages 数组；`to_llm_messages()` 统一 LLM 调用入口。
 
@@ -859,4 +859,4 @@ v0.9 删除：`infer_current_focus()`、`phase_hint` 注入、prompt 的"当前�
 - **名称**: HaGoKu Studio
 - **灵魂**: 用本地模型，做专业级商业分析
 - **原则**: 精、准、狠
-- **许可**: MIT
+- **许可**: PolyForm Noncommercial 1.0.0

@@ -187,8 +187,9 @@ hagoku doctor
 # 4. 一行分析
 hagoku run data.csv -q "哪个渠道ROI最高"
 
-# 5. 或启动 UI
-hagoku-ui    # 默认 http://localhost:8501
+# 5. 或启动 Web UI（两个进程，分别在两个终端）
+hagoku-api                              # 后端（FastAPI，:8000）
+cd hagoku_web && npm install && npm run dev   # 前端（Vite，:5173）
 ```
 
 数据按"项目"组织（默认 `~/.hagoku/projects/{name}/`），每个项目有自己的输入、过程数据、报告、会话、LLM dump。

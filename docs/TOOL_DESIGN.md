@@ -147,48 +147,42 @@ route_to: "切换到指定分析阶段。" (1行)
 
 ---
 
-## 当前工具清单（15 个，2026-06-21 精简后）
+## 当前工具清单（12 个，2026-08-18 核对）
+
+> **运行时验证**：`python3 -c "from hagoku.tools import agent_tools; print(sorted(agent_tools._tools.keys()))"`
+> 列出全部 12 个，与本表一一对应。
 
 | # | 工具 | 描述 | 类别 |
 |---|------|------|------|
-| 1 | `ask_user` | 向用户提问并暂停等待回复。 | 流程控制 |
-| 2 | `route_to` | 切换分析阶段。stage 可选：scout/cleaner/analyst/reporter。 | 流程控制 |
-| 3 | `set_columns` | 写入你对字段的理解。批量推荐 columns 数组一次性写入全部列。 | 写状态 |
-| 4 | `submit_assessment` | 提交清洗评估结果。 | 流程控制 |
-| 5 | `submit_findings` | 提交分析发现。可以是首波探索性发现或最终结论。 | 流程控制 |
-| 6 | `list_columns` | 列出数据集中所有列名和类型。 | 读数据 |
-| 7 | `get_column_stats` | 获取某列的统计信息：min/q25/median/q75/max/mean/std/null_count。 | 读数据 |
-| 8 | `get_sample_rows` | 获取某列的抽样值，用于理解字段内容。 | 读数据 |
-| 9 | `group_stats` | 按某列分组，查看另一列的统计量。 | 读数据 |
-| 10 | `run_statistical_test` | 执行统计检验，返回 p_value/effect_size/confidence_interval。 | 跑计算 |
-| 11 | `check_test_assumptions` | 检验前假设检查：正态性、方差齐性、样本量等。 | 跑计算 |
-| 12 | `correct_multiple_comparisons` | 多重比较校正（bonferroni/bh/holm）。 | 跑计算 |
-| 13 | `detect_outliers` | 检测异常值（iqr/zscore）。 | 跑计算 |
-| 14 | `detect_missing_pattern` | 检测缺失机制（MCAR/MAR/MNAR）。 | 跑计算 |
-| 15 | `create_plot` | 生成交互式图表（Plotly）。 | 画图 |
+| 1 | `get_column_names` | 列出数据集中所有列名 + 行数。 | 数据探查 |
+| 2 | `get_column_stats` | 获取某列的统计信息：min/q25/median/q75/max/mean/std/null_count。 | 数据探查 |
+| 3 | `get_group_stats` | 按某列分组聚合 count/mean/std/min/max。 | 数据探查 |
+| 4 | `set_columns` | 写入你对字段的理解（中文名 + 业务含义 + role + evidence）。批量推荐。 | 字段管理 |
+| 5 | `run_statistical_test` | 调度 ttest/anova/chi2/pearson/spearman/回归/趋势分解，返回 p/effect_size/CI。 | 统计与清洗 |
+| 6 | `detect_outliers` | 检测异常值（IQR 或 Z-score）。 | 统计与清洗 |
+| 7 | `detect_missing_pattern` | 检测缺失机制（MCAR/MAR/MNAR）并给填充建议。 | 统计与清洗 |
+| 8 | `create_plot` | 生成交互式图表（Plotly，散点/折线/柱/直方/箱/小提琴/热力）。 | 可视化·报告·记忆 |
+| 9 | `generate_report` | 渲染 HTML 报告（Jinja 模板，自动注入 create_plot 图表）。 | 可视化·报告·记忆 |
+| 10 | `recall_lessons` | 跨对话经验库检索。 | 可视化·报告·记忆 |
+| 11 | `save_lesson` | 持久化一条新经验。 | 可视化·报告·记忆 |
+| 12 | `query_project_memory` | 读项目记忆（fields/history/corrections 三 aspect）。 | 可视化·报告·记忆 |
+
+**所有工具均为纯 I/O**——不携带流程信号（无 submit/ask/route/pause/confirm 语义）。LLM 调完工具后自然回话推进，代码不替 LLM 管阶段。
 
 ### 已删除
 
 | 工具 | 原因 |
 |------|------|
-| `suggest_cleaning` | 判断类——分析方法是 LLM 知识库里的知识，不是工具 |
-| `interpret_nonsignificant` | 判断类——纯统计学知识，训练数据已有 |
-| `update_field_table` | 与 `set_columns` 功能重叠 |
-| `update_field_role` | handler 只 return args，无副作用 |
-| `restrict_analysis_to` | handler 只 return args，无副作用 |
-| `submit_first_pass` | 合并入 `submit_findings`（代码判断首波/后续，不让 LLM 区分） |
-| `submit_analysis` | 合并入 `submit_findings` |
-| `submit_report` | 合并入 `submit_findings` |
-| 7 个 biz_tools | ROI/ROAS/LTV 等公式是 LLM 训练数据自带的知识 |
-
-### 暂不注册（代码保留，import 已注释）
-
-| 工具 | 原因 |
-|------|------|
-| 8 个 memory_tools | 记忆系统稳定后加回（query_method / read_method / save_lesson / recall_lessons / correct_lesson / remember_field / query_project_memory / forget_project） |
-| `assess_statistical_power` | 可通过 `run_statistical_test` 新增 test_type 吸收 |
-| `required_sample_size` | 同上 |
-| `diagnose_regression` | 依赖 ctx 中 model 对象，耦合重，后续按需加回 |
+| `ask_user` | 违反铁律 14（工具即 I/O）。LLM 直接输出文字提问即可 |
+| `route_to` | 单 Agent 自驱动后不再需要。阶段切换由 LLM 读历史决定（2026-06-11 Phase D） |
+| `submit_findings` / `submit_assessment` / `submit_first_pass` / `submit_analysis` / `submit_report` | 违反铁律 14。LLM 直接输出文字即可，代码不再有"发现卡片"概念 |
+| `set_columns` 之外的所有 `update_field_*` / `restrict_analysis_to` | handler 只 return args 无副作用，纯 LLM 知识（已合并/删除） |
+| `get_sample_rows` | LLM 通过 `get_column_stats` 即可获得样本信息 |
+| `list_columns` | 重命名为 `get_column_names`（同时返回行数） |
+| `group_stats` | 重命名为 `get_group_stats` |
+| `check_test_assumptions` | 检验方法选择是 LLM 任务，不是工具 |
+| `correct_multiple_comparisons` | 多重比较校正可通过 `run_statistical_test` 后续扩展 |
+| 7 个 biz_tools（ROI/ROAS/LTV 等） | 公式是 LLM 训练数据自带的知识 |
 
 ---
 
@@ -206,4 +200,5 @@ route_to: "切换到指定分析阶段。" (1行)
 | 日期 | 版本 | 内容 |
 |------|------|------|
 | 2026-06-21 | v1 | 初稿：审计发现 4 类问题 + 3 个优化方向 |
-| 2026-06-21 | v2 | 精简完成：24→15 工具，审查通过，记录当前清单和删除/暂存理由 |
+| 2026-06-21 | v2 | 精简完成：24→15 工具，审查通过 |
+| 2026-08-18 | v3 | 与 runtime 对齐：12 工具；删 ask_user/route_to/submit_* 等所有流程控制工具；4 个 memory_tools 已重新注册 |

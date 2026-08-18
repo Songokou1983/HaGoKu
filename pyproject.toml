@@ -24,12 +24,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-
-[project.urls]
-Repository = "https://github.com/Songokou1983/HaGoKu"
-Issues = "https://github.com/Songokou1983/HaGoKu/issues"
-Documentation = "https://github.com/Songokou1983/HaGoKu/blob/master/PROJECT.md"
-
 dependencies = [
     # Structured output
     "pydantic>=2.0",

@@ -74,6 +74,10 @@ app.include_router(prompt_lab_router)
 from hagoku.api.doctor_router import router as doctor_router
 app.include_router(doctor_router)
 
+# Quant datasets API（Phase 3.0）
+from hagoku.api.quant_router import router as quant_router
+app.include_router(quant_router)
+
 
 # 环境区分：生产环境锁定 CORS，开发环境开放
 _hagoku_env = os.environ.get("HAGOKU_ENV", "").strip().lower()

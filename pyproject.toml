@@ -54,6 +54,7 @@ dependencies = [
     "openai>=1.0",
     # API
     "fastapi>=0.115.0",
+    "python-multipart>=0.0.9",  # FastAPI UploadFile/Form 必需
     "uvicorn[standard]>=0.30.0",
     "markdown>=3.5",
 ]

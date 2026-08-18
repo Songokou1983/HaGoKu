@@ -422,3 +422,83 @@ try:
     import hagoku.tools._doctor_tools  # noqa: F401
 except ImportError:
     pass
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Quant 3.0 — 数据接入 + 回测
+# ═══════════════════════════════════════════════════════════════════
+
+from .market_data import fetch_market_data as _fetch_market_data_impl
+from .backtest import run_backtest as _run_backtest_impl
+
+
+def _handle_fetch_market_data(args: dict, ctx: dict, _df):
+    return _fetch_market_data_impl(
+        market=args.get("market", ""),
+        symbol=args.get("symbol", ""),
+        period=args.get("period", ""),
+        interval=args.get("interval", "d1"),
+        ctx=ctx,
+    )
+
+
+def _handle_run_backtest(args: dict, ctx: dict, _df):
+    return _run_backtest_impl(
+        strategy_spec=args.get("strategy_spec", {}),
+        _df=_df_safe(_df),
+        ctx=ctx,
+    )
+
+
+agent_tools.register(Tool(
+    name="fetch_market_data",
+    description=(
+        "从 akshare（A 股）或 ccxt（加密货币）拉取历史 OHLCV 行情数据。"
+        "输入市场类型、代码、起止区间、周期；返回标准化 DataFrame 并写入「量化数据集」库。"
+        "何时用：用户要分析 A 股或加密货币，但没有现成 CSV。"
+        "注意：网络失败会抛错；akshare 接口升级可能破坏历史调用。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "market": {"type": "string", "enum": ["a_stock", "crypto"]},
+            "symbol": {"type": "string"},
+            "period": {"type": "string"},
+            "interval": {"type": "string", "enum": ["d1", "h1"]},
+        },
+        "required": ["market", "symbol", "period", "interval"],
+    },
+    handler=_handle_fetch_market_data,
+    phase_tag=['理解字段', '跑统计'],
+))
+
+
+agent_tools.register(Tool(
+    name="run_backtest",
+    description=(
+        "按 strategy_spec 在当前项目数据上模拟交易，输出权益曲线 / 交易明细 / 机械统计。"
+        "输入策略名 + 入场/出场 pandas 表达式 + 可选止损止盈。"
+        "返回纯机械量，Sharpe / MaxDD 等金融指标由你（LLM）从机械量推导。"
+        "何时用：用户定义了交易策略，想看历史回测效果。"
+        "注意：表达式必须是合法 pandas 表达式，引用当前数据列名。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "strategy_spec": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "entry": {"type": "string"},
+                    "exit": {"type": "string"},
+                    "stop_loss": {"type": "number"},
+                    "take_profit": {"type": "number"},
+                },
+                "required": ["name", "entry", "exit"],
+            },
+        },
+        "required": ["strategy_spec"],
+    },
+    handler=_handle_run_backtest,
+    phase_tag=['跑统计', '撰写报告'],
+))

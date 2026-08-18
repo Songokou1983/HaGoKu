@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,12 @@ router = APIRouter(prefix="/api/doctor", tags=["doctor"])
 
 AUDIT_DIR = Path.home() / ".hagoku" / "audits"
 CASES_PATH = Path.home() / ".hagoku" / "doctor" / "cases.jsonl"
+PRESETS_DIR = Path(__file__).resolve().parent.parent / "agents" / "presets"
+
+# 默认预设清单（从 presets.json 动态加载，与 prompt_lab.py:22 同模式）
+default_presets = _json.loads(
+    (PRESETS_DIR / "presets.json").read_text(encoding="utf-8")
+)
 
 # ── 病历 ──────────────────────────────────────────────────────────
 
@@ -370,8 +377,7 @@ def _fix_emergency_recovery(_params: str) -> dict:
         general_path.write_text(_DEFAULT_PROMPT, encoding="utf-8")
         results.append("✅ presets/general.md 已从灾备恢复")
     presets_json = Path(__file__).resolve().parent.parent / "agents" / "presets" / "presets.json"
-    default_presets = '[{"id":"general","name":"通用商业分析","icon":"bar-chart","description":"适合各类经营数据"},{"id":"stock","name":"股市技术分析","icon":"trending-up","description":"趋势分解、波动率检验"},{"id":"ecommerce","name":"电商运营分析","icon":"shopping-cart","description":"ROI分析、转化漏斗"}]'
-    presets_json.write_text(default_presets, encoding="utf-8")
+    presets_json.write_text(_json.dumps(default_presets, ensure_ascii=False, indent=2), encoding="utf-8")
     results.append("✅ presets.json 已重置为默认")
     msg = "紧急恢复完成:\n" + "\n".join(results) + "\n\n请刷新页面，分析功能已恢复出厂状态。"
     return {"ok": True, "message": msg}

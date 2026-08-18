@@ -133,6 +133,7 @@ async def list_projects(request: Request = None):
 class CreateProjectRequest(BaseModel):
     name: str
     description: str = ""
+    scene: str = "general"   # 项目级场景（preset id），默认 general
 
 
 @app.post("/api/projects")
@@ -155,9 +156,11 @@ async def create_project(req: CreateProjectRequest, request: Request):
         from hagoku.storage.database import HaGoKuDB
         db = HaGoKuDB.get_instance()
         desc = req.description.strip()
-        db.create_project(name, description=desc)
+        scene = req.scene.strip() or "general"
+        db.create_project(name, description=desc, scene=scene)
         if desc:
             db.update_project(name, description=desc)
+        # scene 通过 create_project 直接写入，不需 update
     except Exception:
         import logging
         logging.getLogger(__name__).warning("create_project DB 写入失败: %s", name, exc_info=True)

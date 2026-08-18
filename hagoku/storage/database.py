@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 # SQL 字段白名单，防止动态 SQL 注入
-_PROJECT_ALLOWED_FIELDS = frozenset({"description", "data_path", "schema_path"})
+_PROJECT_ALLOWED_FIELDS = frozenset({"description", "data_path", "schema_path", "scene"})
 _RUN_ALLOWED_FIELDS = frozenset({
     "query", "plan_json", "status", "completed_at",
     "duration_ms", "token_count", "manager_mode", "output_path"
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at  DATETIME,
     description TEXT,
     data_path   TEXT,
-    schema_path TEXT
+    schema_path TEXT,
+    scene       TEXT DEFAULT 'general'   -- 项目级场景（preset id）
 );
 
 CREATE TABLE IF NOT EXISTS data_sources (
@@ -171,6 +172,7 @@ class HaGoKuDB:
         # 这里补 ALTER TABLE（列已存在时静默忽略）
         _migrations = [
             "ALTER TABLE project_state ADD COLUMN raw_path TEXT DEFAULT ''",
+            "ALTER TABLE projects ADD COLUMN scene TEXT DEFAULT 'general'",
         ]
         for sql in _migrations:
             try:
@@ -202,13 +204,14 @@ class HaGoKuDB:
         description: str = "",
         data_path: str = "",
         schema_path: str = "",
+        scene: str = "general",
     ) -> dict[str, Any] | None:
         """创建项目"""
         now = datetime.now().isoformat()
         self.conn.execute(
-            "INSERT OR IGNORE INTO projects (id, created_at, description, data_path, schema_path) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (project_id, now, description, data_path, schema_path),
+            "INSERT OR IGNORE INTO projects (id, created_at, description, data_path, schema_path, scene) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (project_id, now, description, data_path, schema_path, scene),
         )
         self.conn.commit()
         return self.get_project(project_id)
@@ -218,7 +221,14 @@ class HaGoKuDB:
         row = self.conn.execute(
             "SELECT * FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        project = dict(row)
+        # 老项目 fallback：迁移前已有数据 scene 列为 NULL（DB 迁移已用 DEFAULT 'general' 兜底，
+        # 但 setdefault 不处理显式 NULL，因此显式判 None）
+        if not project.get("scene"):
+            project["scene"] = "general"
+        return project
 
     def list_projects(self) -> list[dict[str, Any]]:
         """列出所有项目"""

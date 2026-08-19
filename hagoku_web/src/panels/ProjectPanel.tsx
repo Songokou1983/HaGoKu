@@ -254,6 +254,8 @@ export default function ProjectPanel() {
 
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newScene, setNewScene] = useState("general");
+  const [scenes, setScenes] = useState<{ id: string; name: string }[]>([]);
   const [nameError, setNameError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -318,6 +320,17 @@ export default function ProjectPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch]);
 
+  // Load preset list once for the scene dropdown
+  useEffect(() => {
+    fetch("/api/prompt-lab/presets")
+      .then((r) => r.json())
+      .then((d: { presets?: { id: string; name: string }[] }) => {
+        const list = Array.isArray(d.presets) ? d.presets : [];
+        if (list.length > 0) setScenes(list.map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => { /* ignore — scene defaults to "general" via backend */ });
+  }, []);
+
   const NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
   const validateName = (v: string) => {
@@ -337,11 +350,16 @@ export default function ProjectPanel() {
       await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          description: newDesc.trim(),
+          scene: newScene,
+        }),
       });
       setCurrentProject(newName.trim());
       setNewName("");
       setNewDesc("");
+      setNewScene("general");
       setNameError("");
       setShowForm(false);
       loadProjects();
@@ -423,13 +441,31 @@ export default function ProjectPanel() {
               if (e.key === "Enter" && !e.nativeEvent.isComposing && ne.keyCode !== 229) {
                 handleCreate();
               }
-              if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }
+              if (e.key === "Escape") { setShowForm(false); setNewName(""); setNewDesc(""); setNewScene("general"); setNameError(""); }
             }}
             placeholder="描述这个项目（可选）"
             className="w-full px-2.5 py-1.5 text-ui-sm bg-app-bg border border-app-border rounded
                        text-app-text placeholder-app-text-muted focus:outline-none
                        focus:border-app-accent focus-visible:ring-1 focus-visible:ring-app-accent"
           />
+
+          {/* Scene dropdown */}
+          <div>
+            <div className="text-ui-xs text-app-text-muted mb-1">场景 / 预设</div>
+            <select
+              aria-label="场景"
+              value={newScene}
+              onChange={(e) => setNewScene(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-ui-sm bg-app-bg border border-app-border rounded
+                         text-app-text focus:outline-none focus:border-app-accent
+                         focus-visible:ring-1 focus-visible:ring-app-accent"
+            >
+              {scenes.length === 0 && <option value="general">通用商业分析</option>}
+              {scenes.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex gap-2 pt-1">
             <button
@@ -443,7 +479,7 @@ export default function ProjectPanel() {
               创建项目
             </button>
             <button
-              onClick={() => { setShowForm(false); setNewName(""); setNewDesc(""); setNameError(""); }}
+              onClick={() => { setShowForm(false); setNewName(""); setNewDesc(""); setNewScene("general"); setNameError(""); }}
               className="px-2 py-1.5 text-ui-xs text-app-text-muted hover:text-app-text
                          border border-app-border rounded cursor-pointer transition-colors duration-150"
             >

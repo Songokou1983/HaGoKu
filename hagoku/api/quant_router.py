@@ -36,6 +36,50 @@ def _call_fetch_market_data(market: str, symbol: str, period: str, interval: str
     return fetch_market_data(market, symbol, period, interval)
 
 
+def _read_dataset_meta(ds_dir: Path) -> dict:
+    """从挂载的 parquet 文件 metadata 读 meta（仅量化数据集路径 ~/.hagoku/datasets/<id>/data.parquet）。
+
+    优先读 parquet schema metadata（bytes 解码）。
+    找不到字段 → fallback 解析目录名 ({market}__{symbol}__{period}__{interval}__{fetched_at})。
+    """
+    import pyarrow.parquet as _pq
+    parquet_path = ds_dir / "data.parquet"
+    meta = {}
+    if parquet_path.exists():
+        try:
+            schema_meta = _pq.read_metadata(parquet_path).metadata or {}
+            decoded = {}
+            for k, v in schema_meta.items():
+                try:
+                    decoded[k.decode() if isinstance(k, bytes) else k] = v.decode() if isinstance(v, bytes) else v
+                except (UnicodeDecodeError, AttributeError):
+                    continue
+            meta.update(decoded)
+        except Exception:
+            pass
+
+    if "id" not in meta:
+        # 全新代码写入的 parquet 必有 meta；旧文件没有 → fallback 解析目录名
+        # 目录格式: {market}__{symbol}__{period}__{interval}__{fetched_at}
+        parts = ds_dir.name.split("__")
+        if len(parts) >= 5:
+            meta["id"] = ds_dir.name
+            meta["market"] = parts[0]
+            meta["symbol"] = parts[1]
+            meta["period"] = parts[2]
+            meta["interval"] = parts[3]
+            meta["fetched_at"] = "__".join(parts[4:])
+            meta["source"] = "akshare" if parts[0] == "a_stock" else "ccxt"
+            meta["_timezone"] = "Asia/Shanghai" if parts[0] == "a_stock" else "UTC"
+
+    if "rows" in meta:
+        try:
+            meta["rows"] = int(meta["rows"])
+        except (TypeError, ValueError):
+            pass
+    return meta
+
+
 # ── endpoints ──────────────────────────────────────────────────
 
 @router.get("/datasets")

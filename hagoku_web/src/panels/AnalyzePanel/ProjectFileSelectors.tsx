@@ -1,6 +1,8 @@
-import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2, Trash2 } from "lucide-react";
+import { Loader2, FolderOpen, ChevronDown, FileText, Upload, X, CheckCircle2, Trash2, Database } from "lucide-react";
+import { useState } from "react";
 import type { ProjectFile } from "./types";
 import { fmtSize } from "./utils";
+import { DatasetPickerModal } from "./DatasetPickerModal";
 
 interface ProjectFileSelectorsProps {
   currentProject: string | null;
@@ -36,6 +38,8 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
     excelSheets, sheetName, setSheetName, auxSheets, setAuxSheets,
     onDeleteFile,
   } = props;
+
+  const [datasetOpen, setDatasetOpen] = useState(false);
 
   return (
     <div className="px-3 py-2 border-b border-app-border bg-app-bg-secondary shrink-0 space-y-2">
@@ -118,6 +122,19 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
             {uploading ? "上传中…" : "上传"}
           </button>
         </div>
+        {/* 量化数据集 picker — 旁路：用户从数据集库选取后转走 handleUpload 通道 */}
+        <button
+          onClick={() => setDatasetOpen(true)}
+          disabled={!currentProject || uploading || phase === "running"}
+          title="从量化数据集库选取"
+          className={`flex items-center gap-1 px-2 py-1.5 border rounded text-ui-xs shrink-0 transition-colors
+            ${currentProject && !uploading && phase !== "running"
+              ? "border-app-border text-app-text-muted hover:text-app-text hover:border-app-accent cursor-pointer"
+              : "border-app-border text-app-text-muted opacity-40 cursor-not-allowed"}`}
+        >
+          <Database size={12} />
+          选取数据集
+        </button>
       </div>
       {uploadError && (
         <div className="flex items-center gap-1 text-ui-xs text-app-error">
@@ -163,6 +180,13 @@ export function ProjectFileSelectors(props: ProjectFileSelectorsProps) {
           </div>
         </>
       )}
+      <DatasetPickerModal
+        open={datasetOpen}
+        currentProject={currentProject}
+        phase={phase}
+        handleUpload={handleUpload}
+        onClose={() => setDatasetOpen(false)}
+      />
     </div>
   );
 }

@@ -187,7 +187,7 @@ def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, inter
     ds_dir.mkdir(parents=True, exist_ok=True)
 
     source = "akshare" if market == "a_stock" else "ccxt"
-    source_version = _ak.__version__ if market == "a_stock" else _ccxt.__version()
+    source_version = _ak.__version__ if market == "a_stock" else "ccxt"
     # meta 嵌入 parquet 文件 metadata（PyArrow 原生支持），一个文件不分裂
     meta_dict = {
         "id": ds_id,

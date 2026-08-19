@@ -39,6 +39,17 @@ def fetch_market_data(
         ds_id = _build_dataset_id(market, symbol, period, interval, fetched_at)
         return _ok_result(ds_id, df, fetched_at)
 
+    # 缓存命中：磁盘已有同名 (market, symbol, period, interval) → 直接复用，不发网络请求
+    cached_ds_id = _find_latest_cached_dataset(market, symbol, period, interval)
+    if cached_ds_id:
+        try:
+            df = pd.read_parquet(DATASETS_ROOT / cached_ds_id / "data.parquet")
+            _session_cache[key] = df
+            fetched_at = _format_fetched_at()
+            return _ok_result(cached_ds_id, df, fetched_at)
+        except Exception:
+            pass  # 缓存坏则 fallback 到网络
+
     df = _fetch_with_retry(market, symbol, period, interval)
     df = _standardize_columns(df, market)
 
@@ -61,7 +72,8 @@ def _ok_result(ds_id: str, df: pd.DataFrame, fetched_at: str) -> dict:
 
 
 def _fetch_with_retry(market, symbol, period, interval):
-    """3 次指数退避重试；ValueError 不重试（参数错）。"""
+    """3 次指数退避重试；ValueError 不重试（参数错）。
+    限流信号（429 / DDoSProtection / RequestTimeout）最多 3 次退避重试（10s → 30s → 90s）。"""
     import time
     last_error = None
     for attempt in range(1, 4):
@@ -74,9 +86,45 @@ def _fetch_with_retry(market, symbol, period, interval):
             last_error = e
             if attempt < 3:
                 time.sleep(2 ** attempt)
-        except ValueError:
-            raise  # 参数错不重试
-    raise _format_error(market, symbol, last_error, "fetch")
+        except ImportError:  # ccxt 缺
+            raise
+        except Exception as e:
+            # 限流类异常（DDoSProtection / RequestTimeout / 429）→ 退避后重试
+            if _is_rate_limit_error(e):
+                last_error = e
+                if attempt < 3:
+                    time.sleep(10 * (3 ** (attempt - 1)))  # 10s → 30s → 90s
+                continue
+            # 永久错误（无效 symbol 等）→ 不重试
+            if _is_permanent_error(e):
+                raise
+            # 未知错误 → 不重试，抛
+            raise
+    raise _format_error(market, symbol, last_error, "rate_limit")
+
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    """检测 ccxt 限流类异常（DDoSProtection / RequestTimeout / 429）。"""
+    import ccxt
+    name = type(e).__name__
+    if name in ("DDoSProtection", "RequestTimeout", "ExchangeNotAvailable", "RateLimitExceeded"):
+        return True
+    msg = str(e).lower()
+    if "too many requests" in msg or "rate limit" in msg or "ip banned" in msg:
+        return True
+    return False
+
+
+def _is_permanent_error(e: Exception) -> bool:
+    """检测 ccxt 永久错误（无效 symbol / 交易所不存在）→ 不重试。"""
+    import ccxt
+    name = type(e).__name__
+    if name in ("BadSymbol", "InvalidSymbol", "SymbolNotFound", "ExchangeError"):
+        return True
+    msg = str(e).lower()
+    if "invalid symbol" in msg or "symbol not found" in msg:
+        return True
+    return False
 
 
 def _fetch_akshare(symbol: str, period: str, interval: str) -> pd.DataFrame:
@@ -176,6 +224,29 @@ def _build_dataset_id(market: str, symbol: str, period: str, interval: str, fetc
     return f"{market}__{symbol}__{period}__{interval}__{fetched_at}"
 
 
+def _find_latest_cached_dataset(market: str, symbol: str, period: str, interval: str) -> str | None:
+    """找磁盘上同名 (market, symbol, period, interval) 的最新数据集。返回 ds_id 或 None。"""
+    if not DATASETS_ROOT.exists():
+        return None
+    prefix = f"{market}__{symbol}__{period}__{interval}__"
+    candidates = []
+    for d in DATASETS_ROOT.iterdir():
+        if not d.is_dir():
+            continue
+        name = d.name
+        if not name.startswith(prefix):
+            continue
+        # 名字格式：market__symbol__period__interval__fetched_at
+        # 排序按 fetched_at（最后一段）
+        fetched_at = name[len(prefix):]
+        candidates.append((fetched_at, name))
+    if not candidates:
+        return None
+    # fetched_at 格式 YYYYMMDDTHHMMSSZ 字典序 = 时间序
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
 def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, interval: str, df: pd.DataFrame) -> None:
     """写入 ~/.hagoku/datasets/<id>/data.parquet（meta 嵌入 parquet metadata，不另写 meta.json）"""
     import akshare as _ak
@@ -209,7 +280,7 @@ def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, inter
 def _format_error(market: str, symbol: str, error: Exception, error_kind: str = "fetch") -> RuntimeError:
     """统一错误格式：RuntimeError + 原始异常 + 4 条建议。
 
-    error_kind: "fetch" | "columns" | "interval" | "market"
+    error_kind: "fetch" | "columns" | "interval" | "market" | "rate_limit"
     """
     if error_kind == "interval" and market == "a_stock":
         return RuntimeError(
@@ -240,6 +311,15 @@ def _format_error(market: str, symbol: str, error: Exception, error_kind: str = 
             f"  4. 检查网络/防火墙设置"
         )
     src = "akshare" if market == "a_stock" else "ccxt"
+    if error_kind == "rate_limit":
+        return RuntimeError(
+            f"{src} 限流（3 次重试后仍被拒绝）。\n"
+            f"原始错误: {type(error).__name__}: {error}\n"
+            f"建议:\n"
+            f"  1. 等待几分钟后重试（限流窗口过去后）\n"
+            f"  2. 同一 (symbol, period, interval) 的数据已自动缓存，重新拉取走磁盘（不消耗限流）\n"
+            f"  3. 上传 CSV 方式提供数据绕过限流"
+        )
     return RuntimeError(
         f"{src} 获取 {symbol} 失败。\n"
         f"原始错误: {type(error).__name__}: {error}\n"
@@ -247,5 +327,5 @@ def _format_error(market: str, symbol: str, error: Exception, error_kind: str = 
         f"  1. 升级 {src}: pip install -U {src}\n"
         f"  2. 用上传 CSV 方式提供数据\n"
         f"  3. 切换到另一种市场试试\n"
-        f"  4. 检查网络/防火墙设置"
+        f" 4. 检查网络/防火墙设置"
     )

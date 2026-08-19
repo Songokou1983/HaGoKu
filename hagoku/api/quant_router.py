@@ -53,8 +53,9 @@ async def list_datasets() -> dict:
             continue
         try:
             schema_meta = _pq.read_metadata(parquet_path).metadata or {}
-            meta = {k: v for k, v in schema_meta.items()}
-        except (OSError, _json.JSONDecodeError, KeyError):
+            # PyArrow schema_meta keys/values 是 bytes
+            meta = {k.decode(): v.decode() for k, v in schema_meta.items()}
+        except (OSError, _json.JSONDecodeError, KeyError, UnicodeDecodeError):
             continue
         if "id" not in meta:
             continue

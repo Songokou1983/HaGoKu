@@ -27,7 +27,7 @@ import {
   Database,
 } from "lucide-react";
 
-type NavSection = "work" | "ref" | "dev";
+type NavSection = "work" | "data" | "ref" | "dev";
 
 interface NavItem {
   id: PanelId;
@@ -40,8 +40,9 @@ const NAV_ITEMS: NavItem[] = [
   // ── 工作区 ──
   { id: "projects",        title: "项目",         Icon: FolderKanban,  section: "work" },
   { id: "analyze",         title: "分析",         Icon: BarChart3,     section: "work" },
-  { id: "quant-datasets",  title: "量化数据集",   Icon: Database,      section: "work" },
   { id: "report",          title: "报告",         Icon: FileText,      section: "work" },
+  // ── 数据源 ──
+  { id: "quant-datasets",  title: "量化数据集",   Icon: Database,      section: "data" },
   // ── 参考 ──
   { id: "knowledge",       title: "知识库",       Icon: BookOpen,      section: "ref" },
   // ── 开发者 ──
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const SECTION_LABELS: Record<NavSection, string> = {
   work: "工作区",
+  data: "数据源",
   ref:  "参考",
   dev:  "开发者",
 };

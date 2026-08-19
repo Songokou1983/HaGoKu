@@ -10,6 +10,7 @@ import SettingsPanel from "./panels/SettingsPanel";
 import PromptLabPanel from "./panels/PromptLabPanel";
 import EventPanel from "./panels/EventPanel";
 import DoctorPanel from "./panels/DoctorPanel";
+import QuantDatasetsPanel from "./panels/QuantDatasetsPanel";
 import { TitleBar } from "./components/TitleBar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useThemeStore } from "./stores/theme";
@@ -23,6 +24,7 @@ import {
   X,
   FlaskConical,
   Stethoscope,
+  Database,
 } from "lucide-react";
 
 type NavSection = "work" | "ref" | "dev";
@@ -36,16 +38,17 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   // ── 工作区 ──
-  { id: "projects",  title: "项目",   Icon: FolderKanban,  section: "work" },
-  { id: "analyze",   title: "分析",   Icon: BarChart3,     section: "work" },
-  { id: "report",    title: "报告",   Icon: FileText,      section: "work" },
+  { id: "projects",        title: "项目",         Icon: FolderKanban,  section: "work" },
+  { id: "analyze",         title: "分析",         Icon: BarChart3,     section: "work" },
+  { id: "quant-datasets",  title: "量化数据集",   Icon: Database,      section: "work" },
+  { id: "report",          title: "报告",         Icon: FileText,      section: "work" },
   // ── 参考 ──
-  { id: "knowledge", title: "知识库", Icon: BookOpen,      section: "ref" },
+  { id: "knowledge",       title: "知识库",       Icon: BookOpen,      section: "ref" },
   // ── 开发者 ──
-  { id: "lab",       title: "Prompt Lab", Icon: FlaskConical, section: "dev" },
-  { id: "doctor",    title: "HaGoKu Doctor", Icon: Stethoscope,  section: "dev" },
-  { id: "events",    title: "运行日志", Icon: Activity,     section: "dev" },
-  { id: "settings",  title: "设置",   Icon: Settings,      section: "dev" },
+  { id: "lab",             title: "Prompt Lab",   Icon: FlaskConical, section: "dev" },
+  { id: "doctor",          title: "HaGoKu Doctor", Icon: Stethoscope,  section: "dev" },
+  { id: "events",          title: "运行日志",     Icon: Activity,     section: "dev" },
+  { id: "settings",        title: "设置",         Icon: Settings,      section: "dev" },
 ];
 
 const SECTION_LABELS: Record<NavSection, string> = {
@@ -55,20 +58,22 @@ const SECTION_LABELS: Record<NavSection, string> = {
 };
 
 const PANEL_MAP: Record<PanelId, ReactNode> = {
-  projects:  <ProjectPanel />,
-  analyze:   <ErrorBoundary><AnalyzePanel /></ErrorBoundary>,
-  report:    <ReportPanel />,
-  knowledge: <KnowledgePanel />,
-  events:    <EventPanel />,
-  settings:  <SettingsPanel />,
-  lab:       <PromptLabPanel />,
-  doctor:    <DoctorPanel />,
+  projects:        <ProjectPanel />,
+  analyze:         <ErrorBoundary><AnalyzePanel /></ErrorBoundary>,
+  "quant-datasets": <ErrorBoundary><QuantDatasetsPanel /></ErrorBoundary>,
+  report:          <ReportPanel />,
+  knowledge:       <KnowledgePanel />,
+  events:          <EventPanel />,
+  settings:        <SettingsPanel />,
+  lab:             <PromptLabPanel />,
+  doctor:          <DoctorPanel />,
 };
 
 /** 固定顺序，保证切换侧栏时面板不卸载（避免分析页 local state 被重置） */
 const PANEL_ORDER: PanelId[] = [
   "projects",
   "analyze",
+  "quant-datasets",
   "report",
   "knowledge",
   "events",

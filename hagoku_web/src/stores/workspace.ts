@@ -9,7 +9,23 @@ export type PanelId =
   | "settings"
   | "lab"
   | "events"
-  | "doctor";
+  | "doctor"
+  | "quant-datasets";
+
+/**
+ * 量化数据集元信息（来自 parquet metadata，ONE file）。
+ * UI 仅缓存当前选中的数据集，用于 AnalyzePanel 从数据集库选数据时减少回环。
+ */
+export interface QuantDatasetMeta {
+  id: string;
+  market: "a_stock" | "crypto";
+  symbol: string;
+  period: string;
+  interval: "d1" | "h1";
+  fetched_at: string;
+  rows: number;
+  source: "akshare" | "ccxt";
+}
 
 interface WorkspaceStore {
   activeView: PanelId;
@@ -29,6 +45,8 @@ interface WorkspaceStore {
     projectName: string;
     dataPath: string;
   } | null;
+  /** 当前选中的量化数据集元信息（AnalyzePanel 数据选择器写入） */
+  datasetMeta: QuantDatasetMeta | null;
 
   setActiveView: (view: PanelId) => void;
   setStatus: (s: "idle" | "running" | "done") => void;
@@ -40,6 +58,7 @@ interface WorkspaceStore {
   setSnapshot: (snap: any | null) => void;
   setReportFiles: (files: { name: string; url: string; mtime: number }[]) => void;
   setLastError: (msg: string | null) => void;
+  setDatasetMeta: (meta: QuantDatasetMeta | null) => void;
   /** 分析重置：全局运行状态 + Agent 状态条（与项目卡片「进行中」一致） */
   resetRunUiState: () => void;
 }
@@ -55,6 +74,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   reportFiles: [],
   lastError: null,
   snapshot: null,
+  datasetMeta: null,
 
   setActiveView: (activeView) => {
     set({ activeView });
@@ -79,6 +99,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   },
   setReportFiles: (reportFiles) => set({ reportFiles }),
   setLastError: (lastError) => set({ lastError }),
+  setDatasetMeta: (datasetMeta) => set({ datasetMeta }),
   resetRunUiState: () => set({ status: "idle", agents: {} }),
   resetAgentStates: () => set({ agents: { scout: "idle", cleaner: "idle", analyst: "idle", reporter: "idle" } }),
 }));

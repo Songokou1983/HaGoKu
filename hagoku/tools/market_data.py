@@ -177,32 +177,33 @@ def _build_dataset_id(market: str, symbol: str, period: str, interval: str, fetc
 
 
 def _persist_to_library(ds_id: str, market: str, symbol: str, period: str, interval: str, df: pd.DataFrame) -> None:
-    """写入 ~/.hagoku/datasets/<id>/{data.parquet, meta.json}"""
+    """写入 ~/.hagoku/datasets/<id>/data.parquet（meta 嵌入 parquet metadata，不另写 meta.json）"""
     import akshare as _ak
     import ccxt as _ccxt
+    import pyarrow as _pa
+    import pyarrow.parquet as _pq
 
     ds_dir = DATASETS_ROOT / ds_id
     ds_dir.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(ds_dir / "data.parquet")
 
     source = "akshare" if market == "a_stock" else "ccxt"
-    source_version = _ak.__version__ if market == "a_stock" else _ccxt.__version__
-    meta = {
+    source_version = _ak.__version__ if market == "a_stock" else _ccxt.__version()
+    # meta 嵌入 parquet 文件 metadata（PyArrow 原生支持），一个文件不分裂
+    meta_dict = {
         "id": ds_id,
         "market": market,
         "symbol": symbol,
         "period": period,
         "interval": interval,
         "fetched_at": _format_fetched_at(),
-        "rows": len(df),
+        "rows": str(len(df)),
         "source": source,
         "source_version": source_version,
         "_timezone": "Asia/Shanghai" if market == "a_stock" else "UTC",
     }
-    (ds_dir / "meta.json").write_text(
-        _json.dumps(meta, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    table = _pa.Table.from_pandas(df)
+    table = table.replace_schema_metadata(meta_dict)
+    _pq.write_table(table, ds_dir / "data.parquet")
 
 
 def _format_error(market: str, symbol: str, error: Exception, error_kind: str = "fetch") -> RuntimeError:

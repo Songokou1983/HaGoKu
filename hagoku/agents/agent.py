@@ -79,6 +79,35 @@ class DataAnalystAgent:
         if self.event_bus:
             self.event_bus.emit(event_type=event_type, agent=self.role, data=data or {})
 
+    @staticmethod
+    def _read_dataset_meta(data_path: str) -> dict | None:
+        """从挂载的 parquet 文件 metadata 读 meta（仅量化数据集路径 ~/.hagoku/datasets/<id>/data.parquet）。"""
+        from pathlib import Path
+        import pyarrow.parquet as _pq
+        p = Path(data_path)
+        # 仅当是量化数据集的标准路径才读
+        if ".hagoku/datasets" not in str(p) or p.suffix.lower() != ".parquet":
+            return None
+        if not p.exists():
+            return None
+        try:
+            schema_meta = _pq.read_metadata(p).metadata or {}
+        except Exception:
+            return None
+        # 转为 dict（pyarrow metadata 是 bytes keys/values）
+        meta = {k.decode() if isinstance(k, bytes) else k:
+                v.decode() if isinstance(v, bytes) else v
+                for k, v in schema_meta.items()}
+        if "id" not in meta:
+            return None
+        # rows 字段从 string 还原 int
+        if "rows" in meta:
+            try:
+                meta["rows"] = int(meta["rows"])
+            except (TypeError, ValueError):
+                pass
+        return meta
+
     # ── prompt ──────────────────────────────────────────────────────
 
     def _load_prompt(self) -> str:
@@ -167,6 +196,8 @@ class DataAnalystAgent:
             context = {
                 "data_path": data_path,
                 "query": query,
+                # 量化数据集来源（从 parquet 文件 metadata 读）：仅当 data_path 是 .hagoku/datasets/<id>/data.parquet 时存在
+                "_dataset_meta": self._read_dataset_meta(data_path),
                 "n_rows": len(df),
                 "n_cols": len(df.columns),
                 "column_semantics": column_semantics,
@@ -446,6 +477,9 @@ class DataAnalystAgent:
         load_err = context.get("_data_load_error")
         if load_err:
             agent_extra += f"\n⚠️ 数据加载失败：{load_err}\n请告知用户此错误，并建议检查文件格式或表单名称。"
+        # 量化数据集来源（如有）：从挂载的 parquet 文件 metadata 读
+        if context.get("_dataset_meta"):
+            agent_extra += "\n数据集来源: " + _json.dumps(context["_dataset_meta"], ensure_ascii=False)
 
         messages = session.to_llm_messages(system_extra=agent_extra, user_input=user_input)
         dump_messages("agent_run_step", messages, model=self.llm_config.model,

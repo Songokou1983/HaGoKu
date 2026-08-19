@@ -40,16 +40,20 @@ async def list_datasets() -> dict:
     """列出所有已保存的数据集。"""
     if not DATASETS_ROOT.exists():
         return {"datasets": []}
+    import pyarrow.parquet as _pq
     items = []
     for ds_dir in sorted(DATASETS_ROOT.iterdir(), reverse=True):
         if not ds_dir.is_dir():
             continue
-        meta_path = ds_dir / "meta.json"
-        if not meta_path.exists():
+        parquet_path = ds_dir / "data.parquet"
+        if not parquet_path.exists():
             continue
         try:
-            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-        except (OSError, _json.JSONDecodeError):
+            schema_meta = _pq.read_metadata(parquet_path).metadata or {}
+            meta = {k: v for k, v in schema_meta.items()}
+        except (OSError, _json.JSONDecodeError, KeyError):
+            continue
+        if "id" not in meta:
             continue
         items.append({
             "id": meta["id"],
@@ -58,7 +62,7 @@ async def list_datasets() -> dict:
             "period": meta["period"],
             "interval": meta["interval"],
             "fetched_at": meta["fetched_at"],
-            "rows": meta["rows"],
+            "rows": int(meta.get("rows", "0")),
             "source": meta["source"],
         })
     return {"datasets": items}

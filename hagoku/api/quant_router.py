@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json as _json
+import logging
 import shutil
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+
+_log = logging.getLogger(__name__)
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/quant", tags=["quant-datasets"])
@@ -71,10 +74,13 @@ async def list_datasets() -> dict:
 @router.post("/datasets")
 async def create_dataset(req: CreateDatasetReq) -> dict:
     """拉取新数据并保存到数据集库。"""
+    _log.info(f"POST /datasets received: market={req.market} symbol={req.symbol} period={req.period} interval={req.interval}")
     try:
         result = _call_fetch_market_data(req.market, req.symbol, req.period, req.interval)
     except RuntimeError as e:
+        _log.warning(f"POST /datasets failed: {e}")
         raise HTTPException(status_code=422, detail=str(e))
+    _log.info(f"POST /datasets ok: dataset_id={result.get('dataset_id')} rows={result.get('rows')}")
     return result
 
 
